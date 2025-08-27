@@ -7,7 +7,6 @@ type Props = {
   setActive: (idx: number) => void;
   cancelActive: () => void;
   complete: (idx: number, outcome: Outcome, amount?: string) => void;
-  undo: (idx: number) => void;
   filterText?: string;
 };
 
@@ -16,7 +15,6 @@ export function AddressList({
   setActive,
   cancelActive,
   complete,
-  undo,
   filterText = "",
 }: Props) {
   const completedSet = React.useMemo(
@@ -40,7 +38,6 @@ export function AddressList({
         : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
             addr
           )}`;
-    // open in new tab / or handoff to Maps app on mobile
     window.open(url, "_blank");
   };
 
@@ -69,7 +66,6 @@ export function AddressList({
               boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
             }}
           >
-            {/* left: index + address */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
@@ -88,7 +84,6 @@ export function AddressList({
               )}
             </div>
 
-            {/* right: action buttons */}
             <div
               style={{
                 display: "flex",
@@ -98,47 +93,33 @@ export function AddressList({
                 flexWrap: "wrap",
               }}
             >
-              {/* Navigate is always available */}
               <button
-                onClick={() => openMaps(row.address, row.lat ?? undefined, row.lng ?? undefined)}
-                style={{ whiteSpace: "nowrap" }}
+                onClick={() =>
+                  openMaps(row.address, row.lat ?? undefined, row.lng ?? undefined)
+                }
               >
                 Navigate
               </button>
 
               {!isActive && (
-                <button onClick={() => setActive(i)} style={{ whiteSpace: "nowrap" }}>
-                  Set Active
-                </button>
+                <button onClick={() => setActive(i)}>Set Active</button>
               )}
 
               {isActive && (
                 <>
-                  <button onClick={() => cancelActive()} style={{ whiteSpace: "nowrap" }}>
-                    Cancel
-                  </button>
-                  {/* Complete options */}
-                  <button onClick={() => complete(i, "Done")} style={{ whiteSpace: "nowrap" }}>
-                    Done
-                  </button>
-                  <button onClick={() => complete(i, "DA")} style={{ whiteSpace: "nowrap" }}>
-                    DA
-                  </button>
+                  <button onClick={cancelActive}>Cancel</button>
+                  <button onClick={() => complete(i, "Done")}>Done</button>
+                  <button onClick={() => complete(i, "DA")}>DA</button>
                   <button
                     onClick={() => {
                       const amt = window.prompt("Enter PIF amount (£):", "");
                       if (amt && amt.trim()) complete(i, "PIF", amt.trim());
                     }}
-                    style={{ whiteSpace: "nowrap" }}
                   >
                     PIF £
                   </button>
                 </>
               )}
-
-              {/* If you want an Undo on the list for already-completed items,
-                  you'd render them in this list. We hide completed items here,
-                  and Undo is available in the Completed view. */}
             </div>
           </div>
         );
