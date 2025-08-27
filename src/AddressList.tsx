@@ -1,4 +1,3 @@
-// src/AddressList.tsx
 import * as React from "react";
 import type { AppState, Outcome } from "./types";
 
@@ -54,46 +53,23 @@ export function AddressList({
         const isActive = state.activeIndex === i;
 
         return (
-          <div
-            key={i}
-            style={{
-              border: "1px solid #e7e7e7",
-              borderRadius: 12,
-              padding: 14,
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-            }}
-          >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontWeight: 800,
-                  letterSpacing: 0.2,
-                  fontSize: 18,
-                  marginBottom: 6,
-                }}
-              >
+          <div key={i} className="card">
+            {/* Left column: content */}
+            <div>
+              <div className="card-title">
                 {i + 1}. {row.address}
               </div>
               {(row.lat != null || row.lng != null) && (
-                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                <div className="card-gps">
                   GPS: {row.lat ?? "?"}, {row.lng ?? "?"}
                 </div>
               )}
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                alignItems: "center",
-                justifyContent: "flex-end",
-                flexWrap: "wrap",
-              }}
-            >
+            {/* Right column: actions (always aligned to the right) */}
+            <div className="card-actions">
               <button
+                className="btn"
                 onClick={() =>
                   openMaps(row.address, row.lat ?? undefined, row.lng ?? undefined)
                 }
@@ -101,16 +77,23 @@ export function AddressList({
                 Navigate
               </button>
 
-              {!isActive && (
-                <button onClick={() => setActive(i)}>Set Active</button>
-              )}
-
-              {isActive && (
+              {!isActive ? (
+                <button className="btn" onClick={() => setActive(i)}>
+                  Set Active
+                </button>
+              ) : (
                 <>
-                  <button onClick={cancelActive}>Cancel</button>
-                  <button onClick={() => complete(i, "Done")}>Done</button>
-                  <button onClick={() => complete(i, "DA")}>DA</button>
+                  <button className="btn" onClick={cancelActive}>
+                    Cancel
+                  </button>
+                  <button className="btn" onClick={() => complete(i, "Done")}>
+                    Done
+                  </button>
+                  <button className="btn" onClick={() => complete(i, "DA")}>
+                    DA
+                  </button>
                   <button
+                    className="btn"
                     onClick={() => {
                       const amt = window.prompt("Enter PIF amount (£):", "");
                       if (amt && amt.trim()) complete(i, "PIF", amt.trim());
