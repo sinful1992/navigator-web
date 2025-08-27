@@ -1,42 +1,290 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+/* ===========================
+   Global / Base styles
+   =========================== */
+
+:root {
+  --bg: #ffffff;
+  --text: #14213d;
+  --muted: #6b7280;
+  --border: #e7e7e7;
+  --primary: #2563eb;
+  --primary-ink: #ffffff;
+  --accent: #0ea5e9;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #f59e0b;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  line-height: 1.45;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+/* Container spacing if you ever wrap the app in a container */
+.app-container {
+  max-width: 960px;
+  margin: 2rem auto;
+  padding: 0 1rem;
 }
 
+/* Headings */
+h1, h2, h3 {
+  margin: 0 0 .4rem;
+  line-height: 1.15;
+}
+h1 { font-size: clamp(26px, 4.5vw, 36px); }
+h2 { font-size: clamp(18px, 3.5vw, 24px); }
+
+/* Paragraphs / small muted text */
+p { margin: 0 0 .75rem; }
+.muted { color: var(--muted); }
+
+/* ===========================
+   Inputs & Buttons
+   =========================== */
+
+input[type="text"], input[type="number"], input[type="search"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color .15s ease;
+  font-size: 14px;
+  background: #fff;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="search"]:focus {
+  border-color: var(--accent);
+}
+
+input[type="file"] {
+  font-size: 14px;
+}
+
+/* Generic button */
+button, .btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, transform .02s ease;
+  box-shadow: var(--shadow);
+}
+
+button:hover, .btn:hover {
+  background: #fafafa;
+  border-color: #dcdcdc;
+}
+
+button:active, .btn:active {
+  transform: translateY(1px);
+}
+
+/* Primary style (use by adding class "primary" if you need it) */
+.btn.primary {
+  background: var(--primary);
+  color: var(--primary-ink);
+  border-color: var(--primary);
+}
+.btn.primary:hover {
+  filter: brightness(0.98);
+}
+
+/* Danger / Success helpers if needed */
+.btn.danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.btn.success {
+  background: var(--success);
+  color: #fff;
+  border-color: var(--success);
+}
+
+/* Disabled */
+button:disabled, .btn:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* ===========================
+   Tabs (List / Completed)
+   =========================== */
+
+.tabs {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.tab-btn {
+  border: none;
+  background: #fff;
+  padding: 8px 14px;
+  font-weight: 600;
+}
+.tab-btn.active {
+  background: var(--text);
+  color: #fff;
+}
+
+/* ===========================
+   Day panel
+   =========================== */
+
+.day-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--shadow);
+  background: #fff;
+}
+
+.day-panel .stats {
+  display: flex;
+  gap: 18px;
+}
+
+.day-panel .stats > div {
+  display: grid;
+  gap: 2px;
+  min-width: 70px;
+}
+
+.day-panel .label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.day-panel .value {
+  font-weight: 700;
+}
+
+/* ===========================
+   Address cards (List view)
+   =========================== */
+
+.cards {
+  display: grid;
+  gap: 12px;
+}
+
+/* Two column grid: left content | right actions */
 .card {
-  padding: 2em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: start;
+  background: #fff;
+  box-shadow: var(--shadow);
 }
 
-.read-the-docs {
-  color: #888;
+.card-title {
+  font-weight: 800;
+  letter-spacing: .2px;
+  font-size: 18px;
+  line-height: 1.15;
+  margin: 0 0 6px;
+  word-break: break-word;
 }
+
+.card-gps {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+.card-actions .btn {
+  min-width: 116px;
+}
+
+/* Keep buttons aligned on phones; stack vertically if tight */
+@media (max-width: 600px) {
+  .card {
+    grid-template-columns: 1fr 180px; /* right column keeps width for buttons */
+  }
+  .card-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .card-actions .btn {
+    width: 100%;
+  }
+}
+
+/* ===========================
+   Utility spacing
+   =========================== */
+
+.row { display: flex; gap: 8px; align-items: center; }
+.gap-6 { gap: 6px; }
+.gap-8 { gap: 8px; }
+.gap-12 { gap: 12px; }
+
+.mt-4 { margin-top: 4px; }
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.mb-8 { margin-bottom: 8px; }
+.mb-12 { margin-bottom: 12px; }
+
+.center { text-align: center; }
+
+/* ===========================
+   Completed view helpers
+   =========================== */
+
+.completed-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.summary-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 10px;
+}
+.kv .key { color: var(--muted); }
+.kv .val { font-weight: 700; }
