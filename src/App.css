@@ -1,209 +1,178 @@
-/* ===========================
-   Global / Base styles
-   =========================== */
+/* ================================
+   Base theme + resets
+================================== */
 
 :root {
-  --bg: #ffffff;
-  --text: #14213d;
-  --muted: #6b7280;
-  --border: #e7e7e7;
+  --bg: #f7f8fb;
+  --panel: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e5e7eb;
   --primary: #2563eb;
   --primary-ink: #ffffff;
-  --accent: #0ea5e9;
   --success: #16a34a;
   --danger: #dc2626;
-  --warning: #f59e0b;
   --radius: 12px;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow: 0 1px 1px rgba(0,0,0,.02), 0 6px 14px rgba(0,0,0,.06);
 }
 
 * { box-sizing: border-box; }
-
-html, body, #root {
-  height: 100%;
-}
-
+html, body, #root { height: 100%; }
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  line-height: 1.45;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Container spacing if you ever wrap the app in a container */
-.app-container {
-  max-width: 960px;
-  margin: 2rem auto;
-  padding: 0 1rem;
-}
-
-/* Headings */
-h1, h2, h3 {
-  margin: 0 0 .4rem;
-  line-height: 1.15;
-}
-h1 { font-size: clamp(26px, 4.5vw, 36px); }
-h2 { font-size: clamp(18px, 3.5vw, 24px); }
-
-/* Paragraphs / small muted text */
-p { margin: 0 0 .75rem; }
+h1, h2, h3 { margin: 0 0 8px; }
+p { margin: 0 0 8px; }
 .muted { color: var(--muted); }
 
-/* ===========================
-   Inputs & Buttons
-   =========================== */
+/* Layout helpers */
+.stack { display: grid; gap: 12px; }
+.row   { display: flex; gap: 8px; align-items: center; }
 
-input[type="text"], input[type="number"], input[type="search"] {
+/* ================================
+   Inputs & Buttons
+================================== */
+input[type="text"],
+input[type="number"] {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  outline: none;
-  transition: border-color .15s ease;
-  font-size: 14px;
+  border-radius: 10px;
   background: #fff;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+  font-size: 14px;
 }
-
 input[type="text"]:focus,
-input[type="number"]:focus,
-input[type="search"]:focus {
-  border-color: var(--accent);
+input[type="number"]:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(147, 197, 253, .35);
 }
 
 input[type="file"] {
   font-size: 14px;
 }
 
-/* Generic button */
-button, .btn {
+.btn {
   appearance: none;
   border: 1px solid var(--border);
   background: #fff;
   color: var(--text);
-  padding: 9px 12px;
-  border-radius: 8px;
-  font-size: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background .15s ease, border-color .15s ease, transform .02s ease;
-  box-shadow: var(--shadow);
+  transition: transform .04s ease, box-shadow .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
+  box-shadow: 0 1px 0 rgba(0,0,0,.03);
 }
+.btn:hover { box-shadow: var(--shadow); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
 
-button:hover, .btn:hover {
-  background: #fafafa;
-  border-color: #dcdcdc;
-}
-
-button:active, .btn:active {
-  transform: translateY(1px);
-}
-
-/* Primary style (use by adding class "primary" if you need it) */
 .btn.primary {
   background: var(--primary);
   color: var(--primary-ink);
-  border-color: var(--primary);
-}
-.btn.primary:hover {
-  filter: brightness(0.98);
-}
-
-/* Danger / Success helpers if needed */
-.btn.danger {
-  background: var(--danger);
-  color: #fff;
-  border-color: var(--danger);
+  border-color: transparent;
 }
 .btn.success {
   background: var(--success);
   color: #fff;
-  border-color: var(--success);
+  border-color: transparent;
+}
+.btn.danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+}
+.btn.ghost {
+  background: transparent;
+  border-color: var(--border);
 }
 
-/* Disabled */
-button:disabled, .btn:disabled {
-  opacity: .55;
-  cursor: not-allowed;
+/* Smaller button variant (used in DayPanel) */
+.btn.small {
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 9px;
 }
 
-/* ===========================
+/* ================================
    Tabs (List / Completed)
-   =========================== */
-
+================================== */
 .tabs {
   display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
+  background: #eef2ff;
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+}
+.tab {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: #312e81;
+  cursor: pointer;
+  user-select: none;
+}
+.tab.active {
+  background: #fff;
+  color: var(--primary);
   box-shadow: var(--shadow);
 }
 
-.tab-btn {
-  border: none;
-  background: #fff;
-  padding: 8px 14px;
-  font-weight: 600;
-}
-.tab-btn.active {
-  background: var(--text);
-  color: #fff;
-}
-
-/* ===========================
-   Day panel
-   =========================== */
-
-.day-panel {
+/* ================================
+   Day Panel
+================================== */
+.panel {
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  justify-content: space-between;
   box-shadow: var(--shadow);
-  background: #fff;
 }
-
-.day-panel .stats {
+.panel-row {
   display: flex;
-  gap: 18px;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
-
-.day-panel .stats > div {
-  display: grid;
-  gap: 2px;
-  min-width: 70px;
-}
-
-.day-panel .label {
-  font-size: 12px;
+.pill {
+  padding: 6px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
   color: var(--muted);
-}
-.day-panel .value {
-  font-weight: 700;
+  font-size: 12px;
 }
 
-/* ===========================
+/* ================================
    Address cards (List view)
-   =========================== */
-
+   Address on top, actions on bottom
+================================== */
 .cards {
   display: grid;
   gap: 12px;
 }
 
-/* Two column grid: left content | right actions */
 .card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 14px;
-  display: grid;
-  grid-template-columns: 1fr auto;
+  display: flex;              /* vertical stack */
+  flex-direction: column;
   gap: 12px;
-  align-items: start;
   background: #fff;
   box-shadow: var(--shadow);
+}
+
+.card.active {
+  border-color: #93c5fd;
+  background: #f8fbff;
 }
 
 .card-title {
@@ -223,68 +192,92 @@ button:disabled, .btn:disabled {
 .card-actions {
   display: flex;
   gap: 8px;
-  align-items: stretch;
-  justify-content: flex-end;
-  flex-wrap: nowrap;
+  align-items: center;
+  flex-wrap: wrap;            /* wrap nicely on phones */
+  justify-content: flex-end;  /* right-align by default */
+  margin-top: 4px;
 }
 
 .card-actions .btn {
   min-width: 116px;
 }
 
-/* Keep buttons aligned on phones; stack vertically if tight */
-@media (max-width: 600px) {
-  .card {
-    grid-template-columns: 1fr 180px; /* right column keeps width for buttons */
-  }
+/* Make PIF input resemble buttons visually */
+.card-actions input[type="number"] {
+  width: 120px;
+}
+
+/* On very small screens, let buttons stretch two per row */
+@media (max-width: 480px) {
   .card-actions {
-    flex-direction: column;
-    gap: 10px;
+    justify-content: stretch;
+    gap: 8px;
   }
-  .card-actions .btn {
-    width: 100%;
+  .card-actions .btn,
+  .card-actions input[type="number"] {
+    flex: 1 1 48%;
+    min-width: 0;
   }
 }
 
-/* ===========================
-   Utility spacing
-   =========================== */
+/* ================================
+   Completed view
+================================== */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 10px;
+}
+.kpi {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.kpi .label { font-size: 12px; color: var(--muted); }
+.kpi .value { font-size: 20px; font-weight: 800; }
 
-.row { display: flex; gap: 8px; align-items: center; }
-.gap-6 { gap: 6px; }
-.gap-8 { gap: 8px; }
-.gap-12 { gap: 12px; }
-
-.mt-4 { margin-top: 4px; }
-.mt-8 { margin-top: 8px; }
-.mt-12 { margin-top: 12px; }
-.mb-8 { margin-bottom: 8px; }
-.mb-12 { margin-bottom: 12px; }
-
-.center { text-align: center; }
-
-/* ===========================
-   Completed view helpers
-   =========================== */
-
-.completed-summary {
+.day-grid {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
-
-.summary-card {
+.day-card {
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px;
-  background: #fff;
+  box-shadow: var(--shadow);
+}
+.day-header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.day-hours { color: var(--muted); font-size: 13px; }
+.day-outcomes { color: var(--muted); font-size: 13px; }
+
+.addr-line {
+  font-size: 14px;
+  padding: 4px 0;
+  border-top: 1px dashed var(--border);
+}
+.addr-line:first-of-type { border-top: 0; }
+
+/* ================================
+   Utility spacing
+================================== */
+.section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
   box-shadow: var(--shadow);
 }
 
-.kv {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 6px 10px;
-}
-.kv .key { color: var(--muted); }
-.kv .val { font-weight: 700; }
+.center { text-align: center; }
+.right { text-align: right; }
+```0
