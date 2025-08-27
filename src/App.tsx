@@ -288,7 +288,6 @@ export default function App() {
             setActive={setActive}
             cancelActive={cancelActive}
             complete={complete}
-            undo={undo}
             filterText={search}
           />
 
