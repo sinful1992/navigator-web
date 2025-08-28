@@ -24,11 +24,11 @@ export function Completed({ state }: Props) {
   // Date range picker state
   const [range, setRange] = React.useState<DateRange>();
 
-  // Build a set of days included in the selected range (if any)
+  // Build list of days in selected range (if any)
   const selectedDays = React.useMemo(() => {
     if (!range?.from && !range?.to) return null;
-    const from = range?.from!;
-    const to = range?.to ?? range?.from!;
+    const from = range!.from!;
+    const to = range!.to ?? range!.from!;
     return eachDayOfInterval({ start: from, end: to });
   }, [range]);
 
@@ -41,56 +41,55 @@ export function Completed({ state }: Props) {
     });
   }, [state.completions, selectedDays]);
 
-  // Group completions by day (string key)
+  // Group completions by day
   const grouped = React.useMemo(() => {
     const map = new Map<string, Completion[]>();
     for (const c of filtered) {
-      const key = c.timestamp.slice(0, 10);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(c);
+      const k = c.timestamp.slice(0, 10);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(c);
     }
-    // If user picked a range but no completions on some days, still show empty days
+    // Ensure empty days in range also appear
     if (selectedDays) {
-      for (const d of selectedDays) {
-        const k = dayKey(d);
+      for (const sd of selectedDays) {
+        const k = dayKey(sd);            // <-- uses sd (fixes TS6133)
         if (!map.has(k)) map.set(k, []);
       }
     }
-    return Array.from(map.entries())
-      .sort((a, b) => (a[0] < b[0] ? 1 : -1)); // newest first
+    return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1)); // newest first
   }, [filtered, selectedDays]);
 
-  // Compute hours per day from recorded sessions
+  // Compute hours per day from sessions
   const dayHours = React.useMemo(() => {
     const hoursMap = new Map<string, number>();
     for (const s of state.daySessions) {
-      const k = s.date; // already YYYY-MM-DD in your state
+      const k = s.date;
       if (!k) continue;
-      const sec = s.durationSeconds ?? (() => {
-        // Fallback: derive from start/end if present
-        try {
-          if (s.start && s.end) {
-            const a = new Date(s.start).getTime();
-            const b = new Date(s.end).getTime();
-            if (b > a) return Math.floor((b - a) / 1000);
-          }
-        } catch {}
-        return 0;
-      })();
-      if (!hoursMap.has(k)) hoursMap.set(k, 0);
+      const sec =
+        s.durationSeconds ??
+        (() => {
+          try {
+            if (s.start && s.end) {
+              const a = new Date(s.start).getTime();
+              const b = new Date(s.end).getTime();
+              if (b > a) return Math.floor((b - a) / 1000);
+            }
+          } catch {}
+          return 0;
+        })();
       hoursMap.set(k, (hoursMap.get(k) || 0) + (sec || 0));
     }
     return hoursMap;
   }, [state.daySessions]);
 
-  // Outcomes summary across the filtered set
+  // Outcomes summary across filtered set
   const totals = React.useMemo(() => {
     const out: Record<Outcome, number> = { PIF: 0, DA: 0, Done: 0 };
     for (const c of filtered) out[c.outcome] = (out[c.outcome] || 0) + 1;
     return out;
   }, [filtered]);
 
-  // Export JSON (per day details)
+  // Export JSON per day (hours + addresses + outcomes)
   const onExportJSON = () => {
     const fromLabel = range?.from ? format(range.from, "yyyyMMdd") : "all";
     const toLabel = range?.to ? format(range.to, "yyyyMMdd") : fromLabel;
@@ -113,13 +112,13 @@ export function Completed({ state }: Props) {
           lng: c.lng, // optional
           outcome: c.outcome,
           amount: c.amount,
-          timestamp: c.timestamp
-        }))
+          timestamp: c.timestamp,
+        })),
       };
     });
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json"
+      type: "application/json",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -150,7 +149,9 @@ export function Completed({ state }: Props) {
         </div>
 
         <div style={{ marginLeft: "auto" }}>
-          <button className="btn" onClick={onExportJSON}>Export JSON</button>
+          <button className="btn" onClick={onExportJSON}>
+            Export JSON
+          </button>
         </div>
       </div>
 
@@ -182,13 +183,21 @@ export function Completed({ state }: Props) {
               <div className="dayCard" key={k}>
                 <div className="dayHeader">
                   <div>
-                    <div className="dayTitle">{format(dayDate, "EEEE d MMM yyyy")}</div>
+                    <div className="dayTitle">
+                      {format(dayDate, "EEEE d MMM yyyy")}
+                    </div>
                     <div className="muted">Hours: {secsToText(sec)}</div>
                   </div>
                   <div className="dayStats">
-                    <span>PIF: <b>{outcomes.PIF}</b></span>
-                    <span>Done: <b>{outcomes.Done}</b></span>
-                    <span>DA: <b>{outcomes.DA}</b></span>
+                    <span>
+                      PIF: <b>{outcomes.PIF}</b>
+                    </span>
+                    <span>
+                      Done: <b>{outcomes.Done}</b>
+                    </span>
+                    <span>
+                      DA: <b>{outcomes.DA}</b>
+                    </span>
                   </div>
                 </div>
 
