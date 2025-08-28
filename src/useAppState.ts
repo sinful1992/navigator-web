@@ -39,32 +39,33 @@ export function useAppState() {
     };
   }, []);
 
-  // Persist on every change (debounced)
+  // Persist on every change (debounced) - only when not loading
   React.useEffect(() => {
+    if (loading) return;
     const t = setTimeout(() => set(STORAGE_KEY, state).catch(() => {}), 150);
     return () => clearTimeout(t);
-  }, [state]);
+  }, [state, loading]);
 
   // ---- existing actions ----
 
-  const setAddresses = (rows: AddressRow[]) => {
+  const setAddresses = React.useCallback((rows: AddressRow[]) => {
     setState((s) => ({
       ...s,
       addresses: rows,
       activeIndex: null,
       // keep existing completions/sessions/arrangements
     }));
-  };
+  }, []);
 
-  const setActive = (idx: number) => {
+  const setActive = React.useCallback((idx: number) => {
     setState((s) => ({ ...s, activeIndex: idx }));
-  };
+  }, []);
 
-  const cancelActive = () => {
+  const cancelActive = React.useCallback(() => {
     setState((s) => ({ ...s, activeIndex: null }));
-  };
+  }, []);
 
-  const complete = (index: number, outcome: Outcome, amount?: string) => {
+  const complete = React.useCallback((index: number, outcome: Outcome, amount?: string) => {
     setState((s) => {
       const a = s.addresses[index];
       if (!a) return s;
@@ -86,17 +87,17 @@ export function useAppState() {
       if (s.activeIndex === index) next.activeIndex = null;
       return next;
     });
-  };
+  }, []);
 
-  const undo = (index: number) => {
+  const undo = React.useCallback((index: number) => {
     setState((s) => ({
       ...s,
       completions: s.completions.filter((c) => c.index !== index),
     }));
-  };
+  }, []);
 
   // Day tracking
-  const startDay = () => {
+  const startDay = React.useCallback(() => {
     setState((s) => {
       // if already active, no-op
       const hasActive = s.daySessions.some((d) => !d.end);
@@ -108,9 +109,9 @@ export function useAppState() {
       };
       return { ...s, daySessions: [...s.daySessions, sess] };
     });
-  };
+  }, []);
 
-  const endDay = () => {
+  const endDay = React.useCallback(() => {
     setState((s) => {
       const i = s.daySessions.findIndex((d) => !d.end);
       if (i === -1) return s;
@@ -128,11 +129,11 @@ export function useAppState() {
       arr[i] = act;
       return { ...s, daySessions: arr };
     });
-  };
+  }, []);
 
   // ---- arrangement actions ----
 
-  const addArrangement = (arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const addArrangement = React.useCallback((arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => {
     setState((s) => {
       const now = new Date().toISOString();
       const newArrangement: Arrangement = {
@@ -147,9 +148,9 @@ export function useAppState() {
         arrangements: [...s.arrangements, newArrangement],
       };
     });
-  };
+  }, []);
 
-  const updateArrangement = (id: string, updates: Partial<Arrangement>) => {
+  const updateArrangement = React.useCallback((id: string, updates: Partial<Arrangement>) => {
     setState((s) => ({
       ...s,
       arrangements: s.arrangements.map(arr => 
@@ -158,14 +159,14 @@ export function useAppState() {
           : arr
       ),
     }));
-  };
+  }, []);
 
-  const deleteArrangement = (id: string) => {
+  const deleteArrangement = React.useCallback((id: string) => {
     setState((s) => ({
       ...s,
       arrangements: s.arrangements.filter(arr => arr.id !== id),
     }));
-  };
+  }, []);
 
   // ---- backup/restore ----
 
@@ -181,7 +182,7 @@ export function useAppState() {
     );
   }
 
-  const backupState = () => {
+  const backupState = React.useCallback(() => {
     // Return a snapshot; caller can download it as JSON
     return {
       addresses: state.addresses,
@@ -190,9 +191,9 @@ export function useAppState() {
       daySessions: state.daySessions,
       arrangements: state.arrangements,
     } as AppState;
-  };
+  }, [state]);
 
-  const restoreState = (obj: unknown) => {
+  const restoreState = React.useCallback((obj: unknown) => {
     if (!isValidState(obj)) throw new Error("Invalid backup file format");
     const snapshot: AppState = {
       addresses: obj.addresses,
@@ -204,11 +205,12 @@ export function useAppState() {
     setState(snapshot);
     // Optional: persist immediately (in addition to the debounced effect)
     set(STORAGE_KEY, snapshot).catch(() => {});
-  };
+  }, []);
 
   return {
     state,
     loading,
+    setState, // Expose setState for cloud sync
     setAddresses,
     setActive,
     cancelActive,
