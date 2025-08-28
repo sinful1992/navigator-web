@@ -5,23 +5,6 @@ import { useAppState } from "./useAppState";
 import { AddressList } from "./AddressList";
 import { Completed } from "./Completed";
 import { DayPanel } from "./DayPanel";
-import { downloadJson, readJsonFile } from "./backup";
-
-type {tab === "list" ? (
-        <>
-          {/* Search Bar */}
-          <div className="search-container">
-            <input
-              type="search"
-              value={search}
-              placeholder="🔍 Search addresses..."
-              onChange={(e) => setSearch(eimport * as React from "react";
-import "./App.css";
-import { ImportExcel } from "./ImportExcel";
-import { useAppState } from "./useAppState";
-import { AddressList } from "./AddressList";
-import { Completed } from "./Completed";
-import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
 
@@ -305,6 +288,7 @@ export default function App() {
         </div>
       </div>
 
+      {/* Tab Content */}
       {tab === "list" ? (
         <>
           {/* Search Bar */}
@@ -381,12 +365,16 @@ export default function App() {
             ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete • U Undo • S Start Day • E End Day
           </div>
         </>
-      ) : (
+      ) : tab === "completed" ? (
         <Completed state={state} />
+      ) : (
+        <Arrangements
+          state={state}
+          onAddArrangement={addArrangement}
+          onUpdateArrangement={updateArrangement}
+          onDeleteArrangement={deleteArrangement}
+        />
       )}
-    </div>
-  );
-}
     </div>
   );
 }
