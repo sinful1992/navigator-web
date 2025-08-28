@@ -49,13 +49,7 @@ export function Completed({ state }: Props) {
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(c);
     }
-    // Ensure empty days in range also appear
-    if (selectedDays) {
-      for (const sd of selectedDays) {
-        const k = dayKey(sd);            // <-- uses sd (fixes TS6133)
-        if (!map.has(k)) map.set(k, []);
-      }
-    }
+
     return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1)); // newest first
   }, [filtered, selectedDays]);
 
