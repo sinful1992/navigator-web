@@ -71,6 +71,20 @@ export function AddressList({
 
   if (rows.length === 0) {
     return (
+      <div className="empty-box">
+        <div style={{ fontSize: "1rem", marginBottom: "0.5rem", fontWeight: 600 }}>
+          {state.addresses.length === 0 ? "📍 No addresses loaded" : "🔍 No matching addresses"}
+        </div>
+        <div style={{ fontSize: "0.875rem", opacity: 0.75 }}>
+          {state.addresses.length === 0
+            ? "Import an Excel file to get started with address navigation"
+            : "Try adjusting your search terms or check if all addresses are completed"}
+        </div>
+      </div>
+    );
+  }
+
+  return (
     <div className="list-col">
       {rows.map(({ i, address, lat, lng }) => {
         const active = state.activeIndex === i;
@@ -200,17 +214,4 @@ export function AddressList({
       })}
     </div>
   );
-}  <div className="empty-box">
-        <div style={{ fontSize: "1rem", marginBottom: "0.5rem", fontWeight: 600 }}>
-          {state.addresses.length === 0 ? "📍 No addresses loaded" : "🔍 No matching addresses"}
-        </div>
-        <div style={{ fontSize: "0.875rem", opacity: 0.75 }}>
-          {state.addresses.length === 0
-            ? "Import an Excel file to get started with address navigation"
-            : "Try adjusting your search terms or check if all addresses are completed"}
-        </div>
-      </div>
-    );
-  }
-
-  return (
+}
