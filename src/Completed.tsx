@@ -8,11 +8,6 @@ import type { AppState, Completion, Outcome } from "./types";
 
 type Props = { state: AppState };
 
-// Helper: YYYY-MM-DD
-function dayKey(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
 function secsToText(total: number | null | undefined) {
   if (!total || total <= 0) return "N/A";
   const h = Math.floor(total / 3600);
@@ -41,7 +36,7 @@ export function Completed({ state }: Props) {
     });
   }, [state.completions, selectedDays]);
 
-  // Group completions by day
+  // Group completions by day (only days that have completions)
   const grouped = React.useMemo(() => {
     const map = new Map<string, Completion[]>();
     for (const c of filtered) {
@@ -49,9 +44,9 @@ export function Completed({ state }: Props) {
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(c);
     }
-
-    return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1)); // newest first
-  }, [filtered, selectedDays]);
+    // newest first
+    return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  }, [filtered]);
 
   // Compute hours per day from sessions
   const dayHours = React.useMemo(() => {
@@ -89,13 +84,14 @@ export function Completed({ state }: Props) {
     const toLabel = range?.to ? format(range.to, "yyyyMMdd") : fromLabel;
 
     const payload = grouped.map(([k, items]) => {
-      const d = new Date(`${k}T00:00:00Z`);
+      const dayDate = new Date(`${k}T00:00:00Z`);
       const sec = dayHours.get(k) ?? null;
       const outcomes: Record<Outcome, number> = { PIF: 0, DA: 0, Done: 0 };
       for (const c of items) outcomes[c.outcome] = (outcomes[c.outcome] || 0) + 1;
 
       return {
         date: k,
+        prettyDate: format(dayDate, "EEEE d MMM yyyy"),
         durationSeconds: sec,
         hoursText: secsToText(sec),
         outcomesSummary: outcomes,
@@ -163,7 +159,7 @@ export function Completed({ state }: Props) {
         {grouped.length === 0 ? (
           <div className="emptyBox">
             <div style={{ fontSize: 14, opacity: 0.75 }}>
-              No completions in the selected range.
+              No completions{range?.from ? " in the selected range" : ""}.
             </div>
           </div>
         ) : (
@@ -233,3 +229,4 @@ export function Completed({ state }: Props) {
     </div>
   );
 }
+```0
