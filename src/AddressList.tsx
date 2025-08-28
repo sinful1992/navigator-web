@@ -71,7 +71,136 @@ export function AddressList({
 
   if (rows.length === 0) {
     return (
-      <div className="empty-box">
+    <div className="list-col">
+      {rows.map(({ i, address, lat, lng }) => {
+        const active = state.activeIndex === i;
+        const open = openCompleteFor === i;
+
+        return (
+          <div 
+            className={`card address-card fade-in-up ${active ? "card-active" : ""}`} 
+            key={i}
+          >
+            {/* Card Header */}
+            <div className="card-header">
+              <div className="addr-title">
+                <span className="addr-index">{i + 1}</span>
+                {address}
+              </div>
+              {active && (
+                <span className="pill pill-active">
+                  🎯 Active
+                </span>
+              )}
+            </div>
+
+            {/* Card Body - Reserved for future content */}
+            <div className="card-body" style={{ padding: 0 }} />
+
+            {/* Card Footer */}
+            <div className="card-footer">
+              {!open ? (
+                // Normal action row
+                <div className="btn-row btn-row-end">
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => openMaps(address, lat, lng)}
+                    title="Open in Google Maps"
+                  >
+                    🗺️ Navigate
+                  </button>
+
+                  <div className="btn-spacer" />
+
+                  {active ? (
+                    <div className="btn-group">
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => setOpenCompleteFor(i)}
+                      >
+                        ✅ Complete
+                      </button>
+                      <button 
+                        className="btn btn-ghost" 
+                        onClick={cancelActive}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      className="btn btn-primary" 
+                      onClick={() => setActive(i)}
+                    >
+                      Set Active
+                    </button>
+                  )}
+                </div>
+              ) : (
+                // Completion choices open
+                <div className="complete-bar">
+                  <div className="complete-btns">
+                    <button
+                      className="btn btn-success"
+                      onClick={() => {
+                        complete(i, "Done");
+                        setOpenCompleteFor(null);
+                      }}
+                    >
+                      ✅ Done
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => {
+                        complete(i, "DA");
+                        setOpenCompleteFor(null);
+                      }}
+                    >
+                      ❌ DA
+                    </button>
+                  </div>
+
+                  <div className="pif-group">
+                    <input
+                      className="input amount-input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Amount (£)"
+                      value={pifAmount[i] || ""}
+                      onChange={(e) =>
+                        setPifAmount((prev) => ({
+                          ...prev,
+                          [i]: e.target.value,
+                        }))
+                      }
+                    />
+                    <button 
+                      className="btn btn-success" 
+                      onClick={() => onConfirmPIF(i)}
+                    >
+                      💰 PIF
+                    </button>
+                  </div>
+
+                  <div className="btn-spacer" />
+
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => setOpenCompleteFor(null)}
+                    title="Close options"
+                  >
+                    ← Back
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}  <div className="empty-box">
         <div style={{ fontSize: "1rem", marginBottom: "0.5rem", fontWeight: 600 }}>
           {state.addresses.length === 0 ? "📍 No addresses loaded" : "🔍 No matching addresses"}
         </div>
