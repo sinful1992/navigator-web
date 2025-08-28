@@ -10,7 +10,9 @@ import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
 
-// ---------- small error boundary so blank screens show a message ----------
+type Tab = "list" | "completed" | "arrangements";
+
+// Simple error boundary to avoid blank screen
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -29,7 +31,7 @@ class ErrorBoundary extends React.Component<
     if (this.state.hasError) {
       return (
         <div style={{ padding: 16 }}>
-          <h2>Something went wrong rendering the page.</h2>
+          <h2>Something went wrong.</h2>
           <pre style={{ whiteSpace: "pre-wrap" }}>{this.state.msg}</pre>
         </div>
       );
@@ -38,20 +40,34 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-// --------- Public shell: ONLY handles auth. No conditional hooks here. ---------
 export default function App() {
   const cloudSync = useCloudSync(); // always called
 
+  // ✅ NEW: wait for Supabase to restore session before deciding what to show
+  if (cloudSync.isLoading) {
+    return (
+      <div className="container">
+        <div className="loading">
+          <div className="spinner" />
+          Restoring session…
+        </div>
+      </div>
+    );
+  }
+
+  // Not loading and no user → show Auth
   if (!cloudSync.user) {
     return (
       <ErrorBoundary>
         <Auth
           onSignIn={async (email, password) => {
-            await cloudSync.signIn(email, password); // return void to satisfy Auth
+            await cloudSync.signIn(email, password);
           }}
           onSignUp={async (email, password) => {
-            await cloudSync.signUp(email, password); // return void to satisfy Auth
+            await cloudSync.signUp(email, password);
           }}
+          // If you wired a demo account in .env, uncomment the next line and add a Demo button in Auth:
+          // onDemoSignIn={async () => { await cloudSync.signInDemo(); }}
           isLoading={cloudSync.isLoading}
           error={cloudSync.error}
           onClearError={cloudSync.clearError}
@@ -60,16 +76,13 @@ export default function App() {
     );
   }
 
-  // Once authenticated, render the inner app which owns its own hooks.
+  // Authenticated → render the main app
   return (
     <ErrorBoundary>
       <AuthedApp />
     </ErrorBoundary>
   );
 }
-
-// ------------------------ Authenticated app (all previous logic) ------------------------
-type Tab = "list" | "completed" | "arrangements";
 
 function AuthedApp() {
   const {
@@ -98,7 +111,7 @@ function AuthedApp() {
     React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
-  // ----------- Cloud sync: debounce save ----------
+  // Auto-sync data to cloud when state changes (debounced)
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     const t = setTimeout(() => {
@@ -106,30 +119,29 @@ function AuthedApp() {
         .syncData(state)
         .then(() => setLastSyncTime(new Date()))
         .catch((err: any) => console.error("Sync failed:", err));
-    }, 1000);
+    }, 800);
     return () => clearTimeout(t);
-  }, [cloudSync.user, loading, state]); // keep deps minimal & stable
+  }, [cloudSync.user, loading, state, cloudSync]);
 
-  // ----------- Cloud subscribe ----------
+  // Subscribe to cloud changes
   React.useEffect(() => {
     if (!cloudSync.user) return;
-    const unsub =
-      cloudSync.subscribeToData?.((newState) => {
-        if (newState) {
-          setState(newState);
-          setLastSyncTime(new Date());
-        }
-      }) ?? undefined;
-    return typeof unsub === "function" ? unsub : undefined;
-  }, [cloudSync.user, setState]);
+    const unsub = cloudSync.subscribeToData((newState) => {
+      if (newState) {
+        setState(newState);
+        setLastSyncTime(new Date());
+      }
+    });
+    return unsub;
+  }, [cloudSync.user, cloudSync, setState]);
 
-  // ----------- Create arrangement from list ----------
+  // Handle arrangement creation from address list
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
     setTab("arrangements");
   }, []);
 
-  // ----------- Helpers / derived -----------
+  // ----- helpers shared by UI & hotkeys -----
   const completions = state?.completions ?? [];
   const addresses = state?.addresses ?? [];
   const daySessions = state?.daySessions ?? [];
@@ -184,7 +196,7 @@ function AuthedApp() {
     [complete]
   );
 
-  // ----------- Keyboard shortcuts (list tab only) -----------
+  // Keyboard shortcuts (List tab only)
   React.useEffect(() => {
     if (tab !== "list") return;
 
@@ -204,10 +216,12 @@ function AuthedApp() {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         if (visible.length === 0) return;
+
         const pos =
           state.activeIndex != null
             ? visible.findIndex(({ i }) => i === state.activeIndex)
             : -1;
+
         if (e.key === "ArrowDown") {
           const nextPos = pos >= 0 ? (pos + 1) % visible.length : 0;
           setActive(visible[nextPos].i);
@@ -267,7 +281,7 @@ function AuthedApp() {
     endDay,
   ]);
 
-  // ----------- Backup / Restore -----------
+  // Backup / Restore
   const onBackup = () => {
     const snap = backupState();
     const stamp = new Date();
@@ -292,7 +306,7 @@ function AuthedApp() {
     }
   };
 
-  // ----------- Stats -----------
+  // Stats
   const stats = React.useMemo(() => {
     const total = addresses.length;
     const completed = completions.length;
@@ -303,7 +317,7 @@ function AuthedApp() {
     return { total, completed, pending, pifCount, doneCount, daCount };
   }, [addresses, completions]);
 
-  // ----------- Loading guard (initial state after login) -----------
+  // Loading guard (initial state after login)
   const waitingForInitialData =
     !!cloudSync.user && (!state || !Array.isArray(state.addresses));
 
