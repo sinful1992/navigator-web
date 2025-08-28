@@ -13,7 +13,20 @@ import { downloadJson, readJsonFile } from "./backup";
 
 type Tab = "list" | "completed" | "arrangements";
 
-// Simple error boundary to avoid blank screen on unexpected errors
+// --- helper: make sure arrays exist so .length never crashes ---
+function normalizeState(raw: any) {
+  const r = raw ?? {};
+  return {
+    ...r,
+    addresses: Array.isArray(r.addresses) ? r.addresses : [],
+    completions: Array.isArray(r.completions) ? r.completions : [],
+    arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
+    daySessions: Array.isArray(r.daySessions) ? r.daySessions : [],
+    activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
+  };
+}
+
+// Simple error boundary
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -42,9 +55,8 @@ class ErrorBoundary extends React.Component<
 }
 
 export default function App() {
-  const cloudSync = useCloudSync(); // always mount to restore session
+  const cloudSync = useCloudSync();
 
-  // Wait for Supabase to restore session before deciding what to render
   if (cloudSync.isLoading) {
     return (
       <div className="container">
@@ -56,19 +68,12 @@ export default function App() {
     );
   }
 
-  // If not loading and no user, show Auth
   if (!cloudSync.user) {
     return (
       <ErrorBoundary>
         <Auth
-          onSignIn={async (email, password) => {
-            await cloudSync.signIn(email, password);
-          }}
-          onSignUp={async (email, password) => {
-            await cloudSync.signUp(email, password);
-          }}
-          // If you added a Demo button in Auth, you can also pass:
-          // onDemoSignIn={async () => { await cloudSync.signInDemo(); }}
+          onSignIn={cloudSync.signIn}
+          onSignUp={cloudSync.signUp}
           isLoading={cloudSync.isLoading}
           error={cloudSync.error}
           onClearError={cloudSync.clearError}
@@ -77,7 +82,6 @@ export default function App() {
     );
   }
 
-  // Authenticated → render the app
   return (
     <ErrorBoundary>
       <AuthedApp />
@@ -112,24 +116,42 @@ function AuthedApp() {
     React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
-  // Auto-sync local state to cloud (debounced)
+  // --- derive safe arrays (never undefined) ---
+  const addresses = Array.isArray(state?.addresses) ? state!.addresses : [];
+  const completions = Array.isArray(state?.completions) ? state!.completions : [];
+  const arrangements = Array.isArray(state?.arrangements) ? state!.arrangements : [];
+  const daySessions = Array.isArray(state?.daySessions) ? state!.daySessions : [];
+
+  // A safe state object to pass to children
+  const safeState = React.useMemo(
+    () => ({
+      ...(state ?? {}),
+      addresses,
+      completions,
+      arrangements,
+      daySessions,
+    }),
+    [state, addresses, completions, arrangements, daySessions]
+  );
+
+  // Auto-sync to cloud (debounced)
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     const t = setTimeout(() => {
       cloudSync
-        .syncData(state)
+        .syncData(safeState)
         .then(() => setLastSyncTime(new Date()))
         .catch((err: unknown) => console.error("Sync failed:", err));
     }, 800);
     return () => clearTimeout(t);
-  }, [cloudSync.user, loading, state, cloudSync]);
+  }, [cloudSync.user, loading, safeState, cloudSync]);
 
   // Subscribe to cloud changes
   React.useEffect(() => {
     if (!cloudSync.user) return;
     const unsub = cloudSync.subscribeToData((newState) => {
       if (newState) {
-        setState(newState);
+        setState(normalizeState(newState));
         setLastSyncTime(new Date());
       }
     });
@@ -142,16 +164,11 @@ function AuthedApp() {
     setTab("arrangements");
   }, []);
 
-  // ----- helpers shared by UI & hotkeys -----
-  const completions = state?.completions ?? [];
-  const addresses = state?.addresses ?? [];
-  const daySessions = state?.daySessions ?? [];
-
+  // Visible rows + helpers
   const completedIdx = React.useMemo(
     () => new Set(completions.map((c: any) => c.index)),
     [completions]
   );
-
   const lowerQ = (search ?? "").trim().toLowerCase();
   const visible = React.useMemo(
     () =>
@@ -161,7 +178,6 @@ function AuthedApp() {
         .filter(({ i }) => !completedIdx.has(i)),
     [addresses, lowerQ, completedIdx]
   );
-
   const hasActiveSession = daySessions.some((d: any) => !d.end);
 
   const doQuickComplete = React.useCallback(
@@ -200,17 +216,11 @@ function AuthedApp() {
   // Keyboard shortcuts (List tab only)
   React.useEffect(() => {
     if (tab !== "list") return;
-
     const isTypingTarget = (el: EventTarget | null) => {
       if (!el || !(el as HTMLElement)) return false;
       const t = el as HTMLElement;
-      return (
-        t.tagName === "INPUT" ||
-        t.tagName === "TEXTAREA" ||
-        (t as HTMLElement).isContentEditable
-      );
+      return t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable;
     };
-
     const handler = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
 
@@ -219,8 +229,8 @@ function AuthedApp() {
         if (visible.length === 0) return;
 
         const pos =
-          state.activeIndex != null
-            ? visible.findIndex(({ i }) => i === state.activeIndex)
+          safeState.activeIndex != null
+            ? visible.findIndex(({ i }) => i === safeState.activeIndex)
             : -1;
 
         if (e.key === "ArrowDown") {
@@ -235,9 +245,9 @@ function AuthedApp() {
       }
 
       if (e.key === "Enter") {
-        if (state.activeIndex != null) {
+        if (safeState.activeIndex != null) {
           e.preventDefault();
-          doQuickComplete(state.activeIndex);
+          doQuickComplete(safeState.activeIndex);
         }
         return;
       }
@@ -266,23 +276,11 @@ function AuthedApp() {
         return;
       }
     };
-
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [
-    tab,
-    visible,
-    state.activeIndex,
-    completions,
-    hasActiveSession,
-    setActive,
-    undo,
-    doQuickComplete,
-    startDay,
-    endDay,
-  ]);
+  }, [tab, visible, safeState.activeIndex, completions, hasActiveSession, setActive, undo, doQuickComplete, startDay, endDay]);
 
-  // ----- Backup / Restore -----
+  // Backup / Restore
   const onBackup = () => {
     const snap = backupState();
     const stamp = new Date();
@@ -292,36 +290,37 @@ function AuthedApp() {
     downloadJson(`navigator-backup-${y}${m}${d}.json`, snap);
   };
 
-  // ✅ OPTION 2: push restored data to cloud immediately so it can't be overwritten
+  // OPTION 2: push restored data to cloud immediately
   const onRestore: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const data = await readJsonFile(file);
-      restoreState(data);             // 1) apply locally
-      await cloudSync.syncData(data); // 2) immediately upsert to Supabase (authoritative)
+      const raw = await readJsonFile(file);
+      const data = normalizeState(raw);   // ensure arrays exist
+      restoreState(data);                 // local
+      await cloudSync.syncData(data);     // cloud (authoritative)
       alert("✅ Restore completed successfully!");
     } catch (err: any) {
       console.error(err);
       alert(`❌ Restore failed: ${err?.message || err}`);
     } finally {
-      e.target.value = ""; // allow selecting the same file again later
+      e.target.value = "";
     }
   };
 
-  // Stats
+  // Stats (use safe arrays)
   const stats = React.useMemo(() => {
     const total = addresses.length;
-    const completed = completions.length;
-    const pending = total - completed;
+    const completedCount = completions.length;
+    const pending = total - completedCount;
     const pifCount = completions.filter((c: any) => c.outcome === "PIF").length;
     const doneCount = completions.filter((c: any) => c.outcome === "Done").length;
     const daCount = completions.filter((c: any) => c.outcome === "DA").length;
-    return { total, completed, pending, pifCount, doneCount, daCount };
+    return { total, completed: completedCount, pending, pifCount, doneCount, daCount };
   }, [addresses, completions]);
 
-  const waitingForInitialData =
-    !!cloudSync.user && (!state || !Array.isArray(state.addresses));
+  // Initial guard: wait until we at least know addresses is an array
+  const waitingForInitialData = !!cloudSync.user && !Array.isArray(state?.addresses);
 
   if (loading || waitingForInitialData) {
     return (
@@ -342,15 +341,7 @@ function AuthedApp() {
           <h1 className="app-title">📍 Address Navigator</h1>
 
           {/* Sync Status */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              fontSize: "0.75rem",
-              color: "var(--text-muted)",
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
             {cloudSync.isOnline ? (
               <>
                 <span style={{ color: "var(--success)" }}>🟢</span>
@@ -368,15 +359,7 @@ function AuthedApp() {
 
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           {/* User Info */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.75rem",
-              fontSize: "0.875rem",
-              color: "var(--text-secondary)",
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.875rem", color: "var(--text-secondary)" }}>
             <span>👤 {cloudSync.user?.email ?? "Signed in"}</span>
             <button className="btn btn-ghost btn-sm" onClick={cloudSync.signOut} title="Sign out">
               🚪 Sign Out
@@ -384,26 +367,14 @@ function AuthedApp() {
           </div>
 
           <div className="tabs">
-            <button
-              className="tab-btn"
-              aria-selected={tab === "list"}
-              onClick={() => setTab("list")}
-            >
+            <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
               📋 List ({stats.pending})
             </button>
-            <button
-              className="tab-btn"
-              aria-selected={tab === "completed"}
-              onClick={() => setTab("completed")}
-            >
+            <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>
               ✅ Completed ({stats.completed})
             </button>
-            <button
-              className="tab-btn"
-              aria-selected={tab === "arrangements"}
-              onClick={() => setTab("arrangements")}
-            >
-              📅 Arrangements ({state.arrangements.length})
+            <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
+              📅 Arrangements ({arrangements.length})
             </button>
           </div>
         </div>
@@ -411,48 +382,19 @@ function AuthedApp() {
 
       {/* Import & Tools */}
       <div style={{ marginBottom: "2rem" }}>
-        <div
-          style={{
-            background: "var(--surface)",
-            padding: "1.5rem",
-            borderRadius: "var(--radius-lg)",
-            border: "1px solid var(--border-light)",
-            boxShadow: "var(--shadow-sm)",
-            marginBottom: "1rem",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "0.875rem",
-              color: "var(--text-secondary)",
-              marginBottom: "1rem",
-              lineHeight: "1.5",
-            }}
-          >
-            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>,{" "}
-            <strong>lng</strong> columns to get started.
+        <div style={{ background: "var(--surface)", padding: "1.5rem", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-light)", boxShadow: "var(--shadow-sm)", marginBottom: "1rem" }}>
+          <div style={{ fontSize: "0.875rem", color: "var(--text-secondary)", marginBottom: "1rem", lineHeight: "1.5" }}>
+            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>, <strong>lng</strong> columns to get started.
           </div>
 
           <div className="btn-row">
             <ImportExcel onImported={setAddresses} />
-
             <div className="btn-spacer" />
-
-            <button className="btn btn-ghost" onClick={onBackup}>
-              💾 Backup
-            </button>
+            <button className="btn btn-ghost" onClick={onBackup}>💾 Backup</button>
 
             <div className="file-input-wrapper">
-              <input
-                type="file"
-                accept="application/json"
-                onChange={onRestore}
-                className="file-input"
-                id="restore-input"
-              />
-              <label htmlFor="restore-input" className="file-input-label">
-                📤 Restore
-              </label>
+              <input type="file" accept="application/json" onChange={onRestore} className="file-input" id="restore-input" />
+              <label htmlFor="restore-input" className="file-input-label">📤 Restore</label>
             </div>
           </div>
         </div>
@@ -461,7 +403,6 @@ function AuthedApp() {
       {/* Tabs */}
       {tab === "list" ? (
         <>
-          {/* Search */}
           <div className="search-container">
             <input
               type="search"
@@ -472,56 +413,31 @@ function AuthedApp() {
             />
           </div>
 
-          {/* Day Panel */}
           <DayPanel
-            sessions={state.daySessions}
-            completions={state.completions}
+            sessions={daySessions}
+            completions={completions}
             startDay={startDay}
             endDay={endDay}
           />
 
           {/* Stats */}
           <div className="top-row">
-            <div className="stat-item">
-              <div className="stat-label">Total</div>
-              <div className="stat-value">{stats.total}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Pending</div>
-              <div className="stat-value">{stats.pending}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">PIF</div>
-              <div className="stat-value" style={{ color: "var(--success)" }}>
-                {stats.pifCount}
-              </div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Done</div>
-              <div className="stat-value" style={{ color: "var(--primary)" }}>
-                {stats.doneCount}
-              </div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">DA</div>
-              <div className="stat-value" style={{ color: "var(--danger)" }}>
-                {stats.daCount}
-              </div>
-            </div>
+            <div className="stat-item"><div className="stat-label">Total</div><div className="stat-value">{stats.total}</div></div>
+            <div className="stat-item"><div className="stat-label">Pending</div><div className="stat-value">{stats.pending}</div></div>
+            <div className="stat-item"><div className="stat-label">PIF</div><div className="stat-value" style={{ color: "var(--success)" }}>{stats.pifCount}</div></div>
+            <div className="stat-item"><div className="stat-label">Done</div><div className="stat-value" style={{ color: "var(--primary)" }}>{stats.doneCount}</div></div>
+            <div className="stat-item"><div className="stat-label">DA</div><div className="stat-value" style={{ color: "var(--danger)" }}>{stats.daCount}</div></div>
 
-            {state.activeIndex != null && (
+            {safeState.activeIndex != null && (
               <div className="stat-item">
                 <div className="stat-label">Active</div>
-                <div className="stat-value" style={{ color: "var(--primary)" }}>
-                  #{state.activeIndex + 1}
-                </div>
+                <div className="stat-value" style={{ color: "var(--primary)" }}>#{(safeState.activeIndex as number) + 1}</div>
               </div>
             )}
           </div>
 
-          {/* List */}
           <AddressList
-            state={state}
+            state={safeState}
             setActive={setActive}
             cancelActive={cancelActive}
             complete={complete}
@@ -529,27 +445,15 @@ function AuthedApp() {
             filterText={search}
           />
 
-          {/* Shortcuts */}
-          <div
-            style={{
-              marginTop: "2rem",
-              padding: "1rem",
-              background: "var(--bg-tertiary)",
-              borderRadius: "var(--radius)",
-              fontSize: "0.8125rem",
-              color: "var(--text-muted)",
-              textAlign: "center",
-            }}
-          >
-            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo •
-            S Start Day • E End Day
+          <div style={{ marginTop: "2rem", padding: "1rem", background: "var(--bg-tertiary)", borderRadius: "var(--radius)", fontSize: "0.8125rem", color: "var(--text-muted)", textAlign: "center" }}>
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo • S Start Day • E End Day
           </div>
         </>
       ) : tab === "completed" ? (
-        <Completed state={state} />
+        <Completed state={safeState} />
       ) : (
         <Arrangements
-          state={state}
+          state={safeState}
           onAddArrangement={addArrangement}
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
