@@ -7,7 +7,25 @@ import { Completed } from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { downloadJson, readJsonFile } from "./backup";
 
-type Tab = "list" | "completed";
+type {tab === "list" ? (
+        <>
+          {/* Search Bar */}
+          <div className="search-container">
+            <input
+              type="search"
+              value={search}
+              placeholder="🔍 Search addresses..."
+              onChange={(e) => setSearch(eimport * as React from "react";
+import "./App.css";
+import { ImportExcel } from "./ImportExcel";
+import { useAppState } from "./useAppState";
+import { AddressList } from "./AddressList";
+import { Completed } from "./Completed";
+import { DayPanel } from "./DayPanel";
+import { Arrangements } from "./Arrangements";
+import { downloadJson, readJsonFile } from "./backup";
+
+type Tab = "list" | "completed" | "arrangements";
 
 export default function App() {
   const {
@@ -22,6 +40,9 @@ export default function App() {
     endDay,
     backupState,
     restoreState,
+    addArrangement,
+    updateArrangement,
+    deleteArrangement,
   } = useAppState();
 
   const [tab, setTab] = React.useState<Tab>("list");
@@ -230,6 +251,13 @@ export default function App() {
           >
             ✅ Completed ({stats.completed})
           </button>
+          <button
+            className="tab-btn"
+            aria-selected={tab === "arrangements"}
+            onClick={() => setTab("arrangements")}
+          >
+            📅 Arrangements ({state.arrangements.length})
+          </button>
         </div>
       </header>
 
@@ -356,6 +384,9 @@ export default function App() {
       ) : (
         <Completed state={state} />
       )}
+    </div>
+  );
+}
     </div>
   );
 }
