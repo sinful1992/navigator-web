@@ -416,16 +416,15 @@ p, h1, h2, h3, h4, h5, h6 {
 
 /* ==== Stats & Top Row ==== */
 .top-row {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 1rem;
   margin-bottom: 1.5rem;
   padding: 1.25rem;
   background: var(--surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  flex-wrap: wrap;
 }
 
 .stat-item {
@@ -452,10 +451,12 @@ p, h1, h2, h3, h4, h5, h6 {
 }
 
 .stat-actions {
-  margin-left: auto;
+  grid-column: 1 / -1;
+  justify-self: center;
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  margin-top: 0.5rem;
 }
 
 /* ==== Pills & Status ==== */
@@ -838,13 +839,14 @@ p, h1, h2, h3, h4, h5, h6 {
 /* ==== Responsive Design ==== */
 @media (max-width: 768px) {
   .container {
-    padding: 1rem;
+    padding: 0.75rem;
   }
   
   .app-header {
     flex-direction: column;
     align-items: stretch;
     gap: 1rem;
+    margin-bottom: 1rem;
   }
   
   .app-header .left,
@@ -857,14 +859,17 @@ p, h1, h2, h3, h4, h5, h6 {
   }
   
   .top-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 1rem;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    padding: 1rem;
   }
   
-  .stat-actions {
-    margin-left: 0;
-    justify-content: center;
+  .stat-item {
+    min-width: auto;
+  }
+  
+  .stat-value {
+    font-size: 1.25rem;
   }
   
   .day-header {
@@ -894,5 +899,49 @@ p, h1, h2, h3, h4, h5, h6 {
   
   .form-grid {
     grid-template-columns: 1fr;
+  }
+  
+  /* Mobile viewport fixes */
+  .search-input {
+    max-width: 100%;
+  }
+  
+  .day-panel-content {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  
+  .day-panel-info {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0.5rem;
+  }
+  
+  .top-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+  
+  .stat-value {
+    font-size: 1.125rem;
+  }
+  
+  .stat-label {
+    font-size: 0.6875rem;
+  }
+  
+  .btn-group {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .arrangement-actions {
+    justify-content: center;
   }
 }
