@@ -1,15 +1,16 @@
 // src/useAppState.ts
 import * as React from "react";
 import { get, set } from "idb-keyval";
-import type { AddressRow, AppState, Completion, Outcome, DaySession } from "./types";
+import type { AddressRow, AppState, Completion, Outcome, DaySession, Arrangement } from "./types";
 
-const STORAGE_KEY = "navigator_state_v2";
+const STORAGE_KEY = "navigator_state_v3"; // Updated version for arrangements
 
 const initial: AppState = {
   addresses: [],
   activeIndex: null,
   completions: [],
   daySessions: [],
+  arrangements: [],
 };
 
 export function useAppState() {
@@ -22,7 +23,13 @@ export function useAppState() {
     (async () => {
       try {
         const saved = (await get(STORAGE_KEY)) as AppState | undefined;
-        if (alive && saved) setState(saved);
+        if (alive && saved) {
+          // Handle migration from older versions
+          setState({
+            ...saved,
+            arrangements: saved.arrangements || [],
+          });
+        }
       } finally {
         if (alive) setLoading(false);
       }
@@ -38,14 +45,14 @@ export function useAppState() {
     return () => clearTimeout(t);
   }, [state]);
 
-  // ---- actions ----
+  // ---- existing actions ----
 
   const setAddresses = (rows: AddressRow[]) => {
     setState((s) => ({
       ...s,
       addresses: rows,
       activeIndex: null,
-      // keep existing completions/sessions
+      // keep existing completions/sessions/arrangements
     }));
   };
 
@@ -75,7 +82,7 @@ export function useAppState() {
         ...s,
         completions: [c, ...s.completions],
       };
-      // Clear active if it’s the one just completed
+      // Clear active if it's the one just completed
       if (s.activeIndex === index) next.activeIndex = null;
       return next;
     });
@@ -123,6 +130,43 @@ export function useAppState() {
     });
   };
 
+  // ---- arrangement actions ----
+
+  const addArrangement = (arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => {
+    setState((s) => {
+      const now = new Date().toISOString();
+      const newArrangement: Arrangement = {
+        ...arrangementData,
+        id: `arr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+      
+      return {
+        ...s,
+        arrangements: [...s.arrangements, newArrangement],
+      };
+    });
+  };
+
+  const updateArrangement = (id: string, updates: Partial<Arrangement>) => {
+    setState((s) => ({
+      ...s,
+      arrangements: s.arrangements.map(arr => 
+        arr.id === id 
+          ? { ...arr, ...updates, updatedAt: new Date().toISOString() }
+          : arr
+      ),
+    }));
+  };
+
+  const deleteArrangement = (id: string) => {
+    setState((s) => ({
+      ...s,
+      arrangements: s.arrangements.filter(arr => arr.id !== id),
+    }));
+  };
+
   // ---- backup/restore ----
 
   function isValidState(obj: any): obj is AppState {
@@ -133,6 +177,7 @@ export function useAppState() {
       Array.isArray(obj.completions) &&
       "activeIndex" in obj &&
       Array.isArray(obj.daySessions)
+      // arrangements is optional for backward compatibility
     );
   }
 
@@ -143,6 +188,7 @@ export function useAppState() {
       completions: state.completions,
       activeIndex: state.activeIndex,
       daySessions: state.daySessions,
+      arrangements: state.arrangements,
     } as AppState;
   };
 
@@ -153,6 +199,7 @@ export function useAppState() {
       completions: obj.completions,
       activeIndex: obj.activeIndex ?? null,
       daySessions: obj.daySessions ?? [],
+      arrangements: obj.arrangements ?? [],
     };
     setState(snapshot);
     // Optional: persist immediately (in addition to the debounced effect)
@@ -169,6 +216,10 @@ export function useAppState() {
     undo,
     startDay,
     endDay,
+    // arrangement functions
+    addArrangement,
+    updateArrangement,
+    deleteArrangement,
     // backup/restore
     backupState,
     restoreState,
