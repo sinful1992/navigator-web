@@ -30,6 +30,13 @@ export default function App() {
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
+  const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(null);
+
+  // Handle arrangement creation from address list
+  const handleCreateArrangement = React.useCallback((addressIndex: number) => {
+    setAutoCreateArrangementFor(addressIndex);
+    setTab("arrangements");
+  }, []);
 
   // ----- helpers shared by UI & hotkeys -----
   const completedIdx = React.useMemo(
@@ -357,6 +364,7 @@ export default function App() {
             setActive={setActive}
             cancelActive={cancelActive}
             complete={complete}
+            onCreateArrangement={handleCreateArrangement}
             filterText={search}
           />
 
@@ -381,6 +389,8 @@ export default function App() {
           onAddArrangement={addArrangement}
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
+          autoCreateForAddress={autoCreateArrangementFor}
+          onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
         />
       )}
     </div>
