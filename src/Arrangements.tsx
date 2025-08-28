@@ -8,16 +8,33 @@ type Props = {
   onAddArrangement: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateArrangement: (id: string, updates: Partial<Arrangement>) => void;
   onDeleteArrangement: (id: string) => void;
+  autoCreateForAddress?: number | null;
+  onAutoCreateHandled?: () => void;
 };
 
 type ViewMode = "thisWeek" | "all";
 
-export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onDeleteArrangement }: Props) {
+export function Arrangements({ 
+  state, 
+  onAddArrangement, 
+  onUpdateArrangement, 
+  onDeleteArrangement,
+  autoCreateForAddress,
+  onAutoCreateHandled
+}: Props) {
   const [viewMode, setViewMode] = React.useState<ViewMode>("thisWeek");
   const [showAddForm, setShowAddForm] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
 
-  // Filter arrangements based on view mode
+  // Handle auto-create from address list
+  React.useEffect(() => {
+    if (autoCreateForAddress !== null && autoCreateForAddress !== undefined) {
+      setShowAddForm(true);
+      onAutoCreateHandled?.();
+    }
+  }, [autoCreateForAddress, onAutoCreateHandled]);
+
+  // Filter arrangements based on view mode - focus on upcoming payments
   const filteredArrangements = React.useMemo(() => {
     const now = new Date();
     const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // Monday
@@ -28,8 +45,16 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
     if (viewMode === "thisWeek") {
       filtered = state.arrangements.filter(arr => {
         const arrDate = parseISO(arr.scheduledDate);
-        return isWithinInterval(arrDate, { start: weekStart, end: weekEnd });
+        // Show arrangements due this week that are not yet completed
+        return isWithinInterval(arrDate, { start: weekStart, end: weekEnd }) && 
+               arr.status !== "Completed" && 
+               arr.status !== "Cancelled";
       });
+    } else {
+      // Show all arrangements that are not completed
+      filtered = state.arrangements.filter(arr => 
+        arr.status !== "Completed" && arr.status !== "Cancelled"
+      );
     }
 
     // Sort by date, then by time
@@ -71,12 +96,15 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
       return isPast(arrDate) && arr.status === "Scheduled";
     }).length;
     
-    const statusCounts = filteredArrangements.reduce((acc, arr) => {
-      acc[arr.status] = (acc[arr.status] || 0) + 1;
-      return acc;
-    }, {} as Record<ArrangementStatus, number>);
-
-    return { total, todayCount, overdue, statusCounts };
+    // Calculate total amount due this week
+    const totalAmountDue = filteredArrangements.reduce((sum, arr) => {
+      if (arr.amount && arr.status !== "Completed") {
+        return sum + parseFloat(arr.amount);
+      }
+      return sum;
+    }, 0);
+    
+    return { total, todayCount, overdue, totalAmountDue };
   }, [filteredArrangements]);
 
   const getStatusColor = (status: ArrangementStatus): string => {
@@ -109,18 +137,29 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
     return format(date, "EEEE, d MMM yyyy");
   };
 
+  // Mark arrangement as paid/completed
+  const markAsPaid = (id: string, amount: string) => {
+    onUpdateArrangement(id, { 
+      status: "Completed",
+      amount: amount, // Update amount if different
+      updatedAt: new Date().toISOString()
+    });
+  };
+
   return (
     <div className="arrangements-wrap">
       {/* Header with view toggle */}
       <div className="top-row">
         <div className="stat-item">
-          <div className="stat-label">📋 Total</div>
+          <div className="stat-label">📋 Due</div>
           <div className="stat-value">{stats.total}</div>
         </div>
         
         <div className="stat-item">
           <div className="stat-label">📅 Today</div>
-          <div className="stat-value">{stats.todayCount}</div>
+          <div className="stat-value" style={{ color: stats.todayCount > 0 ? "var(--warning)" : "var(--text-primary)" }}>
+            {stats.todayCount}
+          </div>
         </div>
         
         {stats.overdue > 0 && (
@@ -130,12 +169,14 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
           </div>
         )}
         
-        <div className="stat-item">
-          <div className="stat-label">✅ Confirmed</div>
-          <div className="stat-value" style={{ color: "var(--success)" }}>
-            {stats.statusCounts.Confirmed || 0}
+        {stats.totalAmountDue > 0 && (
+          <div className="stat-item">
+            <div className="stat-label">💰 Total Due</div>
+            <div className="stat-value" style={{ color: "var(--success)" }}>
+              £{stats.totalAmountDue.toFixed(2)}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="stat-actions">
           <div className="btn-group">
@@ -149,13 +190,13 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
               className={`btn ${viewMode === "all" ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setViewMode("all")}
             >
-              📋 All
+              📋 All Pending
             </button>
             <button 
               className="btn btn-success"
               onClick={() => setShowAddForm(true)}
             >
-              ➕ Add
+              ➕ Add Arrangement
             </button>
           </div>
         </div>
@@ -166,6 +207,7 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
         <ArrangementForm 
           state={state}
           arrangement={editingId ? state.arrangements.find(a => a.id === editingId) : undefined}
+          preSelectedAddressIndex={autoCreateForAddress}
           onSave={(arrangement) => {
             if (editingId) {
               onUpdateArrangement(editingId, arrangement);
@@ -187,12 +229,12 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
         {groupedArrangements.length === 0 ? (
           <div className="empty-box">
             <div style={{ fontSize: "1.125rem", marginBottom: "0.5rem" }}>
-              📅 No arrangements found
+              📅 No payment arrangements {viewMode === "thisWeek" ? "due this week" : "pending"}
             </div>
             <div style={{ fontSize: "0.875rem", opacity: 0.75 }}>
               {viewMode === "thisWeek" 
-                ? "No arrangements scheduled for this week" 
-                : "No arrangements have been created yet"
+                ? "No payment arrangements are scheduled for this week" 
+                : "No pending payment arrangements found"
               }
             </div>
           </div>
@@ -205,7 +247,10 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
                     {formatDateHeader(dateStr)}
                   </div>
                   <div className="muted">
-                    {arrangements.length} arrangement{arrangements.length === 1 ? '' : 's'}
+                    {arrangements.length} payment{arrangements.length === 1 ? '' : 's'} due
+                    {arrangements.some(arr => arr.amount) && (
+                      <> • £{arrangements.reduce((sum, arr) => sum + (parseFloat(arr.amount || '0')), 0).toFixed(2)} total</>
+                    )}
                   </div>
                 </div>
               </div>
@@ -232,7 +277,7 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
                           </div>
                         )}
                         {arrangement.amount && (
-                          <div className="arrangement-amount">
+                          <div className="arrangement-amount" style={{ fontSize: "1rem", fontWeight: 600, color: "var(--success)" }}>
                             💰 £{arrangement.amount}
                           </div>
                         )}
@@ -263,13 +308,6 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
                     </div>
 
                     <div className="arrangement-actions">
-                      <button
-                        className="btn btn-sm btn-ghost"
-                        onClick={() => setEditingId(arrangement.id)}
-                      >
-                        ✏️ Edit
-                      </button>
-                      
                       {arrangement.status === "Scheduled" && (
                         <button
                           className="btn btn-sm btn-success"
@@ -285,14 +323,26 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
                       {(arrangement.status === "Scheduled" || arrangement.status === "Confirmed") && (
                         <button
                           className="btn btn-sm btn-primary"
-                          onClick={() => onUpdateArrangement(arrangement.id, { 
-                            status: "Completed",
-                            updatedAt: new Date().toISOString()
-                          })}
+                          onClick={() => {
+                            const actualAmount = window.prompt(
+                              `Mark as paid:\n\nExpected: £${arrangement.amount || '0.00'}\nEnter actual amount received:`,
+                              arrangement.amount || ''
+                            );
+                            if (actualAmount !== null && actualAmount.trim()) {
+                              markAsPaid(arrangement.id, actualAmount.trim());
+                            }
+                          }}
                         >
-                          🎉 Complete
+                          💰 Mark Paid
                         </button>
                       )}
+                      
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => setEditingId(arrangement.id)}
+                      >
+                        ✏️ Edit
+                      </button>
                       
                       <button
                         className="btn btn-sm btn-danger"
@@ -320,13 +370,14 @@ export function Arrangements({ state, onAddArrangement, onUpdateArrangement, onD
 type FormProps = {
   state: AppState;
   arrangement?: Arrangement;
+  preSelectedAddressIndex?: number | null;
   onSave: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onCancel: () => void;
 };
 
-function ArrangementForm({ state, arrangement, onSave, onCancel }: FormProps) {
+function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onSave, onCancel }: FormProps) {
   const [formData, setFormData] = React.useState({
-    addressIndex: arrangement?.addressIndex ?? 0,
+    addressIndex: arrangement?.addressIndex ?? preSelectedAddressIndex ?? 0,
     customerName: arrangement?.customerName ?? "",
     phoneNumber: arrangement?.phoneNumber ?? "",
     scheduledDate: arrangement?.scheduledDate ?? new Date().toISOString().slice(0, 10),
@@ -346,6 +397,11 @@ function ArrangementForm({ state, arrangement, onSave, onCancel }: FormProps) {
       return;
     }
 
+    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+      alert("Please enter a valid payment amount");
+      return;
+    }
+
     onSave({
       ...formData,
       address: selectedAddress.address,
@@ -356,7 +412,7 @@ function ArrangementForm({ state, arrangement, onSave, onCancel }: FormProps) {
     <div className="card arrangement-form">
       <div className="card-header">
         <h3 style={{ margin: 0 }}>
-          {arrangement ? "✏️ Edit Arrangement" : "➕ Add New Arrangement"}
+          {arrangement ? "✏️ Edit Payment Arrangement" : "➕ Create Payment Arrangement"}
         </h3>
       </div>
       
@@ -376,6 +432,20 @@ function ArrangementForm({ state, arrangement, onSave, onCancel }: FormProps) {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="form-group">
+            <label>💰 Payment Amount *</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.amount}
+              onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+              className="input"
+              placeholder="0.00"
+              required
+            />
           </div>
 
           <div className="form-group">
@@ -401,7 +471,7 @@ function ArrangementForm({ state, arrangement, onSave, onCancel }: FormProps) {
           </div>
 
           <div className="form-group">
-            <label>📅 Date *</label>
+            <label>📅 Payment Due Date *</label>
             <input
               type="date"
               value={formData.scheduledDate}
@@ -412,25 +482,12 @@ function ArrangementForm({ state, arrangement, onSave, onCancel }: FormProps) {
           </div>
 
           <div className="form-group">
-            <label>🕐 Time</label>
+            <label>🕐 Preferred Time</label>
             <input
               type="time"
               value={formData.scheduledTime}
               onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
               className="input"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>💰 Expected Amount</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.amount}
-              onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-              className="input"
-              placeholder="0.00"
             />
           </div>
 
@@ -441,7 +498,7 @@ function ArrangementForm({ state, arrangement, onSave, onCancel }: FormProps) {
               onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
               className="input"
               rows={3}
-              placeholder="Additional notes..."
+              placeholder="Payment terms, special instructions, etc..."
             />
           </div>
         </form>
@@ -453,7 +510,7 @@ function ArrangementForm({ state, arrangement, onSave, onCancel }: FormProps) {
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" onClick={handleSubmit}>
-            {arrangement ? "💾 Update" : "➕ Create"} Arrangement
+            {arrangement ? "💾 Update" : "📅 Create"} Arrangement
           </button>
         </div>
       </div>
