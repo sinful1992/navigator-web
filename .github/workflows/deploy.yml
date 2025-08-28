@@ -27,7 +27,7 @@ jobs:
           cache: 'npm'
 
       - name: Install
-        run: npm ci
+        run: npm i --no-audit --no-fund
 
       - name: Build
         run: npm run build
