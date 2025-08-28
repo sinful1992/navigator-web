@@ -1,12 +1,12 @@
+// src/AddressList.tsx
 import * as React from "react";
-import type { AppState, AddressRow, Outcome } from "./types";
+import type { AppState, Outcome } from "./types";
 
 type Props = {
   state: AppState;
-  setActive: (idx: number) => void;
+  setActive: (i: number) => void;
   cancelActive: () => void;
-  complete: (idx: number, outcome: Outcome, amount?: string) => void;
-  /** optional search filter */
+  complete: (index: number, outcome: Outcome, amount?: string) => void;
   filterText?: string;
 };
 
@@ -17,136 +17,181 @@ export function AddressList({
   complete,
   filterText = "",
 }: Props) {
-  const pifAmounts = React.useRef<Record<number, string>>({});
+  const [openCompleteFor, setOpenCompleteFor] = React.useState<number | null>(
+    null
+  );
+  const [pifAmount, setPifAmount] = React.useState<Record<number, string>>({});
 
-  // completed indexes (we hide completed from the List view)
   const completedIdx = React.useMemo(() => {
     const s = new Set<number>();
     for (const c of state.completions) s.add(c.index);
     return s;
   }, [state.completions]);
 
-  const filter = filterText.trim().toLowerCase();
+  const needle = filterText.trim().toLowerCase();
 
-  const rows = state.addresses
-    .map((a, i) => ({ row: a, i }))
-    .filter(({ row, i }) => {
-      if (completedIdx.has(i)) return false;
-      if (!filter) return true;
-      return row.address.toLowerCase().includes(filter);
+  // Build visible rows = not completed + matches search
+  const rows = React.useMemo(() => {
+    const out: Array<{ i: number; address: string; lat?: number; lng?: number }> = [];
+    state.addresses.forEach((row, i) => {
+      if (completedIdx.has(i)) return; // hide completed from this list
+      const addr = row.address || "";
+      if (needle && !addr.toLowerCase().includes(needle)) return;
+      out.push({
+        i,
+        address: addr,
+        lat: row.lat ?? undefined,
+        lng: row.lng ?? undefined,
+      });
     });
+    return out;
+  }, [state.addresses, completedIdx, needle]);
 
-  const openMaps = (r: AddressRow) => {
-    const hasGps =
-      typeof r.lat === "number" &&
-      !isNaN(r.lat) &&
-      typeof r.lng === "number" &&
-      !isNaN(r.lng);
-
-    const url = hasGps
-      ? `https://www.google.com/maps/search/${r.lat},${r.lng}`
-      : `https://www.google.com/maps/search/${encodeURIComponent(r.address)}`;
-    window.open(url, "_blank");
+  const openMaps = (addr: string, lat?: number, lng?: number) => {
+    let url: string;
+    if (typeof lat === "number" && typeof lng === "number") {
+      url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    } else {
+      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        addr
+      )}`;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  const onConfirmPIF = (index: number) => {
+    const amt = (pifAmount[index] || "").trim();
+    if (!amt) {
+      alert("Please enter an amount for PIF.");
+      return;
+    }
+    complete(index, "PIF", amt);
+    setOpenCompleteFor(null);
+  };
+
+  if (rows.length === 0) {
+    return (
+      <div className="emptyBox">
+        <div style={{ fontSize: 14, opacity: 0.75 }}>
+          {state.addresses.length === 0
+            ? "No addresses loaded yet. Import an Excel file to get started."
+            : "No addresses match your search (or everything is completed)."}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="cards">
-      {rows.map(({ row, i }) => {
-        const isActive = state.activeIndex === i;
+    <div className="listCol">
+      {rows.map(({ i, address, lat, lng }) => {
+        const active = state.activeIndex === i;
+        const open = openCompleteFor === i;
 
         return (
-          <div
-            key={i}
-            className={`card${isActive ? " active" : ""}`}
-            aria-label={`Address ${i + 1}`}
-          >
-            {/* TOP: number + address */}
-            <div>
-              <div className="card-title">
-                {i + 1}. {row.address}
+          <div className={`card ${active ? "cardActive" : ""}`} key={i}>
+            {/* Top: address + pill */}
+            <div className="cardHeader">
+              <div className="addrTitle">
+                <span className="idx">{i + 1}.</span> {address}
               </div>
-              {typeof row.lat === "number" && typeof row.lng === "number" ? (
-                <div className="card-gps">
-                  GPS: {row.lat.toFixed(6)}, {row.lng.toFixed(6)}
-                </div>
-              ) : (
-                <div className="card-gps">GPS: —</div>
-              )}
+              {active && <span className="pill activePill">ACTIVE</span>}
             </div>
 
-            {/* BOTTOM: actions */}
-            <div className="card-actions">
-              <button className="btn" onClick={() => openMaps(row)}>
-                Navigate
-              </button>
+            {/* Optional body (reserved for future info) */}
+            <div className="cardBody" />
 
-              {isActive ? (
-                <>
+            {/* Bottom: actions */}
+            <div className="cardFooter">
+              {!open ? (
+                // Normal action row
+                <div className="btnRow">
                   <button
-                    className="btn success"
-                    onClick={() => complete(i, "Done")}
+                    className="btn btnGhost"
+                    onClick={() => openMaps(address, lat, lng)}
+                    title="Open in Google Maps"
                   >
-                    Done
+                    Navigate
                   </button>
 
-                  <button
-                    className="btn danger"
-                    onClick={() => complete(i, "DA")}
-                  >
-                    DA
-                  </button>
+                  <div className="btnSpacer" />
 
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="PIF £"
-                      value={pifAmounts.current[i] ?? ""}
-                      onChange={(e) => {
-                        pifAmounts.current[i] = e.target.value;
-                        // force repaint without state; input keeps value
-                        (e.target as HTMLInputElement).value =
-                          pifAmounts.current[i];
-                      }}
-                      style={{ width: 110 }}
-                    />
+                  {active ? (
+                    <>
+                      <button
+                        className="btn btnPrimary"
+                        onClick={() => setOpenCompleteFor(i)}
+                      >
+                        Complete
+                      </button>
+                      <button className="btn btnDanger" onClick={cancelActive}>
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button className="btn" onClick={() => setActive(i)}>
+                      Set Active
+                    </button>
+                  )}
+                </div>
+              ) : (
+                // Completion choices open
+                <div className="completeBar">
+                  <div className="completeBtns">
                     <button
-                      className="btn success"
+                      className="btn btnPrimary"
                       onClick={() => {
-                        const raw = pifAmounts.current[i];
-                        const n = Number(raw);
-                        if (!raw || !isFinite(n) || n <= 0) {
-                          alert("Enter a valid PIF amount");
-                          return;
-                        }
-                        const amt = n.toFixed(2);
-                        complete(i, "PIF", amt);
-                        pifAmounts.current[i] = "";
+                        complete(i, "Done");
+                        setOpenCompleteFor(null);
                       }}
                     >
+                      Done
+                    </button>
+                    <button
+                      className="btn btnDanger"
+                      onClick={() => {
+                        complete(i, "DA");
+                        setOpenCompleteFor(null);
+                      }}
+                    >
+                      DA
+                    </button>
+                  </div>
+
+                  <div className="pifGroup">
+                    <input
+                      className="amountInput"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Amount (£)"
+                      value={pifAmount[i] || ""}
+                      onChange={(e) =>
+                        setPifAmount((prev) => ({
+                          ...prev,
+                          [i]: e.target.value,
+                        }))
+                      }
+                    />
+                    <button className="btn btnGhost" onClick={() => onConfirmPIF(i)}>
                       PIF
                     </button>
                   </div>
 
-                  <button className="btn" onClick={cancelActive}>
-                    Cancel
+                  <div className="btnSpacer" />
+
+                  <button
+                    className="btn"
+                    onClick={() => setOpenCompleteFor(null)}
+                    title="Close options"
+                  >
+                    Back
                   </button>
-                </>
-              ) : (
-                <button className="btn primary" onClick={() => setActive(i)}>
-                  Set Active
-                </button>
+                </div>
               )}
             </div>
           </div>
         );
       })}
-
-      {rows.length === 0 && (
-        <p className="muted" style={{ textAlign: "center", marginTop: 12 }}>
-          No addresses match your search (or all are completed).
-        </p>
-      )}
     </div>
   );
 }
