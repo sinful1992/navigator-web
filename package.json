@@ -15,7 +15,8 @@
     "xlsx": "^0.18.5",
     "idb-keyval": "^6.2.1",
     "date-fns": "^3.6.0",
-    "react-day-picker": "^8.10.1"
+    "react-day-picker": "^8.10.1",
+    "@supabase/supabase-js": "^2.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
