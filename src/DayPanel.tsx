@@ -46,21 +46,9 @@ type Props = {
 };
 
 export const DayPanel: React.FC<Props> = ({ sessions, completions, startDay, endDay }) => {
-  const [currentTime, setCurrentTime] = React.useState(new Date());
   const active = activeSession(sessions);
   const todayCount = countToday(completions);
   const todayOutcomes = getTodayOutcomes(completions);
-
-  // Update time every minute when session is active
-  React.useEffect(() => {
-    if (!active) return;
-    
-    const interval = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 60000); // Update every minute
-    
-    return () => clearInterval(interval);
-  }, [active]);
 
   return (
     <div className={`day-panel ${active ? 'day-panel-active' : ''}`}>
