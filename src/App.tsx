@@ -48,7 +48,7 @@ export default function App() {
   const doQuickComplete = React.useCallback(
     (i: number) => {
       const input = window.prompt(
-        "Outcome:\n- Leave empty = Done\n- Type DA = mark as DA\n- Type a number (e.g. 50) = PIF £amount"
+        "Quick Complete:\n\n• Leave empty → Done\n• Type 'DA' → Mark as DA\n• Type a number (e.g. 50) → PIF £amount"
       );
       if (input === null) return;
       const text = input.trim();
@@ -62,7 +62,7 @@ export default function App() {
           complete(i, "PIF", n.toFixed(2));
         } else {
           alert(
-            "Invalid amount. Use a number (e.g., 50) or type DA, or leave blank for Done."
+            "Invalid amount. Use a number (e.g., 50) or type 'DA', or leave blank for Done."
           );
         }
       }
@@ -177,96 +177,120 @@ export default function App() {
     try {
       const data = await readJsonFile(file);
       restoreState(data);
-      alert("Restore complete.");
+      alert("✅ Restore completed successfully!");
     } catch (err: any) {
       console.error(err);
-      alert(`Restore failed: ${err?.message || err}`);
+      alert(`❌ Restore failed: ${err?.message || err}`);
     } finally {
       e.target.value = ""; // allow selecting the same file again later
     }
   };
 
+  // ----- Stats calculations -----
+  const stats = React.useMemo(() => {
+    const total = state.addresses.length;
+    const completed = state.completions.length;
+    const pending = total - completed;
+    const pifCount = state.completions.filter(c => c.outcome === "PIF").length;
+    const doneCount = state.completions.filter(c => c.outcome === "Done").length;
+    const daCount = state.completions.filter(c => c.outcome === "DA").length;
+    
+    return { total, completed, pending, pifCount, doneCount, daCount };
+  }, [state.addresses.length, state.completions]);
+
+  if (loading) {
+    return (
+      <div className="container">
+        <div className="loading">
+          <div className="spinner" />
+          Loading your address data...
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      style={{
-        maxWidth: 960,
-        margin: "2rem auto",
-        padding: "0 1rem",
-        fontFamily: "system-ui, sans-serif",
-      }}
-    >
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          marginBottom: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <h1 style={{ margin: 0 }}>Address Navigator (Web)</h1>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-          <button onClick={() => setTab("list")} disabled={tab === "list"}>
-            List
+    <div className="container">
+      {/* Header */}
+      <header className="app-header">
+        <h1 className="app-title">📍 Address Navigator</h1>
+        
+        <div className="tabs">
+          <button 
+            className="tab-btn"
+            aria-selected={tab === "list"}
+            onClick={() => setTab("list")}
+          >
+            📋 List ({stats.pending})
           </button>
           <button
+            className="tab-btn"
+            aria-selected={tab === "completed"}
             onClick={() => setTab("completed")}
-            disabled={tab === "completed"}
           >
-            Completed
+            ✅ Completed ({stats.completed})
           </button>
         </div>
       </header>
 
-      <p>
-        Load an Excel file with <b>address</b>, optional <b>lat</b>, <b>lng</b>{" "}
-        columns.
-      </p>
-      <div
-        style={{
-          marginBottom: 16,
-          display: "flex",
-          gap: 8,
-          alignItems: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        <ImportExcel onImported={setAddresses} />
+      {/* Import & Tools Section */}
+      <div style={{ marginBottom: "2rem" }}>
+        <div style={{ 
+          background: "var(--surface)", 
+          padding: "1.5rem", 
+          borderRadius: "var(--radius-lg)", 
+          border: "1px solid var(--border-light)",
+          boxShadow: "var(--shadow-sm)",
+          marginBottom: "1rem"
+        }}>
+          <div style={{ 
+            fontSize: "0.875rem", 
+            color: "var(--text-secondary)", 
+            marginBottom: "1rem",
+            lineHeight: "1.5"
+          }}>
+            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>, <strong>lng</strong> columns to get started.
+          </div>
+          
+          <div className="btn-row">
+            <ImportExcel onImported={setAddresses} />
+            
+            <div className="btn-spacer" />
+            
+            <button className="btn btn-ghost" onClick={onBackup}>
+              💾 Backup
+            </button>
 
-        <button onClick={onBackup}>Backup (.json)</button>
-
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <span>Restore</span>
-          <input type="file" accept="application/json" onChange={onRestore} />
-        </label>
+            <div className="file-input-wrapper">
+              <input 
+                type="file" 
+                accept="application/json" 
+                onChange={onRestore}
+                className="file-input"
+                id="restore-input"
+              />
+              <label htmlFor="restore-input" className="file-input-label">
+                📤 Restore
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {loading ? (
-        <p style={{ opacity: 0.7 }}>Loading…</p>
-      ) : tab === "list" ? (
+      {tab === "list" ? (
         <>
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              alignItems: "center",
-              margin: "8px 0",
-            }}
-          >
+          {/* Search Bar */}
+          <div className="search-container">
             <input
-              type="text"
+              type="search"
               value={search}
-              placeholder="Search addresses…"
+              placeholder="🔍 Search addresses..."
               onChange={(e) => setSearch(e.target.value)}
-              style={{
-                flex: 1,
-                padding: "8px 10px",
-                border: "1px solid #ddd",
-                borderRadius: 6,
-              }}
+              className="input search-input"
             />
           </div>
 
+          {/* Day Panel */}
           <DayPanel
             sessions={state.daySessions}
             completions={state.completions}
@@ -274,15 +298,40 @@ export default function App() {
             endDay={endDay}
           />
 
-          <div style={{ margin: "8px 0", opacity: 0.8 }}>
-            Total addresses: <b>{state.addresses.length}</b>
+          {/* Stats Overview */}
+          <div className="top-row">
+            <div className="stat-item">
+              <div className="stat-label">Total</div>
+              <div className="stat-value">{stats.total}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Pending</div>
+              <div className="stat-value">{stats.pending}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">PIF</div>
+              <div className="stat-value" style={{ color: "var(--success)" }}>{stats.pifCount}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Done</div>
+              <div className="stat-value" style={{ color: "var(--primary)" }}>{stats.doneCount}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">DA</div>
+              <div className="stat-value" style={{ color: "var(--danger)" }}>{stats.daCount}</div>
+            </div>
+            
             {state.activeIndex !== null && (
-              <span style={{ marginLeft: 12 }}>
-                • Active: <b>{state.activeIndex + 1}</b>
-              </span>
+              <div className="stat-item">
+                <div className="stat-label">Active</div>
+                <div className="stat-value" style={{ color: "var(--primary)" }}>
+                  #{state.activeIndex + 1}
+                </div>
+              </div>
             )}
           </div>
 
+          {/* Address List */}
           <AddressList
             state={state}
             setActive={setActive}
@@ -291,9 +340,17 @@ export default function App() {
             filterText={search}
           />
 
-          <div style={{ marginTop: 12, fontSize: 12, opacity: 0.7 }}>
-            Shortcuts: ↑/↓ move • Enter complete • U undo latest • S start day •
-            E end day
+          {/* Keyboard Shortcuts Help */}
+          <div style={{ 
+            marginTop: "2rem", 
+            padding: "1rem",
+            background: "var(--bg-tertiary)", 
+            borderRadius: "var(--radius)",
+            fontSize: "0.8125rem", 
+            color: "var(--text-muted)",
+            textAlign: "center"
+          }}>
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete • U Undo • S Start Day • E End Day
           </div>
         </>
       ) : (
