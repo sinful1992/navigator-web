@@ -71,127 +71,17 @@ export function AddressList({
 
   if (rows.length === 0) {
     return (
-      <div className="emptyBox">
-        <div style={{ fontSize: 14, opacity: 0.75 }}>
+      <div className="empty-box">
+        <div style={{ fontSize: "1rem", marginBottom: "0.5rem", fontWeight: 600 }}>
+          {state.addresses.length === 0 ? "📍 No addresses loaded" : "🔍 No matching addresses"}
+        </div>
+        <div style={{ fontSize: "0.875rem", opacity: 0.75 }}>
           {state.addresses.length === 0
-            ? "No addresses loaded yet. Import an Excel file to get started."
-            : "No addresses match your search (or everything is completed)."}
+            ? "Import an Excel file to get started with address navigation"
+            : "Try adjusting your search terms or check if all addresses are completed"}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="listCol">
-      {rows.map(({ i, address, lat, lng }) => {
-        const active = state.activeIndex === i;
-        const open = openCompleteFor === i;
-
-        return (
-          <div className={`card ${active ? "cardActive" : ""}`} key={i}>
-            {/* Top: address + pill */}
-            <div className="cardHeader">
-              <div className="addrTitle">
-                <span className="idx">{i + 1}.</span> {address}
-              </div>
-              {active && <span className="pill activePill">ACTIVE</span>}
-            </div>
-
-            {/* Optional body (reserved for future info) */}
-            <div className="cardBody" />
-
-            {/* Bottom: actions */}
-            <div className="cardFooter">
-              {!open ? (
-                // Normal action row
-                <div className="btnRow">
-                  <button
-                    className="btn btnGhost"
-                    onClick={() => openMaps(address, lat, lng)}
-                    title="Open in Google Maps"
-                  >
-                    Navigate
-                  </button>
-
-                  <div className="btnSpacer" />
-
-                  {active ? (
-                    <>
-                      <button
-                        className="btn btnPrimary"
-                        onClick={() => setOpenCompleteFor(i)}
-                      >
-                        Complete
-                      </button>
-                      <button className="btn btnDanger" onClick={cancelActive}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <button className="btn" onClick={() => setActive(i)}>
-                      Set Active
-                    </button>
-                  )}
-                </div>
-              ) : (
-                // Completion choices open
-                <div className="completeBar">
-                  <div className="completeBtns">
-                    <button
-                      className="btn btnPrimary"
-                      onClick={() => {
-                        complete(i, "Done");
-                        setOpenCompleteFor(null);
-                      }}
-                    >
-                      Done
-                    </button>
-                    <button
-                      className="btn btnDanger"
-                      onClick={() => {
-                        complete(i, "DA");
-                        setOpenCompleteFor(null);
-                      }}
-                    >
-                      DA
-                    </button>
-                  </div>
-
-                  <div className="pifGroup">
-                    <input
-                      className="amountInput"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="Amount (£)"
-                      value={pifAmount[i] || ""}
-                      onChange={(e) =>
-                        setPifAmount((prev) => ({
-                          ...prev,
-                          [i]: e.target.value,
-                        }))
-                      }
-                    />
-                    <button className="btn btnGhost" onClick={() => onConfirmPIF(i)}>
-                      PIF
-                    </button>
-                  </div>
-
-                  <div className="btnSpacer" />
-
-                  <button
-                    className="btn"
-                    onClick={() => setOpenCompleteFor(null)}
-                    title="Close options"
-                  >
-                    Back
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
