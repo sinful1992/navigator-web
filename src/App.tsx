@@ -52,7 +52,7 @@ export default function App() {
   const doQuickComplete = React.useCallback(
     (i: number) => {
       const input = window.prompt(
-        "Quick Complete:\n\n• Leave empty → Done\n• Type 'DA' → Mark as DA\n• Type a number (e.g. 50) → PIF £amount"
+        "Quick Complete:\n\n• Leave empty → Done\n• Type 'DA' → Mark as DA\n• Type a number (e.g. 50) → PIF £amount\n• Type 'ARR' → Create Arrangement"
       );
       if (input === null) return;
       const text = input.trim();
@@ -60,18 +60,26 @@ export default function App() {
         complete(i, "Done");
       } else if (text.toUpperCase() === "DA") {
         complete(i, "DA");
+      } else if (text.toUpperCase() === "ARR") {
+        // Switch to arrangements tab to create new arrangement for this address
+        setTab("arrangements");
+        // Set a flag to auto-select this address (we'll handle this in the Arrangements component)
+        setTimeout(() => {
+          const event = new CustomEvent('auto-create-arrangement', { detail: { addressIndex: i } });
+          window.dispatchEvent(event);
+        }, 100);
       } else {
         const n = Number(text);
         if (Number.isFinite(n) && n > 0) {
           complete(i, "PIF", n.toFixed(2));
         } else {
           alert(
-            "Invalid amount. Use a number (e.g., 50) or type 'DA', or leave blank for Done."
+            "Invalid amount. Use a number (e.g., 50) or type 'DA', type 'ARR' for arrangement, or leave blank for Done."
           );
         }
       }
     },
-    [complete]
+    [complete, setTab]
   );
 
   // ----- keyboard shortcuts (List tab only) -----
