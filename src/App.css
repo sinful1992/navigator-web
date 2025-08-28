@@ -1,283 +1,283 @@
-/* ================================
-   Base theme + resets
-================================== */
+/* ---------- Base / reset ---------- */
+:root{
+  --bg:#f5f7fb;
+  --card:#ffffff;
+  --text:#0f172a;
+  --muted:#64748b;
+  --border:#e2e8f0;
 
-:root {
-  --bg: #f7f8fb;
-  --panel: #ffffff;
-  --text: #0f172a;
-  --muted: #64748b;
-  --border: #e5e7eb;
-  --primary: #2563eb;
-  --primary-ink: #ffffff;
-  --success: #16a34a;
-  --danger: #dc2626;
-  --radius: 12px;
-  --shadow: 0 1px 1px rgba(0,0,0,.02), 0 6px 14px rgba(0,0,0,.06);
+  --primary:#2563eb;
+  --success:#16a34a;
+  --danger:#ef4444;
+  --warning:#f59e0b;
+
+  --radius:14px;
+  --shadow:0 6px 18px rgba(15, 23, 42, .06);
 }
 
-* { box-sizing: border-box; }
-html, body, #root { height: 100%; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+*{ box-sizing:border-box; }
+html, body, #root { height:100%; }
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3 { margin: 0 0 8px; }
-p { margin: 0 0 8px; }
-.muted { color: var(--muted); }
+/* Headings scale nicely on mobile */
+h1{
+  margin: 24px 0 10px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-size: clamp(1.6rem, 3.2vw + 1rem, 2.2rem);
+}
+h2{ margin: 16px 0 8px; font-size: 1.25rem; }
+p{ margin: 0 0 8px; }
 
-/* Layout helpers */
-.stack { display: grid; gap: 12px; }
-.row   { display: flex; gap: 8px; align-items: center; }
-
-/* ================================
-   Inputs & Buttons
-================================== */
-input[type="text"],
-input[type="number"] {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
+/* ---------- Tabs ---------- */
+.tabs{
+  display:flex;
+  gap:8px;
+  background:#fff;
+  padding:6px;
+  border:1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  box-shadow: var(--shadow);
+}
+.tab-btn{
+  flex:1 1 0;
+  padding:10px 14px;
   border-radius: 10px;
-  background: #fff;
-  outline: none;
-  transition: border-color .15s ease, box-shadow .15s ease;
-  font-size: 14px;
+  border:1px solid transparent;
+  background:transparent;
+  font-weight:700;
 }
-input[type="text"]:focus,
-input[type="number"]:focus {
-  border-color: #93c5fd;
-  box-shadow: 0 0 0 3px rgba(147, 197, 253, .35);
-}
-
-input[type="file"] {
-  font-size: 14px;
-}
-
-.btn {
-  appearance: none;
-  border: 1px solid var(--border);
-  background: #fff;
-  color: var(--text);
-  padding: 10px 14px;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform .04s ease, box-shadow .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
-  box-shadow: 0 1px 0 rgba(0,0,0,.03);
-}
-.btn:hover { box-shadow: var(--shadow); }
-.btn:active { transform: translateY(1px); }
-.btn:disabled { opacity: .55; cursor: not-allowed; }
-
-.btn.primary {
+.tab-btn[disabled],
+.tab-btn.active{
   background: var(--primary);
-  color: var(--primary-ink);
-  border-color: transparent;
-}
-.btn.success {
-  background: var(--success);
-  color: #fff;
-  border-color: transparent;
-}
-.btn.danger {
-  background: var(--danger);
-  color: #fff;
-  border-color: transparent;
-}
-.btn.ghost {
-  background: transparent;
-  border-color: var(--border);
+  color:#fff;
 }
 
-/* Smaller button variant (used in DayPanel) */
-.btn.small {
-  padding: 8px 12px;
-  font-size: 13px;
-  border-radius: 9px;
+/* ---------- Inputs / buttons ---------- */
+input[type="text"],
+input[type="file"],
+select{
+  width:100%;
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius: 10px;
+  padding:10px 12px;
+  font-size: 16px;
 }
 
-/* ================================
-   Tabs (List / Completed)
-================================== */
-.tabs {
-  display: inline-flex;
-  background: #eef2ff;
-  border-radius: 999px;
-  padding: 4px;
-  gap: 4px;
-}
-.tab {
-  padding: 8px 14px;
-  border-radius: 999px;
+.btn{
+  appearance:none;
+  border:1px solid var(--border);
+  background:#fff;
+  color:var(--text);
+  padding:12px 14px;
+  border-radius: 12px;
   font-weight: 700;
-  color: #312e81;
-  cursor: pointer;
-  user-select: none;
+  cursor:pointer;
+  min-width: 120px;
+  box-shadow: var(--shadow);
 }
-.tab.active {
-  background: #fff;
-  color: var(--primary);
+.btn:disabled{ opacity:.6; cursor:not-allowed; }
+
+.btn-primary{
+  background: var(--primary);
+  color:#fff;
+  border-color: transparent;
+}
+.btn-success{
+  background: var(--success);
+  color:#fff;
+  border-color: transparent;
+}
+.btn-danger{
+  background: var(--danger);
+  color:#fff;
+  border-color: transparent;
+}
+.btn-outline{
+  background:#fff;
+  color:var(--text);
+}
+
+/* ---------- Day panel ---------- */
+.day-panel{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  justify-content: space-between;
+  padding:14px;
+  background: var(--card);
+  border:1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.day-panel .status{
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ---------- Address list cards ---------- */
+.addr-card{
+  display:flex;
+  flex-direction: column;
+  gap:12px;
+  background: var(--card);
+  border:1px solid var(--border);
+  border-radius: var(--radius);
+  padding:16px;
   box-shadow: var(--shadow);
 }
 
-/* ================================
-   Day Panel
-================================== */
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px;
-  box-shadow: var(--shadow);
+.addr-top{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
 }
-.panel-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
+
+.addr-index{
+  flex:0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius:10px;
+  background:#eef2ff;
+  color:#3730a3;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+}
+
+.addr-main{
+  flex:1 1 auto;
+  min-width: 0;
+}
+
+.addr-title{
+  margin:0;
+  font-weight:800;
+  line-height:1.2;
+  font-size: clamp(1rem, 1.4vw + .8rem, 1.15rem);
+  word-wrap: break-word;
+}
+
+.addr-gps{
+  margin-top:4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Buttons sit at the bottom, full width on mobile */
+.addr-actions{
+  display:flex;
+  gap:10px;
   flex-wrap: wrap;
 }
-.pill {
-  padding: 6px 10px;
-  border: 1px dashed var(--border);
-  border-radius: 999px;
-  color: var(--muted);
+.addr-actions .btn{
+  flex:1 1 0;
+  min-width: 0;
+}
+
+/* Completed tags (if you show a status chip) */
+.tag{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 10px;
+  border-radius:999px;
+  font-weight:700;
   font-size: 12px;
 }
+.tag-pif{ background:#ecfdf5; color:#065f46; }
+.tag-done{ background:#eff6ff; color:#1d4ed8; }
+.tag-da{ background:#fef2f2; color:#b91c1c; }
 
-/* ================================
-   Address cards (List view)
-   Address on top, actions on bottom
-================================== */
-.cards {
-  display: grid;
-  gap: 12px;
-}
-
-.card {
-  border: 1px solid var(--border);
+/* ---------- Completed summary ---------- */
+.summary-card{
+  display:flex;
+  gap:16px;
+  padding:16px;
+  background: var(--card);
+  border:1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px;
-  display: flex;              /* vertical stack */
-  flex-direction: column;
-  gap: 12px;
-  background: #fff;
   box-shadow: var(--shadow);
-}
-
-.card.active {
-  border-color: #93c5fd;
-  background: #f8fbff;
-}
-
-.card-title {
-  font-weight: 800;
-  letter-spacing: .2px;
-  font-size: 18px;
-  line-height: 1.15;
-  margin: 0 0 6px;
-  word-break: break-word;
-}
-
-.card-gps {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.card-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;            /* wrap nicely on phones */
-  justify-content: flex-end;  /* right-align by default */
-  margin-top: 4px;
-}
-
-.card-actions .btn {
-  min-width: 116px;
-}
-
-/* Make PIF input resemble buttons visually */
-.card-actions input[type="number"] {
-  width: 120px;
-}
-
-/* On very small screens, let buttons stretch two per row */
-@media (max-width: 480px) {
-  .card-actions {
-    justify-content: stretch;
-    gap: 8px;
-  }
-  .card-actions .btn,
-  .card-actions input[type="number"] {
-    flex: 1 1 48%;
-    min-width: 0;
-  }
-}
-
-/* ================================
-   Completed view
-================================== */
-.kpis {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0,1fr));
-  gap: 10px;
-}
-.kpi {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  text-align: center;
-  box-shadow: var(--shadow);
-}
-.kpi .label { font-size: 12px; color: var(--muted); }
-.kpi .value { font-size: 20px; font-weight: 800; }
-
-.day-grid {
-  display: grid;
-  gap: 10px;
-}
-.day-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px;
-  box-shadow: var(--shadow);
-}
-.day-header {
-  display: flex;
-  gap: 10px;
-  align-items: center;
+  align-items:center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  flex-wrap: wrap;
 }
-.day-hours { color: var(--muted); font-size: 13px; }
-.day-outcomes { color: var(--muted); font-size: 13px; }
-
-.addr-line {
-  font-size: 14px;
-  padding: 4px 0;
-  border-top: 1px dashed var(--border);
+.summary-left{
+  display:flex;
+  flex-direction: column;
+  gap:4px;
 }
-.addr-line:first-of-type { border-top: 0; }
+.summary-right{
+  display:grid;
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
+  gap:10px;
+  width:100%;
+}
+@media (min-width: 560px){
+  .summary-right{ width:auto; }
+}
+.stat{
+  background:#f8fafc;
+  border:1px solid var(--border);
+  border-radius: 12px;
+  padding:10px;
+  text-align:center;
+}
+.stat .label{ font-size:12px; color:var(--muted); }
+.stat .value{ font-weight:800; margin-top:4px; }
 
-/* ================================
-   Utility spacing
-================================== */
-.section {
-  background: var(--panel);
-  border: 1px solid var(--border);
+/* ---------- Calendar (react-day-picker) ---------- */
+.calendar-wrap{
+  background: var(--card);
+  border:1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px;
   box-shadow: var(--shadow);
+  padding:8px;
 }
 
-.center { text-align: center; }
-.right { text-align: right; }
+.rdp{ --rdp-accent-color: var(--primary); }
+.rdp,
+.rdp-months{
+  width:100%;
+}
+.rdp-day_selected,
+.rdp-day_selected:focus-visible,
+.rdp-day_selected:hover{
+  background: var(--primary);
+  color:#fff;
+}
+.rdp-range_start,
+.rdp-range_end{
+  background: var(--primary);
+  color:#fff;
+}
+.rdp-day_range_middle{
+  background: #dbeafe;
+}
+.rdp-caption_label{
+  font-weight:800;
+}
+.rdp-head_cell{
+  color: var(--muted);
+}
+
+/* ---------- Utility spacing ---------- */
+.stack{ display:flex; flex-direction:column; gap:12px; }
+.grid-2{ display:grid; grid-template-columns: 1fr; gap:12px; }
+@media (min-width: 720px){
+  .grid-2{ grid-template-columns: 1fr 1fr; }
+}
+
+/* ---------- Small helpers ---------- */
+.muted{ color: var(--muted); }
+.center{ text-align:center; }
 ```0
