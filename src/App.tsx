@@ -32,7 +32,7 @@ export default function App() {
   } = useAppState();
 
   const cloudSync = useCloudSync();
-  
+
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
   const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(null);
@@ -41,13 +41,13 @@ export default function App() {
   // Auto-sync data to cloud when state changes
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
-    
+
     const syncData = async () => {
       try {
         await cloudSync.syncData(state);
         setLastSyncTime(new Date());
       } catch (err) {
-        console.error('Sync failed:', err);
+        console.error("Sync failed:", err);
       }
     };
 
@@ -69,8 +69,12 @@ export default function App() {
   if (!cloudSync.user) {
     return (
       <Auth
-        onSignIn={cloudSync.signIn}
-        onSignUp={cloudSync.signUp}
+        onSignIn={async (email, password) => {
+          await cloudSync.signIn(email, password); // discard returned payload to match Promise<void>
+        }}
+        onSignUp={async (email, password) => {
+          await cloudSync.signUp(email, password); // discard returned payload to match Promise<void>
+        }}
         isLoading={cloudSync.isLoading}
         error={cloudSync.error}
         onClearError={cloudSync.clearError}
@@ -116,9 +120,9 @@ export default function App() {
       } else if (text.toUpperCase() === "ARR") {
         // Switch to arrangements tab to create new arrangement for this address
         setTab("arrangements");
-        // Set a flag to auto-select this address (we'll handle this in the Arrangements component)
+        // Set a flag to auto-select this address (handled in the Arrangements component)
         setTimeout(() => {
-          const event = new CustomEvent('auto-create-arrangement', { detail: { addressIndex: i } });
+          const event = new CustomEvent("auto-create-arrangement", { detail: { addressIndex: i } });
           window.dispatchEvent(event);
         }, 100);
       } else {
@@ -143,11 +147,7 @@ export default function App() {
       if (!el || !(el as HTMLElement)) return false;
       const t = el as HTMLElement;
       const tag = t.tagName;
-      return (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        (t as HTMLElement).isContentEditable
-      );
+      return tag === "INPUT" || tag === "TEXTAREA" || (t as HTMLElement).isContentEditable;
     };
 
     const handler = (e: KeyboardEvent) => {
@@ -256,10 +256,10 @@ export default function App() {
     const total = state.addresses.length;
     const completed = state.completions.length;
     const pending = total - completed;
-    const pifCount = state.completions.filter(c => c.outcome === "PIF").length;
-    const doneCount = state.completions.filter(c => c.outcome === "Done").length;
-    const daCount = state.completions.filter(c => c.outcome === "DA").length;
-    
+    const pifCount = state.completions.filter((c) => c.outcome === "PIF").length;
+    const doneCount = state.completions.filter((c) => c.outcome === "Done").length;
+    const daCount = state.completions.filter((c) => c.outcome === "DA").length;
+
     return { total, completed, pending, pifCount, doneCount, daCount };
   }, [state.addresses.length, state.completions]);
 
@@ -280,22 +280,22 @@ export default function App() {
       <header className="app-header">
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <h1 className="app-title">📍 Address Navigator</h1>
-          
+
           {/* Sync Status */}
-          <div style={{ 
-            display: "flex", 
-            alignItems: "center", 
-            gap: "0.5rem",
-            fontSize: "0.75rem",
-            color: "var(--text-muted)"
-          }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+            }}
+          >
             {cloudSync.isOnline ? (
               <>
                 <span style={{ color: "var(--success)" }}>🟢</span>
                 Online
-                {lastSyncTime && (
-                  <span>• Last sync {lastSyncTime.toLocaleTimeString()}</span>
-                )}
+                {lastSyncTime && <span>• Last sync {lastSyncTime.toLocaleTimeString()}</span>}
               </>
             ) : (
               <>
@@ -305,28 +305,26 @@ export default function App() {
             )}
           </div>
         </div>
-        
+
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           {/* User Info */}
-          <div style={{ 
-            display: "flex", 
-            alignItems: "center", 
-            gap: "0.75rem",
-            fontSize: "0.875rem",
-            color: "var(--text-secondary)"
-          }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.75rem",
+              fontSize: "0.875rem",
+              color: "var(--text-secondary)",
+            }}
+          >
             <span>👤 {cloudSync.user.email}</span>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={cloudSync.signOut}
-              title="Sign out"
-            >
+            <button className="btn btn-ghost btn-sm" onClick={cloudSync.signOut} title="Sign out">
               🚪 Sign Out
             </button>
           </div>
-          
+
           <div className="tabs">
-            <button 
+            <button
               className="tab-btn"
               aria-selected={tab === "list"}
               onClick={() => setTab("list")}
@@ -353,36 +351,41 @@ export default function App() {
 
       {/* Import & Tools Section */}
       <div style={{ marginBottom: "2rem" }}>
-        <div style={{ 
-          background: "var(--surface)", 
-          padding: "1.5rem", 
-          borderRadius: "var(--radius-lg)", 
-          border: "1px solid var(--border-light)",
-          boxShadow: "var(--shadow-sm)",
-          marginBottom: "1rem"
-        }}>
-          <div style={{ 
-            fontSize: "0.875rem", 
-            color: "var(--text-secondary)", 
+        <div
+          style={{
+            background: "var(--surface)",
+            padding: "1.5rem",
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border-light)",
+            boxShadow: "var(--shadow-sm)",
             marginBottom: "1rem",
-            lineHeight: "1.5"
-          }}>
-            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>, <strong>lng</strong> columns to get started.
+          }}
+        >
+          <div
+            style={{
+              fontSize: "0.875rem",
+              color: "var(--text-secondary)",
+              marginBottom: "1rem",
+              lineHeight: "1.5",
+            }}
+          >
+            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>,{" "}
+            <strong>lng</strong> columns to get started.
           </div>
-          
+
           <div className="btn-row">
             <ImportExcel onImported={setAddresses} />
-            
+
             <div className="btn-spacer" />
-            
+
             <button className="btn btn-ghost" onClick={onBackup}>
               💾 Backup
             </button>
 
             <div className="file-input-wrapper">
-              <input 
-                type="file" 
-                accept="application/json" 
+              <input
+                type="file"
+                accept="application/json"
                 onChange={onRestore}
                 className="file-input"
                 id="restore-input"
@@ -429,17 +432,23 @@ export default function App() {
             </div>
             <div className="stat-item">
               <div className="stat-label">PIF</div>
-              <div className="stat-value" style={{ color: "var(--success)" }}>{stats.pifCount}</div>
+              <div className="stat-value" style={{ color: "var(--success)" }}>
+                {stats.pifCount}
+              </div>
             </div>
             <div className="stat-item">
               <div className="stat-label">Done</div>
-              <div className="stat-value" style={{ color: "var(--primary)" }}>{stats.doneCount}</div>
+              <div className="stat-value" style={{ color: "var(--primary)" }}>
+                {stats.doneCount}
+              </div>
             </div>
             <div className="stat-item">
               <div className="stat-label">DA</div>
-              <div className="stat-value" style={{ color: "var(--danger)" }}>{stats.daCount}</div>
+              <div className="stat-value" style={{ color: "var(--danger)" }}>
+                {stats.daCount}
+              </div>
             </div>
-            
+
             {state.activeIndex !== null && (
               <div className="stat-item">
                 <div className="stat-label">Active</div>
@@ -461,16 +470,19 @@ export default function App() {
           />
 
           {/* Keyboard Shortcuts Help */}
-          <div style={{ 
-            marginTop: "2rem", 
-            padding: "1rem",
-            background: "var(--bg-tertiary)", 
-            borderRadius: "var(--radius)",
-            fontSize: "0.8125rem", 
-            color: "var(--text-muted)",
-            textAlign: "center"
-          }}>
-            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR' for arrangement) • U Undo • S Start Day • E End Day
+          <div
+            style={{
+              marginTop: "2rem",
+              padding: "1rem",
+              background: "var(--bg-tertiary)",
+              borderRadius: "var(--radius)",
+              fontSize: "0.8125rem",
+              color: "var(--text-muted)",
+              textAlign: "center",
+            }}
+          >
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR' for
+            arrangement) • U Undo • S Start Day • E End Day
           </div>
         </>
       ) : tab === "completed" ? (
