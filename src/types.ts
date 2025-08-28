@@ -24,9 +24,27 @@ export type DaySession = {
   durationSeconds?: number; // computed on end
 };
 
+export type ArrangementStatus = "Scheduled" | "Confirmed" | "Cancelled" | "Completed" | "Missed";
+
+export type Arrangement = {
+  id: string;               // unique identifier
+  addressIndex: number;     // links to address in the main list
+  address: string;          // cached for display
+  customerName?: string;    // optional customer name
+  phoneNumber?: string;     // optional contact number
+  scheduledDate: string;    // ISO date string (YYYY-MM-DD)
+  scheduledTime?: string;   // optional time (HH:MM)
+  status: ArrangementStatus;
+  notes?: string;           // optional notes
+  amount?: string;          // expected amount
+  createdAt: string;        // when arrangement was created
+  updatedAt: string;        // when last modified
+};
+
 export type AppState = {
   addresses: AddressRow[];
   activeIndex: number | null;
   completions: Completion[];
   daySessions: DaySession[];
+  arrangements: Arrangement[];
 };
