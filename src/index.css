@@ -3,6 +3,13 @@
   box-sizing: border-box;
 }
 
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  overflow-x: hidden;
+}
+
 html {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -18,20 +25,21 @@ html {
 }
 
 body {
-  margin: 0;
-  padding: 0;
   min-width: 320px;
   min-height: 100vh;
   background: #f8fafc;
   color: #1e293b;
   
-  /* Prevent zoom on input focus (mobile) */
+  /* Prevent zoom on input focus (mobile) and horizontal scroll */
   -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 #root {
   min-height: 100vh;
   width: 100%;
+  overflow-x: hidden;
 }
 
 /* Remove default button styles that conflict with our design system */
