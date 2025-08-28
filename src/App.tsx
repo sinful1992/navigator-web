@@ -1,3 +1,4 @@
+// src/App.tsx
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -12,7 +13,7 @@ import { downloadJson, readJsonFile } from "./backup";
 
 type Tab = "list" | "completed" | "arrangements";
 
-// Simple error boundary to avoid blank screen
+// Simple error boundary to avoid blank screen on unexpected errors
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -21,10 +22,10 @@ class ErrorBoundary extends React.Component<
     super(p);
     this.state = { hasError: false };
   }
-  static getDerivedStateFromError(err: any) {
+  static getDerivedStateFromError(err: unknown) {
     return { hasError: true, msg: String(err) };
   }
-  componentDidCatch(err: any, info: any) {
+  componentDidCatch(err: unknown, info: unknown) {
     console.error("Render error:", err, info);
   }
   render() {
@@ -41,9 +42,9 @@ class ErrorBoundary extends React.Component<
 }
 
 export default function App() {
-  const cloudSync = useCloudSync(); // always called
+  const cloudSync = useCloudSync(); // always mount to restore session
 
-  // ✅ NEW: wait for Supabase to restore session before deciding what to show
+  // Wait for Supabase to restore session before deciding what to render
   if (cloudSync.isLoading) {
     return (
       <div className="container">
@@ -55,7 +56,7 @@ export default function App() {
     );
   }
 
-  // Not loading and no user → show Auth
+  // If not loading and no user, show Auth
   if (!cloudSync.user) {
     return (
       <ErrorBoundary>
@@ -66,7 +67,7 @@ export default function App() {
           onSignUp={async (email, password) => {
             await cloudSync.signUp(email, password);
           }}
-          // If you wired a demo account in .env, uncomment the next line and add a Demo button in Auth:
+          // If you added a Demo button in Auth, you can also pass:
           // onDemoSignIn={async () => { await cloudSync.signInDemo(); }}
           isLoading={cloudSync.isLoading}
           error={cloudSync.error}
@@ -76,7 +77,7 @@ export default function App() {
     );
   }
 
-  // Authenticated → render the main app
+  // Authenticated → render the app
   return (
     <ErrorBoundary>
       <AuthedApp />
@@ -111,14 +112,14 @@ function AuthedApp() {
     React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
-  // Auto-sync data to cloud when state changes (debounced)
+  // Auto-sync local state to cloud (debounced)
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     const t = setTimeout(() => {
       cloudSync
         .syncData(state)
         .then(() => setLastSyncTime(new Date()))
-        .catch((err: any) => console.error("Sync failed:", err));
+        .catch((err: unknown) => console.error("Sync failed:", err));
     }, 800);
     return () => clearTimeout(t);
   }, [cloudSync.user, loading, state, cloudSync]);
@@ -147,7 +148,7 @@ function AuthedApp() {
   const daySessions = state?.daySessions ?? [];
 
   const completedIdx = React.useMemo(
-    () => new Set(completions.map((c) => c.index)),
+    () => new Set(completions.map((c: any) => c.index)),
     [completions]
   );
 
@@ -155,13 +156,13 @@ function AuthedApp() {
   const visible = React.useMemo(
     () =>
       addresses
-        .map((a, i) => ({ a, i }))
+        .map((a: any, i: number) => ({ a, i }))
         .filter(({ a }) => !lowerQ || (a.address ?? "").toLowerCase().includes(lowerQ))
         .filter(({ i }) => !completedIdx.has(i)),
     [addresses, lowerQ, completedIdx]
   );
 
-  const hasActiveSession = daySessions.some((d) => !d.end);
+  const hasActiveSession = daySessions.some((d: any) => !d.end);
 
   const doQuickComplete = React.useCallback(
     (i: number) => {
@@ -281,7 +282,7 @@ function AuthedApp() {
     endDay,
   ]);
 
-  // Backup / Restore
+  // ----- Backup / Restore -----
   const onBackup = () => {
     const snap = backupState();
     const stamp = new Date();
@@ -291,18 +292,20 @@ function AuthedApp() {
     downloadJson(`navigator-backup-${y}${m}${d}.json`, snap);
   };
 
+  // ✅ OPTION 2: push restored data to cloud immediately so it can't be overwritten
   const onRestore: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const data = await readJsonFile(file);
-      restoreState(data);
+      restoreState(data);             // 1) apply locally
+      await cloudSync.syncData(data); // 2) immediately upsert to Supabase (authoritative)
       alert("✅ Restore completed successfully!");
     } catch (err: any) {
       console.error(err);
       alert(`❌ Restore failed: ${err?.message || err}`);
     } finally {
-      e.target.value = "";
+      e.target.value = ""; // allow selecting the same file again later
     }
   };
 
@@ -311,13 +314,12 @@ function AuthedApp() {
     const total = addresses.length;
     const completed = completions.length;
     const pending = total - completed;
-    const pifCount = completions.filter((c) => c.outcome === "PIF").length;
-    const doneCount = completions.filter((c) => c.outcome === "Done").length;
-    const daCount = completions.filter((c) => c.outcome === "DA").length;
+    const pifCount = completions.filter((c: any) => c.outcome === "PIF").length;
+    const doneCount = completions.filter((c: any) => c.outcome === "Done").length;
+    const daCount = completions.filter((c: any) => c.outcome === "DA").length;
     return { total, completed, pending, pifCount, doneCount, daCount };
   }, [addresses, completions]);
 
-  // Loading guard (initial state after login)
   const waitingForInitialData =
     !!cloudSync.user && (!state || !Array.isArray(state.addresses));
 
