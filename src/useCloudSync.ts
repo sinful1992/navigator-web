@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "./lib/supabaseClient";
-import type { User } from "@supabase/supabase-js";
+import type { User, SupabaseClient } from "@supabase/supabase-js";
 
-// If you have a concrete State type from useAppState, replace 'any' with it.
+// Replace 'any' with your concrete State type if you have one.
 type AppState = any;
 
 function useOnline() {
@@ -29,48 +29,60 @@ export function useCloudSync() {
   const lastPushedAt = useRef<string>("");
   const lastPulledAt = useRef<string>("");
 
-  // Session bootstrap
+  // ---- Session bootstrap
   useEffect(() => {
-    if (!supabase) { setIsLoading(false); return; }
+    const client = supabase; // capture locally for narrowing in closures
+    if (!client) {
+      setIsLoading(false);
+      return;
+    }
+
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error } = await client.auth.getSession();
+      if (error) console.error(error);
       setUser(session?.user ?? null);
       setIsLoading(false);
     })();
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+
+    const { data: sub } = client.auth.onAuthStateChange((_evt, session) => {
       setUser(session?.user ?? null);
     });
+
     return () => sub?.subscription.unsubscribe();
   }, []);
 
-  // Auth API
+  // ---- Auth API
   const signIn = useCallback(async (email: string, password: string) => {
-    if (!supabase) throw new Error("Cloud disabled: missing env vars");
+    const client = supabase;
+    if (!client) throw new Error("Cloud disabled: missing env vars");
     setError(null);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
     if (error) throw error;
     return { user: data.user! };
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
-    if (!supabase) throw new Error("Cloud disabled: missing env vars");
+    const client = supabase;
+    if (!client) throw new Error("Cloud disabled: missing env vars");
     setError(null);
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await client.auth.signUp({ email, password });
     if (error) throw error;
     return { user: data.user! };
   }, []);
 
   const signOut = useCallback(async () => {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    const client = supabase;
+    if (!client) return;
+    await client.auth.signOut();
   }, []);
 
   const signInDemo = useCallback(async () => {
-    if (!supabase) throw new Error("Cloud disabled");
+    const client = supabase;
+    if (!client) throw new Error("Cloud disabled");
     const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL as string | undefined;
     const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD as string | undefined;
     if (!DEMO_EMAIL || !DEMO_PASSWORD) throw new Error("Demo credentials not configured");
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await client.auth.signInWithPassword({
       email: DEMO_EMAIL,
       password: DEMO_PASSWORD,
     });
@@ -80,25 +92,31 @@ export function useCloudSync() {
 
   const clearError = useCallback(() => setError(null), []);
 
-  // Push local -> cloud
+  // ---- Push local -> cloud
   const syncData = useCallback(async (state: AppState) => {
-    if (!supabase || !user) return;
+    const client = supabase;
+    if (!client || !user) return;
     const now = new Date().toISOString();
-    const { error } = await supabase
+    const { error } = await client
       .from("navigator_state")
       .upsert({ user_id: user.id, data: state, updated_at: now }, { onConflict: "user_id" });
-    if (error) { console.error(error); setError(error.message); return; }
+    if (error) {
+      console.error(error);
+      setError(error.message);
+      return;
+    }
     lastPushedAt.current = now;
   }, [user]);
 
-  // Subscribe cloud -> local
+  // ---- Subscribe cloud -> local
   const subscribeToData = useCallback((onChange: (s: AppState) => void) => {
-    if (!supabase || !user) return () => {};
+    const client = supabase; // capture non-null locally
+    if (!client || !user) return () => {};
 
-    // initial fetch
+    // Initial fetch
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from("navigator_state")
         .select("data, updated_at")
         .eq("user_id", user.id)
@@ -109,8 +127,8 @@ export function useCloudSync() {
       }
     })();
 
-    // realtime
-    const channel = supabase
+    // Realtime
+    const channel = client
       .channel(`realtime:navigator_state:${user.id}`)
       .on(
         "postgres_changes",
@@ -119,7 +137,7 @@ export function useCloudSync() {
           const row: any = payload.new ?? payload.old;
           const updatedAt = row?.updated_at as string | undefined;
           if (!updatedAt) return;
-          if (updatedAt <= lastPushedAt.current) return; // ignore our own echo
+          if (updatedAt <= lastPushedAt.current) return; // ignore our own push echo
           if (updatedAt <= lastPulledAt.current) return; // ignore older snapshot
           lastPulledAt.current = updatedAt;
           if (row?.data) onChange(row.data);
@@ -127,7 +145,10 @@ export function useCloudSync() {
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); cancelled = true; };
+    return () => {
+      client.removeChannel(channel);
+      cancelled = true;
+    };
   }, [user]);
 
   return {
