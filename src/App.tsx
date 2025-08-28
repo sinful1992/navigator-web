@@ -72,8 +72,15 @@ export default function App() {
     return (
       <ErrorBoundary>
         <Auth
-          onSignIn={cloudSync.signIn}
-          onSignUp={cloudSync.signUp}
+          // ✅ Wrap to satisfy Auth prop type: Promise<void>
+          onSignIn={async (email, password) => {
+            await cloudSync.signIn(email, password);
+          }}
+          onSignUp={async (email, password) => {
+            await cloudSync.signUp(email, password);
+          }}
+          // If you added a demo button in Auth, use:
+          // onDemoSignIn={async () => { await cloudSync.signInDemo(); }}
           isLoading={cloudSync.isLoading}
           error={cloudSync.error}
           onClearError={cloudSync.clearError}
@@ -290,15 +297,15 @@ function AuthedApp() {
     downloadJson(`navigator-backup-${y}${m}${d}.json`, snap);
   };
 
-  // OPTION 2: push restored data to cloud immediately
+  // Push restored data to cloud immediately
   const onRestore: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const raw = await readJsonFile(file);
-      const data = normalizeState(raw);   // ensure arrays exist
-      restoreState(data);                 // local
-      await cloudSync.syncData(data);     // cloud (authoritative)
+      const data = normalizeState(raw);
+      restoreState(data);             // local
+      await cloudSync.syncData(data); // cloud (authoritative)
       alert("✅ Restore completed successfully!");
     } catch (err: any) {
       console.error(err);
@@ -319,7 +326,6 @@ function AuthedApp() {
     return { total, completed: completedCount, pending, pifCount, doneCount, daCount };
   }, [addresses, completions]);
 
-  // Initial guard: wait until we at least know addresses is an array
   const waitingForInitialData = !!cloudSync.user && !Array.isArray(state?.addresses);
 
   if (loading || waitingForInitialData) {
