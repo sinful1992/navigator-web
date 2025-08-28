@@ -7,6 +7,7 @@ type Props = {
   setActive: (i: number) => void;
   cancelActive: () => void;
   complete: (index: number, outcome: Outcome, amount?: string) => void;
+  onCreateArrangement: (addressIndex: number) => void;
   filterText?: string;
 };
 
@@ -15,6 +16,7 @@ export function AddressList({
   setActive,
   cancelActive,
   complete,
+  onCreateArrangement,
   filterText = "",
 }: Props) {
   const [openCompleteFor, setOpenCompleteFor] = React.useState<number | null>(
@@ -142,12 +144,21 @@ export function AddressList({
                       </button>
                     </div>
                   ) : (
-                    <button 
-                      className="btn btn-primary" 
-                      onClick={() => setActive(i)}
-                    >
-                      Set Active
-                    </button>
+                    <div className="btn-group">
+                      <button 
+                        className="btn btn-primary" 
+                        onClick={() => setActive(i)}
+                      >
+                        Set Active
+                      </button>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => onCreateArrangement(i)}
+                        title="Create payment arrangement"
+                      >
+                        📅 Arrange
+                      </button>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -196,6 +207,14 @@ export function AddressList({
                       💰 PIF
                     </button>
                   </div>
+
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => onCreateArrangement(i)}
+                    title="Create payment arrangement instead"
+                  >
+                    📅 Arrange
+                  </button>
 
                   <div className="btn-spacer" />
 
