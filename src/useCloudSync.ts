@@ -1,186 +1,146 @@
-// src/useCloudSync.ts
-import * as React from "react";
-import type { AppState } from "./types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { supabase } from "./lib/supabaseClient";
+import type { User } from "@supabase/supabase-js";
 
-// Simple cloud sync interface - can be implemented with Firebase, Supabase, or custom backend
-interface CloudSyncProvider {
-  signIn: (email: string, password: string) => Promise<{ user: { id: string; email: string } }>;
-  signUp: (email: string, password: string) => Promise<{ user: { id: string; email: string } }>;
-  signOut: () => Promise<void>;
-  syncData: (data: AppState) => Promise<void>;
-  subscribeToData: (callback: (data: AppState) => void) => () => void;
-  getCurrentUser: () => { id: string; email: string } | null;
-}
+// If you have a concrete State type from useAppState, replace 'any' with it.
+type AppState = any;
 
-// Mock implementation - replace with actual Firebase/Supabase
-class MockCloudSync implements CloudSyncProvider {
-  private user: { id: string; email: string } | null = null;
-  private data: AppState | null = null;
-  private callbacks: Set<(data: AppState) => void> = new Set();
-
-  async signIn(email: string, password: string) {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    if (password.length < 6) {
-      throw new Error("Password must be at least 6 characters");
-    }
-    
-    this.user = { id: `user_${email.replace('@', '_')}`, email };
-    
-    // Load user's data from localStorage as fallback
-    const savedData = localStorage.getItem(`cloud_data_${this.user.id}`);
-    if (savedData) {
-      this.data = JSON.parse(savedData);
-      this.callbacks.forEach(cb => cb(this.data!));
-    }
-    
-    return { user: this.user };
-  }
-
-  async signUp(email: string, password: string) {
-    return this.signIn(email, password); // Same for mock
-  }
-
-  async signOut() {
-    this.user = null;
-    this.data = null;
-  }
-
-  async syncData(data: AppState) {
-    if (!this.user) throw new Error("Not signed in");
-    
-    this.data = data;
-    // Save to localStorage as mock cloud storage
-    localStorage.setItem(`cloud_data_${this.user.id}`, JSON.stringify(data));
-    
-    // Notify other tabs/windows
-    window.localStorage.setItem('sync_trigger', Date.now().toString());
-  }
-
-  subscribeToData(callback: (data: AppState) => void) {
-    this.callbacks.add(callback);
-    
-    // Listen for changes from other tabs
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'sync_trigger' && this.user && this.data) {
-        callback(this.data);
-      }
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    
+function useOnline() {
+  const [online, setOnline] = useState<boolean>(navigator.onLine);
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
     return () => {
-      this.callbacks.delete(callback);
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener("online", up);
+      window.removeEventListener("offline", down);
     };
-  }
-
-  getCurrentUser() {
-    return this.user;
-  }
+  }, []);
+  return online;
 }
-
-const cloudSync = new MockCloudSync();
 
 export function useCloudSync() {
-  const [user, setUser] = React.useState<{ id: string; email: string } | null>(null);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [isOnline, setIsOnline] = React.useState(navigator.onLine);
+  const isOnline = useOnline();
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(!!supabase);
+  const [error, setError] = useState<string | null>(null);
 
-  // Check online status
-  React.useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
+  const lastPushedAt = useRef<string>("");
+  const lastPulledAt = useRef<string>("");
+
+  // Session bootstrap
+  useEffect(() => {
+    if (!supabase) { setIsLoading(false); return; }
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    })();
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => sub?.subscription.unsubscribe();
   }, []);
 
-  // Check if user is already signed in
-  React.useEffect(() => {
-    const currentUser = cloudSync.getCurrentUser();
-    if (currentUser) {
-      setUser(currentUser);
-    }
-  }, []);
-
-  const signIn = async (email: string, password: string) => {
-    setIsLoading(true);
+  // Auth API
+  const signIn = useCallback(async (email: string, password: string) => {
+    if (!supabase) throw new Error("Cloud disabled: missing env vars");
     setError(null);
-    try {
-      const result = await cloudSync.signIn(email, password);
-      setUser(result.user);
-      return result;
-    } catch (err: any) {
-      setError(err.message || 'Sign in failed');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const signUp = async (email: string, password: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await cloudSync.signUp(email, password);
-      setUser(result.user);
-      return result;
-    } catch (err: any) {
-      setError(err.message || 'Sign up failed');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const signOut = async () => {
-    setIsLoading(true);
-    try {
-      await cloudSync.signOut();
-      setUser(null);
-    } catch (err: any) {
-      setError(err.message || 'Sign out failed');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const syncData = async (data: AppState) => {
-    if (!isOnline) {
-      console.warn('Offline - data will sync when connection is restored');
-      return;
-    }
-    
-    try {
-      await cloudSync.syncData(data);
-    } catch (err: any) {
-      setError(err.message || 'Sync failed');
-      throw err;
-    }
-  };
-
-  const subscribeToData = React.useCallback((callback: (data: AppState) => void) => {
-    return cloudSync.subscribeToData(callback);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return { user: data.user! };
   }, []);
+
+  const signUp = useCallback(async (email: string, password: string) => {
+    if (!supabase) throw new Error("Cloud disabled: missing env vars");
+    setError(null);
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+    return { user: data.user! };
+  }, []);
+
+  const signOut = useCallback(async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+  }, []);
+
+  const signInDemo = useCallback(async () => {
+    if (!supabase) throw new Error("Cloud disabled");
+    const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL as string | undefined;
+    const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD as string | undefined;
+    if (!DEMO_EMAIL || !DEMO_PASSWORD) throw new Error("Demo credentials not configured");
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: DEMO_EMAIL,
+      password: DEMO_PASSWORD,
+    });
+    if (error) throw error;
+    return { user: data.user! };
+  }, []);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  // Push local -> cloud
+  const syncData = useCallback(async (state: AppState) => {
+    if (!supabase || !user) return;
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("navigator_state")
+      .upsert({ user_id: user.id, data: state, updated_at: now }, { onConflict: "user_id" });
+    if (error) { console.error(error); setError(error.message); return; }
+    lastPushedAt.current = now;
+  }, [user]);
+
+  // Subscribe cloud -> local
+  const subscribeToData = useCallback((onChange: (s: AppState) => void) => {
+    if (!supabase || !user) return () => {};
+
+    // initial fetch
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("navigator_state")
+        .select("data, updated_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!cancelled && data && !error) {
+        lastPulledAt.current = data.updated_at ?? new Date().toISOString();
+        onChange(data.data);
+      }
+    })();
+
+    // realtime
+    const channel = supabase
+      .channel(`realtime:navigator_state:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "navigator_state", filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const row: any = payload.new ?? payload.old;
+          const updatedAt = row?.updated_at as string | undefined;
+          if (!updatedAt) return;
+          if (updatedAt <= lastPushedAt.current) return; // ignore our own echo
+          if (updatedAt <= lastPulledAt.current) return; // ignore older snapshot
+          lastPulledAt.current = updatedAt;
+          if (row?.data) onChange(row.data);
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); cancelled = true; };
+  }, [user]);
 
   return {
     user,
     isLoading,
+    isOnline: isOnline && !!supabase,
     error,
-    isOnline,
+    clearError,
     signIn,
     signUp,
     signOut,
+    signInDemo,
     syncData,
     subscribeToData,
-    clearError: () => setError(null)
   };
 }
