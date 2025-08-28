@@ -2,6 +2,8 @@ import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
+import { useCloudSync } from "./useCloudSync";
+import { Auth } from "./Auth";
 import { AddressList } from "./AddressList";
 import { Completed } from "./Completed";
 import { DayPanel } from "./DayPanel";
@@ -26,11 +28,55 @@ export default function App() {
     addArrangement,
     updateArrangement,
     deleteArrangement,
+    setState, // Add this to useAppState
   } = useAppState();
 
+  const cloudSync = useCloudSync();
+  
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
   const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(null);
+  const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
+
+  // Auto-sync data to cloud when state changes
+  React.useEffect(() => {
+    if (!cloudSync.user || loading) return;
+    
+    const syncData = async () => {
+      try {
+        await cloudSync.syncData(state);
+        setLastSyncTime(new Date());
+      } catch (err) {
+        console.error('Sync failed:', err);
+      }
+    };
+
+    const debounceTimer = setTimeout(syncData, 1000); // Debounce syncing
+    return () => clearTimeout(debounceTimer);
+  }, [state, cloudSync.user, cloudSync.syncData, loading]);
+
+  // Subscribe to data changes from other devices
+  React.useEffect(() => {
+    if (!cloudSync.user) return;
+
+    return cloudSync.subscribeToData((newState) => {
+      setState(newState);
+      setLastSyncTime(new Date());
+    });
+  }, [cloudSync.user, cloudSync.subscribeToData, setState]);
+
+  // Show auth screen if not signed in
+  if (!cloudSync.user) {
+    return (
+      <Auth
+        onSignIn={cloudSync.signIn}
+        onSignUp={cloudSync.signUp}
+        isLoading={cloudSync.isLoading}
+        error={cloudSync.error}
+        onClearError={cloudSync.clearError}
+      />
+    );
+  }
 
   // Handle arrangement creation from address list
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
@@ -232,30 +278,76 @@ export default function App() {
     <div className="container">
       {/* Header */}
       <header className="app-header">
-        <h1 className="app-title">📍 Address Navigator</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <h1 className="app-title">📍 Address Navigator</h1>
+          
+          {/* Sync Status */}
+          <div style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            gap: "0.5rem",
+            fontSize: "0.75rem",
+            color: "var(--text-muted)"
+          }}>
+            {cloudSync.isOnline ? (
+              <>
+                <span style={{ color: "var(--success)" }}>🟢</span>
+                Online
+                {lastSyncTime && (
+                  <span>• Last sync {lastSyncTime.toLocaleTimeString()}</span>
+                )}
+              </>
+            ) : (
+              <>
+                <span style={{ color: "var(--warning)" }}>🟡</span>
+                Offline
+              </>
+            )}
+          </div>
+        </div>
         
-        <div className="tabs">
-          <button 
-            className="tab-btn"
-            aria-selected={tab === "list"}
-            onClick={() => setTab("list")}
-          >
-            📋 List ({stats.pending})
-          </button>
-          <button
-            className="tab-btn"
-            aria-selected={tab === "completed"}
-            onClick={() => setTab("completed")}
-          >
-            ✅ Completed ({stats.completed})
-          </button>
-          <button
-            className="tab-btn"
-            aria-selected={tab === "arrangements"}
-            onClick={() => setTab("arrangements")}
-          >
-            📅 Arrangements ({state.arrangements.length})
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          {/* User Info */}
+          <div style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            gap: "0.75rem",
+            fontSize: "0.875rem",
+            color: "var(--text-secondary)"
+          }}>
+            <span>👤 {cloudSync.user.email}</span>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={cloudSync.signOut}
+              title="Sign out"
+            >
+              🚪 Sign Out
+            </button>
+          </div>
+          
+          <div className="tabs">
+            <button 
+              className="tab-btn"
+              aria-selected={tab === "list"}
+              onClick={() => setTab("list")}
+            >
+              📋 List ({stats.pending})
+            </button>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "completed"}
+              onClick={() => setTab("completed")}
+            >
+              ✅ Completed ({stats.completed})
+            </button>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "arrangements"}
+              onClick={() => setTab("arrangements")}
+            >
+              📅 Arrangements ({state.arrangements.length})
+            </button>
+          </div>
         </div>
       </header>
 
