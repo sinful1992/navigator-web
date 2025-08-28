@@ -63,7 +63,9 @@ export function Completed({ state }: Props) {
               const b = new Date(s.end).getTime();
               if (b > a) return Math.floor((b - a) / 1000);
             }
-          } catch {}
+          } catch {
+            /* ignore */
+          }
           return 0;
         })();
       hoursMap.set(k, (hoursMap.get(k) || 0) + (sec || 0));
@@ -208,7 +210,8 @@ export function Completed({ state }: Props) {
                           <div className="rowRight">
                             {c.outcome === "PIF" ? (
                               <span className="pill pillPif">
-                                PIF{c.amount ? ` £${c.amount}` : ""}
+                                {/* Avoid template literals to prevent TS1160 */}
+                                {"PIF" + (c.amount ? " £" + c.amount : "")}
                               </span>
                             ) : c.outcome === "DA" ? (
                               <span className="pill pillDa">DA</span>
@@ -229,4 +232,3 @@ export function Completed({ state }: Props) {
     </div>
   );
 }
-```0
