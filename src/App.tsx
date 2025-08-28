@@ -378,7 +378,7 @@ export default function App() {
             color: "var(--text-muted)",
             textAlign: "center"
           }}>
-            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete • U Undo • S Start Day • E End Day
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR' for arrangement) • U Undo • S Start Day • E End Day
           </div>
         </>
       ) : tab === "completed" ? (
