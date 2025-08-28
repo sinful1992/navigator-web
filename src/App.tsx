@@ -10,9 +10,68 @@ import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
 
+// ---------- small error boundary so blank screens show a message ----------
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; msg?: string }
+> {
+  constructor(p: any) {
+    super(p);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError(err: any) {
+    return { hasError: true, msg: String(err) };
+  }
+  componentDidCatch(err: any, info: any) {
+    console.error("Render error:", err, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 16 }}>
+          <h2>Something went wrong rendering the page.</h2>
+          <pre style={{ whiteSpace: "pre-wrap" }}>{this.state.msg}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// --------- Public shell: ONLY handles auth. No conditional hooks here. ---------
+export default function App() {
+  const cloudSync = useCloudSync(); // always called
+
+  if (!cloudSync.user) {
+    return (
+      <ErrorBoundary>
+        <Auth
+          onSignIn={async (email, password) => {
+            await cloudSync.signIn(email, password); // return void to satisfy Auth
+          }}
+          onSignUp={async (email, password) => {
+            await cloudSync.signUp(email, password); // return void to satisfy Auth
+          }}
+          isLoading={cloudSync.isLoading}
+          error={cloudSync.error}
+          onClearError={cloudSync.clearError}
+        />
+      </ErrorBoundary>
+    );
+  }
+
+  // Once authenticated, render the inner app which owns its own hooks.
+  return (
+    <ErrorBoundary>
+      <AuthedApp />
+    </ErrorBoundary>
+  );
+}
+
+// ------------------------ Authenticated app (all previous logic) ------------------------
 type Tab = "list" | "completed" | "arrangements";
 
-export default function App() {
+function AuthedApp() {
   const {
     state,
     loading,
@@ -28,83 +87,69 @@ export default function App() {
     addArrangement,
     updateArrangement,
     deleteArrangement,
-    setState, // Add this to useAppState
+    setState,
   } = useAppState();
 
   const cloudSync = useCloudSync();
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
-  const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(null);
+  const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
+    React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
-  // Auto-sync data to cloud when state changes
+  // ----------- Cloud sync: debounce save ----------
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
+    const t = setTimeout(() => {
+      cloudSync
+        .syncData(state)
+        .then(() => setLastSyncTime(new Date()))
+        .catch((err: any) => console.error("Sync failed:", err));
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [cloudSync.user, loading, state]); // keep deps minimal & stable
 
-    const syncData = async () => {
-      try {
-        await cloudSync.syncData(state);
-        setLastSyncTime(new Date());
-      } catch (err) {
-        console.error("Sync failed:", err);
-      }
-    };
-
-    const debounceTimer = setTimeout(syncData, 1000); // Debounce syncing
-    return () => clearTimeout(debounceTimer);
-  }, [state, cloudSync.user, cloudSync.syncData, loading]);
-
-  // Subscribe to data changes from other devices
+  // ----------- Cloud subscribe ----------
   React.useEffect(() => {
     if (!cloudSync.user) return;
+    const unsub =
+      cloudSync.subscribeToData?.((newState) => {
+        if (newState) {
+          setState(newState);
+          setLastSyncTime(new Date());
+        }
+      }) ?? undefined;
+    return typeof unsub === "function" ? unsub : undefined;
+  }, [cloudSync.user, setState]);
 
-    return cloudSync.subscribeToData((newState) => {
-      setState(newState);
-      setLastSyncTime(new Date());
-    });
-  }, [cloudSync.user, cloudSync.subscribeToData, setState]);
-
-  // Show auth screen if not signed in
-  if (!cloudSync.user) {
-    return (
-      <Auth
-        onSignIn={async (email, password) => {
-          await cloudSync.signIn(email, password); // discard returned payload to match Promise<void>
-        }}
-        onSignUp={async (email, password) => {
-          await cloudSync.signUp(email, password); // discard returned payload to match Promise<void>
-        }}
-        isLoading={cloudSync.isLoading}
-        error={cloudSync.error}
-        onClearError={cloudSync.clearError}
-      />
-    );
-  }
-
-  // Handle arrangement creation from address list
+  // ----------- Create arrangement from list ----------
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
     setTab("arrangements");
   }, []);
 
-  // ----- helpers shared by UI & hotkeys -----
+  // ----------- Helpers / derived -----------
+  const completions = state?.completions ?? [];
+  const addresses = state?.addresses ?? [];
+  const daySessions = state?.daySessions ?? [];
+
   const completedIdx = React.useMemo(
-    () => new Set(state.completions.map((c) => c.index)),
-    [state.completions]
+    () => new Set(completions.map((c) => c.index)),
+    [completions]
   );
 
-  const lowerQ = search.trim().toLowerCase();
+  const lowerQ = (search ?? "").trim().toLowerCase();
   const visible = React.useMemo(
     () =>
-      state.addresses
+      addresses
         .map((a, i) => ({ a, i }))
-        .filter(({ a }) => !lowerQ || a.address.toLowerCase().includes(lowerQ))
+        .filter(({ a }) => !lowerQ || (a.address ?? "").toLowerCase().includes(lowerQ))
         .filter(({ i }) => !completedIdx.has(i)),
-    [state.addresses, lowerQ, completedIdx]
+    [addresses, lowerQ, completedIdx]
   );
 
-  const hasActiveSession = state.daySessions.some((d) => !d.end);
+  const hasActiveSession = daySessions.some((d) => !d.end);
 
   const doQuickComplete = React.useCallback(
     (i: number) => {
@@ -118,11 +163,11 @@ export default function App() {
       } else if (text.toUpperCase() === "DA") {
         complete(i, "DA");
       } else if (text.toUpperCase() === "ARR") {
-        // Switch to arrangements tab to create new arrangement for this address
         setTab("arrangements");
-        // Set a flag to auto-select this address (handled in the Arrangements component)
         setTimeout(() => {
-          const event = new CustomEvent("auto-create-arrangement", { detail: { addressIndex: i } });
+          const event = new CustomEvent("auto-create-arrangement", {
+            detail: { addressIndex: i },
+          });
           window.dispatchEvent(event);
         }, 100);
       } else {
@@ -136,34 +181,33 @@ export default function App() {
         }
       }
     },
-    [complete, setTab]
+    [complete]
   );
 
-  // ----- keyboard shortcuts (List tab only) -----
+  // ----------- Keyboard shortcuts (list tab only) -----------
   React.useEffect(() => {
     if (tab !== "list") return;
 
     const isTypingTarget = (el: EventTarget | null) => {
       if (!el || !(el as HTMLElement)) return false;
       const t = el as HTMLElement;
-      const tag = t.tagName;
-      return tag === "INPUT" || tag === "TEXTAREA" || (t as HTMLElement).isContentEditable;
+      return (
+        t.tagName === "INPUT" ||
+        t.tagName === "TEXTAREA" ||
+        (t as HTMLElement).isContentEditable
+      );
     };
 
     const handler = (e: KeyboardEvent) => {
-      // Ignore while typing in inputs
       if (isTypingTarget(e.target)) return;
 
-      // Navigation among visible rows
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         if (visible.length === 0) return;
-
         const pos =
           state.activeIndex != null
             ? visible.findIndex(({ i }) => i === state.activeIndex)
             : -1;
-
         if (e.key === "ArrowDown") {
           const nextPos = pos >= 0 ? (pos + 1) % visible.length : 0;
           setActive(visible[nextPos].i);
@@ -175,7 +219,6 @@ export default function App() {
         return;
       }
 
-      // Complete current
       if (e.key === "Enter") {
         if (state.activeIndex != null) {
           e.preventDefault();
@@ -184,9 +227,8 @@ export default function App() {
         return;
       }
 
-      // Undo latest completion
       if (e.key === "u" || e.key === "U") {
-        const latest = state.completions[0];
+        const latest = completions[0];
         if (latest) {
           e.preventDefault();
           undo(latest.index);
@@ -194,7 +236,6 @@ export default function App() {
         return;
       }
 
-      // Start / End day
       if (e.key === "s" || e.key === "S") {
         if (!hasActiveSession) {
           e.preventDefault();
@@ -217,7 +258,7 @@ export default function App() {
     tab,
     visible,
     state.activeIndex,
-    state.completions,
+    completions,
     hasActiveSession,
     setActive,
     undo,
@@ -226,7 +267,7 @@ export default function App() {
     endDay,
   ]);
 
-  // ----- Backup / Restore -----
+  // ----------- Backup / Restore -----------
   const onBackup = () => {
     const snap = backupState();
     const stamp = new Date();
@@ -247,28 +288,31 @@ export default function App() {
       console.error(err);
       alert(`❌ Restore failed: ${err?.message || err}`);
     } finally {
-      e.target.value = ""; // allow selecting the same file again later
+      e.target.value = "";
     }
   };
 
-  // ----- Stats calculations -----
+  // ----------- Stats -----------
   const stats = React.useMemo(() => {
-    const total = state.addresses.length;
-    const completed = state.completions.length;
+    const total = addresses.length;
+    const completed = completions.length;
     const pending = total - completed;
-    const pifCount = state.completions.filter((c) => c.outcome === "PIF").length;
-    const doneCount = state.completions.filter((c) => c.outcome === "Done").length;
-    const daCount = state.completions.filter((c) => c.outcome === "DA").length;
-
+    const pifCount = completions.filter((c) => c.outcome === "PIF").length;
+    const doneCount = completions.filter((c) => c.outcome === "Done").length;
+    const daCount = completions.filter((c) => c.outcome === "DA").length;
     return { total, completed, pending, pifCount, doneCount, daCount };
-  }, [state.addresses.length, state.completions]);
+  }, [addresses, completions]);
 
-  if (loading) {
+  // ----------- Loading guard (initial state after login) -----------
+  const waitingForInitialData =
+    !!cloudSync.user && (!state || !Array.isArray(state.addresses));
+
+  if (loading || waitingForInitialData) {
     return (
       <div className="container">
         <div className="loading">
           <div className="spinner" />
-          Loading your address data...
+          Preparing your workspace…
         </div>
       </div>
     );
@@ -317,7 +361,7 @@ export default function App() {
               color: "var(--text-secondary)",
             }}
           >
-            <span>👤 {cloudSync.user.email}</span>
+            <span>👤 {cloudSync.user?.email ?? "Signed in"}</span>
             <button className="btn btn-ghost btn-sm" onClick={cloudSync.signOut} title="Sign out">
               🚪 Sign Out
             </button>
@@ -349,7 +393,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Import & Tools Section */}
+      {/* Import & Tools */}
       <div style={{ marginBottom: "2rem" }}>
         <div
           style={{
@@ -398,10 +442,10 @@ export default function App() {
         </div>
       </div>
 
-      {/* Tab Content */}
+      {/* Tabs */}
       {tab === "list" ? (
         <>
-          {/* Search Bar */}
+          {/* Search */}
           <div className="search-container">
             <input
               type="search"
@@ -420,7 +464,7 @@ export default function App() {
             endDay={endDay}
           />
 
-          {/* Stats Overview */}
+          {/* Stats */}
           <div className="top-row">
             <div className="stat-item">
               <div className="stat-label">Total</div>
@@ -449,7 +493,7 @@ export default function App() {
               </div>
             </div>
 
-            {state.activeIndex !== null && (
+            {state.activeIndex != null && (
               <div className="stat-item">
                 <div className="stat-label">Active</div>
                 <div className="stat-value" style={{ color: "var(--primary)" }}>
@@ -459,7 +503,7 @@ export default function App() {
             )}
           </div>
 
-          {/* Address List */}
+          {/* List */}
           <AddressList
             state={state}
             setActive={setActive}
@@ -469,7 +513,7 @@ export default function App() {
             filterText={search}
           />
 
-          {/* Keyboard Shortcuts Help */}
+          {/* Shortcuts */}
           <div
             style={{
               marginTop: "2rem",
@@ -481,8 +525,8 @@ export default function App() {
               textAlign: "center",
             }}
           >
-            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR' for
-            arrangement) • U Undo • S Start Day • E End Day
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo •
+            S Start Day • E End Day
           </div>
         </>
       ) : tab === "completed" ? (
