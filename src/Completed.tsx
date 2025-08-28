@@ -76,8 +76,16 @@ export function Completed({ state }: Props) {
   // Outcomes summary across filtered set
   const totals = React.useMemo(() => {
     const out: Record<Outcome, number> = { PIF: 0, DA: 0, Done: 0 };
-    for (const c of filtered) out[c.outcome] = (out[c.outcome] || 0) + 1;
-    return out;
+    let totalPifAmount = 0;
+    
+    for (const c of filtered) {
+      out[c.outcome] = (out[c.outcome] || 0) + 1;
+      if (c.outcome === "PIF" && c.amount) {
+        totalPifAmount += parseFloat(c.amount) || 0;
+      }
+    }
+    
+    return { ...out, totalPifAmount };
   }, [filtered]);
 
   // Export JSON per day (hours + addresses + outcomes)
@@ -89,7 +97,14 @@ export function Completed({ state }: Props) {
       const dayDate = new Date(`${k}T00:00:00Z`);
       const sec = dayHours.get(k) ?? null;
       const outcomes: Record<Outcome, number> = { PIF: 0, DA: 0, Done: 0 };
-      for (const c of items) outcomes[c.outcome] = (outcomes[c.outcome] || 0) + 1;
+      let dayPifTotal = 0;
+      
+      for (const c of items) {
+        outcomes[c.outcome] = (outcomes[c.outcome] || 0) + 1;
+        if (c.outcome === "PIF" && c.amount) {
+          dayPifTotal += parseFloat(c.amount) || 0;
+        }
+      }
 
       return {
         date: k,
@@ -97,11 +112,12 @@ export function Completed({ state }: Props) {
         durationSeconds: sec,
         hoursText: secsToText(sec),
         outcomesSummary: outcomes,
+        totalPifAmount: dayPifTotal,
         addresses: items.map((c) => ({
           index: c.index,
           address: c.address,
-          lat: c.lat, // optional
-          lng: c.lng, // optional
+          lat: c.lat,
+          lng: c.lng,
           outcome: c.outcome,
           amount: c.amount,
           timestamp: c.timestamp,
@@ -120,113 +136,211 @@ export function Completed({ state }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const clearDateRange = () => {
+    setRange(undefined);
+  };
+
   return (
-    <div className="completedWrap">
-      <div className="topRow">
-        <div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>Completed (filtered)</div>
-          <div style={{ fontWeight: 700 }}>{filtered.length}</div>
+    <div className="completed-wrap">
+      {/* Summary Stats */}
+      <div className="top-row">
+        <div className="stat-item">
+          <div className="stat-label">📍 Total Completed</div>
+          <div className="stat-value">{filtered.length}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>PIF</div>
-          <div style={{ fontWeight: 700 }}>{totals.PIF}</div>
+        
+        <div className="stat-item">
+          <div className="stat-label">💰 PIF</div>
+          <div className="stat-value" style={{ color: "var(--success)" }}>
+            {totals.PIF}
+            {totals.totalPifAmount > 0 && (
+              <div style={{ fontSize: "0.75rem", fontWeight: 500, opacity: 0.8 }}>
+                £{totals.totalPifAmount.toFixed(2)}
+              </div>
+            )}
+          </div>
         </div>
-        <div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>Done</div>
-          <div style={{ fontWeight: 700 }}>{totals.Done}</div>
+        
+        <div className="stat-item">
+          <div className="stat-label">✅ Done</div>
+          <div className="stat-value" style={{ color: "var(--primary)" }}>{totals.Done}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>DA</div>
-          <div style={{ fontWeight: 700 }}>{totals.DA}</div>
+        
+        <div className="stat-item">
+          <div className="stat-label">❌ DA</div>
+          <div className="stat-value" style={{ color: "var(--danger)" }}>{totals.DA}</div>
         </div>
 
-        <div style={{ marginLeft: "auto" }}>
-          <button className="btn" onClick={onExportJSON}>
-            Export JSON
-          </button>
+        <div className="stat-actions">
+          <div className="btn-group">
+            <button className="btn btn-primary" onClick={onExportJSON}>
+              📤 Export Data
+            </button>
+            {range && (
+              <button className="btn btn-ghost" onClick={clearDateRange}>
+                🗓️ Clear Filter
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="calendarRow">
-        <DayPicker
-          mode="range"
-          selected={range}
-          onSelect={setRange}
-          captionLayout="buttons"
-          showOutsideDays
-        />
+      {/* Date Range Filter */}
+      <div className="calendar-row">
+        <div style={{ marginBottom: "1rem" }}>
+          <h3 style={{ 
+            margin: "0 0 0.5rem 0", 
+            fontSize: "1.125rem",
+            fontWeight: 700,
+            color: "var(--text-primary)"
+          }}>
+            📅 Filter by Date Range
+          </h3>
+          <p style={{ 
+            margin: 0, 
+            fontSize: "0.875rem", 
+            color: "var(--text-secondary)",
+            lineHeight: 1.5
+          }}>
+            {range?.from ? (
+              range.to ? (
+                `Showing completions from ${format(range.from, "MMM d")} to ${format(range.to, "MMM d, yyyy")}`
+              ) : (
+                `Showing completions for ${format(range.from, "MMM d, yyyy")}`
+              )
+            ) : (
+              "Click dates below to filter results, or select a range by clicking start and end dates"
+            )}
+          </p>
+        </div>
+        
+        <div style={{ 
+          background: "var(--bg-tertiary)", 
+          borderRadius: "var(--radius)",
+          padding: "1rem",
+          display: "flex",
+          justifyContent: "center"
+        }}>
+          <DayPicker
+            mode="range"
+            selected={range}
+            onSelect={setRange}
+            captionLayout="buttons"
+            showOutsideDays
+            style={{
+              fontSize: "0.875rem"
+            }}
+          />
+        </div>
       </div>
 
-      <div className="daysList">
+      {/* Daily Breakdown */}
+      <div className="days-list">
         {grouped.length === 0 ? (
-          <div className="emptyBox">
-            <div style={{ fontSize: 14, opacity: 0.75 }}>
-              No completions{range?.from ? " in the selected range" : ""}.
+          <div className="empty-box">
+            <div style={{ fontSize: "1.125rem", marginBottom: "0.5rem" }}>
+              📊 No completions found
+            </div>
+            <div style={{ fontSize: "0.875rem", opacity: 0.75 }}>
+              {range?.from 
+                ? "No addresses were completed in the selected date range" 
+                : "Complete some addresses to see your progress here"
+              }
             </div>
           </div>
         ) : (
-          grouped.map(([k, items]) => {
-            const dayDate = new Date(`${k}T00:00:00Z`);
-            const sec = dayHours.get(k) ?? null;
-            const outcomes: Record<Outcome, number> = { PIF: 0, DA: 0, Done: 0 };
-            for (const c of items) outcomes[c.outcome] = (outcomes[c.outcome] || 0) + 1;
+          <>
+            <div style={{
+              fontSize: "1.25rem",
+              fontWeight: 700,
+              color: "var(--text-primary)",
+              marginBottom: "1rem"
+            }}>
+              📈 Daily Breakdown ({grouped.length} day{grouped.length === 1 ? '' : 's'})
+            </div>
+            
+            {grouped.map(([k, items]) => {
+              const dayDate = new Date(`${k}T00:00:00Z`);
+              const sec = dayHours.get(k) ?? null;
+              const outcomes: Record<Outcome, number> = { PIF: 0, DA: 0, Done: 0 };
+              let dayPifTotal = 0;
+              
+              for (const c of items) {
+                outcomes[c.outcome] = (outcomes[c.outcome] || 0) + 1;
+                if (c.outcome === "PIF" && c.amount) {
+                  dayPifTotal += parseFloat(c.amount) || 0;
+                }
+              }
 
-            return (
-              <div className="dayCard" key={k}>
-                <div className="dayHeader">
-                  <div>
-                    <div className="dayTitle">
-                      {format(dayDate, "EEEE d MMM yyyy")}
+              return (
+                <div className="day-card fade-in-up" key={k}>
+                  <div className="day-header">
+                    <div>
+                      <div className="day-title">
+                        📅 {format(dayDate, "EEEE, d MMM yyyy")}
+                      </div>
+                      <div className="muted">
+                        ⏱️ {secsToText(sec)} • 📍 {items.length} address{items.length === 1 ? '' : 'es'}
+                        {dayPifTotal > 0 && ` • 💰 £${dayPifTotal.toFixed(2)} PIF`}
+                      </div>
                     </div>
-                    <div className="muted">Hours: {secsToText(sec)}</div>
+                    
+                    <div className="day-stats">
+                      {outcomes.PIF > 0 && (
+                        <span className="pill pill-pif">
+                          💰 {outcomes.PIF} PIF
+                        </span>
+                      )}
+                      {outcomes.Done > 0 && (
+                        <span className="pill pill-done">
+                          ✅ {outcomes.Done} Done
+                        </span>
+                      )}
+                      {outcomes.DA > 0 && (
+                        <span className="pill pill-da">
+                          ❌ {outcomes.DA} DA
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="dayStats">
-                    <span>
-                      PIF: <b>{outcomes.PIF}</b>
-                    </span>
-                    <span>
-                      Done: <b>{outcomes.Done}</b>
-                    </span>
-                    <span>
-                      DA: <b>{outcomes.DA}</b>
-                    </span>
-                  </div>
-                </div>
 
-                {items.length === 0 ? (
-                  <div className="emptyBox" style={{ marginTop: 8 }}>
-                    <div className="muted">No completions this day.</div>
-                  </div>
-                ) : (
-                  <div className="dayBody">
+                  <div className="day-body">
                     {items.map((c, idx) => {
                       const t = format(parseISO(c.timestamp), "HH:mm");
                       return (
-                        <div className="row" key={idx}>
-                          <div className="rowLeft">
-                            <div className="addr">{c.address}</div>
-                            <div className="muted">{t}</div>
+                        <div className="day-row" key={idx}>
+                          <div className="row-left">
+                            <div className="addr">
+                              <span style={{ 
+                                color: "var(--text-muted)", 
+                                fontSize: "0.8125rem",
+                                marginRight: "0.5rem"
+                              }}>
+                                {c.index + 1}.
+                              </span>
+                              {c.address}
+                            </div>
+                            <div className="muted">🕐 {t}</div>
                           </div>
-                          <div className="rowRight">
+                          <div className="row-right">
                             {c.outcome === "PIF" ? (
-                              <span className="pill pillPif">
-                                {/* Avoid template literals to prevent TS1160 */}
-                                {"PIF" + (c.amount ? " £" + c.amount : "")}
+                              <span className="pill pill-pif">
+                                💰 PIF{c.amount ? ` £${c.amount}` : ""}
                               </span>
                             ) : c.outcome === "DA" ? (
-                              <span className="pill pillDa">DA</span>
+                              <span className="pill pill-da">❌ DA</span>
                             ) : (
-                              <span className="pill pillDone">Done</span>
+                              <span className="pill pill-done">✅ Done</span>
                             )}
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                )}
-              </div>
-            );
-          })
+                </div>
+              );
+            })}
+          </>
         )}
       </div>
     </div>
