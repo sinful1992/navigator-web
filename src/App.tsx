@@ -1,4 +1,3 @@
-// src/App.tsx
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -72,15 +71,13 @@ export default function App() {
     return (
       <ErrorBoundary>
         <Auth
-          // ✅ Wrap to satisfy Auth prop type: Promise<void>
+          // Wraps return type to Promise<void> as expected by Auth
           onSignIn={async (email, password) => {
             await cloudSync.signIn(email, password);
           }}
           onSignUp={async (email, password) => {
             await cloudSync.signUp(email, password);
           }}
-          // If you added a demo button in Auth, use:
-          // onDemoSignIn={async () => { await cloudSync.signInDemo(); }}
           isLoading={cloudSync.isLoading}
           error={cloudSync.error}
           onClearError={cloudSync.clearError}
@@ -297,7 +294,7 @@ function AuthedApp() {
     downloadJson(`navigator-backup-${y}${m}${d}.json`, snap);
   };
 
-  // Push restored data to cloud immediately
+  // Push restored data to cloud immediately (authoritative)
   const onRestore: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -305,7 +302,7 @@ function AuthedApp() {
       const raw = await readJsonFile(file);
       const data = normalizeState(raw);
       restoreState(data);             // local
-      await cloudSync.syncData(data); // cloud (authoritative)
+      await cloudSync.syncData(data); // cloud
       alert("✅ Restore completed successfully!");
     } catch (err: any) {
       console.error(err);
@@ -343,11 +340,19 @@ function AuthedApp() {
     <div className="container">
       {/* Header */}
       <header className="app-header">
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+        <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
 
           {/* Sync Status */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+            }}
+          >
             {cloudSync.isOnline ? (
               <>
                 <span style={{ color: "var(--success)" }}>🟢</span>
@@ -363,23 +368,46 @@ function AuthedApp() {
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          {/* User Info */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.875rem", color: "var(--text-secondary)" }}>
-            <span>👤 {cloudSync.user?.email ?? "Signed in"}</span>
-            <button className="btn btn-ghost btn-sm" onClick={cloudSync.signOut} title="Sign out">
-              🚪 Sign Out
+        <div className="right">
+          {/* Email + Sign out pill */}
+          <div className="user-chip" role="group" aria-label="Account">
+            <span className="avatar" aria-hidden>👤</span>
+            <span
+              className="email"
+              title={cloudSync.user?.email ?? ""}
+            >
+              {cloudSync.user?.email ?? "Signed in"}
+            </span>
+            <button
+              className="signout-btn"
+              onClick={cloudSync.signOut}
+              title="Sign out"
+            >
+              Sign Out
             </button>
           </div>
 
+          {/* Tabs */}
           <div className="tabs">
-            <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "list"}
+              onClick={() => setTab("list")}
+            >
               📋 List ({stats.pending})
             </button>
-            <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "completed"}
+              onClick={() => setTab("completed")}
+            >
               ✅ Completed ({stats.completed})
             </button>
-            <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "arrangements"}
+              onClick={() => setTab("arrangements")}
+            >
               📅 Arrangements ({arrangements.length})
             </button>
           </div>
@@ -388,9 +416,26 @@ function AuthedApp() {
 
       {/* Import & Tools */}
       <div style={{ marginBottom: "2rem" }}>
-        <div style={{ background: "var(--surface)", padding: "1.5rem", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-light)", boxShadow: "var(--shadow-sm)", marginBottom: "1rem" }}>
-          <div style={{ fontSize: "0.875rem", color: "var(--text-secondary)", marginBottom: "1rem", lineHeight: "1.5" }}>
-            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>, <strong>lng</strong> columns to get started.
+        <div
+          style={{
+            background: "var(--surface)",
+            padding: "1.5rem",
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border-light)",
+            boxShadow: "var(--shadow-sm)",
+            marginBottom: "1rem",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "0.875rem",
+              color: "var(--text-secondary)",
+              marginBottom: "1rem",
+              lineHeight: "1.5",
+            }}
+          >
+            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>,{" "}
+            <strong>lng</strong> columns to get started.
           </div>
 
           <div className="btn-row">
@@ -399,8 +444,16 @@ function AuthedApp() {
             <button className="btn btn-ghost" onClick={onBackup}>💾 Backup</button>
 
             <div className="file-input-wrapper">
-              <input type="file" accept="application/json" onChange={onRestore} className="file-input" id="restore-input" />
-              <label htmlFor="restore-input" className="file-input-label">📤 Restore</label>
+              <input
+                type="file"
+                accept="application/json"
+                onChange={onRestore}
+                className="file-input"
+                id="restore-input"
+              />
+              <label htmlFor="restore-input" className="file-input-label">
+                📤 Restore
+              </label>
             </div>
           </div>
         </div>
@@ -437,7 +490,9 @@ function AuthedApp() {
             {safeState.activeIndex != null && (
               <div className="stat-item">
                 <div className="stat-label">Active</div>
-                <div className="stat-value" style={{ color: "var(--primary)" }}>#{(safeState.activeIndex as number) + 1}</div>
+                <div className="stat-value" style={{ color: "var(--primary)" }}>
+                  #{(safeState.activeIndex as number) + 1}
+                </div>
               </div>
             )}
           </div>
@@ -451,8 +506,19 @@ function AuthedApp() {
             filterText={search}
           />
 
-          <div style={{ marginTop: "2rem", padding: "1rem", background: "var(--bg-tertiary)", borderRadius: "var(--radius)", fontSize: "0.8125rem", color: "var(--text-muted)", textAlign: "center" }}>
-            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo • S Start Day • E End Day
+          <div
+            style={{
+              marginTop: "2rem",
+              padding: "1rem",
+              background: "var(--bg-tertiary)",
+              borderRadius: "var(--radius)",
+              fontSize: "0.8125rem",
+              color: "var(--text-muted)",
+              textAlign: "center",
+            }}
+          >
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo •
+            S Start Day • E End Day
           </div>
         </>
       ) : tab === "completed" ? (
