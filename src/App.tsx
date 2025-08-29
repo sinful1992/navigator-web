@@ -74,8 +74,12 @@ export default function App() {
       <ErrorBoundary>
         <Auth
           // Wrap to match Auth’s Promise<void> signature
-          onSignIn={async (email, password) => { await cloudSync.signIn(email, password); }}
-          onSignUp={async (email, password) => { await cloudSync.signUp(email, password); }}
+          onSignIn={async (email, password) => {
+            await cloudSync.signIn(email, password);
+          }}
+          onSignUp={async (email, password) => {
+            await cloudSync.signUp(email, password);
+          }}
           isLoading={cloudSync.isLoading}
           error={cloudSync.error}
           onClearError={cloudSync.clearError}
@@ -164,7 +168,7 @@ function AuthedApp() {
           const str = JSON.stringify(normalized);
 
           // Update local from cloud
-          setState(normalized);
+          setState(normalizeState(newState));
           setLastSyncTime(new Date());
 
           // Set baseline & hydration
@@ -211,8 +215,9 @@ function AuthedApp() {
     setTab("arrangements");
   }, []);
 
+  // Cast to number so filtering matches across devices/serializations
   const completedIdx = React.useMemo(
-    () => new Set(completions.map((c: any) => c.index)),
+    () => new Set(completions.map((c: any) => Number(c.index))),
     [completions]
   );
 
@@ -326,7 +331,18 @@ function AuthedApp() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tab, visible, safeState.activeIndex, completions, hasActiveSession, setActive, undo, doQuickComplete, startDay, endDay]);
+  }, [
+    tab,
+    visible,
+    safeState.activeIndex,
+    completions,
+    hasActiveSession,
+    setActive,
+    undo,
+    doQuickComplete,
+    startDay,
+    endDay,
+  ]);
 
   // ----- Backup / Restore -----
   const onBackup = () => {
@@ -345,7 +361,7 @@ function AuthedApp() {
     try {
       const raw = await readJsonFile(file);
       const data = normalizeState(raw);
-      restoreState(data);             // local
+      restoreState(data); // local
       await cloudSync.syncData(data); // cloud
       // Advance baseline to restored snapshot so we don't immediately overwrite it
       lastFromCloudRef.current = JSON.stringify(data);
@@ -418,7 +434,9 @@ function AuthedApp() {
         <div className="right">
           {/* Account pill */}
           <div className="user-chip" role="group" aria-label="Account">
-            <span className="avatar" aria-hidden>👤</span>
+            <span className="avatar" aria-hidden>
+              👤
+            </span>
             <span className="email" title={cloudSync.user?.email ?? ""}>
               {cloudSync.user?.email ?? "Signed in"}
             </span>
@@ -470,16 +488,12 @@ function AuthedApp() {
           <div className="btn-row">
             <ImportExcel onImported={setAddresses} />
             <div className="btn-spacer" />
-            <button className="btn btn-ghost" onClick={onBackup}>💾 Backup</button>
+            <button className="btn btn-ghost" onClick={onBackup}>
+              💾 Backup
+            </button>
 
             <div className="file-input-wrapper">
-              <input
-                type="file"
-                accept="application/json"
-                onChange={onRestore}
-                className="file-input"
-                id="restore-input"
-              />
+              <input type="file" accept="application/json" onChange={onRestore} className="file-input" id="restore-input" />
               <label htmlFor="restore-input" className="file-input-label">
                 📤 Restore
               </label>
@@ -501,20 +515,36 @@ function AuthedApp() {
             />
           </div>
 
-          <DayPanel
-            sessions={daySessions}
-            completions={completions}
-            startDay={startDay}
-            endDay={endDay}
-          />
+          <DayPanel sessions={daySessions} completions={completions} startDay={startDay} endDay={endDay} />
 
           {/* Stats */}
           <div className="top-row">
-            <div className="stat-item"><div className="stat-label">Total</div><div className="stat-value">{stats.total}</div></div>
-            <div className="stat-item"><div className="stat-label">Pending</div><div className="stat-value">{stats.pending}</div></div>
-            <div className="stat-item"><div className="stat-label">PIF</div><div className="stat-value" style={{ color: "var(--success)" }}>{stats.pifCount}</div></div>
-            <div className="stat-item"><div className="stat-label">Done</div><div className="stat-value" style={{ color: "var(--primary)" }}>{stats.doneCount}</div></div>
-            <div className="stat-item"><div className="stat-label">DA</div><div className="stat-value" style={{ color: "var(--danger)" }}>{stats.daCount}</div></div>
+            <div className="stat-item">
+              <div className="stat-label">Total</div>
+              <div className="stat-value">{stats.total}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Pending</div>
+              <div className="stat-value">{stats.pending}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">PIF</div>
+              <div className="stat-value" style={{ color: "var(--success)" }}>
+                {stats.pifCount}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Done</div>
+              <div className="stat-value" style={{ color: "var(--primary)" }}>
+                {stats.doneCount}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">DA</div>
+              <div className="stat-value" style={{ color: "var(--danger)" }}>
+                {stats.daCount}
+              </div>
+            </div>
 
             {safeState.activeIndex != null && (
               <div className="stat-item">
@@ -546,8 +576,7 @@ function AuthedApp() {
               textAlign: "center",
             }}
           >
-            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo •
-            S Start Day • E End Day
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo • S Start Day • E End Day
           </div>
         </>
       ) : tab === "completed" ? (
@@ -565,3 +594,4 @@ function AuthedApp() {
     </div>
   );
 }
+```0
