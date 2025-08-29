@@ -1,10 +1,10 @@
-// src/AddressList.tsx
 import * as React from "react";
-import type { AppState, Outcome } from "./types";
+
+type Outcome = "Done" | "DA" | "PIF";
 
 type Props = {
-  state: AppState;
-  setActive: (i: number) => void;
+  state: any;
+  setActive: (index: number) => void;
   cancelActive: () => void;
   complete: (index: number, outcome: Outcome, amount?: string) => void;
   onCreateArrangement: (addressIndex: number) => void;
@@ -19,221 +19,120 @@ export function AddressList({
   onCreateArrangement,
   filterText = "",
 }: Props) {
-  const [openCompleteFor, setOpenCompleteFor] = React.useState<number | null>(
-    null
+  const addresses: any[] = Array.isArray(state?.addresses) ? state.addresses : [];
+  const activeIndex: number | null =
+    typeof state?.activeIndex === "number" ? state.activeIndex : null;
+
+  const q = filterText.trim().toLowerCase();
+  const rows = React.useMemo(
+    () =>
+      addresses
+        .map((a, i) => ({ a, i }))
+        .filter(({ a }) => !q || String(a.address ?? "").toLowerCase().includes(q)),
+    [addresses, q]
   );
-  const [pifAmount, setPifAmount] = React.useState<Record<number, string>>({});
 
-  const completedIdx = React.useMemo(() => {
-    const s = new Set<number>();
-    for (const c of state.completions) s.add(c.index);
-    return s;
-  }, [state.completions]);
-
-  const needle = filterText.trim().toLowerCase();
-
-  // Build visible rows = not completed + matches search
-  const rows = React.useMemo(() => {
-    const out: Array<{ i: number; address: string; lat?: number; lng?: number }> = [];
-    state.addresses.forEach((row, i) => {
-      if (completedIdx.has(i)) return; // hide completed from this list
-      const addr = row.address || "";
-      if (needle && !addr.toLowerCase().includes(needle)) return;
-      out.push({
-        i,
-        address: addr,
-        lat: row.lat ?? undefined,
-        lng: row.lng ?? undefined,
-      });
-    });
-    return out;
-  }, [state.addresses, completedIdx, needle]);
-
-  const openMaps = (addr: string, lat?: number, lng?: number) => {
-    let url: string;
-    if (typeof lat === "number" && typeof lng === "number") {
-      url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-    } else {
-      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-        addr
-      )}`;
-    }
+  const onNavigate = (addr: string) => {
+    const url =
+      "https://www.google.com/maps/search/?api=1&query=" +
+      encodeURIComponent(addr || "");
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const onConfirmPIF = (index: number) => {
-    const amt = (pifAmount[index] || "").trim();
-    if (!amt) {
-      alert("Please enter an amount for PIF.");
-      return;
+  // Keep the same "Quick complete" behavior used elsewhere
+  const quickComplete = (i: number) => {
+    const input = window.prompt(
+      "Quick Complete:\n\n• Leave empty → Done\n• Type 'DA' → Mark as DA\n• Type a number (e.g. 50) → PIF £amount"
+    );
+    if (input === null) return;
+    const text = input.trim();
+    if (!text) {
+      complete(i, "Done");
+    } else if (text.toUpperCase() === "DA") {
+      complete(i, "DA");
+    } else {
+      const n = Number(text);
+      if (Number.isFinite(n) && n > 0) {
+        complete(i, "PIF", n.toFixed(2));
+      } else {
+        alert("Invalid amount. Use a number (e.g., 50) or leave empty for Done.");
+      }
     }
-    complete(index, "PIF", amt);
-    setOpenCompleteFor(null);
   };
 
-  // Clear completion form when active index changes
-  React.useEffect(() => {
-    setOpenCompleteFor(null);
-  }, [state.activeIndex]);
-
-  if (rows.length === 0) {
-    return (
-      <div className="empty-box">
-        <div style={{ fontSize: "1rem", marginBottom: "0.5rem", fontWeight: 600 }}>
-          {state.addresses.length === 0 ? "📍 No addresses loaded" : "🔍 No matching addresses"}
-        </div>
-        <div style={{ fontSize: "0.875rem", opacity: 0.75 }}>
-          {state.addresses.length === 0
-            ? "Import an Excel file to get started with address navigation"
-            : "Try adjusting your search terms or check if all addresses are completed"}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="list-col">
-      {rows.map(({ i, address, lat, lng }) => {
-        const active = state.activeIndex === i;
-        const open = openCompleteFor === i && active; // Only show completion if BOTH active AND openCompleteFor match
+    <div className="list">
+      {rows.map(({ a, i }) => {
+        const isActive = activeIndex === i;
+        const label = String(a?.address ?? "");
 
         return (
-          <div 
-            className={`card address-card fade-in-up ${active ? "card-active" : ""}`} 
-            key={i}
-          >
-            {/* Card Header */}
-            <div className="card-header">
-              <div className="addr-title">
-                <span className="addr-index">{i + 1}</span>
-                {address}
+          <div key={i} className="row-card">
+            {/* Row header: index, address, active badge */}
+            <div className="row-head">
+              <div className="row-index">{i + 1}</div>
+              <div className="row-title" title={label}>
+                {label}
               </div>
-              {active && (
-                <span className="pill pill-active">
-                  🎯 Active
-                </span>
-              )}
+              {isActive && <span className="active-badge">ACTIVE</span>}
             </div>
 
-            {/* Card Body - Reserved for future content */}
-            <div className="card-body" style={{ padding: 0 }} />
+            {/* Row actions: ALWAYS show Navigate + Arrange.
+                When active, also show Complete + Cancel. When not, show Set Active. */}
+            <div className="row-actions">
+              <button
+                className="btn btn-ghost"
+                onClick={() => onNavigate(label)}
+                title="Open in Google Maps"
+              >
+                🌐 Navigate
+              </button>
 
-            {/* Card Footer */}
-            <div className="card-footer">
-              {!open ? (
-                // Normal action row
-                <div className="btn-row btn-row-end">
+              {isActive ? (
+                <>
                   <button
-                    className="btn btn-ghost"
-                    onClick={() => openMaps(address, lat, lng)}
-                    title="Open in Google Maps"
+                    className="btn btn-primary"
+                    onClick={() => quickComplete(i)}
+                    title="Complete (quick)"
                   >
-                    🗺️ Navigate
+                    ✅ Complete
                   </button>
 
-                  <div className="btn-spacer" />
-
-                  {active ? (
-                    <div className="btn-group">
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => setOpenCompleteFor(i)}
-                      >
-                        ✅ Complete
-                      </button>
-                      <button 
-                        className="btn btn-ghost" 
-                        onClick={() => {
-                          cancelActive();
-                          setOpenCompleteFor(null); // Also clear completion form
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="btn-group">
-                      <button 
-                        className="btn btn-primary" 
-                        onClick={() => setActive(i)}
-                      >
-                        Set Active
-                      </button>
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => onCreateArrangement(i)}
-                        title="Create payment arrangement"
-                      >
-                        📅 Arrange
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                // Completion choices open
-                <div className="complete-bar">
-                  <div className="complete-btns">
-                    <button
-                      className="btn btn-success"
-                      onClick={() => {
-                        complete(i, "Done");
-                        setOpenCompleteFor(null);
-                      }}
-                    >
-                      ✅ Done
-                    </button>
-                    <button
-                      className="btn btn-danger"
-                      onClick={() => {
-                        complete(i, "DA");
-                        setOpenCompleteFor(null);
-                      }}
-                    >
-                      ❌ DA
-                    </button>
-                  </div>
-
-                  <div className="pif-group">
-                    <input
-                      className="input amount-input"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="Amount (£)"
-                      value={pifAmount[i] || ""}
-                      onChange={(e) =>
-                        setPifAmount((prev) => ({
-                          ...prev,
-                          [i]: e.target.value,
-                        }))
-                      }
-                    />
-                    <button 
-                      className="btn btn-success" 
-                      onClick={() => onConfirmPIF(i)}
-                    >
-                      💰 PIF
-                    </button>
-                  </div>
-
                   <button
                     className="btn btn-ghost"
+                    onClick={() => cancelActive()}
+                    title="Cancel active"
+                  >
+                    ⛔ Cancel
+                  </button>
+
+                  {/* Keep Arrange visible even when active */}
+                  <button
+                    className="btn btn-outline"
                     onClick={() => onCreateArrangement(i)}
-                    title="Create payment arrangement instead"
+                    title="Create arrangement"
                   >
                     📅 Arrange
                   </button>
-
-                  <div className="btn-spacer" />
+                </>
+              ) : (
+                <>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => setActive(i)}
+                    title="Set active"
+                  >
+                    Set Active
+                  </button>
 
                   <button
-                    className="btn btn-ghost"
-                    onClick={() => setOpenCompleteFor(null)}
-                    title="Close options"
+                    className="btn btn-outline"
+                    onClick={() => onCreateArrangement(i)}
+                    title="Create arrangement"
                   >
-                    ← Back
+                    📅 Arrange
                   </button>
-                </div>
+                </>
               )}
             </div>
           </div>
