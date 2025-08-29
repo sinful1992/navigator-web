@@ -23,13 +23,28 @@ export function AddressList({
   const activeIndex: number | null =
     typeof state?.activeIndex === "number" ? state.activeIndex : null;
 
+  // 🔒 Build a Set of completed indices (cast to number to avoid "string vs number")
+  const completionsArr: any[] = Array.isArray(state?.completions) ? state.completions : [];
+  const completedIdx = React.useMemo(
+    () =>
+      new Set(
+        completionsArr
+          .map((c) => Number(c?.index))
+          .filter((n) => Number.isFinite(n) && n >= 0)
+      ),
+    [completionsArr]
+  );
+
   const q = filterText.trim().toLowerCase();
+
+  // ✅ Exclude completed rows from the visible list
   const rows = React.useMemo(
     () =>
       addresses
         .map((a, i) => ({ a, i }))
-        .filter(({ a }) => !q || String(a.address ?? "").toLowerCase().includes(q)),
-    [addresses, q]
+        .filter(({ a }) => !q || String(a?.address ?? "").toLowerCase().includes(q))
+        .filter(({ i }) => !completedIdx.has(i)),
+    [addresses, q, completedIdx]
   );
 
   const onNavigate = (addr: string) => {
@@ -39,7 +54,6 @@ export function AddressList({
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  // Keep the same "Quick complete" behavior used elsewhere
   const quickComplete = (i: number) => {
     const input = window.prompt(
       "Quick Complete:\n\n• Leave empty → Done\n• Type 'DA' → Mark as DA\n• Type a number (e.g. 50) → PIF £amount"
@@ -68,7 +82,7 @@ export function AddressList({
 
         return (
           <div key={i} className="row-card">
-            {/* Row header: index, address, active badge */}
+            {/* Header */}
             <div className="row-head">
               <div className="row-index">{i + 1}</div>
               <div className="row-title" title={label}>
@@ -77,8 +91,7 @@ export function AddressList({
               {isActive && <span className="active-badge">ACTIVE</span>}
             </div>
 
-            {/* Row actions: ALWAYS show Navigate + Arrange.
-                When active, also show Complete + Cancel. When not, show Set Active. */}
+            {/* Actions */}
             <div className="row-actions">
               <button
                 className="btn btn-ghost"
@@ -106,7 +119,7 @@ export function AddressList({
                     ⛔ Cancel
                   </button>
 
-                  {/* Keep Arrange visible even when active */}
+                  {/* Keep Arrange visible when active */}
                   <button
                     className="btn btn-outline"
                     onClick={() => onCreateArrangement(i)}
