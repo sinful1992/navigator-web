@@ -23,7 +23,7 @@ export function AddressList({
   const activeIndex: number | null =
     typeof state?.activeIndex === "number" ? state.activeIndex : null;
 
-  // 🔒 Build a Set of completed indices (cast to number to avoid "string vs number")
+  // Exclude completed items from list
   const completionsArr: any[] = Array.isArray(state?.completions) ? state.completions : [];
   const completedIdx = React.useMemo(
     () =>
@@ -36,8 +36,6 @@ export function AddressList({
   );
 
   const q = filterText.trim().toLowerCase();
-
-  // ✅ Exclude completed rows from the visible list
   const rows = React.useMemo(
     () =>
       addresses
@@ -47,31 +45,24 @@ export function AddressList({
     [addresses, q, completedIdx]
   );
 
+  // Local PIF input per row
+  const [pifAmounts, setPifAmounts] = React.useState<Record<number, string>>({});
+
   const onNavigate = (addr: string) => {
-    const url =
-      "https://www.google.com/maps/search/?api=1&query=" +
-      encodeURIComponent(addr || "");
+    const url = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(addr || "");
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const quickComplete = (i: number) => {
-    const input = window.prompt(
-      "Quick Complete:\n\n• Leave empty → Done\n• Type 'DA' → Mark as DA\n• Type a number (e.g. 50) → PIF £amount"
-    );
-    if (input === null) return;
-    const text = input.trim();
-    if (!text) {
-      complete(i, "Done");
-    } else if (text.toUpperCase() === "DA") {
-      complete(i, "DA");
-    } else {
-      const n = Number(text);
-      if (Number.isFinite(n) && n > 0) {
-        complete(i, "PIF", n.toFixed(2));
-      } else {
-        alert("Invalid amount. Use a number (e.g., 50) or leave empty for Done.");
-      }
+  const submitPIF = (i: number) => {
+    const raw = (pifAmounts[i] ?? "").trim();
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) {
+      alert("Enter a valid PIF amount (e.g. 50).");
+      return;
     }
+    complete(i, "PIF", n.toFixed(2));
+    // optional: clear the input after submit
+    setPifAmounts((m) => ({ ...m, [i]: "" }));
   };
 
   return (
@@ -91,7 +82,7 @@ export function AddressList({
               {isActive && <span className="active-badge">ACTIVE</span>}
             </div>
 
-            {/* Actions */}
+            {/* Action bar (always show Navigate + Arrange; Active adds Cancel) */}
             <div className="row-actions">
               <button
                 className="btn btn-ghost"
@@ -104,22 +95,12 @@ export function AddressList({
               {isActive ? (
                 <>
                   <button
-                    className="btn btn-primary"
-                    onClick={() => quickComplete(i)}
-                    title="Complete (quick)"
-                  >
-                    ✅ Complete
-                  </button>
-
-                  <button
                     className="btn btn-ghost"
                     onClick={() => cancelActive()}
                     title="Cancel active"
                   >
                     ⛔ Cancel
                   </button>
-
-                  {/* Keep Arrange visible when active */}
                   <button
                     className="btn btn-outline"
                     onClick={() => onCreateArrangement(i)}
@@ -137,7 +118,6 @@ export function AddressList({
                   >
                     Set Active
                   </button>
-
                   <button
                     className="btn btn-outline"
                     onClick={() => onCreateArrangement(i)}
@@ -148,6 +128,51 @@ export function AddressList({
                 </>
               )}
             </div>
+
+            {/* Complete bar appears ONLY when active */}
+            {isActive && (
+              <div className="complete-bar fade-in-up" role="group" aria-label="Complete outcome">
+                <div className="complete-btns">
+                  <button
+                    className="btn btn-success"
+                    onClick={() => complete(i, "Done")}
+                    title="Mark Done"
+                  >
+                    ✅ Done
+                  </button>
+
+                  <button
+                    className="btn btn-danger"
+                    onClick={() => complete(i, "DA")}
+                    title="Mark DA"
+                  >
+                    🚫 DA
+                  </button>
+                </div>
+
+                <div className="pif-group">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    className="input amount-input"
+                    placeholder="PIF £"
+                    value={pifAmounts[i] ?? ""}
+                    onChange={(e) =>
+                      setPifAmounts((m) => ({ ...m, [i]: e.target.value }))
+                    }
+                  />
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => submitPIF(i)}
+                    title="Record PIF"
+                  >
+                    💷 PIF
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
       })}
