@@ -18,16 +18,6 @@ export default defineConfig({
         "icons/icon-192-maskable.png",
         "icons/icon-512-maskable.png",
       ],
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,png,svg,ico,webmanifest}"],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.origin === self.location.origin,
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "static" },
-          },
-        ],
-      },
       manifest: {
         name: "Address Navigator – Field Collection App",
         short_name: "Navigator",
@@ -42,7 +32,20 @@ export default defineConfig({
           { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
           { src: "icons/icon-192-maskable.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
-          { src: "icons/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
+          { src: "icons/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,png,svg,ico,webmanifest}"],
+        runtimeCaching: [
+          {
+            // no 'self' here — this runs fine in SW and passes TS in Node
+            urlPattern: ({ sameOrigin }) => sameOrigin,
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "static" },
+          },
+          // If you prefer a strict origin regex, you can use:
+          // { urlPattern: /^https:\/\/sinful1992\.github\.io\/navigator-web\//, handler: "StaleWhileRevalidate", options: { cacheName: "static" } }
         ],
       },
     }),
