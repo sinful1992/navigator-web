@@ -71,6 +71,11 @@ export function AddressList({
     setOpenCompleteFor(null);
   };
 
+  // Clear completion form when active index changes
+  React.useEffect(() => {
+    setOpenCompleteFor(null);
+  }, [state.activeIndex]);
+
   if (rows.length === 0) {
     return (
       <div className="empty-box">
@@ -90,7 +95,7 @@ export function AddressList({
     <div className="list-col">
       {rows.map(({ i, address, lat, lng }) => {
         const active = state.activeIndex === i;
-        const open = openCompleteFor === i;
+        const open = openCompleteFor === i && active; // Only show completion if BOTH active AND openCompleteFor match
 
         return (
           <div 
@@ -138,7 +143,10 @@ export function AddressList({
                       </button>
                       <button 
                         className="btn btn-ghost" 
-                        onClick={cancelActive}
+                        onClick={() => {
+                          cancelActive();
+                          setOpenCompleteFor(null); // Also clear completion form
+                        }}
                       >
                         Cancel
                       </button>
