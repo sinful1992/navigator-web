@@ -2,17 +2,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import "./index.css";
+import "./index.css"; // keep if present
 
-
-// --- PWA registration ---
-import { registerSW } from "virtual:pwa-register";
-registerSW({
-  immediate: true,
-  onOfflineReady() {
-    console.log("PWA ready to work offline.");
-  }
-});
+// No PWA plugin import here.
+// The service worker is registered from index.html for GitHub Pages.
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
