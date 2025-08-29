@@ -1,53 +1,10 @@
 // vite.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { VitePWA } from "vite-plugin-pwa";
 
+// No PWA plugin needed. We ship a static manifest + service worker in /public.
 export default defineConfig({
-  // GitHub Pages base path
+  // GitHub Pages serves the app at /navigator-web/
   base: "/navigator-web/",
-  plugins: [
-    react(),
-    VitePWA({
-      registerType: "autoUpdate",
-      includeAssets: [
-        "favicon.ico",
-        "icons/apple-touch-icon-180.png",
-        "icons/icon-192.png",
-        "icons/icon-512.png",
-        "icons/icon-192-maskable.png",
-        "icons/icon-512-maskable.png",
-      ],
-      manifest: {
-        name: "Address Navigator – Field Collection App",
-        short_name: "Navigator",
-        id: "/navigator-web/",
-        scope: "/navigator-web/",
-        start_url: "/navigator-web/",
-        display: "standalone",
-        display_override: ["standalone"],
-        background_color: "#ffffff",
-        theme_color: "#0ea5e9",
-        icons: [
-          { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
-          { src: "icons/icon-192-maskable.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
-          { src: "icons/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-        ],
-      },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,png,svg,ico,webmanifest}"],
-        runtimeCaching: [
-          {
-            // no 'self' here — this runs fine in SW and passes TS in Node
-            urlPattern: ({ sameOrigin }) => sameOrigin,
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "static" },
-          },
-          // If you prefer a strict origin regex, you can use:
-          // { urlPattern: /^https:\/\/sinful1992\.github\.io\/navigator-web\//, handler: "StaleWhileRevalidate", options: { cacheName: "static" } }
-        ],
-      },
-    }),
-  ],
+  plugins: [react()],
 });
