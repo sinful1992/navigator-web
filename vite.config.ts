@@ -4,37 +4,47 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // GitHub Pages base path
+  base: "/navigator-web/",
   plugins: [
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      manifest: {
-        name: "Address Navigator (web)",
-        short_name: "Navigator",
-        start_url: ".",
-        display: "standalone",
-        background_color: "#ffffff",
-        theme_color: "#eaeaea",
-        // IMPORTANT: no leading slash; files live in public/icons/
-        icons: [
-          { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
-          { src: "icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
-        ]
-      },
+      includeAssets: [
+        "favicon.ico",
+        "icons/apple-touch-icon-180.png",
+        "icons/icon-192.png",
+        "icons/icon-512.png",
+        "icons/icon-192-maskable.png",
+        "icons/icon-512-maskable.png",
+      ],
       workbox: {
         globPatterns: ["**/*.{js,css,html,png,svg,ico,webmanifest}"],
         runtimeCaching: [
           {
-            // cache same-origin static assets
-            urlPattern: ({ sameOrigin }) => sameOrigin,
+            urlPattern: ({ url }) => url.origin === self.location.origin,
             handler: "StaleWhileRevalidate",
-            options: { cacheName: "static" }
-          }
-        ]
-      }
-    })
+            options: { cacheName: "static" },
+          },
+        ],
+      },
+      manifest: {
+        name: "Address Navigator – Field Collection App",
+        short_name: "Navigator",
+        id: "/navigator-web/",
+        scope: "/navigator-web/",
+        start_url: "/navigator-web/",
+        display: "standalone",
+        display_override: ["standalone"],
+        background_color: "#ffffff",
+        theme_color: "#0ea5e9",
+        icons: [
+          { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: "icons/icon-192-maskable.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+          { src: "icons/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
+        ],
+      },
+    }),
   ],
-  // REQUIRED for GitHub Pages under /navigator-web/
-  base: "/navigator-web/",
 });
