@@ -25,7 +25,7 @@ function normalizeState(raw: any) {
   };
 }
 
-// Simple error boundary
+// Simple error boundary (avoids blank screen on unexpected errors)
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -56,6 +56,7 @@ class ErrorBoundary extends React.Component<
 export default function App() {
   const cloudSync = useCloudSync();
 
+  // Wait for Supabase session restore
   if (cloudSync.isLoading) {
     return (
       <div className="container">
@@ -67,10 +68,12 @@ export default function App() {
     );
   }
 
+  // Auth screen
   if (!cloudSync.user) {
     return (
       <ErrorBoundary>
         <Auth
+          // Wrap to match Auth’s Promise<void> signature
           onSignIn={async (email, password) => { await cloudSync.signIn(email, password); }}
           onSignUp={async (email, password) => { await cloudSync.signUp(email, password); }}
           isLoading={cloudSync.isLoading}
@@ -115,21 +118,25 @@ function AuthedApp() {
     React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
-  // --- derive safe arrays (never undefined) ---
+  // Hydration / echo guards
+  const [hydrated, setHydrated] = React.useState(false);
+  const lastFromCloudRef = React.useRef<string | null>(null); // JSON of last cloud snapshot we applied
+
+  // --- safe arrays (never undefined) ---
   const addresses = Array.isArray(state?.addresses) ? state!.addresses : [];
   const completions = Array.isArray(state?.completions) ? state!.completions : [];
   const arrangements = Array.isArray(state?.arrangements) ? state!.arrangements : [];
   const daySessions = Array.isArray(state?.daySessions) ? state!.daySessions : [];
 
-  // A safe state object to pass to children
+  // State passed to children
   const safeState = React.useMemo(
     () => ({ ...(state ?? {}), addresses, completions, arrangements, daySessions }),
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ---- Bootstrap cloud sync ----
-  // If local already has data, PUSH first (authoritative) then subscribe.
-  // If local is empty, subscribe first to hydrate from cloud.
+  // ---- Bootstrap sync ----
+  // If we already have local data, PUSH once (authoritative) and mark hydrated.
+  // If local is empty, SUBSCRIBE and mark hydrated when first cloud snapshot arrives.
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: (() => void) | undefined;
@@ -146,11 +153,23 @@ function AuthedApp() {
         if (localHasData) {
           await cloudSync.syncData(safeState);
           if (cancelled) return;
+          // Baseline equals what we just pushed
+          lastFromCloudRef.current = JSON.stringify(safeState);
+          setHydrated(true);
         }
+
         cleanup = cloudSync.subscribeToData((newState) => {
           if (!newState) return;
-          setState(normalizeState(newState));
+          const normalized = normalizeState(newState);
+          const str = JSON.stringify(normalized);
+
+          // Update local from cloud
+          setState(normalized);
           setLastSyncTime(new Date());
+
+          // Set baseline & hydration
+          lastFromCloudRef.current = str;
+          setHydrated(true);
         });
       } catch (err) {
         console.error("Bootstrap sync failed:", err);
@@ -161,32 +180,42 @@ function AuthedApp() {
       cancelled = true;
       if (cleanup) cleanup();
     };
+    // run once per session
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloudSync.user, loading]); // run once per session
+  }, [cloudSync.user, loading]);
 
-  // Auto-sync local changes to cloud (debounced)
+  // ---- Auto push local changes -> cloud (debounced) ----
+  // Only after we're hydrated; skip if identical to the last cloud snapshot.
   React.useEffect(() => {
-    if (!cloudSync.user || loading) return;
+    if (!cloudSync.user || loading || !hydrated) return;
+
+    const currentStr = JSON.stringify(safeState);
+    if (currentStr === lastFromCloudRef.current) return; // no change vs cloud baseline
+
     const t = setTimeout(() => {
       cloudSync
         .syncData(safeState)
-        .then(() => setLastSyncTime(new Date()))
+        .then(() => {
+          setLastSyncTime(new Date());
+          lastFromCloudRef.current = currentStr; // advance baseline to what we just wrote
+        })
         .catch((err: unknown) => console.error("Sync failed:", err));
-    }, 800);
-    return () => clearTimeout(t);
-  }, [cloudSync.user, loading, safeState, cloudSync]);
+    }, 400);
 
-  // Handle arrangement creation from address list
+    return () => clearTimeout(t);
+  }, [cloudSync.user, loading, hydrated, safeState, cloudSync]);
+
+  // ----- UI helpers -----
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
     setTab("arrangements");
   }, []);
 
-  // Visible rows + helpers
   const completedIdx = React.useMemo(
     () => new Set(completions.map((c: any) => c.index)),
     [completions]
   );
+
   const lowerQ = (search ?? "").trim().toLowerCase();
   const visible = React.useMemo(
     () =>
@@ -196,6 +225,7 @@ function AuthedApp() {
         .filter(({ i }) => !completedIdx.has(i)),
     [addresses, lowerQ, completedIdx]
   );
+
   const hasActiveSession = daySessions.some((d: any) => !d.end);
 
   const doQuickComplete = React.useCallback(
@@ -298,7 +328,7 @@ function AuthedApp() {
     return () => window.removeEventListener("keydown", handler);
   }, [tab, visible, safeState.activeIndex, completions, hasActiveSession, setActive, undo, doQuickComplete, startDay, endDay]);
 
-  // Backup / Restore
+  // ----- Backup / Restore -----
   const onBackup = () => {
     const snap = backupState();
     const stamp = new Date();
@@ -317,6 +347,9 @@ function AuthedApp() {
       const data = normalizeState(raw);
       restoreState(data);             // local
       await cloudSync.syncData(data); // cloud
+      // Advance baseline to restored snapshot so we don't immediately overwrite it
+      lastFromCloudRef.current = JSON.stringify(data);
+      setHydrated(true);
       alert("✅ Restore completed successfully!");
     } catch (err: any) {
       console.error(err);
@@ -326,7 +359,7 @@ function AuthedApp() {
     }
   };
 
-  // Stats (use safe arrays)
+  // ----- Stats (safe arrays) -----
   const stats = React.useMemo(() => {
     const total = addresses.length;
     const completedCount = completions.length;
@@ -383,7 +416,7 @@ function AuthedApp() {
         </div>
 
         <div className="right">
-          {/* Email + Sign out pill */}
+          {/* Account pill */}
           <div className="user-chip" role="group" aria-label="Account">
             <span className="avatar" aria-hidden>👤</span>
             <span className="email" title={cloudSync.user?.email ?? ""}>
@@ -416,7 +449,8 @@ function AuthedApp() {
             background: "var(--surface)",
             padding: "1.5rem",
             borderRadius: "var(--radius-lg)",
-            border: "1px solid var(--border-light)",
+            border: "1px solid",
+            borderColor: "var(--border-light)",
             boxShadow: "var(--shadow-sm)",
             marginBottom: "1rem",
           }}
