@@ -12,20 +12,111 @@ import { downloadJson, readJsonFile } from "./backup";
 
 type Tab = "list" | "completed" | "arrangements";
 
-// --- helper: make sure arrays exist so .length never crashes ---
+type Outcome = "Done" | "DA" | "PIF";
+
+// ---- helpers ---------------------------------------------------------------
+
 function normalizeState(raw: any) {
   const r = raw ?? {};
   return {
     ...r,
+    // never let these be undefined
     addresses: Array.isArray(r.addresses) ? r.addresses : [],
     completions: Array.isArray(r.completions) ? r.completions : [],
     arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
     daySessions: Array.isArray(r.daySessions) ? r.daySessions : [],
+    // per-device only; do NOT sync
     activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
   };
 }
 
-// Simple error boundary (avoids blank screen on unexpected errors)
+/** Build the object we actually send to the cloud (exclude per-device fields). */
+function toCloudPayload(state: any) {
+  const s = normalizeState(state);
+  // exclude fields that should not sync cross-device
+  const { activeIndex, ...rest } = s;
+  return rest;
+}
+
+/** Merge local → remote without losing work made on another device. */
+function mergeStates(remote: any, local: any) {
+  const R = normalizeState(remote);
+  const L = normalizeState(local);
+
+  // Addresses: prefer any non-empty remote list, otherwise local
+  const addresses =
+    (R.addresses?.length ?? 0) >= (L.addresses?.length ?? 0) ? R.addresses : L.addresses;
+
+  // Completions: union by "index", keep the one with the newest timestamp if both exist
+  const byIndex = new Map<number, any>();
+  const take = (c: any) => {
+    const idx = Number(c?.index);
+    if (!Number.isFinite(idx)) return;
+    const prev = byIndex.get(idx);
+    if (!prev) {
+      byIndex.set(idx, c);
+    } else {
+      // prefer the one with newer ts if present, else keep remote
+      const pt = Number(new Date(prev.ts || prev.time || 0));
+      const nt = Number(new Date(c.ts || c.time || 0));
+      if (nt > pt) byIndex.set(idx, c);
+    }
+  };
+  (R.completions || []).forEach(take);
+  (L.completions || []).forEach(take);
+  const completions = Array.from(byIndex.values()).sort(
+    (a, b) => Number(new Date(b.ts || b.time || 0)) - Number(new Date(a.ts || a.time || 0))
+  );
+
+  // Day sessions: merge by (id || start)
+  const dsKey = (d: any) => String(d?.id ?? d?.start ?? JSON.stringify(d ?? {}));
+  const dsMap = new Map<string, any>();
+  for (const d of R.daySessions || []) dsMap.set(dsKey(d), d);
+  for (const d of L.daySessions || []) {
+    const k = dsKey(d);
+    const r = dsMap.get(k);
+    // if either has end, prefer the one with end; else prefer newer 'start'
+    if (!r) dsMap.set(k, d);
+    else {
+      if (r.end && !d.end) continue;
+      if (!r.end && d.end) dsMap.set(k, d);
+      else {
+        const rt = Number(new Date(r.start || 0));
+        const lt = Number(new Date(d.start || 0));
+        if (lt >= rt) dsMap.set(k, d);
+      }
+    }
+  }
+  const daySessions = Array.from(dsMap.values()).sort(
+    (a, b) => Number(new Date(a.start || 0)) - Number(new Date(b.start || 0))
+  );
+
+  // Arrangements: merge by (id || address+date)
+  const arrKey = (x: any) => String(x?.id ?? `${x?.address ?? ""}#${x?.date ?? ""}`);
+  const am = new Map<string, any>();
+  for (const a of R.arrangements || []) am.set(arrKey(a), a);
+  for (const a of L.arrangements || []) {
+    const k = arrKey(a);
+    const r = am.get(k);
+    if (!r) am.set(k, a);
+    else {
+      const rt = Number(new Date(r.updatedAt || r.ts || 0));
+      const lt = Number(new Date(a.updatedAt || a.ts || 0));
+      if (lt >= rt) am.set(k, a);
+    }
+  }
+  const arrangements = Array.from(am.values());
+
+  return {
+    ...R,
+    addresses,
+    completions,
+    daySessions,
+    arrangements,
+  };
+}
+
+// Simple error boundary (avoid blank screen)
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -53,11 +144,12 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-export default function App() {
-  const cloudSync = useCloudSync();
+// ---- App -------------------------------------------------------------------
 
-  // Wait for Supabase session restore
-  if (cloudSync.isLoading) {
+export default function App() {
+  const cloud = useCloudSync();
+
+  if (cloud.isLoading) {
     return (
       <div className="container">
         <div className="loading">
@@ -68,20 +160,19 @@ export default function App() {
     );
   }
 
-  // Auth screen
-  if (!cloudSync.user) {
+  if (!cloud.user) {
     return (
       <ErrorBoundary>
         <Auth
           onSignIn={async (email, password) => {
-            await cloudSync.signIn(email, password);
+            await cloud.signIn(email, password);
           }}
           onSignUp={async (email, password) => {
-            await cloudSync.signUp(email, password);
+            await cloud.signUp(email, password);
           }}
-          isLoading={cloudSync.isLoading}
-          error={cloudSync.error}
-          onClearError={cloudSync.clearError}
+          isLoading={cloud.isLoading}
+          error={cloud.error}
+          onClearError={cloud.clearError}
         />
       </ErrorBoundary>
     );
@@ -113,7 +204,7 @@ function AuthedApp() {
     setState,
   } = useAppState();
 
-  const cloudSync = useCloudSync();
+  const cloud = useCloudSync();
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
@@ -121,93 +212,88 @@ function AuthedApp() {
     React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
-  // Hydration / echo guards
+  // hydration & baseline
   const [hydrated, setHydrated] = React.useState(false);
-  const lastFromCloudRef = React.useRef<string | null>(null);
+  const lastRemoteRef = React.useRef<any | null>(null); // parsed remote snapshot
 
-  // --- safe arrays (never undefined) ---
-  const addresses = Array.isArray(state?.addresses) ? state!.addresses : [];
-  const completions = Array.isArray(state?.completions) ? state!.completions : [];
-  const arrangements = Array.isArray(state?.arrangements) ? state!.arrangements : [];
-  const daySessions = Array.isArray(state?.daySessions) ? state!.daySessions : [];
+  // Safe slices
+  const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
+  const completions = Array.isArray(state?.completions) ? state.completions : [];
+  const arrangements = Array.isArray(state?.arrangements) ? state.arrangements : [];
+  const daySessions = Array.isArray(state?.daySessions) ? state.daySessions : [];
 
-  // State passed to children
   const safeState = React.useMemo(
     () => ({ ...(state ?? {}), addresses, completions, arrangements, daySessions }),
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ---- Bootstrap sync ----
+  // ---- Subscribe first; do not push on mount --------------------------------
   React.useEffect(() => {
-    if (!cloudSync.user || loading) return;
-    let cleanup: (() => void) | undefined;
-    let cancelled = false;
+    if (!cloud.user) return;
+    let unsub: (() => void) | undefined;
 
-    (async () => {
-      const localHasData =
-        addresses.length > 0 ||
-        completions.length > 0 ||
-        arrangements.length > 0 ||
-        daySessions.length > 0;
+    // callback for remote updates
+    const onRemote = (remote: any) => {
+      const normalized = normalizeState(remote);
+      lastRemoteRef.current = toCloudPayload(normalized); // baseline to compare/merge
+      // Keep our current device's activeIndex
+      setState((prev: any) => ({ ...normalized, activeIndex: prev?.activeIndex ?? null }));
+      setLastSyncTime(new Date());
+      setHydrated(true);
+    };
 
-      try {
-        if (localHasData) {
-          await cloudSync.syncData(safeState);
-          if (cancelled) return;
-          lastFromCloudRef.current = JSON.stringify(safeState);
-          setHydrated(true);
-        }
+    try {
+      unsub = cloud.subscribeToData(onRemote);
+    } catch (e) {
+      console.error("subscribe failed:", e);
+    }
 
-        cleanup = cloudSync.subscribeToData((newState) => {
-          if (!newState) return;
-          const normalized = normalizeState(newState);
-          const str = JSON.stringify(normalized);
-
-          setState(normalized);
-          setLastSyncTime(new Date());
-
-          lastFromCloudRef.current = str;
-          setHydrated(true);
-        });
-      } catch (err) {
-        console.error("Bootstrap sync failed:", err);
+    // safety net: if nothing arrives in 2s, allow local to push
+    const t = setTimeout(() => {
+      if (!hydrated) {
+        lastRemoteRef.current = null; // unknown remote; we'll merge on first push
+        setHydrated(true);
       }
-    })();
+    }, 2000);
 
     return () => {
-      cancelled = true;
-      if (cleanup) cleanup();
+      clearTimeout(t);
+      if (unsub) unsub();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloudSync.user, loading]);
+  }, [cloud.user]);
 
-  // ---- Auto push local changes -> cloud (debounced) ----
+  // ---- Debounced push with MERGE against latest remote ----------------------
   React.useEffect(() => {
-    if (!cloudSync.user || loading || !hydrated) return;
+    if (!cloud.user || loading || !hydrated) return;
 
-    const currentStr = JSON.stringify(safeState);
-    if (currentStr === lastFromCloudRef.current) return;
+    const payloadLocal = toCloudPayload(safeState);
+    const payloadMerged = mergeStates(lastRemoteRef.current ?? {}, payloadLocal);
 
-    const t = setTimeout(() => {
-      cloudSync
-        .syncData(safeState)
-        .then(() => {
-          setLastSyncTime(new Date());
-          lastFromCloudRef.current = currentStr;
-        })
-        .catch((err: unknown) => console.error("Sync failed:", err));
+    // If nothing changed vs our remote baseline, skip
+    const localStr = JSON.stringify(payloadMerged);
+    const remoteStr = JSON.stringify(lastRemoteRef.current ?? {});
+    if (localStr === remoteStr) return;
+
+    const t = setTimeout(async () => {
+      try {
+        await cloud.syncData(payloadMerged);
+        lastRemoteRef.current = payloadMerged; // advance baseline
+        setLastSyncTime(new Date());
+      } catch (err) {
+        console.error("sync failed:", err);
+      }
     }, 400);
 
     return () => clearTimeout(t);
-  }, [cloudSync.user, loading, hydrated, safeState, cloudSync]);
+  }, [cloud.user, loading, hydrated, safeState, cloud]);
 
-  // ----- UI helpers -----
+  // ----- UI helpers ----------------------------------------------------------
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
     setTab("arrangements");
   }, []);
 
-  // Cast to number to be robust
   const completedIdx = React.useMemo(
     () => new Set(completions.map((c: any) => Number(c.index))),
     [completions]
@@ -225,7 +311,7 @@ function AuthedApp() {
 
   const hasActiveSession = daySessions.some((d: any) => !d.end);
 
-  // Keyboard shortcuts (List tab only) — Enter path removed
+  // Keyboard shortcuts (List tab only)
   React.useEffect(() => {
     if (tab !== "list") return;
     const isTypingTarget = (el: EventTarget | null) => {
@@ -282,9 +368,19 @@ function AuthedApp() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tab, visible, safeState.activeIndex, completions, hasActiveSession, setActive, undo, startDay, endDay]);
+  }, [
+    tab,
+    visible,
+    safeState.activeIndex,
+    completions,
+    hasActiveSession,
+    setActive,
+    undo,
+    startDay,
+    endDay,
+  ]);
 
-  // ----- Backup / Restore -----
+  // ----- Backup / Restore ----------------------------------------------------
   const onBackup = () => {
     const snap = backupState();
     const stamp = new Date();
@@ -300,9 +396,11 @@ function AuthedApp() {
     try {
       const raw = await readJsonFile(file);
       const data = normalizeState(raw);
-      restoreState(data);
-      await cloudSync.syncData(data);
-      lastFromCloudRef.current = JSON.stringify(data);
+      restoreState(data); // local
+      // merge against latest remote and push
+      const merged = mergeStates(lastRemoteRef.current ?? {}, toCloudPayload(data));
+      await cloud.syncData(merged);
+      lastRemoteRef.current = merged;
       setHydrated(true);
       alert("✅ Restore completed successfully!");
     } catch (err: any) {
@@ -313,7 +411,7 @@ function AuthedApp() {
     }
   };
 
-  // ----- Stats -----
+  // ----- Stats ---------------------------------------------------------------
   const stats = React.useMemo(() => {
     const total = addresses.length;
     const completedCount = completions.length;
@@ -324,7 +422,7 @@ function AuthedApp() {
     return { total, completed: completedCount, pending, pifCount, doneCount, daCount };
   }, [addresses, completions]);
 
-  const waitingForInitialData = !!cloudSync.user && !Array.isArray(state?.addresses);
+  const waitingForInitialData = !!cloud.user && !Array.isArray(state?.addresses);
 
   if (loading || waitingForInitialData) {
     return (
@@ -337,14 +435,13 @@ function AuthedApp() {
     );
   }
 
+  // ---- UI -------------------------------------------------------------------
   return (
     <div className="container">
       {/* Header */}
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
-
-          {/* Sync Status */}
           <div
             style={{
               display: "flex",
@@ -354,7 +451,7 @@ function AuthedApp() {
               color: "var(--text-muted)",
             }}
           >
-            {cloudSync.isOnline ? (
+            {cloud.isOnline ? (
               <>
                 <span style={{ color: "var(--success)" }}>🟢</span>
                 Online
@@ -370,18 +467,16 @@ function AuthedApp() {
         </div>
 
         <div className="right">
-          {/* Account pill */}
           <div className="user-chip" role="group" aria-label="Account">
             <span className="avatar" aria-hidden>👤</span>
-            <span className="email" title={cloudSync.user?.email ?? ""}>
-              {cloudSync.user?.email ?? "Signed in"}
+            <span className="email" title={cloud.user?.email ?? ""}>
+              {cloud.user?.email ?? "Signed in"}
             </span>
-            <button className="signout-btn" onClick={cloudSync.signOut} title="Sign out">
+            <button className="signout-btn" onClick={cloud.signOut} title="Sign out">
               Sign Out
             </button>
           </div>
 
-          {/* Tabs */}
           <div className="tabs">
             <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
               📋 List ({stats.pending})
@@ -403,8 +498,7 @@ function AuthedApp() {
             background: "var(--surface)",
             padding: "1.5rem",
             borderRadius: "var(--radius-lg)",
-            border: "1px solid",
-            borderColor: "var(--border-light)",
+            border: "1px solid var(--border-light)",
             boxShadow: "var(--shadow-sm)",
             marginBottom: "1rem",
           }}
@@ -417,7 +511,8 @@ function AuthedApp() {
               lineHeight: "1.5",
             }}
           >
-            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>, <strong>lng</strong> columns to get started.
+            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>,{" "}
+            <strong>lng</strong> columns to get started.
           </div>
 
           <div className="btn-row">
@@ -426,7 +521,13 @@ function AuthedApp() {
             <button className="btn btn-ghost" onClick={onBackup}>💾 Backup</button>
 
             <div className="file-input-wrapper">
-              <input type="file" accept="application/json" onChange={onRestore} className="file-input" id="restore-input" />
+              <input
+                type="file"
+                accept="application/json"
+                onChange={onRestore}
+                className="file-input"
+                id="restore-input"
+              />
               <label htmlFor="restore-input" className="file-input-label">📤 Restore</label>
             </div>
           </div>
@@ -469,7 +570,12 @@ function AuthedApp() {
             state={safeState}
             setActive={setActive}
             cancelActive={cancelActive}
-            complete={complete}
+            complete={(i: number, outcome: Outcome, amount?: string) => {
+              // Record timestamp so merge can pick latest if needed
+              const ts = new Date().toISOString();
+              complete(i, outcome, amount);
+              // (complete in useAppState should append {index:i,outcome,amount,ts})
+            }}
             onCreateArrangement={handleCreateArrangement}
             filterText={search}
           />
