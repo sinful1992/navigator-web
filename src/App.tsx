@@ -11,7 +11,6 @@ import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
 
 type Tab = "list" | "completed" | "arrangements";
-
 type Outcome = "Done" | "DA" | "PIF";
 
 // ---- helpers ---------------------------------------------------------------
@@ -20,20 +19,17 @@ function normalizeState(raw: any) {
   const r = raw ?? {};
   return {
     ...r,
-    // never let these be undefined
     addresses: Array.isArray(r.addresses) ? r.addresses : [],
     completions: Array.isArray(r.completions) ? r.completions : [],
     arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
     daySessions: Array.isArray(r.daySessions) ? r.daySessions : [],
-    // per-device only; do NOT sync
-    activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
+    activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null, // per-device
   };
 }
 
 /** Build the object we actually send to the cloud (exclude per-device fields). */
 function toCloudPayload(state: any) {
   const s = normalizeState(state);
-  // exclude fields that should not sync cross-device
   const { activeIndex, ...rest } = s;
   return rest;
 }
@@ -47,23 +43,22 @@ function mergeStates(remote: any, local: any) {
   const addresses =
     (R.addresses?.length ?? 0) >= (L.addresses?.length ?? 0) ? R.addresses : L.addresses;
 
-  // Completions: union by "index", keep the one with the newest timestamp if both exist
+  // Completions: union by index, prefer newer timestamp if present
   const byIndex = new Map<number, any>();
-  const take = (c: any) => {
+  const put = (c: any) => {
     const idx = Number(c?.index);
     if (!Number.isFinite(idx)) return;
     const prev = byIndex.get(idx);
     if (!prev) {
       byIndex.set(idx, c);
     } else {
-      // prefer the one with newer ts if present, else keep remote
       const pt = Number(new Date(prev.ts || prev.time || 0));
       const nt = Number(new Date(c.ts || c.time || 0));
       if (nt > pt) byIndex.set(idx, c);
     }
   };
-  (R.completions || []).forEach(take);
-  (L.completions || []).forEach(take);
+  (R.completions || []).forEach(put);
+  (L.completions || []).forEach(put);
   const completions = Array.from(byIndex.values()).sort(
     (a, b) => Number(new Date(b.ts || b.time || 0)) - Number(new Date(a.ts || a.time || 0))
   );
@@ -75,7 +70,6 @@ function mergeStates(remote: any, local: any) {
   for (const d of L.daySessions || []) {
     const k = dsKey(d);
     const r = dsMap.get(k);
-    // if either has end, prefer the one with end; else prefer newer 'start'
     if (!r) dsMap.set(k, d);
     else {
       if (r.end && !d.end) continue;
@@ -91,7 +85,7 @@ function mergeStates(remote: any, local: any) {
     (a, b) => Number(new Date(a.start || 0)) - Number(new Date(b.start || 0))
   );
 
-  // Arrangements: merge by (id || address+date)
+  // Arrangements: merge by (id || address+date), prefer newer updatedAt/ts
   const arrKey = (x: any) => String(x?.id ?? `${x?.address ?? ""}#${x?.date ?? ""}`);
   const am = new Map<string, any>();
   for (const a of R.arrangements || []) am.set(arrKey(a), a);
@@ -107,13 +101,7 @@ function mergeStates(remote: any, local: any) {
   }
   const arrangements = Array.from(am.values());
 
-  return {
-    ...R,
-    addresses,
-    completions,
-    daySessions,
-    arrangements,
-  };
+  return { ...R, addresses, completions, daySessions, arrangements };
 }
 
 // Simple error boundary (avoid blank screen)
@@ -232,11 +220,9 @@ function AuthedApp() {
     if (!cloud.user) return;
     let unsub: (() => void) | undefined;
 
-    // callback for remote updates
     const onRemote = (remote: any) => {
       const normalized = normalizeState(remote);
-      lastRemoteRef.current = toCloudPayload(normalized); // baseline to compare/merge
-      // Keep our current device's activeIndex
+      lastRemoteRef.current = toCloudPayload(normalized); // baseline
       setState((prev: any) => ({ ...normalized, activeIndex: prev?.activeIndex ?? null }));
       setLastSyncTime(new Date());
       setHydrated(true);
@@ -248,10 +234,9 @@ function AuthedApp() {
       console.error("subscribe failed:", e);
     }
 
-    // safety net: if nothing arrives in 2s, allow local to push
     const t = setTimeout(() => {
       if (!hydrated) {
-        lastRemoteRef.current = null; // unknown remote; we'll merge on first push
+        lastRemoteRef.current = null;
         setHydrated(true);
       }
     }, 2000);
@@ -270,7 +255,6 @@ function AuthedApp() {
     const payloadLocal = toCloudPayload(safeState);
     const payloadMerged = mergeStates(lastRemoteRef.current ?? {}, payloadLocal);
 
-    // If nothing changed vs our remote baseline, skip
     const localStr = JSON.stringify(payloadMerged);
     const remoteStr = JSON.stringify(lastRemoteRef.current ?? {});
     if (localStr === remoteStr) return;
@@ -397,7 +381,6 @@ function AuthedApp() {
       const raw = await readJsonFile(file);
       const data = normalizeState(raw);
       restoreState(data); // local
-      // merge against latest remote and push
       const merged = mergeStates(lastRemoteRef.current ?? {}, toCloudPayload(data));
       await cloud.syncData(merged);
       lastRemoteRef.current = merged;
@@ -571,10 +554,8 @@ function AuthedApp() {
             setActive={setActive}
             cancelActive={cancelActive}
             complete={(i: number, outcome: Outcome, amount?: string) => {
-              // Record timestamp so merge can pick latest if needed
-              const ts = new Date().toISOString();
+              // call the state action; it should record timestamp internally
               complete(i, outcome, amount);
-              // (complete in useAppState should append {index:i,outcome,amount,ts})
             }}
             onCreateArrangement={handleCreateArrangement}
             filterText={search}
