@@ -27,16 +27,19 @@ export function DayPanel({ sessions, completions, startDay, endDay }: Props) {
     });
   }, [completions]);
 
-  // Include ARR in the counts and type it as Record<Outcome, number>
-  const counts: Record<Outcome, number> = React.useMemo(
-    () => ({ PIF: 0, Done: 0, DA: 0, ARR: 0 }),
-    []
-  );
-
-  for (const c of todays) {
-    const o: Outcome | undefined = c?.outcome;
-    if (o && o in counts) counts[o] += 1;
-  }
+  // ✅ FIX: Calculate counts properly with todays as dependency
+  const counts = React.useMemo(() => {
+    const result: Record<Outcome, number> = { PIF: 0, Done: 0, DA: 0, ARR: 0 };
+    
+    for (const c of todays) {
+      const outcome: Outcome | undefined = c?.outcome;
+      if (outcome && outcome in result) {
+        result[outcome] += 1;
+      }
+    }
+    
+    return result;
+  }, [todays]); // ✅ Now depends on todays, so it updates when completions change
 
   const startedAt = activeSession?.start ? new Date(activeSession.start) : null;
 
