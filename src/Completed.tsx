@@ -1,10 +1,9 @@
-// src/Completed.tsx
 import * as React from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { isSameDay } from "date-fns";
 
-type Outcome = "Done" | "DA" | "PIF";
+type Outcome = "Done" | "DA" | "PIF" | "ARR";
 
 type Props = {
   state: any;
@@ -26,7 +25,7 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
     const toDate = (c: any): Date | null => {
       const raw = c?.ts ?? c?.time ?? null;
       const d = raw ? new Date(raw) : null;
-      return isNaN(d as any) ? null : d;
+      return d && !isNaN(d as any) ? d : null;
     };
     const arr = completions
       .map((c) => ({ ...c, _date: toDate(c) }))
@@ -62,7 +61,7 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
 
   return (
     <div className="completed-wrap">
-      {/* Calendar row (uses .calendar-row styles from App.css) */}
+      {/* Calendar row */}
       <div className="calendar-row">
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
           <div style={{ fontWeight: 700, color: "var(--text-primary)" }}>
@@ -78,7 +77,6 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
           mode="single"
           selected={selectedDate}
           onSelect={setSelectedDate}
-          // Small quality-of-life: highlight days that have at least one completion
           modifiers={{
             hasData: (day) =>
               normalized.some((c) => (c._date ? isSameDay(c._date, day) : false)),
@@ -87,7 +85,7 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
         />
       </div>
 
-      {/* List of completed calls (filtered by date if selected) */}
+      {/* Completed list */}
       {filtered.length === 0 ? (
         <div className="empty-box">
           <div>No completions for this date</div>
@@ -99,7 +97,6 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
           const rec = addresses[idx] ?? {};
           const label = String(rec?.address ?? `#${idx + 1}`);
           const when = c._date;
-
           const isEditing = editingFor === idx;
 
           return (
@@ -127,6 +124,8 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
                           ? "pill-pif"
                           : c.outcome === "DA"
                           ? "pill-da"
+                          : c.outcome === "ARR"
+                          ? "pill-arr"
                           : "pill-done")
                       }
                     >
@@ -195,6 +194,17 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
                         title="Mark as DA"
                       >
                         🚫 DA
+                      </button>
+
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => {
+                          onChangeOutcome(idx, "ARR");
+                          setEditingFor(null);
+                        }}
+                        title="Mark as Arrangement"
+                      >
+                        📅 ARR
                       </button>
                     </div>
 
