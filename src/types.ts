@@ -50,6 +50,8 @@ export type Arrangement = {
   amount?: string;          // expected amount
   createdAt: string;        // when arrangement was created
   updatedAt: string;        // when last modified
+  lat?: number | null;      // optional geo cache
+  lng?: number | null;      // optional geo cache
 };
 
 export type AppState = {
@@ -59,4 +61,3 @@ export type AppState = {
   daySessions: DaySession[];
   arrangements: Arrangement[];
 };
-```0
