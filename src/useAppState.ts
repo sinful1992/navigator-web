@@ -66,6 +66,23 @@ export function useAppState() {
     }));
   }, []);
 
+  const addAddress = React.useCallback((addressRow: AddressRow) => {
+    return new Promise<number>((resolve) => {
+      setState((s) => {
+        const newAddresses = [...s.addresses, addressRow];
+        const newIndex = newAddresses.length - 1;
+        
+        // Use setTimeout to ensure state is updated before resolving
+        setTimeout(() => resolve(newIndex), 0);
+        
+        return {
+          ...s,
+          addresses: newAddresses,
+        };
+      });
+    });
+  }, []);
+
   const setActive = React.useCallback((idx: number) => {
     setState((s) => ({ ...s, activeIndex: idx }));
   }, []);
@@ -235,6 +252,7 @@ export function useAppState() {
     setState, // for cloud sync integrations
     // addresses
     setAddresses,
+    addAddress, // ✅ New function for adding individual addresses
     // active
     setActive,
     cancelActive,
