@@ -175,6 +175,7 @@ function AuthedApp() {
     state,
     loading,
     setAddresses,
+    addAddress,
     setActive,
     cancelActive,
     complete,
@@ -275,6 +276,24 @@ function AuthedApp() {
     setAutoCreateArrangementFor(addressIndex);
     setTab("arrangements");
   }, []);
+
+  // ✅ NEW: Enhanced address handler for arrangements
+  const handleAddAddress = React.useCallback(async (addressRow: any) => {
+    console.log('handleAddAddress called with:', addressRow);
+    try {
+      const newIndex = await addAddress(addressRow);
+      console.log('Address added at index:', newIndex);
+      
+      // Automatically mark this address as completed with "ARR" outcome
+      complete(newIndex, "ARR");
+      console.log('Address marked as ARR completion');
+      
+      return newIndex;
+    } catch (error) {
+      console.error('Error in handleAddAddress:', error);
+      throw error;
+    }
+  }, [addAddress, complete]);
 
   const completedIdx = React.useMemo(
     () => new Set(completions.map((c: any) => Number(c.index))),
@@ -625,6 +644,7 @@ function AuthedApp() {
           onAddArrangement={addArrangement}
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
+          onAddAddress={handleAddAddress} // ✅ NOW PROPERLY CONNECTED
           autoCreateForAddress={autoCreateArrangementFor}
           onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
         />
