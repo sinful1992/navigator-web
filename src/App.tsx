@@ -576,7 +576,15 @@ function AuthedApp() {
           </div>
         </>
       ) : tab === "completed" ? (
-        <Completed state={safeState} />
+        <Completed
+          state={safeState}
+          onChangeOutcome={(index, outcome, amount) => {
+          // Re-write the outcome by undoing then re-applying with the new choice
+            undo(index);
+            setTimeout(() => complete(index, outcome, amount), 0);
+          }}
+          onUndo={(index) => undo(index)}
+        />
       ) : (
         <Arrangements
           state={safeState}
