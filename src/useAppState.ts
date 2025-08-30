@@ -1,9 +1,16 @@
 // src/useAppState.ts
 import * as React from "react";
 import { get, set } from "idb-keyval";
-import type { AddressRow, AppState, Completion, Outcome, DaySession, Arrangement } from "./types";
+import type {
+  AddressRow,
+  AppState,
+  Completion,
+  Outcome,
+  DaySession,
+  Arrangement,
+} from "./types";
 
-const STORAGE_KEY = "navigator_state_v3"; // Updated version for arrangements
+const STORAGE_KEY = "navigator_state_v3"; // versioned for arrangements
 
 const initial: AppState = {
   addresses: [],
@@ -17,17 +24,17 @@ export function useAppState() {
   const [state, setState] = React.useState<AppState>(initial);
   const [loading, setLoading] = React.useState(true);
 
-  // Load persisted state
+  // ---- load from IndexedDB ----
   React.useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const saved = (await get(STORAGE_KEY)) as AppState | undefined;
         if (alive && saved) {
-          // Handle migration from older versions
           setState({
             ...saved,
-            arrangements: saved.arrangements || [],
+            // migrate older snapshots that might not have arrangements
+            arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
           });
         }
       } finally {
@@ -39,21 +46,23 @@ export function useAppState() {
     };
   }, []);
 
-  // Persist on every change (debounced) - only when not loading
+  // ---- persist to IndexedDB (debounced) ----
   React.useEffect(() => {
     if (loading) return;
-    const t = setTimeout(() => set(STORAGE_KEY, state).catch(() => {}), 150);
+    const t = setTimeout(() => {
+      set(STORAGE_KEY, state).catch(() => {});
+    }, 150);
     return () => clearTimeout(t);
   }, [state, loading]);
 
-  // ---- existing actions ----
+  // ---------------- actions ----------------
 
   const setAddresses = React.useCallback((rows: AddressRow[]) => {
     setState((s) => ({
       ...s,
-      addresses: rows,
+      addresses: Array.isArray(rows) ? rows : [],
       activeIndex: null,
-      // keep existing completions/sessions/arrangements
+      // keep completions/daySessions/arrangements
     }));
   }, []);
 
@@ -65,47 +74,61 @@ export function useAppState() {
     setState((s) => ({ ...s, activeIndex: null }));
   }, []);
 
-  const complete = React.useCallback((index: number, outcome: Outcome, amount?: string) => {
+  /**
+   * Record a completion for an address index.
+   * Writes BOTH `timestamp` and `ts` so merges/filters across devices agree.
+   */
+  const complete = React.useCallback(
+    (index: number, outcome: Outcome, amount?: string) => {
+      setState((s) => {
+        const a = s.addresses[index];
+        if (!a) return s;
+
+        const nowISO = new Date().toISOString();
+        const c: Completion = {
+          index,
+          address: a.address,
+          lat: a.lat ?? null,
+          lng: a.lng ?? null,
+          outcome,
+          amount,
+          timestamp: nowISO, // primary
+          ts: nowISO,        // back-compat for readers/merges
+        };
+
+        const next: AppState = {
+          ...s,
+          completions: [c, ...s.completions],
+        };
+        if (s.activeIndex === index) next.activeIndex = null;
+        return next;
+      });
+    },
+    []
+  );
+
+  /**
+   * Undo the most recent completion for the given address index.
+   * (Removes the first match only, not all historical entries.)
+   */
+  const undo = React.useCallback((index: number) => {
     setState((s) => {
-      const a = s.addresses[index];
-      if (!a) return s;
-      const now = new Date().toISOString();
-      const c: Completion = {
-        index,
-        address: a.address,
-        lat: a.lat ?? undefined,
-        lng: a.lng ?? undefined,
-        outcome,
-        amount,
-        timestamp: now,
-      };
-      const next: AppState = {
-        ...s,
-        completions: [c, ...s.completions],
-      };
-      // Clear active if it's the one just completed
-      if (s.activeIndex === index) next.activeIndex = null;
-      return next;
+      const arr = s.completions.slice();
+      const pos = arr.findIndex((c) => Number(c.index) === Number(index));
+      if (pos >= 0) arr.splice(pos, 1);
+      return { ...s, completions: arr };
     });
   }, []);
 
-  const undo = React.useCallback((index: number) => {
-    setState((s) => ({
-      ...s,
-      completions: s.completions.filter((c) => c.index !== index),
-    }));
-  }, []);
+  // ---- day tracking ----
 
-  // Day tracking
   const startDay = React.useCallback(() => {
     setState((s) => {
-      // if already active, no-op
-      const hasActive = s.daySessions.some((d) => !d.end);
-      if (hasActive) return s;
-      const today = new Date();
+      if (s.daySessions.some((d) => !d.end)) return s; // already active
+      const now = new Date();
       const sess: DaySession = {
-        date: today.toISOString().slice(0, 10),
-        start: today.toISOString(),
+        date: now.toISOString().slice(0, 10),
+        start: now.toISOString(),
       };
       return { ...s, daySessions: [...s.daySessions, sess] };
     });
@@ -131,32 +154,33 @@ export function useAppState() {
     });
   }, []);
 
-  // ---- arrangement actions ----
+  // ---- arrangements ----
 
-  const addArrangement = React.useCallback((arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => {
-    setState((s) => {
-      const now = new Date().toISOString();
-      const newArrangement: Arrangement = {
-        ...arrangementData,
-        id: `arr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        createdAt: now,
-        updatedAt: now,
-      };
-      
-      return {
-        ...s,
-        arrangements: [...s.arrangements, newArrangement],
-      };
-    });
-  }, []);
+  const addArrangement = React.useCallback(
+    (arrangementData: Omit<Arrangement, "id" | "createdAt" | "updatedAt">) => {
+      setState((s) => {
+        const now = new Date().toISOString();
+        const newArrangement: Arrangement = {
+          ...arrangementData,
+          id: `arr_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        return {
+          ...s,
+          arrangements: [...s.arrangements, newArrangement],
+        };
+      });
+    },
+    []
+  );
 
   const updateArrangement = React.useCallback((id: string, updates: Partial<Arrangement>) => {
     setState((s) => ({
       ...s,
-      arrangements: s.arrangements.map(arr => 
-        arr.id === id 
-          ? { ...arr, ...updates, updatedAt: new Date().toISOString() }
-          : arr
+      arrangements: s.arrangements.map((arr) =>
+        arr.id === id ? { ...arr, ...updates, updatedAt: new Date().toISOString() } : arr
       ),
     }));
   }, []);
@@ -164,11 +188,11 @@ export function useAppState() {
   const deleteArrangement = React.useCallback((id: string) => {
     setState((s) => ({
       ...s,
-      arrangements: s.arrangements.filter(arr => arr.id !== id),
+      arrangements: s.arrangements.filter((arr) => arr.id !== id),
     }));
   }, []);
 
-  // ---- backup/restore ----
+  // ---- backup / restore ----
 
   function isValidState(obj: any): obj is AppState {
     return (
@@ -178,19 +202,18 @@ export function useAppState() {
       Array.isArray(obj.completions) &&
       "activeIndex" in obj &&
       Array.isArray(obj.daySessions)
-      // arrangements is optional for backward compatibility
     );
   }
 
   const backupState = React.useCallback(() => {
-    // Return a snapshot; caller can download it as JSON
-    return {
+    const snap: AppState = {
       addresses: state.addresses,
       completions: state.completions,
       activeIndex: state.activeIndex,
       daySessions: state.daySessions,
       arrangements: state.arrangements,
-    } as AppState;
+    };
+    return snap;
   }, [state]);
 
   const restoreState = React.useCallback((obj: unknown) => {
@@ -203,22 +226,25 @@ export function useAppState() {
       arrangements: obj.arrangements ?? [],
     };
     setState(snapshot);
-    // Optional: persist immediately (in addition to the debounced effect)
     set(STORAGE_KEY, snapshot).catch(() => {});
   }, []);
 
   return {
     state,
     loading,
-    setState, // Expose setState for cloud sync
+    setState, // for cloud sync integrations
+    // addresses
     setAddresses,
+    // active
     setActive,
     cancelActive,
+    // completions
     complete,
     undo,
+    // day sessions
     startDay,
     endDay,
-    // arrangement functions
+    // arrangements
     addArrangement,
     updateArrangement,
     deleteArrangement,
