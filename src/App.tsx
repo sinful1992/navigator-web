@@ -13,7 +13,7 @@ import type { Outcome } from "./types";
 
 type Tab = "list" | "completed" | "arrangements";
 
-// ---- helpers ---------------------------------------------------------------
+/* -------------------- helpers -------------------- */
 
 function normalizeState(raw: any) {
   const r = raw ?? {};
@@ -23,27 +23,31 @@ function normalizeState(raw: any) {
     completions: Array.isArray(r.completions) ? r.completions : [],
     arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
     daySessions: Array.isArray(r.daySessions) ? r.daySessions : [],
-    activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null, // per-device
+    activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
   };
 }
 
-/** Build the object we actually send to the cloud (exclude per-device fields). */
+/** What we send to the cloud (exclude per-device UI fields). */
 function toCloudPayload(state: any) {
   const s = normalizeState(state);
   const { activeIndex, ...rest } = s;
   return rest;
 }
 
-/** Merge local → remote without losing work made on another device. */
+/** Get comparable time for a completion (newest wins). */
+const stamp = (c: any) =>
+  Number(new Date(c?.timestamp ?? c?.ts ?? c?.time ?? 0)) || 0;
+
+/** Merge remote & local without losing work from either device. */
 function mergeStates(remote: any, local: any) {
   const R = normalizeState(remote);
   const L = normalizeState(local);
 
-  // Addresses: prefer any non-empty remote list, otherwise local
+  // Addresses: prefer the longer list (simple heuristic)
   const addresses =
     (R.addresses?.length ?? 0) >= (L.addresses?.length ?? 0) ? R.addresses : L.addresses;
 
-  // Completions: union by index, prefer newer timestamp if present
+  // Completions: union by index; prefer newer timestamp
   const byIndex = new Map<number, any>();
   const put = (c: any) => {
     const idx = Number(c?.index);
@@ -52,16 +56,12 @@ function mergeStates(remote: any, local: any) {
     if (!prev) {
       byIndex.set(idx, c);
     } else {
-      const pt = Number(new Date(prev.ts || prev.time || 0));
-      const nt = Number(new Date(c.ts || c.time || 0));
-      if (nt > pt) byIndex.set(idx, c);
+      if (stamp(c) > stamp(prev)) byIndex.set(idx, c);
     }
   };
   (R.completions || []).forEach(put);
   (L.completions || []).forEach(put);
-  const completions = Array.from(byIndex.values()).sort(
-    (a, b) => Number(new Date(b.ts || b.time || 0)) - Number(new Date(a.ts || a.time || 0))
-  );
+  const completions = Array.from(byIndex.values()).sort((a, b) => stamp(b) - stamp(a));
 
   // Day sessions: merge by (id || start)
   const dsKey = (d: any) => String(d?.id ?? d?.start ?? JSON.stringify(d ?? {}));
@@ -72,39 +72,35 @@ function mergeStates(remote: any, local: any) {
     const r = dsMap.get(k);
     if (!r) dsMap.set(k, d);
     else {
+      // prefer one that has end; otherwise the later start
       if (r.end && !d.end) continue;
       if (!r.end && d.end) dsMap.set(k, d);
-      else {
-        const rt = Number(new Date(r.start || 0));
-        const lt = Number(new Date(d.start || 0));
-        if (lt >= rt) dsMap.set(k, d);
-      }
+      else if (Number(new Date(d.start || 0)) >= Number(new Date(r.start || 0))) dsMap.set(k, d);
     }
   }
   const daySessions = Array.from(dsMap.values()).sort(
     (a, b) => Number(new Date(a.start || 0)) - Number(new Date(b.start || 0))
   );
 
-  // Arrangements: merge by (id || address+date), prefer newer updatedAt/ts
-  const arrKey = (x: any) => String(x?.id ?? `${x?.address ?? ""}#${x?.date ?? ""}`);
+  // Arrangements: merge by (id || address+date), prefer newer updatedAt/ts/timestamp
+  const arrKey = (x: any) => String(x?.id ?? `${x?.address ?? ""}#${x?.scheduledDate ?? ""}`);
+  const arrStamp = (x: any) =>
+    Number(new Date(x?.updatedAt ?? x?.timestamp ?? x?.ts ?? 0)) || 0;
   const am = new Map<string, any>();
   for (const a of R.arrangements || []) am.set(arrKey(a), a);
   for (const a of L.arrangements || []) {
     const k = arrKey(a);
     const r = am.get(k);
     if (!r) am.set(k, a);
-    else {
-      const rt = Number(new Date(r.updatedAt || r.ts || 0));
-      const lt = Number(new Date(a.updatedAt || a.ts || 0));
-      if (lt >= rt) am.set(k, a);
-    }
+    else if (arrStamp(a) >= arrStamp(r)) am.set(k, a);
   }
   const arrangements = Array.from(am.values());
 
   return { ...R, addresses, completions, daySessions, arrangements };
 }
 
-// Simple error boundary (avoid blank screen)
+/* -------------------- error boundary -------------------- */
+
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -132,7 +128,7 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-// ---- App -------------------------------------------------------------------
+/* -------------------- app -------------------- */
 
 export default function App() {
   const cloud = useCloudSync();
@@ -200,9 +196,8 @@ function AuthedApp() {
     React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
-  // hydration & baseline
   const [hydrated, setHydrated] = React.useState(false);
-  const lastRemoteRef = React.useRef<any | null>(null); // parsed remote snapshot
+  const lastRemoteRef = React.useRef<any | null>(null); // baseline (cloud snapshot w/o activeIndex)
 
   // Safe slices
   const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
@@ -215,14 +210,14 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ---- Subscribe first; do not push on mount --------------------------------
+  /* ---- subscribe first; don't push on mount ---- */
   React.useEffect(() => {
     if (!cloud.user) return;
-    let unsub: (() => void) | undefined;
+    let unsub: undefined | (() => void);
 
     const onRemote = (remote: any) => {
       const normalized = normalizeState(remote);
-      lastRemoteRef.current = toCloudPayload(normalized); // baseline
+      lastRemoteRef.current = toCloudPayload(normalized); // baseline for merges
       setState((prev: any) => ({ ...normalized, activeIndex: prev?.activeIndex ?? null }));
       setLastSyncTime(new Date());
       setHydrated(true);
@@ -230,8 +225,8 @@ function AuthedApp() {
 
     try {
       unsub = cloud.subscribeToData(onRemote);
-    } catch (e) {
-      console.error("subscribe failed:", e);
+    } catch (err) {
+      console.error("subscribe failed:", err);
     }
 
     const t = setTimeout(() => {
@@ -248,7 +243,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloud.user]);
 
-  // ---- Debounced push with MERGE against latest remote ----------------------
+  /* ---- debounced push with merge ---- */
   React.useEffect(() => {
     if (!cloud.user || loading || !hydrated) return;
 
@@ -272,7 +267,7 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [cloud.user, loading, hydrated, safeState, cloud]);
 
-  // ----- UI helpers ----------------------------------------------------------
+  /* ---- UI helpers ---- */
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
     setTab("arrangements");
@@ -295,7 +290,7 @@ function AuthedApp() {
 
   const hasActiveSession = daySessions.some((d: any) => !d.end);
 
-  // Keyboard shortcuts (List tab only)
+  // keyboard shortcuts (unchanged)
   React.useEffect(() => {
     if (tab !== "list") return;
     const isTypingTarget = (el: EventTarget | null) => {
@@ -364,13 +359,13 @@ function AuthedApp() {
     endDay,
   ]);
 
-  // ----- Backup / Restore ----------------------------------------------------
+  /* ---- backup / restore ---- */
   const onBackup = () => {
     const snap = backupState();
-    const stamp = new Date();
-    const y = String(stamp.getFullYear());
-    const m = String(stamp.getMonth() + 1).padStart(2, "0");
-    const d = String(stamp.getDate()).padStart(2, "0");
+    const dt = new Date();
+    const y = String(dt.getFullYear());
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const d = String(dt.getDate()).padStart(2, "0");
     downloadJson(`navigator-backup-${y}${m}${d}.json`, snap);
   };
 
@@ -394,7 +389,7 @@ function AuthedApp() {
     }
   };
 
-  // ----- Stats ---------------------------------------------------------------
+  /* ---- stats ---- */
   const stats = React.useMemo(() => {
     const total = addresses.length;
     const completedCount = completions.length;
@@ -418,7 +413,7 @@ function AuthedApp() {
     );
   }
 
-  // ---- UI -------------------------------------------------------------------
+  /* ---- UI ---- */
   return (
     <div className="container">
       {/* Header */}
@@ -451,7 +446,9 @@ function AuthedApp() {
 
         <div className="right">
           <div className="user-chip" role="group" aria-label="Account">
-            <span className="avatar" aria-hidden>👤</span>
+            <span className="avatar" aria-hidden>
+              👤
+            </span>
             <span className="email" title={cloud.user?.email ?? ""}>
               {cloud.user?.email ?? "Signed in"}
             </span>
@@ -464,10 +461,18 @@ function AuthedApp() {
             <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
               📋 List ({stats.pending})
             </button>
-            <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "completed"}
+              onClick={() => setTab("completed")}
+            >
               ✅ Completed ({stats.completed})
             </button>
-            <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "arrangements"}
+              onClick={() => setTab("arrangements")}
+            >
               📅 Arrangements ({arrangements.length})
             </button>
           </div>
@@ -501,7 +506,9 @@ function AuthedApp() {
           <div className="btn-row">
             <ImportExcel onImported={setAddresses} />
             <div className="btn-spacer" />
-            <button className="btn btn-ghost" onClick={onBackup}>💾 Backup</button>
+            <button className="btn btn-ghost" onClick={onBackup}>
+              💾 Backup
+            </button>
 
             <div className="file-input-wrapper">
               <input
@@ -511,7 +518,9 @@ function AuthedApp() {
                 className="file-input"
                 id="restore-input"
               />
-              <label htmlFor="restore-input" className="file-input-label">📤 Restore</label>
+              <label htmlFor="restore-input" className="file-input-label">
+                📤 Restore
+              </label>
             </div>
           </div>
         </div>
@@ -534,11 +543,32 @@ function AuthedApp() {
 
           {/* Stats */}
           <div className="top-row">
-            <div className="stat-item"><div className="stat-label">Total</div><div className="stat-value">{stats.total}</div></div>
-            <div className="stat-item"><div className="stat-label">Pending</div><div className="stat-value">{stats.pending}</div></div>
-            <div className="stat-item"><div className="stat-label">PIF</div><div className="stat-value" style={{ color: "var(--success)" }}>{stats.pifCount}</div></div>
-            <div className="stat-item"><div className="stat-label">Done</div><div className="stat-value" style={{ color: "var(--primary)" }}>{stats.doneCount}</div></div>
-            <div className="stat-item"><div className="stat-label">DA</div><div className="stat-value" style={{ color: "var(--danger)" }}>{stats.daCount}</div></div>
+            <div className="stat-item">
+              <div className="stat-label">Total</div>
+              <div className="stat-value">{stats.total}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Pending</div>
+              <div className="stat-value">{stats.pending}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">PIF</div>
+              <div className="stat-value" style={{ color: "var(--success)" }}>
+                {stats.pifCount}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Done</div>
+              <div className="stat-value" style={{ color: "var(--primary)" }}>
+                {stats.doneCount}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">DA</div>
+              <div className="stat-value" style={{ color: "var(--danger)" }}>
+                {stats.daCount}
+              </div>
+            </div>
             {safeState.activeIndex != null && (
               <div className="stat-item">
                 <div className="stat-label">Active</div>
@@ -556,7 +586,10 @@ function AuthedApp() {
             complete={(i: number, outcome: Outcome, amount?: string) => {
               complete(i, outcome, amount);
             }}
-            onCreateArrangement={handleCreateArrangement}
+            onCreateArrangement={(index) => {
+              setAutoCreateArrangementFor(index);
+              setTab("arrangements");
+            }}
             filterText={search}
           />
 
@@ -578,7 +611,7 @@ function AuthedApp() {
         <Completed
           state={safeState}
           onChangeOutcome={(index, outcome, amount) => {
-            // Change outcome by undoing then re-completing
+            // change outcome = undo then re-complete (will stamp with new now)
             undo(index);
             setTimeout(() => complete(index, outcome as Outcome, amount), 0);
           }}
@@ -587,54 +620,7 @@ function AuthedApp() {
       ) : (
         <Arrangements
           state={safeState}
-          // Add/complete ARR even if address isn't currently on the list
-          onAddArrangement={(arr: any) => {
-            addArrangement(arr);
-
-            // Try to find an existing address index
-            let idx: number | null = null;
-
-            if (typeof arr?.addressIndex === "number") {
-              idx = arr.addressIndex;
-            } else if (typeof arr?.index === "number") {
-              idx = arr.index;
-            } else if (arr?.address) {
-              const target = String(arr.address).trim().toLowerCase();
-              const found = (safeState.addresses || []).findIndex(
-                (a: any) => String(a?.address ?? "").trim().toLowerCase() === target
-              );
-              if (found >= 0) idx = found;
-            }
-
-            if (idx == null) {
-              if (!arr?.address) {
-                alert("Arrangement saved, but no address was provided to link it.");
-                return;
-              }
-
-              const trimmed = String(arr.address).trim();
-              const newIndex = (safeState.addresses?.length ?? 0);
-
-              // Append new address
-              setState((prev: any) => {
-                const prevList = Array.isArray(prev?.addresses) ? prev.addresses : [];
-                return {
-                  ...prev,
-                  addresses: [
-                    ...prevList,
-                    { address: trimmed, lat: arr.lat ?? null, lng: arr.lng ?? null },
-                  ],
-                };
-              });
-
-              // Complete as ARR next tick
-              setTimeout(() => complete(newIndex, "ARR"), 0);
-              return;
-            }
-
-            // Already exists → just complete as ARR
-            complete(idx, "ARR");
-          }}
+          onAddArrangement={addArrangement}
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
           autoCreateForAddress={autoCreateArrangementFor}
