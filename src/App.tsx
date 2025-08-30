@@ -1,3 +1,4 @@
+// src/App.tsx
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -27,23 +28,23 @@ function normalizeState(raw: any) {
   };
 }
 
-/** What we send to the cloud (exclude per-device UI fields). */
+/** Strip per-device UI fields before pushing to cloud. */
 function toCloudPayload(state: any) {
   const s = normalizeState(state);
   const { activeIndex, ...rest } = s;
   return rest;
 }
 
-/** Get comparable time for a completion (newest wins). */
+/** Comparable time for completions (newest wins). */
 const stamp = (c: any) =>
   Number(new Date(c?.timestamp ?? c?.ts ?? c?.time ?? 0)) || 0;
 
-/** Merge remote & local without losing work from either device. */
+/** Merge remote & local without losing work. */
 function mergeStates(remote: any, local: any) {
   const R = normalizeState(remote);
   const L = normalizeState(local);
 
-  // Addresses: prefer the longer list (simple heuristic)
+  // Addresses: prefer the longer list
   const addresses =
     (R.addresses?.length ?? 0) >= (L.addresses?.length ?? 0) ? R.addresses : L.addresses;
 
@@ -197,7 +198,7 @@ function AuthedApp() {
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
   const [hydrated, setHydrated] = React.useState(false);
-  const lastRemoteRef = React.useRef<any | null>(null); // baseline (cloud snapshot w/o activeIndex)
+  const lastRemoteRef = React.useRef<any | null>(null); // baseline cloud snapshot (sans activeIndex)
 
   // Safe slices
   const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
@@ -267,7 +268,9 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [cloud.user, loading, hydrated, safeState, cloud]);
 
-  /* ---- UI helpers ---- */
+  /* ---- handlers ---- */
+
+  // ✅ BEST OPTION: declare once and reuse (prevents TS6133)
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
     setTab("arrangements");
@@ -290,7 +293,7 @@ function AuthedApp() {
 
   const hasActiveSession = daySessions.some((d: any) => !d.end);
 
-  // keyboard shortcuts (unchanged)
+  // keyboard shortcuts
   React.useEffect(() => {
     if (tab !== "list") return;
     const isTypingTarget = (el: EventTarget | null) => {
@@ -375,7 +378,9 @@ function AuthedApp() {
     try {
       const raw = await readJsonFile(file);
       const data = normalizeState(raw);
-      restoreState(data); // local
+      // local
+      restoreState(data);
+      // merge with latest remote and push
       const merged = mergeStates(lastRemoteRef.current ?? {}, toCloudPayload(data));
       await cloud.syncData(merged);
       lastRemoteRef.current = merged;
@@ -586,10 +591,7 @@ function AuthedApp() {
             complete={(i: number, outcome: Outcome, amount?: string) => {
               complete(i, outcome, amount);
             }}
-            onCreateArrangement={(index) => {
-              setAutoCreateArrangementFor(index);
-              setTab("arrangements");
-            }}
+            onCreateArrangement={handleCreateArrangement}  // ✅ used here
             filterText={search}
           />
 
@@ -611,7 +613,7 @@ function AuthedApp() {
         <Completed
           state={safeState}
           onChangeOutcome={(index, outcome, amount) => {
-            // change outcome = undo then re-complete (will stamp with new now)
+            // change outcome = undo then re-complete (new timestamp)
             undo(index);
             setTimeout(() => complete(index, outcome as Outcome, amount), 0);
           }}
