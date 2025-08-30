@@ -9,9 +9,9 @@ import { Completed } from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
+import type { Outcome } from "./types";
 
 type Tab = "list" | "completed" | "arrangements";
-type Outcome = "Done" | "DA" | "PIF" | "ARR";
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -587,7 +587,7 @@ function AuthedApp() {
       ) : (
         <Arrangements
           state={safeState}
-          // ⬇️ Add/complete ARR even if address isn't currently on the list
+          // Add/complete ARR even if address isn't currently on the list
           onAddArrangement={(arr: any) => {
             addArrangement(arr);
 
