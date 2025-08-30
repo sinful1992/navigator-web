@@ -16,7 +16,6 @@ export function DayPanel({ sessions, completions, startDay, endDay }: Props) {
     [sessions]
   );
 
-  // Today's completions (using timestamp || ts || time)
   const today = new Date();
   const todays = React.useMemo(() => {
     if (!Array.isArray(completions)) return [];
@@ -28,7 +27,7 @@ export function DayPanel({ sessions, completions, startDay, endDay }: Props) {
     });
   }, [completions]);
 
-  // Outcome counts: include ARR
+  // Include ARR in the counts and type it as Record<Outcome, number>
   const counts: Record<Outcome, number> = React.useMemo(
     () => ({ PIF: 0, Done: 0, DA: 0, ARR: 0 }),
     []
@@ -39,9 +38,7 @@ export function DayPanel({ sessions, completions, startDay, endDay }: Props) {
     if (o && o in counts) counts[o] += 1;
   }
 
-  const startedAt = activeSession?.start
-    ? new Date(activeSession.start)
-    : null;
+  const startedAt = activeSession?.start ? new Date(activeSession.start) : null;
 
   return (
     <div className={`day-panel ${activeSession ? "day-panel-active" : ""}`}>
@@ -52,9 +49,7 @@ export function DayPanel({ sessions, completions, startDay, endDay }: Props) {
               <>
                 <span className="pill pill-active">Day Active</span>
                 {startedAt && (
-                  <span className="muted">
-                    since {startedAt.toLocaleTimeString()}
-                  </span>
+                  <span className="muted">since {startedAt.toLocaleTimeString()}</span>
                 )}
               </>
             ) : (
