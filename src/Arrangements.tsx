@@ -1,13 +1,14 @@
 // src/Arrangements.tsx
 import * as React from "react";
 import { format, parseISO, isWithinInterval, startOfWeek, endOfWeek, isSameDay, isPast, addDays } from "date-fns";
-import type { AppState, Arrangement, ArrangementStatus } from "./types";
+import type { AppState, Arrangement, ArrangementStatus, AddressRow } from "./types";
 
 type Props = {
   state: AppState;
   onAddArrangement: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateArrangement: (id: string, updates: Partial<Arrangement>) => void;
   onDeleteArrangement: (id: string) => void;
+  onAddAddress?: (address: AddressRow) => Promise<number>; // Returns the new address index
   autoCreateForAddress?: number | null;
   onAutoCreateHandled?: () => void;
 };
@@ -19,6 +20,7 @@ export function Arrangements({
   onAddArrangement, 
   onUpdateArrangement, 
   onDeleteArrangement,
+  onAddAddress,
   autoCreateForAddress,
   onAutoCreateHandled
 }: Props) {
@@ -146,6 +148,28 @@ export function Arrangements({
     });
   };
 
+  // Handle arrangement creation with potential address addition
+  const handleArrangementSave = async (arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      await onAddArrangement(arrangementData);
+      setShowAddForm(false);
+      setEditingId(null);
+    } catch (error) {
+      console.error('Error saving arrangement:', error);
+      alert('Failed to save arrangement. Please try again.');
+    }
+  };
+
+  const handleArrangementUpdate = async (id: string, arrangementData: Partial<Arrangement>) => {
+    try {
+      await onUpdateArrangement(id, arrangementData);
+      setEditingId(null);
+    } catch (error) {
+      console.error('Error updating arrangement:', error);
+      alert('Failed to update arrangement. Please try again.');
+    }
+  };
+
   return (
     <div className="arrangements-wrap">
       {/* Header with view toggle */}
@@ -208,15 +232,8 @@ export function Arrangements({
           state={state}
           arrangement={editingId ? state.arrangements.find(a => a.id === editingId) : undefined}
           preSelectedAddressIndex={autoCreateForAddress}
-          onSave={(arrangement) => {
-            if (editingId) {
-              onUpdateArrangement(editingId, arrangement);
-              setEditingId(null);
-            } else {
-              onAddArrangement(arrangement);
-              setShowAddForm(false);
-            }
-          }}
+          onAddAddress={onAddAddress}
+          onSave={editingId ? handleArrangementUpdate.bind(null, editingId) : handleArrangementSave}
           onCancel={() => {
             setShowAddForm(false);
             setEditingId(null);
@@ -371,13 +388,19 @@ type FormProps = {
   state: AppState;
   arrangement?: Arrangement;
   preSelectedAddressIndex?: number | null;
-  onSave: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onAddAddress?: (address: AddressRow) => Promise<number>;
+  onSave: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void> | void;
   onCancel: () => void;
 };
 
-function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onSave, onCancel }: FormProps) {
+function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAddress, onSave, onCancel }: FormProps) {
+  const [addressMode, setAddressMode] = React.useState<"existing" | "manual">(
+    preSelectedAddressIndex !== null && preSelectedAddressIndex !== undefined ? "existing" : "existing"
+  );
+  
   const [formData, setFormData] = React.useState({
     addressIndex: arrangement?.addressIndex ?? preSelectedAddressIndex ?? 0,
+    manualAddress: "",
     customerName: arrangement?.customerName ?? "",
     phoneNumber: arrangement?.phoneNumber ?? "",
     scheduledDate: arrangement?.scheduledDate ?? new Date().toISOString().slice(0, 10),
@@ -387,25 +410,78 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onSave, 
     status: arrangement?.status ?? "Scheduled" as ArrangementStatus,
   });
 
-  const selectedAddress = state.addresses[formData.addressIndex];
+  const selectedAddress = addressMode === "existing" ? state.addresses[formData.addressIndex] : null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedAddress) {
-      alert("Please select a valid address");
-      return;
-    }
-
     if (!formData.amount || parseFloat(formData.amount) <= 0) {
       alert("Please enter a valid payment amount");
       return;
     }
 
-    onSave({
-      ...formData,
-      address: selectedAddress.address,
-    });
+    let finalAddressIndex = formData.addressIndex;
+    let finalAddress = "";
+
+    if (addressMode === "existing") {
+      if (!selectedAddress) {
+        alert("Please select a valid address");
+        return;
+      }
+      finalAddress = selectedAddress.address;
+    } else {
+      // Manual address mode
+      if (!formData.manualAddress.trim()) {
+        alert("Please enter an address");
+        return;
+      }
+
+      // Check if this address already exists in the list
+      const existingIndex = state.addresses.findIndex(
+        addr => addr.address.toLowerCase().trim() === formData.manualAddress.toLowerCase().trim()
+      );
+
+      if (existingIndex >= 0) {
+        // Address already exists, use existing index
+        finalAddressIndex = existingIndex;
+        finalAddress = state.addresses[existingIndex].address;
+      } else {
+        // New address, add it to the list
+        if (!onAddAddress) {
+          alert("Cannot add new addresses - missing onAddAddress handler");
+          return;
+        }
+
+        try {
+          const newAddressRow: AddressRow = {
+            address: formData.manualAddress.trim(),
+            lat: null,
+            lng: null
+          };
+          
+          finalAddressIndex = await onAddAddress(newAddressRow);
+          finalAddress = newAddressRow.address;
+        } catch (error) {
+          console.error('Error adding address:', error);
+          alert('Failed to add new address. Please try again.');
+          return;
+        }
+      }
+    }
+
+    const arrangementData = {
+      addressIndex: finalAddressIndex,
+      address: finalAddress,
+      customerName: formData.customerName,
+      phoneNumber: formData.phoneNumber,
+      scheduledDate: formData.scheduledDate,
+      scheduledTime: formData.scheduledTime,
+      amount: formData.amount,
+      notes: formData.notes,
+      status: formData.status,
+    };
+
+    await onSave(arrangementData);
   };
 
   return (
@@ -418,21 +494,75 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onSave, 
       
       <div className="card-body">
         <form onSubmit={handleSubmit} className="form-grid">
-          <div className="form-group">
-            <label>📍 Address *</label>
-            <select 
-              value={formData.addressIndex}
-              onChange={(e) => setFormData(prev => ({ ...prev, addressIndex: parseInt(e.target.value) }))}
-              className="input"
-              required
-            >
-              {state.addresses.map((addr, idx) => (
-                <option key={idx} value={idx}>
-                  #{idx + 1} - {addr.address}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Address Mode Toggle */}
+          {!arrangement && (
+            <div className="form-group form-group-full">
+              <label>📍 Address Source</label>
+              <div className="btn-group">
+                <button
+                  type="button"
+                  className={`btn ${addressMode === "existing" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setAddressMode("existing")}
+                >
+                  📋 From List
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${addressMode === "manual" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setAddressMode("manual")}
+                >
+                  ✏️ Enter Manually
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Address Selection */}
+          {addressMode === "existing" ? (
+            <div className="form-group form-group-full">
+              <label>📍 Address *</label>
+              {state.addresses.length === 0 ? (
+                <div style={{ 
+                  padding: "0.75rem", 
+                  backgroundColor: "var(--warning-light)", 
+                  border: "1px solid var(--warning)",
+                  borderRadius: "var(--radius)",
+                  color: "var(--warning)",
+                  fontSize: "0.875rem"
+                }}>
+                  ⚠️ No addresses in your list. Switch to "Enter Manually" to add a new address.
+                </div>
+              ) : (
+                <select 
+                  value={formData.addressIndex}
+                  onChange={(e) => setFormData(prev => ({ ...prev, addressIndex: parseInt(e.target.value) }))}
+                  className="input"
+                  required
+                >
+                  {state.addresses.map((addr, idx) => (
+                    <option key={idx} value={idx}>
+                      #{idx + 1} - {addr.address}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          ) : (
+            <div className="form-group form-group-full">
+              <label>📍 Address *</label>
+              <input
+                type="text"
+                value={formData.manualAddress}
+                onChange={(e) => setFormData(prev => ({ ...prev, manualAddress: e.target.value }))}
+                className="input"
+                placeholder="Enter full address"
+                required
+              />
+              <div style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
+                💡 If this address doesn't exist in your list, it will be automatically added.
+              </div>
+            </div>
+          )}
 
           <div className="form-group">
             <label>💰 Payment Amount *</label>
@@ -509,7 +639,12 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onSave, 
           <button type="button" className="btn btn-ghost" onClick={onCancel}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary" onClick={handleSubmit}>
+          <button 
+            type="submit" 
+            className="btn btn-primary" 
+            onClick={handleSubmit}
+            disabled={addressMode === "existing" && state.addresses.length === 0}
+          >
             {arrangement ? "💾 Update" : "📅 Create"} Arrangement
           </button>
         </div>
