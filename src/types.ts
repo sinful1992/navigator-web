@@ -1,11 +1,13 @@
 // src/types.ts
+
 export type AddressRow = {
   address: string;
   lat?: number | null;
   lng?: number | null;
 };
 
-export type Outcome = "PIF" | "DA" | "Done";
+/** Valid completion outcomes, including Arrangement ("ARR"). */
+export type Outcome = "PIF" | "DA" | "Done" | "ARR";
 
 export type Completion = {
   index: number;            // index in the address list at the time of completion
@@ -14,7 +16,11 @@ export type Completion = {
   lng?: number | null;
   outcome: Outcome;
   amount?: string;          // "12.34" (string to preserve formatting)
-  timestamp: string;        // ISO string
+  timestamp: string;        // ISO string (primary timestamp field)
+
+  // Optional compatibility fields used by some components:
+  ts?: string;              // ISO string (legacy alias)
+  time?: string;            // ISO string (legacy alias)
 };
 
 export type DaySession = {
@@ -24,7 +30,12 @@ export type DaySession = {
   durationSeconds?: number; // computed on end
 };
 
-export type ArrangementStatus = "Scheduled" | "Confirmed" | "Cancelled" | "Completed" | "Missed";
+export type ArrangementStatus =
+  | "Scheduled"
+  | "Confirmed"
+  | "Cancelled"
+  | "Completed"
+  | "Missed";
 
 export type Arrangement = {
   id: string;               // unique identifier
@@ -48,3 +59,4 @@ export type AppState = {
   daySessions: DaySession[];
   arrangements: Arrangement[];
 };
+```0
