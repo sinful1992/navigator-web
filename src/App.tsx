@@ -11,7 +11,7 @@ import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
 
 type Tab = "list" | "completed" | "arrangements";
-type Outcome = "Done" | "DA" | "PIF";
+type Outcome = "Done" | "DA" | "PIF" | "ARR";
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -554,7 +554,6 @@ function AuthedApp() {
             setActive={setActive}
             cancelActive={cancelActive}
             complete={(i: number, outcome: Outcome, amount?: string) => {
-              // call the state action; it should record timestamp internally
               complete(i, outcome, amount);
             }}
             onCreateArrangement={handleCreateArrangement}
@@ -579,16 +578,63 @@ function AuthedApp() {
         <Completed
           state={safeState}
           onChangeOutcome={(index, outcome, amount) => {
-          // Re-write the outcome by undoing then re-applying with the new choice
+            // Change outcome by undoing then re-completing
             undo(index);
-            setTimeout(() => complete(index, outcome, amount), 0);
+            setTimeout(() => complete(index, outcome as Outcome, amount), 0);
           }}
           onUndo={(index) => undo(index)}
         />
       ) : (
         <Arrangements
           state={safeState}
-          onAddArrangement={addArrangement}
+          // ⬇️ Add/complete ARR even if address isn't currently on the list
+          onAddArrangement={(arr: any) => {
+            addArrangement(arr);
+
+            // Try to find an existing address index
+            let idx: number | null = null;
+
+            if (typeof arr?.addressIndex === "number") {
+              idx = arr.addressIndex;
+            } else if (typeof arr?.index === "number") {
+              idx = arr.index;
+            } else if (arr?.address) {
+              const target = String(arr.address).trim().toLowerCase();
+              const found = (safeState.addresses || []).findIndex(
+                (a: any) => String(a?.address ?? "").trim().toLowerCase() === target
+              );
+              if (found >= 0) idx = found;
+            }
+
+            if (idx == null) {
+              if (!arr?.address) {
+                alert("Arrangement saved, but no address was provided to link it.");
+                return;
+              }
+
+              const trimmed = String(arr.address).trim();
+              const newIndex = (safeState.addresses?.length ?? 0);
+
+              // Append new address
+              setState((prev: any) => {
+                const prevList = Array.isArray(prev?.addresses) ? prev.addresses : [];
+                return {
+                  ...prev,
+                  addresses: [
+                    ...prevList,
+                    { address: trimmed, lat: arr.lat ?? null, lng: arr.lng ?? null },
+                  ],
+                };
+              });
+
+              // Complete as ARR next tick
+              setTimeout(() => complete(newIndex, "ARR"), 0);
+              return;
+            }
+
+            // Already exists → just complete as ARR
+            complete(idx, "ARR");
+          }}
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
           autoCreateForAddress={autoCreateArrangementFor}
