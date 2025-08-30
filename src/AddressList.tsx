@@ -1,6 +1,5 @@
 import * as React from "react";
-
-type Outcome = "Done" | "DA" | "PIF";
+import type { Outcome } from "./types";
 
 type Props = {
   state: any;
@@ -17,25 +16,19 @@ export function AddressList({
   cancelActive,
   complete,
   onCreateArrangement,
-  filterText = "",
+  filterText,
 }: Props) {
   const addresses: any[] = Array.isArray(state?.addresses) ? state.addresses : [];
-  const activeIndex: number | null =
-    typeof state?.activeIndex === "number" ? state.activeIndex : null;
+  const completions: any[] = Array.isArray(state?.completions) ? state.completions : [];
+  const activeIndex: number | null = typeof state?.activeIndex === "number" ? state.activeIndex : null;
 
-  // Build a Set of completed indices so we can hide them from the main list
-  const completionsArr: any[] = Array.isArray(state?.completions) ? state.completions : [];
+  // Completed indexes → hide them in the List tab
   const completedIdx = React.useMemo(
-    () =>
-      new Set(
-        completionsArr
-          .map((c) => Number(c?.index))
-          .filter((n) => Number.isFinite(n) && n >= 0)
-      ),
-    [completionsArr]
+    () => new Set(completions.map((c) => Number(c.index))),
+    [completions]
   );
 
-  const q = filterText.trim().toLowerCase();
+  const q = (filterText ?? "").trim().toLowerCase();
 
   // Visible rows (exclude completed)
   const rows = React.useMemo(
@@ -47,7 +40,7 @@ export function AddressList({
     [addresses, q, completedIdx]
   );
 
-  // State: which active row has its outcomes panel open
+  // Which active row has its outcomes panel open
   const [openOutcomesFor, setOpenOutcomesFor] = React.useState<number | null>(null);
 
   // Reset outcomes panel when active row changes
@@ -67,12 +60,12 @@ export function AddressList({
     const raw = (pifAmounts[i] ?? "").trim();
     const n = Number(raw);
     if (!Number.isFinite(n) || n <= 0) {
-      alert("Enter a valid PIF amount (e.g. 50).");
+      alert("Enter a valid amount (e.g., 50)");
       return;
     }
     complete(i, "PIF", n.toFixed(2));
     setPifAmounts((m) => ({ ...m, [i]: "" }));
-    setOpenOutcomesFor(null); // collapse after completion
+    setOpenOutcomesFor(null);
   };
 
   const markDone = (i: number) => {
@@ -115,7 +108,6 @@ export function AddressList({
 
               {isActive ? (
                 <>
-                  {/* When active, hide Arrange here (it will move next to DA in outcomes panel) */}
                   <button
                     className="btn btn-ghost"
                     onClick={() => {
@@ -146,7 +138,9 @@ export function AddressList({
                     Set Active
                   </button>
 
-                  {/* When NOT active, Arrange sits here in the action bar */}
+                  {/* Optional: Arrange available even when not active.
+                      If you want it ONLY after pressing Complete,
+                      you can remove this button block. */}
                   <button
                     className="btn btn-outline"
                     onClick={() => onCreateArrangement(i)}
@@ -178,7 +172,7 @@ export function AddressList({
                     🚫 DA
                   </button>
 
-                  {/* 🔁 Arrange moved next to DA when outcomes are shown */}
+                  {/* Arrange lives next to DA when outcomes are shown */}
                   <button
                     className="btn btn-outline"
                     onClick={() => onCreateArrangement(i)}
@@ -214,4 +208,4 @@ export function AddressList({
       })}
     </div>
   );
-}
+                }
