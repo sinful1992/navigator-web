@@ -1,9 +1,9 @@
+// src/Completed.tsx
 import * as React from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { isSameDay } from "date-fns";
-
-type Outcome = "Done" | "DA" | "PIF" | "ARR";
+import type { Outcome } from "./types";
 
 type Props = {
   state: any;
@@ -23,18 +23,18 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
   // Normalize + sort completions (newest first)
   const normalized = React.useMemo(() => {
     const toDate = (c: any): Date | null => {
-      const raw = c?.ts ?? c?.time ?? null;
-      const d = raw ? new Date(raw) : null;
-      return d && !isNaN(d as any) ? d : null;
+      const raw = c?.timestamp ?? c?.ts ?? c?.time ?? null; // support all timestamp shapes
+      if (!raw) return null;
+      const d = new Date(raw);
+      return isNaN(d as any) ? null : d;
     };
-    const arr = completions
+    return completions
       .map((c) => ({ ...c, _date: toDate(c) }))
       .sort((a, b) => {
         const at = a._date ? a._date.getTime() : 0;
         const bt = b._date ? b._date.getTime() : 0;
         return bt - at; // newest first
       });
-    return arr;
   }, [completions]);
 
   const filtered = React.useMemo(() => {
@@ -92,15 +92,15 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
           <p>Pick another day or clear the date filter.</p>
         </div>
       ) : (
-        filtered.map((c) => {
+        filtered.map((c, row) => {
           const idx = Number(c?.index);
           const rec = addresses[idx] ?? {};
-          const label = String(rec?.address ?? `#${idx + 1}`);
+          const label = String(rec?.address ?? c?.address ?? `#${idx + 1}`);
           const when = c._date;
           const isEditing = editingFor === idx;
 
           return (
-            <div key={`${idx}-${c._date?.toISOString?.() ?? ""}`} className="card">
+            <div key={`${idx}-${when?.toISOString?.() ?? row}`} className="card">
               <div className="card-header">
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                   <div
