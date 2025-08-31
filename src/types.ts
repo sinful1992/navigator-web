@@ -14,8 +14,9 @@ export type Completion = {
   lng?: number | null;
   outcome: Outcome;
   amount?: string;          // "12.34" (string to preserve formatting)
-  timestamp: string;        // ISO string (when recorded/edited)
-  // Some older code used "ts"; we keep timestamp as the canonical field.
+  timestamp: string;        // ISO string
+  /** The list version this completion belongs to (so new imports don't hide items). */
+  listVersion?: number;
 };
 
 export type DaySession = {
@@ -42,7 +43,7 @@ export type Arrangement = {
   scheduledTime?: string;   // optional time (HH:MM)
   status: ArrangementStatus;
   notes?: string;           // optional notes
-  amount?: string;          // expected amount
+  amount?: string;          // expected/actual amount
   createdAt: string;        // when arrangement was created
   updatedAt: string;        // when last modified
 };
@@ -53,4 +54,6 @@ export type AppState = {
   completions: Completion[];
   daySessions: DaySession[];
   arrangements: Arrangement[];
+  /** Increments whenever you import a new Excel list. */
+  currentListVersion: number;
 };
