@@ -10,16 +10,14 @@ import { Completed } from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
-import type { Outcome } from "./types";
 
 type Tab = "list" | "completed" | "arrangements";
-
-/* -------------------- helpers -------------------- */
 
 function normalizeState(raw: any) {
   const r = raw ?? {};
   return {
     ...r,
+    currentListVersion: typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
     addresses: Array.isArray(r.addresses) ? r.addresses : [],
     completions: Array.isArray(r.completions) ? r.completions : [],
     arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
@@ -27,80 +25,6 @@ function normalizeState(raw: any) {
     activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
   };
 }
-
-/** Strip per-device UI fields before pushing to cloud. */
-function toCloudPayload(state: any) {
-  const s = normalizeState(state);
-  const { activeIndex, ...rest } = s;
-  return rest;
-}
-
-/** Comparable time for completions (newest wins). */
-const stamp = (c: any) =>
-  Number(new Date(c?.timestamp ?? c?.ts ?? c?.time ?? 0)) || 0;
-
-/** Merge remote & local without losing work. */
-function mergeStates(remote: any, local: any) {
-  const R = normalizeState(remote);
-  const L = normalizeState(local);
-
-  // Addresses: prefer the longer list
-  const addresses =
-    (R.addresses?.length ?? 0) >= (L.addresses?.length ?? 0) ? R.addresses : L.addresses;
-
-  // Completions: union by index; prefer newer timestamp
-  const byIndex = new Map<number, any>();
-  const put = (c: any) => {
-    const idx = Number(c?.index);
-    if (!Number.isFinite(idx)) return;
-    const prev = byIndex.get(idx);
-    if (!prev) {
-      byIndex.set(idx, c);
-    } else {
-      if (stamp(c) > stamp(prev)) byIndex.set(idx, c);
-    }
-  };
-  (R.completions || []).forEach(put);
-  (L.completions || []).forEach(put);
-  const completions = Array.from(byIndex.values()).sort((a, b) => stamp(b) - stamp(a));
-
-  // Day sessions: merge by (id || start)
-  const dsKey = (d: any) => String(d?.id ?? d?.start ?? JSON.stringify(d ?? {}));
-  const dsMap = new Map<string, any>();
-  for (const d of R.daySessions || []) dsMap.set(dsKey(d), d);
-  for (const d of L.daySessions || []) {
-    const k = dsKey(d);
-    const r = dsMap.get(k);
-    if (!r) dsMap.set(k, d);
-    else {
-      // prefer one that has end; otherwise the later start
-      if (r.end && !d.end) continue;
-      if (!r.end && d.end) dsMap.set(k, d);
-      else if (Number(new Date(d.start || 0)) >= Number(new Date(r.start || 0))) dsMap.set(k, d);
-    }
-  }
-  const daySessions = Array.from(dsMap.values()).sort(
-    (a, b) => Number(new Date(a.start || 0)) - Number(new Date(b.start || 0))
-  );
-
-  // Arrangements: merge by (id || address+date), prefer newer updatedAt/ts/timestamp
-  const arrKey = (x: any) => String(x?.id ?? `${x?.address ?? ""}#${x?.scheduledDate ?? ""}`);
-  const arrStamp = (x: any) =>
-    Number(new Date(x?.updatedAt ?? x?.timestamp ?? x?.ts ?? 0)) || 0;
-  const am = new Map<string, any>();
-  for (const a of R.arrangements || []) am.set(arrKey(a), a);
-  for (const a of L.arrangements || []) {
-    const k = arrKey(a);
-    const r = am.get(k);
-    if (!r) am.set(k, a);
-    else if (arrStamp(a) >= arrStamp(r)) am.set(k, a);
-  }
-  const arrangements = Array.from(am.values());
-
-  return { ...R, addresses, completions, daySessions, arrangements };
-}
-
-/* -------------------- error boundary -------------------- */
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -129,12 +53,10 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-/* -------------------- app -------------------- */
-
 export default function App() {
-  const cloud = useCloudSync();
+  const cloudSync = useCloudSync();
 
-  if (cloud.isLoading) {
+  if (cloudSync.isLoading) {
     return (
       <div className="container">
         <div className="loading">
@@ -145,19 +67,19 @@ export default function App() {
     );
   }
 
-  if (!cloud.user) {
+  if (!cloudSync.user) {
     return (
       <ErrorBoundary>
         <Auth
           onSignIn={async (email, password) => {
-            await cloud.signIn(email, password);
+            await cloudSync.signIn(email, password);
           }}
           onSignUp={async (email, password) => {
-            await cloud.signUp(email, password);
+            await cloudSync.signUp(email, password);
           }}
-          isLoading={cloud.isLoading}
-          error={cloud.error}
-          onClearError={cloud.clearError}
+          isLoading={cloudSync.isLoading}
+          error={cloudSync.error}
+          onClearError={cloudSync.clearError}
         />
       </ErrorBoundary>
     );
@@ -175,7 +97,6 @@ function AuthedApp() {
     state,
     loading,
     setAddresses,
-    addAddress,
     setActive,
     cancelActive,
     complete,
@@ -187,10 +108,11 @@ function AuthedApp() {
     addArrangement,
     updateArrangement,
     deleteArrangement,
+    addAddress,
     setState,
   } = useAppState();
 
-  const cloud = useCloudSync();
+  const cloudSync = useCloudSync();
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
@@ -199,106 +121,106 @@ function AuthedApp() {
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
   const [hydrated, setHydrated] = React.useState(false);
-  const lastRemoteRef = React.useRef<any | null>(null); // baseline cloud snapshot (sans activeIndex)
+  const lastFromCloudRef = React.useRef<string | null>(null);
 
-  // Safe slices
-  const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
-  const completions = Array.isArray(state?.completions) ? state.completions : [];
-  const arrangements = Array.isArray(state?.arrangements) ? state.arrangements : [];
-  const daySessions = Array.isArray(state?.daySessions) ? state.daySessions : [];
+  const addresses = Array.isArray(state?.addresses) ? state!.addresses : [];
+  const completions = Array.isArray(state?.completions) ? state!.completions : [];
+  const arrangements = Array.isArray(state?.arrangements) ? state!.arrangements : [];
+  const daySessions = Array.isArray(state?.daySessions) ? state!.daySessions : [];
+  const currentListVersion = state?.currentListVersion ?? 1;
 
   const safeState = React.useMemo(
-    () => ({ ...(state ?? {}), addresses, completions, arrangements, daySessions }),
-    [state, addresses, completions, arrangements, daySessions]
+    () => ({
+      ...(state ?? {}),
+      addresses,
+      completions,
+      arrangements,
+      daySessions,
+      currentListVersion,
+    }),
+    [state, addresses, completions, arrangements, daySessions, currentListVersion]
   );
 
-  /* ---- subscribe first; don't push on mount ---- */
+  // Cloud sync bootstrap
   React.useEffect(() => {
-    if (!cloud.user) return;
-    let unsub: undefined | (() => void);
+    if (!cloudSync.user || loading) return;
+    let cleanup: (() => void) | undefined;
+    let cancelled = false;
 
-    const onRemote = (remote: any) => {
-      const normalized = normalizeState(remote);
-      lastRemoteRef.current = toCloudPayload(normalized); // baseline for merges
-      setState((prev: any) => ({ ...normalized, activeIndex: prev?.activeIndex ?? null }));
-      setLastSyncTime(new Date());
-      setHydrated(true);
-    };
+    (async () => {
+      const localHasData =
+        addresses.length > 0 ||
+        completions.length > 0 ||
+        arrangements.length > 0 ||
+        daySessions.length > 0;
 
-    try {
-      unsub = cloud.subscribeToData(onRemote);
-    } catch (err) {
-      console.error("subscribe failed:", err);
-    }
+      try {
+        if (localHasData) {
+          await cloudSync.syncData(safeState);
+          if (cancelled) return;
+          lastFromCloudRef.current = JSON.stringify(safeState);
+          setHydrated(true);
+        }
 
-    const t = setTimeout(() => {
-      if (!hydrated) {
-        lastRemoteRef.current = null;
-        setHydrated(true);
+        cleanup = cloudSync.subscribeToData((newState) => {
+          if (!newState) return;
+          const normalized = normalizeState(newState);
+          const str = JSON.stringify(normalized);
+
+          setState(normalized);
+          setLastSyncTime(new Date());
+
+          lastFromCloudRef.current = str;
+          setHydrated(true);
+        });
+      } catch (err) {
+        console.error("Bootstrap sync failed:", err);
       }
-    }, 2000);
+    })();
 
     return () => {
-      clearTimeout(t);
-      if (unsub) unsub();
+      cancelled = true;
+      if (cleanup) cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloud.user]);
+  }, [cloudSync.user, loading]);
 
-  /* ---- debounced push with merge ---- */
+  // Push local changes -> cloud
   React.useEffect(() => {
-    if (!cloud.user || loading || !hydrated) return;
+    if (!cloudSync.user || loading || !hydrated) return;
+    const currentStr = JSON.stringify(safeState);
+    if (currentStr === lastFromCloudRef.current) return;
 
-    const payloadLocal = toCloudPayload(safeState);
-    const payloadMerged = mergeStates(lastRemoteRef.current ?? {}, payloadLocal);
-
-    const localStr = JSON.stringify(payloadMerged);
-    const remoteStr = JSON.stringify(lastRemoteRef.current ?? {});
-    if (localStr === remoteStr) return;
-
-    const t = setTimeout(async () => {
-      try {
-        await cloud.syncData(payloadMerged);
-        lastRemoteRef.current = payloadMerged; // advance baseline
-        setLastSyncTime(new Date());
-      } catch (err) {
-        console.error("sync failed:", err);
-      }
+    const t = setTimeout(() => {
+      cloudSync
+        .syncData(safeState)
+        .then(() => {
+          setLastSyncTime(new Date());
+          lastFromCloudRef.current = currentStr;
+        })
+        .catch((err: unknown) => console.error("Sync failed:", err));
     }, 400);
 
     return () => clearTimeout(t);
-  }, [cloud.user, loading, hydrated, safeState, cloud]);
+  }, [cloudSync.user, loading, hydrated, safeState, cloudSync]);
 
-  /* ---- handlers ---- */
-
-  // ✅ BEST OPTION: declare once and reuse (prevents TS6133)
+  // Arrangement creation from list
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
     setTab("arrangements");
   }, []);
 
-  // ✅ NEW: Enhanced address handler for arrangements
-  const handleAddAddress = React.useCallback(async (addressRow: any) => {
-    console.log('handleAddAddress called with:', addressRow);
-    try {
-      const newIndex = await addAddress(addressRow);
-      console.log('Address added at index:', newIndex);
-      
-      // Automatically mark this address as completed with "ARR" outcome
-      complete(newIndex, "ARR");
-      console.log('Address marked as ARR completion');
-      
-      return newIndex;
-    } catch (error) {
-      console.error('Error in handleAddAddress:', error);
-      throw error;
+  // === Persistent-done logic (per version) ===
+  // Build a set of indices completed in the CURRENT list version:
+  const completedIdxCurrent = React.useMemo(() => {
+    const set = new Set<number>();
+    for (const c of completions) {
+      if ((c as any)?.listVersion === currentListVersion) {
+        set.add(Number(c.index));
+      }
     }
-  }, [addAddress, complete]);
-
-  const completedIdx = React.useMemo(
-    () => new Set(completions.map((c: any) => Number(c.index))),
-    [completions]
-  );
+    return set;
+  }, [completions, currentListVersion]);
 
   const lowerQ = (search ?? "").trim().toLowerCase();
   const visible = React.useMemo(
@@ -306,13 +228,46 @@ function AuthedApp() {
       addresses
         .map((a: any, i: number) => ({ a, i }))
         .filter(({ a }) => !lowerQ || (a.address ?? "").toLowerCase().includes(lowerQ))
-        .filter(({ i }) => !completedIdx.has(i)),
-    [addresses, lowerQ, completedIdx]
+        .filter(({ i }) => !completedIdxCurrent.has(i)),
+    [addresses, lowerQ, completedIdxCurrent]
   );
 
   const hasActiveSession = daySessions.some((d: any) => !d.end);
 
-  // keyboard shortcuts
+  // Keyboard shortcuts for quick actions (unchanged)
+  const doQuickComplete = React.useCallback(
+    (i: number) => {
+      const input = window.prompt(
+        "Quick Complete:\n\n• Leave empty → Done\n• Type 'DA' → Mark as DA\n• Type a number (e.g. 50) → PIF £amount\n• Type 'ARR' → Create Arrangement"
+      );
+      if (input === null) return;
+      const text = input.trim();
+      if (!text) {
+        complete(i, "Done");
+      } else if (text.toUpperCase() === "DA") {
+        complete(i, "DA");
+      } else if (text.toUpperCase() === "ARR") {
+        setTab("arrangements");
+        setTimeout(() => {
+          const event = new CustomEvent("auto-create-arrangement", {
+            detail: { addressIndex: i },
+          });
+          window.dispatchEvent(event);
+        }, 100);
+      } else {
+        const n = Number(text);
+        if (Number.isFinite(n) && n > 0) {
+          complete(i, "PIF", n.toFixed(2));
+        } else {
+          alert(
+            "Invalid amount. Use a number (e.g., 50) or type 'DA', type 'ARR' for arrangement, or leave blank for Done."
+          );
+        }
+      }
+    },
+    [complete]
+  );
+
   React.useEffect(() => {
     if (tab !== "list") return;
     const isTypingTarget = (el: EventTarget | null) => {
@@ -343,11 +298,23 @@ function AuthedApp() {
         return;
       }
 
-      if (e.key === "u" || e.key === "U") {
-        const latest = completions[0];
-        if (latest) {
+      if (e.key === "Enter") {
+        if (safeState.activeIndex != null) {
           e.preventDefault();
-          undo(latest.index);
+          doQuickComplete(safeState.activeIndex);
+        }
+        return;
+      }
+
+      if (e.key === "u" || e.key === "U") {
+        const v = currentListVersion;
+        // undo the latest completion for this index in THIS version
+        const latest = completions.find(
+          (c: any) => c.index === safeState.activeIndex && c.listVersion === v
+        );
+        if (latest && safeState.activeIndex != null) {
+          e.preventDefault();
+          undo(safeState.activeIndex);
         }
         return;
       }
@@ -377,17 +344,19 @@ function AuthedApp() {
     hasActiveSession,
     setActive,
     undo,
+    doQuickComplete,
     startDay,
     endDay,
+    currentListVersion,
   ]);
 
-  /* ---- backup / restore ---- */
+  // Backup / Restore
   const onBackup = () => {
     const snap = backupState();
-    const dt = new Date();
-    const y = String(dt.getFullYear());
-    const m = String(dt.getMonth() + 1).padStart(2, "0");
-    const d = String(dt.getDate()).padStart(2, "0");
+    const stamp = new Date();
+    const y = String(stamp.getFullYear());
+    const m = String(stamp.getMonth() + 1).padStart(2, "0");
+    const d = String(stamp.getDate()).padStart(2, "0");
     downloadJson(`navigator-backup-${y}${m}${d}.json`, snap);
   };
 
@@ -395,14 +364,10 @@ function AuthedApp() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const raw = await readJsonFile(file);
-      const data = normalizeState(raw);
-      // local
+      const data = normalizeState(await readJsonFile(file));
       restoreState(data);
-      // merge with latest remote and push
-      const merged = mergeStates(lastRemoteRef.current ?? {}, toCloudPayload(data));
-      await cloud.syncData(merged);
-      lastRemoteRef.current = merged;
+      await cloudSync.syncData(data);
+      lastFromCloudRef.current = JSON.stringify(data);
       setHydrated(true);
       alert("✅ Restore completed successfully!");
     } catch (err: any) {
@@ -413,18 +378,37 @@ function AuthedApp() {
     }
   };
 
-  /* ---- stats ---- */
+  // Stats for CURRENT VERSION:
   const stats = React.useMemo(() => {
-    const total = addresses.length;
-    const completedCount = completions.length;
-    const pending = total - completedCount;
-    const pifCount = completions.filter((c: any) => c.outcome === "PIF").length;
-    const doneCount = completions.filter((c: any) => c.outcome === "Done").length;
-    const daCount = completions.filter((c: any) => c.outcome === "DA").length;
-    return { total, completed: completedCount, pending, pifCount, doneCount, daCount };
-  }, [addresses, completions]);
+    // unique indices completed in this version
+    const completedSet = new Set<number>();
+    let pif = 0,
+      done = 0,
+      da = 0;
 
-  const waitingForInitialData = !!cloud.user && !Array.isArray(state?.addresses);
+    for (const c of completions) {
+      if ((c as any)?.listVersion !== currentListVersion) continue;
+      completedSet.add(Number(c.index));
+      if (c.outcome === "PIF") pif++;
+      else if (c.outcome === "Done") done++;
+      else if (c.outcome === "DA") da++;
+    }
+
+    const total = addresses.length;
+    const completedUnique = completedSet.size;
+    const pending = total - completedUnique;
+
+    return {
+      total,
+      completed: completedUnique, // number of addresses finished this version
+      pending,
+      pifCount: pif,
+      doneCount: done,
+      daCount: da,
+    };
+  }, [addresses, completions, currentListVersion]);
+
+  const waitingForInitialData = !!cloudSync.user && !Array.isArray(state?.addresses);
 
   if (loading || waitingForInitialData) {
     return (
@@ -437,13 +421,13 @@ function AuthedApp() {
     );
   }
 
-  /* ---- UI ---- */
   return (
     <div className="container">
       {/* Header */}
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
+
           <div
             style={{
               display: "flex",
@@ -453,7 +437,7 @@ function AuthedApp() {
               color: "var(--text-muted)",
             }}
           >
-            {cloud.isOnline ? (
+            {cloudSync.isOnline ? (
               <>
                 <span style={{ color: "var(--success)" }}>🟢</span>
                 Online
@@ -473,10 +457,10 @@ function AuthedApp() {
             <span className="avatar" aria-hidden>
               👤
             </span>
-            <span className="email" title={cloud.user?.email ?? ""}>
-              {cloud.user?.email ?? "Signed in"}
+            <span className="email" title={cloudSync.user?.email ?? ""}>
+              {cloudSync.user?.email ?? "Signed in"}
             </span>
-            <button className="signout-btn" onClick={cloud.signOut} title="Sign out">
+            <button className="signout-btn" onClick={cloudSync.signOut} title="Sign out">
               Sign Out
             </button>
           </div>
@@ -510,7 +494,8 @@ function AuthedApp() {
             background: "var(--surface)",
             padding: "1.5rem",
             borderRadius: "var(--radius-lg)",
-            border: "1px solid var(--border-light)",
+            border: "1px solid",
+            borderColor: "var(--border-light)",
             boxShadow: "var(--shadow-sm)",
             marginBottom: "1rem",
           }}
@@ -563,7 +548,12 @@ function AuthedApp() {
             />
           </div>
 
-          <DayPanel sessions={daySessions} completions={completions} startDay={startDay} endDay={endDay} />
+          <DayPanel
+            sessions={daySessions}
+            completions={completions}
+            startDay={startDay}
+            endDay={endDay}
+          />
 
           {/* Stats */}
           <div className="top-row">
@@ -593,6 +583,7 @@ function AuthedApp() {
                 {stats.daCount}
               </div>
             </div>
+
             {safeState.activeIndex != null && (
               <div className="stat-item">
                 <div className="stat-label">Active</div>
@@ -607,10 +598,8 @@ function AuthedApp() {
             state={safeState}
             setActive={setActive}
             cancelActive={cancelActive}
-            complete={(i: number, outcome: Outcome, amount?: string) => {
-              complete(i, outcome, amount);
-            }}
-            onCreateArrangement={handleCreateArrangement}  // ✅ used here
+            complete={complete}
+            onCreateArrangement={handleCreateArrangement}
             filterText={search}
           />
 
@@ -625,26 +614,19 @@ function AuthedApp() {
               textAlign: "center",
             }}
           >
-            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • U Undo • S Start Day • E End Day
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo • S
+            Start Day • E End Day
           </div>
         </>
       ) : tab === "completed" ? (
-        <Completed
-          state={safeState}
-          onChangeOutcome={(index, outcome, amount) => {
-            // change outcome = undo then re-complete (new timestamp)
-            undo(index);
-            setTimeout(() => complete(index, outcome as Outcome, amount), 0);
-          }}
-          onUndo={(index) => undo(index)}
-        />
+        <Completed state={safeState} />
       ) : (
         <Arrangements
           state={safeState}
           onAddArrangement={addArrangement}
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
-          onAddAddress={handleAddAddress} // ✅ NOW PROPERLY CONNECTED
+          onAddAddress={addAddress}
           autoCreateForAddress={autoCreateArrangementFor}
           onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
         />
