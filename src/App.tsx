@@ -10,22 +10,25 @@ import { Completed } from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
+import type { Arrangement, Outcome } from "./types";
 
 type Tab = "list" | "completed" | "arrangements";
 
+// --- helper: normalize arrays so .length never crashes
 function normalizeState(raw: any) {
   const r = raw ?? {};
   return {
     ...r,
-    currentListVersion: typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
     addresses: Array.isArray(r.addresses) ? r.addresses : [],
     completions: Array.isArray(r.completions) ? r.completions : [],
     arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
     daySessions: Array.isArray(r.daySessions) ? r.daySessions : [],
     activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
+    currentListVersion: typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
   };
 }
 
+// Simple error boundary
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -97,6 +100,7 @@ function AuthedApp() {
     state,
     loading,
     setAddresses,
+    addAddress,
     setActive,
     cancelActive,
     complete,
@@ -108,7 +112,6 @@ function AuthedApp() {
     addArrangement,
     updateArrangement,
     deleteArrangement,
-    addAddress,
     setState,
   } = useAppState();
 
@@ -120,14 +123,15 @@ function AuthedApp() {
     React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
+  // hydration / echo guards
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
-  const addresses = Array.isArray(state?.addresses) ? state!.addresses : [];
-  const completions = Array.isArray(state?.completions) ? state!.completions : [];
-  const arrangements = Array.isArray(state?.arrangements) ? state!.arrangements : [];
-  const daySessions = Array.isArray(state?.daySessions) ? state!.daySessions : [];
-  const currentListVersion = state?.currentListVersion ?? 1;
+  // safe arrays
+  const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
+  const completions = Array.isArray(state?.completions) ? state.completions : [];
+  const arrangements = Array.isArray(state?.arrangements) ? state.arrangements : [];
+  const daySessions = Array.isArray(state?.daySessions) ? state.daySessions : [];
 
   const safeState = React.useMemo(
     () => ({
@@ -136,12 +140,12 @@ function AuthedApp() {
       completions,
       arrangements,
       daySessions,
-      currentListVersion,
+      currentListVersion: state.currentListVersion,
     }),
-    [state, addresses, completions, arrangements, daySessions, currentListVersion]
+    [state, addresses, completions, arrangements, daySessions]
   );
 
-  // Cloud sync bootstrap
+  // ---- Bootstrap cloud sync ----
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: (() => void) | undefined;
@@ -166,10 +170,8 @@ function AuthedApp() {
           if (!newState) return;
           const normalized = normalizeState(newState);
           const str = JSON.stringify(normalized);
-
           setState(normalized);
           setLastSyncTime(new Date());
-
           lastFromCloudRef.current = str;
           setHydrated(true);
         });
@@ -185,7 +187,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // Push local changes -> cloud
+  // ---- Push local changes -> cloud (debounced) ----
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
     const currentStr = JSON.stringify(safeState);
@@ -204,153 +206,7 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [cloudSync.user, loading, hydrated, safeState, cloudSync]);
 
-  // Arrangement creation from list
-  const handleCreateArrangement = React.useCallback((addressIndex: number) => {
-    setAutoCreateArrangementFor(addressIndex);
-    setTab("arrangements");
-  }, []);
-
-  // === Persistent-done logic (per version) ===
-  // Build a set of indices completed in the CURRENT list version:
-  const completedIdxCurrent = React.useMemo(() => {
-    const set = new Set<number>();
-    for (const c of completions) {
-      if ((c as any)?.listVersion === currentListVersion) {
-        set.add(Number(c.index));
-      }
-    }
-    return set;
-  }, [completions, currentListVersion]);
-
-  const lowerQ = (search ?? "").trim().toLowerCase();
-  const visible = React.useMemo(
-    () =>
-      addresses
-        .map((a: any, i: number) => ({ a, i }))
-        .filter(({ a }) => !lowerQ || (a.address ?? "").toLowerCase().includes(lowerQ))
-        .filter(({ i }) => !completedIdxCurrent.has(i)),
-    [addresses, lowerQ, completedIdxCurrent]
-  );
-
-  const hasActiveSession = daySessions.some((d: any) => !d.end);
-
-  // Keyboard shortcuts for quick actions (unchanged)
-  const doQuickComplete = React.useCallback(
-    (i: number) => {
-      const input = window.prompt(
-        "Quick Complete:\n\n• Leave empty → Done\n• Type 'DA' → Mark as DA\n• Type a number (e.g. 50) → PIF £amount\n• Type 'ARR' → Create Arrangement"
-      );
-      if (input === null) return;
-      const text = input.trim();
-      if (!text) {
-        complete(i, "Done");
-      } else if (text.toUpperCase() === "DA") {
-        complete(i, "DA");
-      } else if (text.toUpperCase() === "ARR") {
-        setTab("arrangements");
-        setTimeout(() => {
-          const event = new CustomEvent("auto-create-arrangement", {
-            detail: { addressIndex: i },
-          });
-          window.dispatchEvent(event);
-        }, 100);
-      } else {
-        const n = Number(text);
-        if (Number.isFinite(n) && n > 0) {
-          complete(i, "PIF", n.toFixed(2));
-        } else {
-          alert(
-            "Invalid amount. Use a number (e.g., 50) or type 'DA', type 'ARR' for arrangement, or leave blank for Done."
-          );
-        }
-      }
-    },
-    [complete]
-  );
-
-  React.useEffect(() => {
-    if (tab !== "list") return;
-    const isTypingTarget = (el: EventTarget | null) => {
-      if (!el || !(el as HTMLElement)) return false;
-      const t = el as HTMLElement;
-      return t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable;
-    };
-    const handler = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target)) return;
-
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault();
-        if (visible.length === 0) return;
-
-        const pos =
-          safeState.activeIndex != null
-            ? visible.findIndex(({ i }) => i === safeState.activeIndex)
-            : -1;
-
-        if (e.key === "ArrowDown") {
-          const nextPos = pos >= 0 ? (pos + 1) % visible.length : 0;
-          setActive(visible[nextPos].i);
-        } else {
-          const prevPos =
-            pos >= 0 ? (pos - 1 + visible.length) % visible.length : visible.length - 1;
-          setActive(visible[prevPos].i);
-        }
-        return;
-      }
-
-      if (e.key === "Enter") {
-        if (safeState.activeIndex != null) {
-          e.preventDefault();
-          doQuickComplete(safeState.activeIndex);
-        }
-        return;
-      }
-
-      if (e.key === "u" || e.key === "U") {
-        const v = currentListVersion;
-        // undo the latest completion for this index in THIS version
-        const latest = completions.find(
-          (c: any) => c.index === safeState.activeIndex && c.listVersion === v
-        );
-        if (latest && safeState.activeIndex != null) {
-          e.preventDefault();
-          undo(safeState.activeIndex);
-        }
-        return;
-      }
-
-      if (e.key === "s" || e.key === "S") {
-        if (!hasActiveSession) {
-          e.preventDefault();
-          startDay();
-        }
-        return;
-      }
-      if (e.key === "e" || e.key === "E") {
-        if (hasActiveSession) {
-          e.preventDefault();
-          endDay();
-        }
-        return;
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [
-    tab,
-    visible,
-    safeState.activeIndex,
-    completions,
-    hasActiveSession,
-    setActive,
-    undo,
-    doQuickComplete,
-    startDay,
-    endDay,
-    currentListVersion,
-  ]);
-
-  // Backup / Restore
+  // ----- Import/Backup/Restore -----
   const onBackup = () => {
     const snap = backupState();
     const stamp = new Date();
@@ -364,7 +220,8 @@ function AuthedApp() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const data = normalizeState(await readJsonFile(file));
+      const raw = await readJsonFile(file);
+      const data = normalizeState(raw);
       restoreState(data);
       await cloudSync.syncData(data);
       lastFromCloudRef.current = JSON.stringify(data);
@@ -378,39 +235,81 @@ function AuthedApp() {
     }
   };
 
-  // Stats for CURRENT VERSION:
-  const stats = React.useMemo(() => {
-    // unique indices completed in this version
-    const completedSet = new Set<number>();
-    let pif = 0,
-      done = 0,
-      da = 0;
+  // ----- Arrange + complete wrapper -----
+  const onAddArrangementAndComplete = React.useCallback(
+    (data: Omit<Arrangement, "id" | "createdAt" | "updatedAt">) => {
+      // Save the arrangement
+      addArrangement(data);
+      // Mark as completed (ARR) for current list version
+      complete(data.addressIndex, "ARR");
+      // switch to Completed tab for quick confirmation (optional)
+      setTab("completed");
+    },
+    [addArrangement, complete]
+  );
 
+  // ----- Change outcome in Completed -----
+  const changeCompletionOutcome = React.useCallback(
+    (index: number, outcome: Outcome, amount?: string) => {
+      setState((s) => {
+        const arr = s.completions.slice();
+        // Change the most recent entry for this index (any version)
+        const pos = arr.findIndex((c) => Number(c.index) === Number(index));
+        if (pos === -1) return s;
+        const prev = arr[pos];
+        arr[pos] = {
+          ...prev,
+          outcome,
+          amount: outcome === "PIF" ? (amount ?? prev.amount) : undefined,
+          timestamp: new Date().toISOString(),
+        };
+        return { ...s, completions: arr };
+      });
+    },
+    [setState]
+  );
+
+  // ----- Searching + visibility -----
+  const lowerQ = (search ?? "").trim().toLowerCase();
+
+  const completedIdxForCurrentList = React.useMemo(() => {
+    const set = new Set<number>();
     for (const c of completions) {
-      if ((c as any)?.listVersion !== currentListVersion) continue;
-      completedSet.add(Number(c.index));
-      if (c.outcome === "PIF") pif++;
-      else if (c.outcome === "Done") done++;
-      else if (c.outcome === "DA") da++;
+      if ((c.listVersion ?? 1) === state.currentListVersion) {
+        set.add(c.index);
+      }
     }
+    return set;
+  }, [completions, state.currentListVersion]);
 
+  const visible = React.useMemo(
+    () =>
+      addresses
+        .map((a, i) => ({ a, i }))
+        .filter(({ a }) => !lowerQ || (a.address ?? "").toLowerCase().includes(lowerQ))
+        .filter(({ i }) => !completedIdxForCurrentList.has(i)),
+    [addresses, lowerQ, completedIdxForCurrentList]
+  );
+
+  const hasActiveSession = daySessions.some((d) => !d.end);
+
+  // ----- Stats (for current list version) -----
+  const stats = React.useMemo(() => {
     const total = addresses.length;
-    const completedUnique = completedSet.size;
-    const pending = total - completedUnique;
+    const inThisList = completions.filter(
+      (c) => (c.listVersion ?? 1) === state.currentListVersion
+    );
+    const completedCount = inThisList.length;
+    const pending = total - completedCount;
+    const pifCount = inThisList.filter((c) => c.outcome === "PIF").length;
+    const doneCount = inThisList.filter((c) => c.outcome === "Done").length;
+    const daCount = inThisList.filter((c) => c.outcome === "DA").length;
+    const arrCount = inThisList.filter((c) => c.outcome === "ARR").length;
 
-    return {
-      total,
-      completed: completedUnique, // number of addresses finished this version
-      pending,
-      pifCount: pif,
-      doneCount: done,
-      daCount: da,
-    };
-  }, [addresses, completions, currentListVersion]);
+    return { total, completed: completedCount, pending, pifCount, doneCount, daCount, arrCount };
+  }, [addresses, completions, state.currentListVersion]);
 
-  const waitingForInitialData = !!cloudSync.user && !Array.isArray(state?.addresses);
-
-  if (loading || waitingForInitialData) {
+  if (loading) {
     return (
       <div className="container">
         <div className="loading">
@@ -427,7 +326,6 @@ function AuthedApp() {
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
-
           <div
             style={{
               display: "flex",
@@ -555,7 +453,6 @@ function AuthedApp() {
             endDay={endDay}
           />
 
-          {/* Stats */}
           <div className="top-row">
             <div className="stat-item">
               <div className="stat-label">Total</div>
@@ -583,6 +480,12 @@ function AuthedApp() {
                 {stats.daCount}
               </div>
             </div>
+            <div className="stat-item">
+              <div className="stat-label">ARR</div>
+              <div className="stat-value" style={{ color: "var(--primary)" }}>
+                {stats.arrCount}
+              </div>
+            </div>
 
             {safeState.activeIndex != null && (
               <div className="stat-item">
@@ -599,7 +502,10 @@ function AuthedApp() {
             setActive={setActive}
             cancelActive={cancelActive}
             complete={complete}
-            onCreateArrangement={handleCreateArrangement}
+            onCreateArrangement={(i) => {
+              setAutoCreateArrangementFor(i);
+              setTab("arrangements");
+            }}
             filterText={search}
           />
 
@@ -614,16 +520,20 @@ function AuthedApp() {
               textAlign: "center",
             }}
           >
-            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo • S
-            Start Day • E End Day
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete • U Undo • S Start Day • E
+            End Day
           </div>
         </>
       ) : tab === "completed" ? (
-        <Completed state={safeState} />
+        <Completed
+          state={safeState}
+          onChangeOutcome={changeCompletionOutcome}
+          onUndo={(idx) => undo(idx)}
+        />
       ) : (
         <Arrangements
           state={safeState}
-          onAddArrangement={addArrangement}
+          onAddArrangement={onAddArrangementAndComplete}
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
           onAddAddress={addAddress}
