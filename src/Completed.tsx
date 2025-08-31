@@ -1,4 +1,3 @@
-// src/Completed.tsx
 import * as React from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -7,39 +6,33 @@ import type { Outcome } from "./types";
 
 type Props = {
   state: any;
+  /** Change the outcome for a completed address (by address index). */
   onChangeOutcome: (index: number, outcome: Outcome, amount?: string) => void;
+  /** Optional: expose undo on each row. */
   onUndo?: (index: number) => void;
 };
-
-function toDate(c: any): Date | null {
-  // Accept the many shapes we may have saved over time
-  const raw =
-    c?.timestamp ??
-    c?.ts ??
-    c?.time ??
-    c?.updatedAt ?? // arrangements sometimes carry these
-    c?.createdAt ??
-    null;
-
-  if (!raw) return null;
-  const d = new Date(raw);
-  return isNaN(d as any) ? null : d;
-}
 
 export function Completed({ state, onChangeOutcome, onUndo }: Props) {
   const completions: any[] = Array.isArray(state?.completions) ? state.completions : [];
   const addresses: any[] = Array.isArray(state?.addresses) ? state.addresses : [];
 
+  // --- Calendar filter ---
   const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(undefined);
 
   // Normalize + sort completions (newest first)
   const normalized = React.useMemo(() => {
+    const toDate = (c: any): Date | null => {
+      const raw = c?.timestamp ?? null;
+      if (!raw) return null;
+      const d = new Date(raw);
+      return isNaN(d as any) ? null : d;
+    };
     return completions
       .map((c) => ({ ...c, _date: toDate(c) }))
       .sort((a, b) => {
         const at = a._date ? a._date.getTime() : 0;
         const bt = b._date ? b._date.getTime() : 0;
-        return bt - at;
+        return bt - at; // newest first
       });
   }, [completions]);
 
@@ -48,6 +41,7 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
     return normalized.filter((c) => (c._date ? isSameDay(c._date, selectedDate) : false));
   }, [normalized, selectedDate]);
 
+  // --- Inline edit state ---
   const [editingFor, setEditingFor] = React.useState<number | null>(null);
   const [pifAmount, setPifAmount] = React.useState<string>("");
 
@@ -83,7 +77,8 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
           selected={selectedDate}
           onSelect={setSelectedDate}
           modifiers={{
-            hasData: (day) => filtered.some((c) => (c._date ? isSameDay(c._date, day) : false)),
+            hasData: (day) =>
+              normalized.some((c) => (c._date ? isSameDay(c._date, day) : false)),
           }}
           modifiersClassNames={{ hasData: "pill-active" }}
         />
@@ -103,12 +98,8 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
           const when = c._date;
           const isEditing = editingFor === idx;
 
-          // Stable unique key prioritizing a real timestamp/createdAt etc.
-          const key =
-            c?.timestamp || c?.ts || c?.time || c?.updatedAt || c?.createdAt || `${idx}-${row}`;
-
           return (
-            <div key={key} className="card">
+            <div key={`${idx}-${when?.toISOString?.() ?? row}`} className="card">
               <div className="card-header">
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                   <div
@@ -133,7 +124,7 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
                           : c.outcome === "DA"
                           ? "pill-da"
                           : c.outcome === "ARR"
-                          ? "pill-active" // use your existing blue pill style
+                          ? "pill-arr"
                           : "pill-done")
                       }
                     >
@@ -205,7 +196,7 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
                       </button>
 
                       <button
-                        className="btn btn-ghost"
+                        className="btn btn-outline"
                         onClick={() => {
                           onChangeOutcome(idx, "ARR");
                           setEditingFor(null);
@@ -244,6 +235,10 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
                       </button>
                     </div>
                   </div>
+
+                  <div className="muted" style={{ marginTop: 8 }}>
+                    Need to manage the payment schedule? Go to the <strong>📅 Arrangements</strong> tab.
+                  </div>
                 </div>
               )}
             </div>
@@ -252,4 +247,4 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
       )}
     </div>
   );
-                      }
+}
