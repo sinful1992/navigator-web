@@ -1,4 +1,3 @@
-// src/useAppState.ts
 import * as React from "react";
 import { get, set } from "idb-keyval";
 import type {
@@ -10,7 +9,7 @@ import type {
   Arrangement,
 } from "./types";
 
-const STORAGE_KEY = "navigator_state_v4"; // bump for listVersion + arrangements
+const STORAGE_KEY = "navigator_state_v3";
 
 const initial: AppState = {
   addresses: [],
@@ -33,11 +32,11 @@ export function useAppState() {
         const saved = (await get(STORAGE_KEY)) as AppState | undefined;
         if (alive && saved) {
           setState({
+            ...initial,
             ...saved,
             arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
-            currentListVersion: typeof (saved as any).currentListVersion === "number"
-              ? (saved as any).currentListVersion
-              : 1,
+            currentListVersion:
+              typeof saved.currentListVersion === "number" ? saved.currentListVersion : 1,
           });
         }
       } finally {
@@ -61,25 +60,25 @@ export function useAppState() {
   // ---------------- actions ----------------
 
   /**
-   * Replaces the address list and increments list version.
-   * Keeps previous completions/daySessions/arrangements but **new listVersion**
-   * makes the list treat everything as fresh until you complete again.
+   * Replace the address list and BUMP list version.
+   * Completions are kept, but only those with the NEW version will hide rows.
    */
   const setAddresses = React.useCallback((rows: AddressRow[]) => {
     setState((s) => ({
       ...s,
       addresses: Array.isArray(rows) ? rows : [],
       activeIndex: null,
-      currentListVersion: s.currentListVersion + 1,
+      currentListVersion: (s.currentListVersion ?? 1) + 1,
     }));
   }, []);
 
-  /** Add a single address (manual add) without bumping list version. */
+  /** Add a single address (used by Arrangements manual entry). Returns the new index. */
   const addAddress = React.useCallback((addressRow: AddressRow) => {
     return new Promise<number>((resolve) => {
       setState((s) => {
         const newAddresses = [...s.addresses, addressRow];
         const newIndex = newAddresses.length - 1;
+        // resolve on next tick so state is applied
         setTimeout(() => resolve(newIndex), 0);
         return { ...s, addresses: newAddresses };
       });
@@ -94,7 +93,11 @@ export function useAppState() {
     setState((s) => ({ ...s, activeIndex: null }));
   }, []);
 
-  /** Record a completion for current list version. */
+  /**
+   * Record a completion for an address index.
+   * We stamp the *current list version* so only this import’s completions
+   * hide rows in the List until the next import.
+   */
   const complete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string) => {
       setState((s) => {
@@ -124,13 +127,11 @@ export function useAppState() {
     []
   );
 
-  /** Undo the most recent completion for this index in the **current** list version. */
+  /** Undo only the most recent completion for a given index (for convenience). */
   const undo = React.useCallback((index: number) => {
     setState((s) => {
       const arr = s.completions.slice();
-      const pos = arr.findIndex(
-        (c) => Number(c.index) === Number(index) && (c.listVersion ?? 1) === s.currentListVersion
-      );
+      const pos = arr.findIndex((c) => Number(c.index) === Number(index));
       if (pos >= 0) arr.splice(pos, 1);
       return { ...s, completions: arr };
     });
@@ -249,7 +250,7 @@ export function useAppState() {
   return {
     state,
     loading,
-    setState, // for cloud sync integrations
+    setState, // for cloud sync
     // addresses
     setAddresses,
     addAddress,
