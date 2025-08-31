@@ -1,4 +1,3 @@
-// src/App.tsx
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -10,11 +9,11 @@ import { Completed } from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
-import type { Arrangement, Outcome } from "./types";
+import type { AppState, Completion, Outcome, AddressRow } from "./types";
 
 type Tab = "list" | "completed" | "arrangements";
 
-// --- helper: normalize arrays so .length never crashes
+// --- helper: make sure arrays exist so .length never crashes ---
 function normalizeState(raw: any) {
   const r = raw ?? {};
   return {
@@ -24,11 +23,12 @@ function normalizeState(raw: any) {
     arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
     daySessions: Array.isArray(r.daySessions) ? r.daySessions : [],
     activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
-    currentListVersion: typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
+    currentListVersion:
+      typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
   };
 }
 
-// Simple error boundary
+// Simple error boundary (avoids blank screen on unexpected errors)
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -59,6 +59,7 @@ class ErrorBoundary extends React.Component<
 export default function App() {
   const cloudSync = useCloudSync();
 
+  // Wait for Supabase session restore
   if (cloudSync.isLoading) {
     return (
       <div className="container">
@@ -70,6 +71,7 @@ export default function App() {
     );
   }
 
+  // Auth screen
   if (!cloudSync.user) {
     return (
       <ErrorBoundary>
@@ -122,12 +124,10 @@ function AuthedApp() {
   const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
     React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
-
-  // hydration / echo guards
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
-  // safe arrays
+  // --- safe arrays (never undefined) ---
   const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
   const completions = Array.isArray(state?.completions) ? state.completions : [];
   const arrangements = Array.isArray(state?.arrangements) ? state.arrangements : [];
@@ -140,12 +140,15 @@ function AuthedApp() {
       completions,
       arrangements,
       daySessions,
-      currentListVersion: state.currentListVersion,
+      currentListVersion:
+        typeof (state as any)?.currentListVersion === "number"
+          ? (state as any).currentListVersion
+          : 1,
     }),
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ---- Bootstrap cloud sync ----
+  // ---- Bootstrap cloud sync (push if local has data; always subscribe) ----
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: (() => void) | undefined;
@@ -160,7 +163,7 @@ function AuthedApp() {
 
       try {
         if (localHasData) {
-          await cloudSync.syncData(safeState);
+          await cloudSync.syncData(safeState as AppState);
           if (cancelled) return;
           lastFromCloudRef.current = JSON.stringify(safeState);
           setHydrated(true);
@@ -187,7 +190,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // ---- Push local changes -> cloud (debounced) ----
+  // ---- Auto push local changes -> cloud (debounced) ----
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
     const currentStr = JSON.stringify(safeState);
@@ -195,7 +198,7 @@ function AuthedApp() {
 
     const t = setTimeout(() => {
       cloudSync
-        .syncData(safeState)
+        .syncData(safeState as AppState)
         .then(() => {
           setLastSyncTime(new Date());
           lastFromCloudRef.current = currentStr;
@@ -206,7 +209,7 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [cloudSync.user, loading, hydrated, safeState, cloudSync]);
 
-  // ----- Import/Backup/Restore -----
+  // ----- Backup / Restore -----
   const onBackup = () => {
     const snap = backupState();
     const stamp = new Date();
@@ -222,8 +225,8 @@ function AuthedApp() {
     try {
       const raw = await readJsonFile(file);
       const data = normalizeState(raw);
-      restoreState(data);
-      await cloudSync.syncData(data);
+      restoreState(data); // local
+      await cloudSync.syncData(data as AppState); // cloud
       lastFromCloudRef.current = JSON.stringify(data);
       setHydrated(true);
       alert("✅ Restore completed successfully!");
@@ -235,81 +238,62 @@ function AuthedApp() {
     }
   };
 
-  // ----- Arrange + complete wrapper -----
-  const onAddArrangementAndComplete = React.useCallback(
-    (data: Omit<Arrangement, "id" | "createdAt" | "updatedAt">) => {
-      // Save the arrangement
-      addArrangement(data);
-      // Mark as completed (ARR) for current list version
-      complete(data.addressIndex, "ARR");
-      // switch to Completed tab for quick confirmation (optional)
-      setTab("completed");
-    },
-    [addArrangement, complete]
-  );
+  // ----- Stats (safe arrays) -----
+  const stats = React.useMemo(() => {
+    const total = addresses.length;
+    const completedCount = completions.length;
+    const pending = total - completedCount;
+    const pifCount = completions.filter((c: any) => c.outcome === "PIF").length;
+    const doneCount = completions.filter((c: any) => c.outcome === "Done").length;
+    const daCount = completions.filter((c: any) => c.outcome === "DA").length;
+    const arrCount = completions.filter((c: any) => c.outcome === "ARR").length;
+    return {
+      total,
+      completed: completedCount,
+      pending,
+      pifCount,
+      doneCount,
+      daCount,
+      arrCount,
+    };
+  }, [addresses, completions]);
 
-  // ----- Change outcome in Completed -----
-  const changeCompletionOutcome = React.useCallback(
+  // ----- Completed screen handlers -----
+
+  // Edit outcome (only the most recent completion for that index)
+  const onChangeOutcome = React.useCallback(
     (index: number, outcome: Outcome, amount?: string) => {
       setState((s) => {
-        const arr = s.completions.slice();
-        // Change the most recent entry for this index (any version)
-        const pos = arr.findIndex((c) => Number(c.index) === Number(index));
+        const list = Array.isArray(s.completions) ? s.completions.slice() : [];
+        const pos = list.findIndex((c) => Number(c.index) === Number(index));
         if (pos === -1) return s;
-        const prev = arr[pos];
-        arr[pos] = {
-          ...prev,
+
+        const current = list[pos];
+        const updated: Completion = {
+          ...current,
           outcome,
-          amount: outcome === "PIF" ? (amount ?? prev.amount) : undefined,
-          timestamp: new Date().toISOString(),
+          amount: outcome === "PIF" ? amount : undefined,
+          // keep original timestamp so it stays on the same day in history
         };
-        return { ...s, completions: arr };
+        list[pos] = updated;
+        return { ...s, completions: list };
       });
     },
     [setState]
   );
 
-  // ----- Searching + visibility -----
-  const lowerQ = (search ?? "").trim().toLowerCase();
-
-  const completedIdxForCurrentList = React.useMemo(() => {
-    const set = new Set<number>();
-    for (const c of completions) {
-      if ((c.listVersion ?? 1) === state.currentListVersion) {
-        set.add(c.index);
-      }
-    }
-    return set;
-  }, [completions, state.currentListVersion]);
-
-  const visible = React.useMemo(
-    () =>
-      addresses
-        .map((a, i) => ({ a, i }))
-        .filter(({ a }) => !lowerQ || (a.address ?? "").toLowerCase().includes(lowerQ))
-        .filter(({ i }) => !completedIdxForCurrentList.has(i)),
-    [addresses, lowerQ, completedIdxForCurrentList]
+  // Add address helper for Arrangements form (manual address path)
+  const onAddAddress = React.useCallback(
+    async (row: AddressRow) => {
+      const idx = await addAddress(row);
+      return idx;
+    },
+    [addAddress]
   );
 
-  const hasActiveSession = daySessions.some((d) => !d.end);
+  const waitingForInitialData = !!cloudSync.user && !Array.isArray(state?.addresses);
 
-  // ----- Stats (for current list version) -----
-  const stats = React.useMemo(() => {
-    const total = addresses.length;
-    const inThisList = completions.filter(
-      (c) => (c.listVersion ?? 1) === state.currentListVersion
-    );
-    const completedCount = inThisList.length;
-    const pending = total - completedCount;
-    const pifCount = inThisList.filter((c) => c.outcome === "PIF").length;
-    const doneCount = inThisList.filter((c) => c.outcome === "Done").length;
-    const daCount = inThisList.filter((c) => c.outcome === "DA").length;
-    const arrCount = inThisList.filter((c) => c.outcome === "ARR").length;
-
-    return { total, completed: completedCount, pending, pifCount, doneCount, daCount, arrCount };
-  }, [addresses, completions, state.currentListVersion]);
-
-  if (loading) {
+  if (loading || waitingForInitialData) {
     return (
       <div className="container">
         <div className="loading">
@@ -326,6 +310,8 @@ function AuthedApp() {
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
+
+          {/* Sync Status */}
           <div
             style={{
               display: "flex",
@@ -351,6 +337,7 @@ function AuthedApp() {
         </div>
 
         <div className="right">
+          {/* Account pill */}
           <div className="user-chip" role="group" aria-label="Account">
             <span className="avatar" aria-hidden>
               👤
@@ -363,8 +350,13 @@ function AuthedApp() {
             </button>
           </div>
 
+          {/* Tabs */}
           <div className="tabs">
-            <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "list"}
+              onClick={() => setTab("list")}
+            >
               📋 List ({stats.pending})
             </button>
             <button
@@ -453,6 +445,7 @@ function AuthedApp() {
             endDay={endDay}
           />
 
+          {/* Stats */}
           <div className="top-row">
             <div className="stat-item">
               <div className="stat-label">Total</div>
@@ -482,9 +475,7 @@ function AuthedApp() {
             </div>
             <div className="stat-item">
               <div className="stat-label">ARR</div>
-              <div className="stat-value" style={{ color: "var(--primary)" }}>
-                {stats.arrCount}
-              </div>
+              <div className="stat-value">{stats.arrCount}</div>
             </div>
 
             {safeState.activeIndex != null && (
@@ -498,7 +489,7 @@ function AuthedApp() {
           </div>
 
           <AddressList
-            state={safeState}
+            state={safeState as AppState}
             setActive={setActive}
             cancelActive={cancelActive}
             complete={complete}
@@ -520,23 +511,23 @@ function AuthedApp() {
               textAlign: "center",
             }}
           >
-            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete • U Undo • S Start Day • E
-            End Day
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo •
+            S Start Day • E End Day
           </div>
         </>
       ) : tab === "completed" ? (
         <Completed
-          state={safeState}
-          onChangeOutcome={changeCompletionOutcome}
-          onUndo={(idx) => undo(idx)}
+          state={safeState as AppState}
+          onChangeOutcome={onChangeOutcome}
+          onUndo={(i) => undo(i)}
         />
       ) : (
         <Arrangements
-          state={safeState}
-          onAddArrangement={onAddArrangementAndComplete}
+          state={safeState as AppState}
+          onAddArrangement={addArrangement}
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
-          onAddAddress={addAddress}
+          onAddAddress={onAddAddress}
           autoCreateForAddress={autoCreateArrangementFor}
           onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
         />
