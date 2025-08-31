@@ -10,15 +10,15 @@ import type {
   Arrangement,
 } from "./types";
 
-const STORAGE_KEY = "navigator_state_v4"; // bump key because structure changed
+const STORAGE_KEY = "navigator_state_v4"; // bump for listVersion + arrangements
 
 const initial: AppState = {
-  currentListVersion: 1,
   addresses: [],
   activeIndex: null,
   completions: [],
   daySessions: [],
   arrangements: [],
+  currentListVersion: 1,
 };
 
 export function useAppState() {
@@ -31,32 +31,14 @@ export function useAppState() {
     (async () => {
       try {
         const saved = (await get(STORAGE_KEY)) as AppState | undefined;
-
         if (alive && saved) {
-          // Migrate older snapshots that didn't have versions
-          const migrated: AppState = {
-            currentListVersion:
-              typeof (saved as any).currentListVersion === "number"
-                ? (saved as any).currentListVersion
-                : 1,
-            addresses: Array.isArray(saved.addresses) ? saved.addresses : [],
-            activeIndex:
-              typeof saved.activeIndex === "number" || saved.activeIndex === null
-                ? saved.activeIndex
-                : null,
-            completions: Array.isArray(saved.completions)
-              ? saved.completions.map((c: any) => ({
-                  ...c,
-                  listVersion:
-                    typeof c?.listVersion === "number" ? c.listVersion : 1,
-                }))
-              : [],
-            daySessions: Array.isArray(saved.daySessions) ? saved.daySessions : [],
-            arrangements: Array.isArray((saved as any).arrangements)
-              ? (saved as any).arrangements
-              : [],
-          };
-          setState(migrated);
+          setState({
+            ...saved,
+            arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
+            currentListVersion: typeof (saved as any).currentListVersion === "number"
+              ? (saved as any).currentListVersion
+              : 1,
+          });
         }
       } finally {
         if (alive) setLoading(false);
@@ -79,34 +61,27 @@ export function useAppState() {
   // ---------------- actions ----------------
 
   /**
-   * Import a new file:
-   * - Increments the list version.
-   * - Replaces the addresses with the new set.
-   * - Keeps history (completions retain their prior listVersion).
-   * - Does NOT relink old completions to this new version.
+   * Replaces the address list and increments list version.
+   * Keeps previous completions/daySessions/arrangements but **new listVersion**
+   * makes the list treat everything as fresh until you complete again.
    */
   const setAddresses = React.useCallback((rows: AddressRow[]) => {
     setState((s) => ({
       ...s,
-      currentListVersion: (s.currentListVersion ?? 1) + 1,
       addresses: Array.isArray(rows) ? rows : [],
       activeIndex: null,
-      // Keep completions/daySessions/arrangements as history.
+      currentListVersion: s.currentListVersion + 1,
     }));
   }, []);
 
-  /**
-   * Add a single address interactively (used by Arrangements).
-   */
+  /** Add a single address (manual add) without bumping list version. */
   const addAddress = React.useCallback((addressRow: AddressRow) => {
     return new Promise<number>((resolve) => {
       setState((s) => {
         const newAddresses = [...s.addresses, addressRow];
         const newIndex = newAddresses.length - 1;
-        const next = { ...s, addresses: newAddresses };
-        set(STORAGE_KEY, next).catch(() => {});
         setTimeout(() => resolve(newIndex), 0);
-        return next;
+        return { ...s, addresses: newAddresses };
       });
     });
   }, []);
@@ -119,9 +94,7 @@ export function useAppState() {
     setState((s) => ({ ...s, activeIndex: null }));
   }, []);
 
-  /**
-   * Record a completion for the current list version.
-   */
+  /** Record a completion for current list version. */
   const complete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string) => {
       setState((s) => {
@@ -137,7 +110,7 @@ export function useAppState() {
           outcome,
           amount,
           timestamp: nowISO,
-          listVersion: s.currentListVersion ?? 1, // tag with active version
+          listVersion: s.currentListVersion,
         };
 
         const next: AppState = {
@@ -151,15 +124,12 @@ export function useAppState() {
     []
   );
 
-  /**
-   * Undo the most recent completion for the given index in the **current** version.
-   */
+  /** Undo the most recent completion for this index in the **current** list version. */
   const undo = React.useCallback((index: number) => {
     setState((s) => {
-      const v = s.currentListVersion ?? 1;
       const arr = s.completions.slice();
       const pos = arr.findIndex(
-        (c) => Number(c.index) === Number(index) && c.listVersion === v
+        (c) => Number(c.index) === Number(index) && (c.listVersion ?? 1) === s.currentListVersion
       );
       if (pos >= 0) arr.splice(pos, 1);
       return { ...s, completions: arr };
@@ -212,11 +182,7 @@ export function useAppState() {
           createdAt: now,
           updatedAt: now,
         };
-
-        return {
-          ...s,
-          arrangements: [...s.arrangements, newArrangement],
-        };
+        return { ...s, arrangements: [...s.arrangements, newArrangement] };
       });
     },
     []
@@ -244,23 +210,21 @@ export function useAppState() {
     return (
       obj &&
       typeof obj === "object" &&
-      typeof obj.currentListVersion === "number" &&
       Array.isArray(obj.addresses) &&
       Array.isArray(obj.completions) &&
       "activeIndex" in obj &&
-      Array.isArray(obj.daySessions) &&
-      Array.isArray(obj.arrangements)
+      Array.isArray(obj.daySessions)
     );
   }
 
   const backupState = React.useCallback(() => {
     const snap: AppState = {
-      currentListVersion: state.currentListVersion,
       addresses: state.addresses,
       completions: state.completions,
       activeIndex: state.activeIndex,
       daySessions: state.daySessions,
       arrangements: state.arrangements,
+      currentListVersion: state.currentListVersion,
     };
     return snap;
   }, [state]);
@@ -268,12 +232,15 @@ export function useAppState() {
   const restoreState = React.useCallback((obj: unknown) => {
     if (!isValidState(obj)) throw new Error("Invalid backup file format");
     const snapshot: AppState = {
-      currentListVersion: obj.currentListVersion,
       addresses: obj.addresses,
       completions: obj.completions,
       activeIndex: obj.activeIndex ?? null,
       daySessions: obj.daySessions ?? [],
       arrangements: obj.arrangements ?? [],
+      currentListVersion:
+        typeof (obj as any).currentListVersion === "number"
+          ? (obj as any).currentListVersion
+          : 1,
     };
     setState(snapshot);
     set(STORAGE_KEY, snapshot).catch(() => {});
@@ -282,9 +249,9 @@ export function useAppState() {
   return {
     state,
     loading,
-    setState, // for cloud sync
+    setState, // for cloud sync integrations
     // addresses
-    setAddresses, // increments version (fresh run)
+    setAddresses,
     addAddress,
     // active
     setActive,
