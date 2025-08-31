@@ -1,4 +1,3 @@
-// src/types.ts
 export type AddressRow = {
   address: string;
   lat?: number | null;
@@ -37,15 +36,15 @@ export type Arrangement = {
   id: string;               // unique identifier
   addressIndex: number;     // links to address in the main list
   address: string;          // cached for display
-  customerName?: string;    // optional customer name
-  phoneNumber?: string;     // optional contact number
+  customerName?: string;
+  phoneNumber?: string;
   scheduledDate: string;    // ISO date string (YYYY-MM-DD)
   scheduledTime?: string;   // optional time (HH:MM)
   status: ArrangementStatus;
-  notes?: string;           // optional notes
-  amount?: string;          // expected/actual amount
-  createdAt: string;        // when arrangement was created
-  updatedAt: string;        // when last modified
+  notes?: string;
+  amount?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type AppState = {
