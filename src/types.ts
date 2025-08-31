@@ -6,28 +6,26 @@ export type AddressRow = {
   lng?: number | null;
 };
 
-/** Valid completion outcomes, including Arrangement ("ARR"). */
-export type Outcome = "PIF" | "DA" | "Done" | "ARR";
+// If you also use "ARR" elsewhere, add it here:
+// export type Outcome = "PIF" | "DA" | "Done" | "ARR";
+export type Outcome = "PIF" | "DA" | "Done";
 
 export type Completion = {
-  index: number;            // index in the address list at the time of completion
-  address: string;
+  index: number;            // index in the list at the time of completion (for that version)
+  address: string;          // cached label (stable for history)
   lat?: number | null;
   lng?: number | null;
   outcome: Outcome;
-  amount?: string;          // "12.34" (string to preserve formatting)
-  timestamp: string;        // ISO string (primary timestamp field)
-
-  // Optional compatibility fields used by some components:
-  ts?: string;              // ISO string (legacy alias)
-  time?: string;            // ISO string (legacy alias)
+  amount?: string;          // "12.34" (string preserves formatting)
+  timestamp: string;        // ISO string
+  listVersion: number;      // <== NEW: which import/version this completion belongs to
 };
 
 export type DaySession = {
   date: string;             // "YYYY-MM-DD"
-  start: string;            // ISO string
-  end?: string;             // ISO string (undefined while active)
-  durationSeconds?: number; // computed on end
+  start: string;            // ISO
+  end?: string;             // ISO
+  durationSeconds?: number;
 };
 
 export type ArrangementStatus =
@@ -38,23 +36,24 @@ export type ArrangementStatus =
   | "Missed";
 
 export type Arrangement = {
-  id: string;               // unique identifier
-  addressIndex: number;     // links to address in the main list
-  address: string;          // cached for display
-  customerName?: string;    // optional customer name
-  phoneNumber?: string;     // optional contact number
-  scheduledDate: string;    // ISO date string (YYYY-MM-DD)
-  scheduledTime?: string;   // optional time (HH:MM)
+  id: string;
+  addressIndex: number;
+  address: string;
+  customerName?: string;
+  phoneNumber?: string;
+  scheduledDate: string;    // "YYYY-MM-DD"
+  scheduledTime?: string;   // "HH:MM"
   status: ArrangementStatus;
-  notes?: string;           // optional notes
-  amount?: string;          // expected amount
-  createdAt: string;        // when arrangement was created
-  updatedAt: string;        // when last modified
-  lat?: number | null;      // optional geo cache
-  lng?: number | null;      // optional geo cache
+  notes?: string;
+  amount?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type AppState = {
+  // NEW: the active version of the imported list (increments on every import)
+  currentListVersion: number;
+
   addresses: AddressRow[];
   activeIndex: number | null;
   completions: Completion[];
