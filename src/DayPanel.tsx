@@ -1,6 +1,7 @@
+// src/DayPanel.tsx
 import * as React from "react";
-import { format, isSameDay } from "date-fns";
-import type { DaySession, Completion, Outcome } from "./types";
+import { isSameDay } from "date-fns";
+import type { DaySession, Completion } from "./types";
 
 type Props = {
   sessions: DaySession[];
@@ -13,29 +14,35 @@ type Tally = { PIF: number; Done: number; DA: number; ARR: number };
 
 export function DayPanel({ sessions, completions, startDay, endDay }: Props) {
   const today = new Date();
+  const active = sessions.some((s) => !s.end);
 
-  const todaysCompletions = React.useMemo(() => {
-    return (Array.isArray(completions) ? completions : []).filter((c) => {
+  // Only today's completions; de-dupe by address index (latest keeps)
+  const todaysLatestByIndex = React.useMemo(() => {
+    const map = new Map<number, Completion>();
+    for (const c of completions ?? []) {
       const ts = c?.timestamp;
-      if (!ts) return false;
+      if (!ts) continue;
       const d = new Date(ts);
-      return !isNaN(d as any) && isSameDay(d, today);
-    });
+      if (!isNaN(d as any) && isSameDay(d, today)) {
+        const prev = map.get(c.index);
+        if (!prev || new Date(prev.timestamp).getTime() < d.getTime()) {
+          map.set(c.index, c);
+        }
+      }
+    }
+    return Array.from(map.values());
   }, [completions, today]);
 
   const tally: Tally = React.useMemo(() => {
     const t: Tally = { PIF: 0, Done: 0, DA: 0, ARR: 0 };
-    for (const c of todaysCompletions) {
-      if (c.outcome === "PIF") t.PIF++;
-      else if (c.outcome === "Done") t.Done++;
-      else if (c.outcome === "DA") t.DA++;
-      else if (c.outcome === "ARR") t.ARR++;
+    for (const c of todaysLatestByIndex) {
+      if (c.outcome in t) {
+        // @ts-expect-error key is safe
+        t[c.outcome] += 1;
+      }
     }
     return t;
-  }, [todaysCompletions]);
-
-  const activeIdx = sessions.findIndex((s) => !s.end);
-  const active = activeIdx >= 0 ? sessions[activeIdx] : null;
+  }, [todaysLatestByIndex]);
 
   return (
     <div className={`day-panel ${active ? "day-panel-active" : ""}`}>
@@ -43,11 +50,10 @@ export function DayPanel({ sessions, completions, startDay, endDay }: Props) {
         <div className="day-panel-info">
           <div>
             <div style={{ fontWeight: 700, color: "var(--text-primary)" }}>
-              {format(today, "EEEE, d MMM yyyy")}
+              {today.toLocaleDateString()}
             </div>
             <div className="muted">
-              {active ? "Day started" : "Day not started"}
-              {active?.start ? ` • ${new Date(active.start).toLocaleTimeString()}` : ""}
+              {active ? "Day in progress" : "Day not started"}
             </div>
           </div>
 
