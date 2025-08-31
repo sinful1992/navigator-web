@@ -78,7 +78,6 @@ export function useAppState() {
       setState((s) => {
         const newAddresses = [...s.addresses, addressRow];
         const newIndex = newAddresses.length - 1;
-        // resolve on next tick so state is applied
         setTimeout(() => resolve(newIndex), 0);
         return { ...s, addresses: newAddresses };
       });
@@ -233,11 +232,11 @@ export function useAppState() {
   const restoreState = React.useCallback((obj: unknown) => {
     if (!isValidState(obj)) throw new Error("Invalid backup file format");
     const snapshot: AppState = {
-      addresses: obj.addresses,
-      completions: obj.completions,
-      activeIndex: obj.activeIndex ?? null,
-      daySessions: obj.daySessions ?? [],
-      arrangements: obj.arrangements ?? [],
+      addresses: (obj as AppState).addresses,
+      completions: (obj as AppState).completions,
+      activeIndex: (obj as AppState).activeIndex ?? null,
+      daySessions: (obj as AppState).daySessions ?? [],
+      arrangements: (obj as AppState).arrangements ?? [],
       currentListVersion:
         typeof (obj as any).currentListVersion === "number"
           ? (obj as any).currentListVersion
