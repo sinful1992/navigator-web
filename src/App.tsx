@@ -13,7 +13,7 @@ import type { AppState, Completion, Outcome, AddressRow } from "./types";
 
 type Tab = "list" | "completed" | "arrangements";
 
-// --- helper: make sure arrays exist so .length never crashes ---
+// --- helper: normalize state from cloud/restore ---
 function normalizeState(raw: any) {
   const r = raw ?? {};
   return {
@@ -28,7 +28,7 @@ function normalizeState(raw: any) {
   };
 }
 
-// Simple error boundary (avoids blank screen on unexpected errors)
+// Simple error boundary
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -59,7 +59,6 @@ class ErrorBoundary extends React.Component<
 export default function App() {
   const cloudSync = useCloudSync();
 
-  // Wait for Supabase session restore
   if (cloudSync.isLoading) {
     return (
       <div className="container">
@@ -71,7 +70,6 @@ export default function App() {
     );
   }
 
-  // Auth screen
   if (!cloudSync.user) {
     return (
       <ErrorBoundary>
@@ -127,7 +125,6 @@ function AuthedApp() {
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
-  // --- safe arrays (never undefined) ---
   const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
   const completions = Array.isArray(state?.completions) ? state.completions : [];
   const arrangements = Array.isArray(state?.arrangements) ? state.arrangements : [];
@@ -238,7 +235,7 @@ function AuthedApp() {
     }
   };
 
-  // ----- Stats (safe arrays) -----
+  // ----- Stats -----
   const stats = React.useMemo(() => {
     const total = addresses.length;
     const completedCount = completions.length;
@@ -259,8 +256,6 @@ function AuthedApp() {
   }, [addresses, completions]);
 
   // ----- Completed screen handlers -----
-
-  // Edit outcome (only the most recent completion for that index)
   const onChangeOutcome = React.useCallback(
     (index: number, outcome: Outcome, amount?: string) => {
       setState((s) => {
@@ -273,7 +268,7 @@ function AuthedApp() {
           ...current,
           outcome,
           amount: outcome === "PIF" ? amount : undefined,
-          // keep original timestamp so it stays on the same day in history
+          // keep original timestamp
         };
         list[pos] = updated;
         return { ...s, completions: list };
@@ -282,7 +277,6 @@ function AuthedApp() {
     [setState]
   );
 
-  // Add address helper for Arrangements form (manual address path)
   const onAddAddress = React.useCallback(
     async (row: AddressRow) => {
       const idx = await addAddress(row);
@@ -311,7 +305,6 @@ function AuthedApp() {
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
 
-          {/* Sync Status */}
           <div
             style={{
               display: "flex",
@@ -337,7 +330,6 @@ function AuthedApp() {
         </div>
 
         <div className="right">
-          {/* Account pill */}
           <div className="user-chip" role="group" aria-label="Account">
             <span className="avatar" aria-hidden>
               👤
@@ -350,7 +342,6 @@ function AuthedApp() {
             </button>
           </div>
 
-          {/* Tabs */}
           <div className="tabs">
             <button
               className="tab-btn"
@@ -528,6 +519,7 @@ function AuthedApp() {
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
           onAddAddress={onAddAddress}
+          onComplete={complete}            // ✅ mark ARR completion on create
           autoCreateForAddress={autoCreateArrangementFor}
           onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
         />
