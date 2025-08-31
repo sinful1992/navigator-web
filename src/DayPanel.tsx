@@ -22,7 +22,6 @@ export function DayPanel({ sessions, completions, startDay, endDay }: Props) {
     });
   }, [completions, today]);
 
-  // Tally outcomes (supports ARR)
   const counts = React.useMemo(() => {
     const tally: Record<Outcome, number> = {
       PIF: 0,
