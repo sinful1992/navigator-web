@@ -2,10 +2,10 @@ import * as React from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { isSameDay } from "date-fns";
-import type { Outcome } from "./types";
+import type { Outcome, AppState } from "./types";
 
 type Props = {
-  state: any;
+  state: AppState;
   /** Change the outcome for a completed address (by address index). */
   onChangeOutcome: (index: number, outcome: Outcome, amount?: string) => void;
   /** Optional: expose undo on each row. */
@@ -13,8 +13,8 @@ type Props = {
 };
 
 export function Completed({ state, onChangeOutcome, onUndo }: Props) {
-  const completions: any[] = Array.isArray(state?.completions) ? state.completions : [];
-  const addresses: any[] = Array.isArray(state?.addresses) ? state.addresses : [];
+  const completions = Array.isArray(state?.completions) ? state.completions : [];
+  const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
 
   // --- Calendar filter ---
   const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(undefined);
@@ -22,7 +22,7 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
   // Normalize + sort completions (newest first)
   const normalized = React.useMemo(() => {
     const toDate = (c: any): Date | null => {
-      const raw = c?.timestamp ?? null;
+      const raw = c?.timestamp ?? c?.ts ?? c?.time ?? null; // support all timestamp shapes
       if (!raw) return null;
       const d = new Date(raw);
       return isNaN(d as any) ? null : d;
@@ -95,7 +95,7 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
           const idx = Number(c?.index);
           const rec = addresses[idx] ?? {};
           const label = String(rec?.address ?? c?.address ?? `#${idx + 1}`);
-          const when = c._date;
+          const when = (c as any)._date as Date | null;
           const isEditing = editingFor === idx;
 
           return (
@@ -123,9 +123,7 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
                           ? "pill-pif"
                           : c.outcome === "DA"
                           ? "pill-da"
-                          : c.outcome === "ARR"
-                          ? "pill-arr"
-                          : "pill-done")
+                          : /* style ARR like Done to avoid needing .pill-arr in CSS */ "pill-done")
                       }
                     >
                       {c.outcome}
@@ -196,7 +194,7 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
                       </button>
 
                       <button
-                        className="btn btn-outline"
+                        className="btn btn-ghost"
                         onClick={() => {
                           onChangeOutcome(idx, "ARR");
                           setEditingFor(null);
@@ -234,10 +232,6 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
                         💷 Save PIF
                       </button>
                     </div>
-                  </div>
-
-                  <div className="muted" style={{ marginTop: 8 }}>
-                    Need to manage the payment schedule? Go to the <strong>📅 Arrangements</strong> tab.
                   </div>
                 </div>
               )}
