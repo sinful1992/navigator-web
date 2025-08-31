@@ -10,9 +10,10 @@ import type {
   Arrangement,
 } from "./types";
 
-const STORAGE_KEY = "navigator_state_v3"; // versioned for arrangements
+const STORAGE_KEY = "navigator_state_v4"; // bump key because structure changed
 
 const initial: AppState = {
+  currentListVersion: 1,
   addresses: [],
   activeIndex: null,
   completions: [],
@@ -30,12 +31,32 @@ export function useAppState() {
     (async () => {
       try {
         const saved = (await get(STORAGE_KEY)) as AppState | undefined;
+
         if (alive && saved) {
-          setState({
-            ...saved,
-            // migrate older snapshots that might not have arrangements
-            arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
-          });
+          // Migrate older snapshots that didn't have versions
+          const migrated: AppState = {
+            currentListVersion:
+              typeof (saved as any).currentListVersion === "number"
+                ? (saved as any).currentListVersion
+                : 1,
+            addresses: Array.isArray(saved.addresses) ? saved.addresses : [],
+            activeIndex:
+              typeof saved.activeIndex === "number" || saved.activeIndex === null
+                ? saved.activeIndex
+                : null,
+            completions: Array.isArray(saved.completions)
+              ? saved.completions.map((c: any) => ({
+                  ...c,
+                  listVersion:
+                    typeof c?.listVersion === "number" ? c.listVersion : 1,
+                }))
+              : [],
+            daySessions: Array.isArray(saved.daySessions) ? saved.daySessions : [],
+            arrangements: Array.isArray((saved as any).arrangements)
+              ? (saved as any).arrangements
+              : [],
+          };
+          setState(migrated);
         }
       } finally {
         if (alive) setLoading(false);
@@ -57,28 +78,35 @@ export function useAppState() {
 
   // ---------------- actions ----------------
 
+  /**
+   * Import a new file:
+   * - Increments the list version.
+   * - Replaces the addresses with the new set.
+   * - Keeps history (completions retain their prior listVersion).
+   * - Does NOT relink old completions to this new version.
+   */
   const setAddresses = React.useCallback((rows: AddressRow[]) => {
     setState((s) => ({
       ...s,
+      currentListVersion: (s.currentListVersion ?? 1) + 1,
       addresses: Array.isArray(rows) ? rows : [],
       activeIndex: null,
-      // keep completions/daySessions/arrangements
+      // Keep completions/daySessions/arrangements as history.
     }));
   }, []);
 
+  /**
+   * Add a single address interactively (used by Arrangements).
+   */
   const addAddress = React.useCallback((addressRow: AddressRow) => {
     return new Promise<number>((resolve) => {
       setState((s) => {
         const newAddresses = [...s.addresses, addressRow];
         const newIndex = newAddresses.length - 1;
-        
-        // Use setTimeout to ensure state is updated before resolving
+        const next = { ...s, addresses: newAddresses };
+        set(STORAGE_KEY, next).catch(() => {});
         setTimeout(() => resolve(newIndex), 0);
-        
-        return {
-          ...s,
-          addresses: newAddresses,
-        };
+        return next;
       });
     });
   }, []);
@@ -92,8 +120,7 @@ export function useAppState() {
   }, []);
 
   /**
-   * Record a completion for an address index.
-   * Writes BOTH `timestamp` and `ts` so merges/filters across devices agree.
+   * Record a completion for the current list version.
    */
   const complete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string) => {
@@ -109,8 +136,8 @@ export function useAppState() {
           lng: a.lng ?? null,
           outcome,
           amount,
-          timestamp: nowISO, // primary
-          ts: nowISO,        // back-compat for readers/merges
+          timestamp: nowISO,
+          listVersion: s.currentListVersion ?? 1, // tag with active version
         };
 
         const next: AppState = {
@@ -125,13 +152,15 @@ export function useAppState() {
   );
 
   /**
-   * Undo the most recent completion for the given address index.
-   * (Removes the first match only, not all historical entries.)
+   * Undo the most recent completion for the given index in the **current** version.
    */
   const undo = React.useCallback((index: number) => {
     setState((s) => {
+      const v = s.currentListVersion ?? 1;
       const arr = s.completions.slice();
-      const pos = arr.findIndex((c) => Number(c.index) === Number(index));
+      const pos = arr.findIndex(
+        (c) => Number(c.index) === Number(index) && c.listVersion === v
+      );
       if (pos >= 0) arr.splice(pos, 1);
       return { ...s, completions: arr };
     });
@@ -215,15 +244,18 @@ export function useAppState() {
     return (
       obj &&
       typeof obj === "object" &&
+      typeof obj.currentListVersion === "number" &&
       Array.isArray(obj.addresses) &&
       Array.isArray(obj.completions) &&
       "activeIndex" in obj &&
-      Array.isArray(obj.daySessions)
+      Array.isArray(obj.daySessions) &&
+      Array.isArray(obj.arrangements)
     );
   }
 
   const backupState = React.useCallback(() => {
     const snap: AppState = {
+      currentListVersion: state.currentListVersion,
       addresses: state.addresses,
       completions: state.completions,
       activeIndex: state.activeIndex,
@@ -236,6 +268,7 @@ export function useAppState() {
   const restoreState = React.useCallback((obj: unknown) => {
     if (!isValidState(obj)) throw new Error("Invalid backup file format");
     const snapshot: AppState = {
+      currentListVersion: obj.currentListVersion,
       addresses: obj.addresses,
       completions: obj.completions,
       activeIndex: obj.activeIndex ?? null,
@@ -249,10 +282,10 @@ export function useAppState() {
   return {
     state,
     loading,
-    setState, // for cloud sync integrations
+    setState, // for cloud sync
     // addresses
-    setAddresses,
-    addAddress, // ✅ New function for adding individual addresses
+    setAddresses, // increments version (fresh run)
+    addAddress,
     // active
     setActive,
     cancelActive,
