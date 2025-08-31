@@ -92,8 +92,6 @@ export function AddressList({
                   </button>
                 </>
               )}
-
-              {/* When active, show ARR button next to DA in the outcome bar below */}
             </div>
 
             {isActive && showing && (
@@ -122,7 +120,6 @@ export function AddressList({
                   <button
                     className="btn btn-ghost btn-sm"
                     onClick={() => {
-                      // mark as arrangement AND jump to the Arrangements tab for details
                       complete(i, "ARR");
                       onCreateArrangement(i);
                       setShowOutcomesFor(null);
