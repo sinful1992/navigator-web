@@ -19,7 +19,9 @@ function makeMapsHref(row: AddressRow) {
     !Number.isNaN(row.lat) &&
     !Number.isNaN(row.lng)
   ) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${row.lat},${row.lng}`)}`;
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+      `${row.lat},${row.lng}`
+    )}`;
   }
   const q = encodeURIComponent(row?.address ?? "");
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
@@ -149,7 +151,11 @@ export function AddressList({
                   </button>
                   <button
                     className="btn btn-ghost"
-                    onClick={() => onComplete(index, "ARR")}
+                    onClick={() => {
+                      // Mark outcome as ARR and open/create arrangement for this address
+                      onComplete(index, "ARR");
+                      onCreateArrangement(index);
+                    }}
                     title="Payment arrangement"
                   >
                     📅 ARR
@@ -187,3 +193,5 @@ export function AddressList({
     </div>
   );
 }
+
+export default AddressList;
