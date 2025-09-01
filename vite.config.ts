@@ -2,9 +2,15 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// No PWA plugin needed. We ship a static manifest + service worker in /public.
+// GITHUB_REPOSITORY looks like "sinful1992/navigator-web"
+const repoFull = process.env.GITHUB_REPOSITORY ?? "";
+const [owner, repo] = repoFull.split("/");
+const isUserSite = repo?.toLowerCase() === `${owner?.toLowerCase()}.github.io`;
+
+// For https://sinful1992.github.io/navigator-web/ we want "/navigator-web/"
+const base = isUserSite ? "/" : `/${repo ?? ""}/`;
+
 export default defineConfig({
-  // GitHub Pages serves the app at /navigator-web/
-  base: "/navigator-web/",
   plugins: [react()],
+  base,
 });
