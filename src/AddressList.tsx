@@ -1,7 +1,6 @@
 // src/AddressList.tsx
 import * as React from "react";
 import type { AppState, Outcome, AddressRow, Completion } from "./types";
-import { AddressCard } from "./AddressCard";
 
 type Props = {
   state: AppState;
@@ -20,18 +19,14 @@ function makeMapsHref(row: AddressRow) {
     !Number.isNaN(row.lat) &&
     !Number.isNaN(row.lng)
   ) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-      `${row.lat},${row.lng}`
-    )}`;
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${row.lat},${row.lng}`)}`;
   }
   const q = encodeURIComponent(row?.address ?? "");
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
 
-function getCompletedIdxForCurrentVersion(
-  completions: Completion[] | undefined,
-  currentLV: number
-) {
+/** Only hide indices completed for the *current* list version. */
+function completedForCurrent(completions: Completion[] | undefined, currentLV: number) {
   const set = new Set<number>();
   if (!completions?.length) return set;
   for (const c of completions) {
@@ -56,69 +51,139 @@ export function AddressList({
   const currentLV = state.currentListVersion;
 
   const completedIdx = React.useMemo(
-    () => getCompletedIdxForCurrentVersion(completions, currentLV),
+    () => completedForCurrent(completions, currentLV),
     [completions, currentLV]
   );
 
-  const tuples = React.useMemo(
-    () => items.map((row, index) => ({ row, index })),
-    [items]
-  );
-
-  const normalizedQuery = filterText.trim().toLowerCase();
+  const tuples = React.useMemo(() => items.map((row, index) => ({ row, index })), [items]);
+  const q = filterText.trim().toLowerCase();
 
   const filtered = React.useMemo(() => {
-    if (!normalizedQuery) return tuples;
+    if (!q) return tuples;
     return tuples.filter(({ row }) => {
       const a = (row.address ?? "").toLowerCase();
       const p = (row.postcode ?? "").toLowerCase();
-      return a.includes(normalizedQuery) || p.includes(normalizedQuery);
+      return a.includes(q) || p.includes(q);
     });
-  }, [tuples, normalizedQuery]);
+  }, [tuples, q]);
 
   const visible = React.useMemo(
     () => filtered.filter(({ index }) => !completedIdx.has(index)),
     [filtered, completedIdx]
   );
 
-  const handleNavigate = React.useCallback(
-    (originalIndex: number) => {
-      if (!state.day?.startTime) ensureDayStarted();
-      setActive(originalIndex);
-    },
-    [ensureDayStarted, setActive, state.day?.startTime]
-  );
-
-  const handleComplete = React.useCallback(
-    (originalIndex: number, outcome: Outcome, amount?: string) => {
-      onComplete(originalIndex, outcome, amount);
-    },
-    [onComplete]
-  );
+  const [pifAmount, setPifAmount] = React.useState<string>("");
 
   if (!items.length) {
-    return <div className="p-4 text-sm opacity-70">No addresses loaded yet.</div>;
+    return (
+      <div className="empty-box">
+        <div>No addresses yet</div>
+        <div>Import a list to begin.</div>
+      </div>
+    );
   }
   if (!visible.length) {
-    return <div className="p-4 text-sm opacity-70">No results. Clear filters or items are completed.</div>;
+    return (
+      <div className="empty-box">
+        <div>No results</div>
+        <div>Clear the search or all visible items may be completed.</div>
+      </div>
+    );
   }
 
   return (
-    <div className="address-list">
-      {visible.map(({ row, index: originalIndex }) => (
-        <AddressCard
-          key={row.id ?? originalIndex}
-          index={originalIndex}
-          row={row}
-          mapsHref={makeMapsHref(row)}
-          setActive={() => handleNavigate(originalIndex)}
-          cancelActive={cancelActive}
-          onComplete={(outcome, amount) => handleComplete(originalIndex, outcome, amount)}
-          onCreateArrangement={() => onCreateArrangement(originalIndex)}
-        />
-      ))}
+    <div className="list">
+      {visible.map(({ row, index }) => {
+        const isActive = state.activeIndex === index;
+        const mapsHref = makeMapsHref(row);
+
+        return (
+          <div key={row.id ?? index} className={`row-card ${isActive ? "card-active" : ""}`}>
+            {/* Row head */}
+            <div className="row-head">
+              <div className="row-index">{index + 1}</div>
+              <div className="row-title" title={row.address ?? ""}>
+                {row.address ?? "(no address)"}{" "}
+                {row.postcode ? <span style={{ color: "var(--text-secondary)" }}> · {row.postcode}</span> : null}
+                {isActive && <span className="active-badge">Active</span>}
+              </div>
+              <div className="row-actions">
+                <a
+                  className="btn btn-outline btn-sm"
+                  href={mapsHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open in Google Maps"
+                  onClick={() => {
+                    if (!state.day?.startTime) {
+                      // auto-start day when navigating first time
+                      ensureDayStarted();
+                    }
+                  }}
+                >
+                  🧭 Navigate
+                </a>
+
+                {!isActive ? (
+                  <button className="btn btn-primary btn-sm" onClick={() => setActive(index)}>
+                    ▶️ Set Active
+                  </button>
+                ) : (
+                  <button className="btn btn-ghost btn-sm" onClick={cancelActive}>
+                    ✖ Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Completion bar */}
+            <div className="card-body">
+              <div className="complete-bar">
+                <div className="complete-btns">
+                  <button
+                    className="btn btn-success"
+                    onClick={() => onComplete(index, "DA")}
+                    title="Door answered / agreed action"
+                  >
+                    👍 DA
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => onComplete(index, "ARR")}
+                    title="Payment arrangement"
+                  >
+                    📅 ARR
+                  </button>
+                  <button
+                    className="btn btn-danger"
+                    onClick={() => onComplete(index, "DONE")}
+                    title="No further action"
+                  >
+                    ✅ Done
+                  </button>
+                </div>
+
+                <div className="pif-group">
+                  <input
+                    className="input amount-input"
+                    placeholder="£ Amount"
+                    value={pifAmount}
+                    onChange={(e) => setPifAmount(e.target.value)}
+                    inputMode="decimal"
+                  />
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => onComplete(index, "PIF", pifAmount || undefined)}
+                    title="Save PIF amount"
+                  >
+                    💷 Save PIF
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
-
-export default AddressList;
