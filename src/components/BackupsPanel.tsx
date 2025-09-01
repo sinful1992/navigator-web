@@ -79,9 +79,8 @@ export function BackupsPanel({ open, onClose, setState }: Props) {
                             setBusyId(r.id);
                             try {
                               const url = await getBackupSignedUrl(r.object_path, 60);
-                              // trigger download in a new tab
                               window.open(url, "_blank", "noopener,noreferrer");
-                            } catch (e) {
+                            } catch {
                               alert("Failed to create download link.");
                             } finally {
                               setBusyId(null);
