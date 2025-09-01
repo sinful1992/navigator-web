@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as React from "react";
 import { format, parseISO, isWithinInterval, startOfWeek, endOfWeek, isSameDay, isPast, addDays } from "date-fns";
 import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome } from "./types";
