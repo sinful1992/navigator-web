@@ -5,19 +5,13 @@ import { Completed } from "./Completed";
 import type { AppState, Outcome } from "./types";
 import { BackupsPanel } from "./components/BackupsPanel";
 
-// Version-safe outcome updates (Step B)
 import { updateOutcomeByIndexAndVersion } from "./state/updateOutcome";
-
-// Creation path (listVersion + addressSnapshot)
 import { createCompletion, upsertCompletion } from "./state/createCompletion";
-
-// Version-scoped stats
 import { computeCurrentStats } from "./state/selectors";
-
-// Backup helpers
 import { localDateKey, makeDaySnapshot, performBackup } from "./backup/backup";
 
-import { useAppState } from "./state/useAppState";
+// ✅ correct path (file is at src/useAppState.ts)
+import { useAppState } from "./useAppState";
 
 export default function App() {
   const { state, setState } = useAppState();
@@ -46,7 +40,6 @@ export default function App() {
     console.debug("Create arrangement for index", addressIndex);
   }, []);
 
-  // Create completion stamped with listVersion + addressSnapshot; upsert by (index, listVersion)
   const onComplete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string) => {
       setState((s: AppState) => {
@@ -57,7 +50,6 @@ export default function App() {
     [setState]
   );
 
-  // Version-safe outcome updates (used by Completed)
   const handleChangeOutcome = React.useCallback(
     (index: number, o: Outcome, amount?: string, listVersion?: number) => {
       setState((s: AppState) => updateOutcomeByIndexAndVersion(s, index, o, amount, listVersion));
@@ -65,7 +57,6 @@ export default function App() {
     [setState]
   );
 
-  // Manual "Backup now"
   const handleBackupNow = React.useCallback(async () => {
     try {
       setIsBackingUp(true);
@@ -73,7 +64,7 @@ export default function App() {
       const snapshot = makeDaySnapshot(state, dayKey);
       await performBackup(dayKey, snapshot);
       alert("Backup completed.");
-      setState((s) => ({ ...s, lastBackupAt: new Date().toISOString() } as AppState));
+      setState((s: AppState) => ({ ...s, lastBackupAt: new Date().toISOString() }));
     } catch (e) {
       console.error(e);
       alert("Backup failed. Please try again.");
@@ -82,7 +73,6 @@ export default function App() {
     }
   }, [state, setState]);
 
-  // Finish Day → set endTime and back up the final snapshot
   const handleFinishDay = React.useCallback(async () => {
     try {
       setIsBackingUp(true);
@@ -90,7 +80,6 @@ export default function App() {
       const dayKey = localDateKey(new Date(), "Europe/London");
       const snapshot = makeDaySnapshot(state, dayKey, { endTime: nowIso });
 
-      // Update endTime locally for UX consistency
       setState((s: AppState) => ({
         ...s,
         day: { ...(s.day ?? {}), endTime: nowIso },
@@ -98,7 +87,7 @@ export default function App() {
 
       await performBackup(dayKey, snapshot);
       alert(`Day ${dayKey} finished and backed up.`);
-      setState((s) => ({ ...s, lastBackupAt: nowIso } as AppState));
+      setState((s: AppState) => ({ ...s, lastBackupAt: nowIso }));
     } catch (e) {
       console.error(e);
       alert("Finish Day backup failed. Your data is still on this device.");
@@ -188,11 +177,7 @@ export default function App() {
         </section>
       </main>
 
-      <BackupsPanel
-        open={showBackups}
-        onClose={() => setShowBackups(false)}
-        setState={setState}
-      />
+      <BackupsPanel open={showBackups} onClose={() => setShowBackups(false)} setState={setState} />
     </div>
   );
 }
