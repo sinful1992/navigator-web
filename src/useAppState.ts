@@ -1,4 +1,3 @@
-// src/useAppState.ts
 import * as React from "react";
 import { get, set } from "idb-keyval";
 import type {
@@ -10,7 +9,7 @@ import type {
   Arrangement,
 } from "./types";
 
-const STORAGE_KEY = "navigator_state_v3";
+const STORAGE_KEY = "navigator_state_v3"; // versioned for arrangements + listVersion
 
 const initial: AppState = {
   addresses: [],
@@ -18,130 +17,33 @@ const initial: AppState = {
   completions: [],
   daySessions: [],
   arrangements: [],
+  currentListVersion: 1, // ✅ required by AppState
 };
-
-/* ------------ normalize helpers (no dedupe) ------------ */
-
-function normAddressString(raw: string | undefined | null): string {
-  if (!raw) return "";
-  let s = String(raw).toUpperCase();
-
-  // tidy commas & spaces
-  s = s.replace(/,+/g, ",");
-  s = s.replace(/\s*,\s*/g, ", ");
-  s = s.replace(/\s+/g, " ").trim();
-
-  // fix common postcode typo S0## -> SO##
-  s = s.replace(/\bS0(?=\d)/g, "SO");
-  return s;
-}
-
-function normalizeRow(row: AddressRow): AddressRow {
-  return {
-    address: normAddressString(row.address),
-    lat: typeof row.lat === "number" && isFinite(row.lat) ? row.lat : null,
-    lng: typeof row.lng === "number" && isFinite(row.lng) ? row.lng : null,
-  };
-}
-
-function sameCoords(a?: number | null, b?: number | null) {
-  if (a == null && b == null) return true;
-  if (typeof a !== "number" || typeof b !== "number") return false;
-  // loose match (≈11m at 5 dp)
-  return a.toFixed(5) === b.toFixed(5);
-}
-
-function tryFindIndexByAddress(
-  rows: AddressRow[],
-  address: string,
-  lat?: number | null,
-  lng?: number | null
-): number | undefined {
-  const target = normAddressString(address);
-  // prefer exact address + near coords
-  let hit = rows.findIndex(
-    (r) =>
-      r.address === target &&
-      sameCoords(r.lat ?? null, lat ?? null) &&
-      sameCoords(r.lng ?? null, lng ?? null)
-  );
-  if (hit >= 0) return hit;
-
-  // fallback: exact address match only
-  hit = rows.findIndex((r) => r.address === target);
-  return hit >= 0 ? hit : undefined;
-}
-
-/* reindex completions without removing/merging rows */
-function reindexCompletionsNoReorder(
-  completions: Completion[],
-  rows: AddressRow[]
-) {
-  const out: Completion[] = [];
-  const rowsMut = rows.slice(); // we may append if needed
-
-  completions.forEach((c) => {
-    let idx = Number.isInteger(c.index) ? (c.index as number) : -1;
-
-    if (idx < 0 || idx >= rowsMut.length) {
-      const guess = tryFindIndexByAddress(rowsMut, c.address, c.lat, c.lng);
-      if (guess !== undefined) {
-        idx = guess;
-      } else {
-        // preserve history: append a synthetic row for this completion
-        const appended: AddressRow = normalizeRow({
-          address: c.address,
-          lat: c.lat ?? null,
-          lng: c.lng ?? null,
-        });
-        rowsMut.push(appended);
-        idx = rowsMut.length - 1;
-      }
-    }
-
-    out.push({
-      ...c,
-      index: idx,
-      address: normAddressString(c.address),
-    });
-  });
-
-  return { completions: out, rows: rowsMut };
-}
-
-/* overall cleanup on load/restore: normalize only */
-function applyCleanup(snap: AppState): AppState {
-  const rowsNorm = Array.isArray(snap.addresses)
-    ? snap.addresses.map(normalizeRow)
-    : [];
-
-  const { completions, rows } = reindexCompletionsNoReorder(
-    Array.isArray(snap.completions) ? snap.completions : [],
-    rowsNorm
-  );
-
-  return {
-    addresses: rows,
-    completions,
-    activeIndex: snap.activeIndex ?? null,
-    daySessions: Array.isArray(snap.daySessions) ? snap.daySessions : [],
-    arrangements: Array.isArray(snap.arrangements) ? snap.arrangements : [],
-  };
-}
-
-/* ---------------------- hook ---------------------- */
 
 export function useAppState() {
   const [state, setState] = React.useState<AppState>(initial);
   const [loading, setLoading] = React.useState(true);
 
-  // load
+  // ---- load from IndexedDB ----
   React.useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const saved = (await get(STORAGE_KEY)) as AppState | undefined;
-        if (alive && saved) setState(applyCleanup(saved));
+        const saved = (await get(STORAGE_KEY)) as Partial<AppState> | undefined;
+        if (alive && saved) {
+          setState({
+            addresses: Array.isArray(saved.addresses) ? saved.addresses : [],
+            activeIndex:
+              typeof saved.activeIndex === "number" ? saved.activeIndex : null,
+            completions: Array.isArray(saved.completions) ? saved.completions : [],
+            daySessions: Array.isArray(saved.daySessions) ? saved.daySessions : [],
+            arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
+            currentListVersion:
+              typeof saved.currentListVersion === "number"
+                ? saved.currentListVersion
+                : 1, // ✅ default if missing in older snapshots
+          });
+        }
       } finally {
         if (alive) setLoading(false);
       }
@@ -151,30 +53,43 @@ export function useAppState() {
     };
   }, []);
 
-  // persist
+  // ---- persist to IndexedDB (debounced) ----
   React.useEffect(() => {
     if (loading) return;
-    const t = setTimeout(() => set(STORAGE_KEY, state).catch(() => {}), 150);
+    const t = setTimeout(() => {
+      set(STORAGE_KEY, state).catch(() => {});
+    }, 150);
     return () => clearTimeout(t);
   }, [state, loading]);
 
-  /* actions */
+  // ---------------- actions ----------------
 
+  /** Replace the address list (e.g. after importing a new Excel file).
+   *  We bump `currentListVersion` so future completions can record which list they belong to.
+   *  (No dedupe: duplicate addresses remain separate rows.)
+   */
   const setAddresses = React.useCallback((rows: AddressRow[]) => {
     setState((s) => ({
       ...s,
-      addresses: (Array.isArray(rows) ? rows : []).map(normalizeRow),
+      addresses: Array.isArray(rows) ? rows : [],
       activeIndex: null,
+      currentListVersion: (s.currentListVersion ?? 1) + 1, // ✅ bump version on new list
+      // keep completions/daySessions/arrangements
     }));
   }, []);
 
-  const addAddress = React.useCallback((row: AddressRow) => {
+  /** Append a single address row and return its index. */
+  const addAddress = React.useCallback((addressRow: AddressRow) => {
     return new Promise<number>((resolve) => {
       setState((s) => {
-        const next = [...s.addresses, normalizeRow(row)];
-        const newIdx = next.length - 1;
-        setTimeout(() => resolve(newIdx), 0);
-        return { ...s, addresses: next };
+        const newAddresses = [...s.addresses, addressRow];
+        const newIndex = newAddresses.length - 1;
+        // resolve on next tick so state is applied
+        setTimeout(() => resolve(newIndex), 0);
+        return {
+          ...s,
+          addresses: newAddresses,
+        };
       });
     });
   }, []);
@@ -187,12 +102,17 @@ export function useAppState() {
     setState((s) => ({ ...s, activeIndex: null }));
   }, []);
 
+  /**
+   * Record a completion for an address index.
+   * Also stamps the current listVersion so history remains clear across imports.
+   */
   const complete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string) => {
       setState((s) => {
         const a = s.addresses[index];
         if (!a) return s;
-        const now = new Date().toISOString();
+
+        const nowISO = new Date().toISOString();
         const c: Completion = {
           index,
           address: a.address,
@@ -200,9 +120,14 @@ export function useAppState() {
           lng: a.lng ?? null,
           outcome,
           amount,
-          timestamp: now,
+          timestamp: nowISO,
+          listVersion: s.currentListVersion, // ✅ track which list this belonged to
         };
-        const next: AppState = { ...s, completions: [c, ...s.completions] };
+
+        const next: AppState = {
+          ...s,
+          completions: [c, ...s.completions],
+        };
         if (s.activeIndex === index) next.activeIndex = null;
         return next;
       });
@@ -210,6 +135,7 @@ export function useAppState() {
     []
   );
 
+  /** Undo the most recent completion for the given address index (first match removal). */
   const undo = React.useCallback((index: number) => {
     setState((s) => {
       const arr = s.completions.slice();
@@ -219,10 +145,11 @@ export function useAppState() {
     });
   }, []);
 
-  // day sessions
+  // ---- day tracking ----
+
   const startDay = React.useCallback(() => {
     setState((s) => {
-      if (s.daySessions.some((d) => !d.end)) return s;
+      if (s.daySessions.some((d) => !d.end)) return s; // already active
       const now = new Date();
       const sess: DaySession = {
         date: now.toISOString().slice(0, 10),
@@ -244,13 +171,16 @@ export function useAppState() {
         const start = new Date(act.start).getTime();
         const end = now.getTime();
         if (end > start) act.durationSeconds = Math.floor((end - start) / 1000);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       arr[i] = act;
       return { ...s, daySessions: arr };
     });
   }, []);
 
-  // arrangements
+  // ---- arrangements ----
+
   const addArrangement = React.useCallback(
     (arrangementData: Omit<Arrangement, "id" | "createdAt" | "updatedAt">) => {
       setState((s) => {
@@ -261,20 +191,29 @@ export function useAppState() {
           createdAt: now,
           updatedAt: now,
         };
-        return { ...s, arrangements: [...s.arrangements, newArrangement] };
+
+        return {
+          ...s,
+          arrangements: [...s.arrangements, newArrangement],
+        };
       });
     },
     []
   );
 
-  const updateArrangement = React.useCallback((id: string, updates: Partial<Arrangement>) => {
-    setState((s) => ({
-      ...s,
-      arrangements: s.arrangements.map((arr) =>
-        arr.id === id ? { ...arr, ...updates, updatedAt: new Date().toISOString() } : arr
-      ),
-    }));
-  }, []);
+  const updateArrangement = React.useCallback(
+    (id: string, updates: Partial<Arrangement>) => {
+      setState((s) => ({
+        ...s,
+        arrangements: s.arrangements.map((arr) =>
+          arr.id === id
+            ? { ...arr, ...updates, updatedAt: new Date().toISOString() }
+            : arr
+        ),
+      }));
+    },
+    []
+  );
 
   const deleteArrangement = React.useCallback((id: string) => {
     setState((s) => ({
@@ -283,7 +222,8 @@ export function useAppState() {
     }));
   }, []);
 
-  // backup/restore
+  // ---- backup / restore ----
+
   function isValidState(obj: any): obj is AppState {
     return (
       obj &&
@@ -302,24 +242,35 @@ export function useAppState() {
       activeIndex: state.activeIndex,
       daySessions: state.daySessions,
       arrangements: state.arrangements,
+      currentListVersion: state.currentListVersion, // ✅ include in backup
     };
     return snap;
   }, [state]);
 
   const restoreState = React.useCallback((obj: unknown) => {
     if (!isValidState(obj)) throw new Error("Invalid backup file format");
-    const cleaned = applyCleanup(obj as AppState); // normalize only; keep duplicates
-    setState(cleaned);
-    set(STORAGE_KEY, cleaned).catch(() => {});
+    const src = obj as AppState;
+    const snapshot: AppState = {
+      addresses: Array.isArray(src.addresses) ? src.addresses : [],
+      completions: Array.isArray(src.completions) ? src.completions : [],
+      activeIndex:
+        typeof src.activeIndex === "number" ? src.activeIndex : null,
+      daySessions: Array.isArray(src.daySessions) ? src.daySessions : [],
+      arrangements: Array.isArray(src.arrangements) ? src.arrangements : [],
+      currentListVersion:
+        typeof src.currentListVersion === "number" ? src.currentListVersion : 1, // ✅ default if missing
+    };
+    setState(snapshot);
+    set(STORAGE_KEY, snapshot).catch(() => {});
   }, []);
 
   return {
     state,
     loading,
-    setState,
+    setState, // for cloud sync integrations
     // addresses
     setAddresses,
-    addAddress,
+    addAddress, // add single address and get its index
     // active
     setActive,
     cancelActive,
