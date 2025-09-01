@@ -28,7 +28,7 @@ function normalizeState(raw: any) {
   };
 }
 
-// Simple error boundary
+// ----- Error boundary -----
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -136,7 +136,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // Bootstrap cloud sync
+  // ---- Cloud sync bootstrap ----
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: (() => void) | undefined;
@@ -177,7 +177,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // Push local -> cloud (debounced)
+  // ---- Debounced push local -> cloud ----
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
@@ -197,6 +197,7 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [cloudSync.user, loading, hydrated, safeState, cloudSync]);
 
+  // ---- Handlers ----
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
     setTab("arrangements");
@@ -207,6 +208,45 @@ function AuthedApp() {
     const hasToday = daySessions.some((d: any) => d.date === today);
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
+
+  // Allow DayPanel to edit today's start time (or create a session with that start)
+  const handleEditStart = React.useCallback(
+    (newStartISO: any) => {
+      const parsed =
+        typeof newStartISO === "string" ? new Date(newStartISO) : new Date(newStartISO?.value ?? Date.now());
+      if (Number.isNaN(parsed.getTime())) return;
+
+      const newISO = parsed.toISOString();
+      setState((s) => {
+        const today = newISO.slice(0, 10);
+        const idx = s.daySessions.findIndex((d) => d.date === today && !d.end);
+        // if active session today exists, edit its start
+        if (idx >= 0) {
+          const arr = s.daySessions.slice();
+          const sess = { ...arr[idx], start: newISO };
+          // recompute duration if ended (shouldn't be ended per predicate, but safe)
+          if (sess.end) {
+            try {
+              const start = new Date(sess.start).getTime();
+              const end = new Date(sess.end).getTime();
+              if (end > start) sess.durationSeconds = Math.floor((end - start) / 1000);
+            } catch {}
+          }
+          arr[idx] = sess;
+          return { ...s, daySessions: arr };
+        }
+        // otherwise, create a new session for today with this start
+        return {
+          ...s,
+          daySessions: [
+            ...s.daySessions,
+            { date: today, start: newISO },
+          ],
+        };
+      });
+    },
+    [setState]
+  );
 
   // Backup / Restore
   const onBackup = React.useCallback(() => {
@@ -239,6 +279,7 @@ function AuthedApp() {
     }
   };
 
+  // Stats (simple global counts)
   const stats = React.useMemo(() => {
     const total = addresses.length;
     const completedCount = completions.length;
@@ -361,7 +402,7 @@ function AuthedApp() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tab content */}
       {tab === "list" ? (
         <>
           <div className="search-container">
@@ -379,13 +420,14 @@ function AuthedApp() {
             completions={completions}
             startDay={startDay}
             endDay={endDay}
+            onEditStart={handleEditStart}   {/* ✅ new prop wired */}
           />
 
           <AddressList
             state={safeState}
             setActive={setActive}
             cancelActive={cancelActive}
-            complete={complete}
+            onComplete={complete}           {/* ✅ AddressList expects onComplete */}
             onCreateArrangement={handleCreateArrangement}
             filterText={search}
             ensureDayStarted={ensureDayStarted}
@@ -428,6 +470,7 @@ function AuthedApp() {
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
           onAddAddress={async (addr: AddressRow) => addAddress(addr)}
+          onComplete={complete}            {/* ✅ provide to Arrangements if it needs to mark done */}
           autoCreateForAddress={autoCreateArrangementFor}
           onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
         />
