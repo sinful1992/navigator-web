@@ -8,13 +8,13 @@ import { BackupsPanel } from "./components/BackupsPanel";
 // Version-safe outcome updates (Step B)
 import { updateOutcomeByIndexAndVersion } from "./state/updateOutcome";
 
-// Creation path you already added (listVersion+snapshot)
+// Creation path (listVersion + addressSnapshot)
 import { createCompletion, upsertCompletion } from "./state/createCompletion";
 
-// Optional stats header
+// Version-scoped stats
 import { computeCurrentStats } from "./state/selectors";
 
-// ✅ Backup helpers
+// Backup helpers
 import { localDateKey, makeDaySnapshot, performBackup } from "./backup/backup";
 
 import { useAppState } from "./state/useAppState";
@@ -23,6 +23,7 @@ export default function App() {
   const { state, setState } = useAppState();
   const [filterText, setFilterText] = React.useState("");
   const [isBackingUp, setIsBackingUp] = React.useState(false);
+  const [showBackups, setShowBackups] = React.useState(false);
 
   const setActive = React.useCallback(
     (index: number) => setState((s: AppState) => ({ ...s, activeIndex: index })),
@@ -45,7 +46,7 @@ export default function App() {
     console.debug("Create arrangement for index", addressIndex);
   }, []);
 
-  // Stamped creation + upsert (you already use this)
+  // Create completion stamped with listVersion + addressSnapshot; upsert by (index, listVersion)
   const onComplete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string) => {
       setState((s: AppState) => {
@@ -64,7 +65,7 @@ export default function App() {
     [setState]
   );
 
-  // ✅ Manual "Backup now"
+  // Manual "Backup now"
   const handleBackupNow = React.useCallback(async () => {
     try {
       setIsBackingUp(true);
@@ -81,7 +82,7 @@ export default function App() {
     }
   }, [state, setState]);
 
-  // ✅ Finish Day → set endTime and back up the final snapshot
+  // Finish Day → set endTime and back up the final snapshot
   const handleFinishDay = React.useCallback(async () => {
     try {
       setIsBackingUp(true);
@@ -121,7 +122,9 @@ export default function App() {
           <span className="mr-2">Done: {stats.doneCount}</span>
           <span className="mr-2">ARR: {stats.arrCount}</span>
           {state?.lastBackupAt && (
-            <span className="ml-2 opacity-70">Last backup: {new Date(state.lastBackupAt).toLocaleString()}</span>
+            <span className="ml-2 opacity-70">
+              Last backup: {new Date(state.lastBackupAt).toLocaleString()}
+            </span>
           )}
         </div>
 
@@ -132,6 +135,13 @@ export default function App() {
             placeholder="Search address or postcode…"
             className="border rounded px-3 py-1 text-sm"
           />
+          <button
+            onClick={() => setShowBackups(true)}
+            className="border rounded px-3 py-1 text-sm"
+            title="View/restore previous backups"
+          >
+            Backups
+          </button>
           <button
             onClick={handleBackupNow}
             disabled={isBackingUp}
@@ -153,7 +163,9 @@ export default function App() {
 
       <main className="grid md:grid-cols-2 gap-4 p-3">
         <section className="min-w-0">
-          <h2 className="text-sm font-medium mb-2">Active List (v{state.currentListVersion})</h2>
+          <h2 className="text-sm font-medium mb-2">
+            Active List (v{state.currentListVersion})
+          </h2>
           <AddressList
             state={state}
             setActive={setActive}
@@ -175,6 +187,12 @@ export default function App() {
           />
         </section>
       </main>
+
+      <BackupsPanel
+        open={showBackups}
+        onClose={() => setShowBackups(false)}
+        setState={setState}
+      />
     </div>
   );
 }
