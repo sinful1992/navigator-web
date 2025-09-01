@@ -18,31 +18,54 @@ const initial: AppState = {
   completions: [],
   daySessions: [],
   arrangements: [],
-  currentListVersion: 1, // make sure this exists
+  currentListVersion: 1, // <- default version for older snapshots/backups
 };
+
+function stampCompletionsWithVersion(
+  completions: any[] | undefined,
+  version: number
+): Completion[] {
+  const src = Array.isArray(completions) ? completions : [];
+  return src.map((c: any) => ({
+    ...c,
+    // if missing, tag with the snapshot's version
+    listVersion: typeof c?.listVersion === "number" ? c.listVersion : version,
+  }));
+}
 
 export function useAppState() {
   const [state, setState] = React.useState<AppState>(initial);
   const [loading, setLoading] = React.useState(true);
 
-  // load
+  // ---- load from IndexedDB (with migration) ----
   React.useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const saved = (await get(STORAGE_KEY)) as AppState | undefined;
-        if (alive && saved) {
-          setState({
+        const saved = (await get(STORAGE_KEY)) as Partial<AppState> | undefined;
+        if (!alive) return;
+
+        if (saved) {
+          const version =
+            typeof saved.currentListVersion === "number"
+              ? saved.currentListVersion
+              : 1;
+
+          const next: AppState = {
             addresses: Array.isArray(saved.addresses) ? saved.addresses : [],
-            activeIndex: saved.activeIndex ?? null,
-            completions: Array.isArray(saved.completions) ? saved.completions : [],
-            daySessions: Array.isArray(saved.daySessions) ? saved.daySessions : [],
-            arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
-            currentListVersion:
-              typeof (saved as any).currentListVersion === "number"
-                ? (saved as any).currentListVersion
-                : 1,
-          });
+            activeIndex:
+              typeof saved.activeIndex === "number" ? saved.activeIndex : null,
+            completions: stampCompletionsWithVersion(saved.completions, version),
+            daySessions: Array.isArray(saved.daySessions)
+              ? saved.daySessions
+              : [],
+            arrangements: Array.isArray(saved.arrangements)
+              ? saved.arrangements
+              : [],
+            currentListVersion: version,
+          };
+
+          setState(next);
         }
       } finally {
         if (alive) setLoading(false);
@@ -53,25 +76,26 @@ export function useAppState() {
     };
   }, []);
 
-  // persist (debounced)
+  // ---- persist to IndexedDB (debounced) ----
   React.useEffect(() => {
     if (loading) return;
     const t = setTimeout(() => set(STORAGE_KEY, state).catch(() => {}), 150);
     return () => clearTimeout(t);
   }, [state, loading]);
 
-  // ── actions ────────────────────────────────────────────────────────────────
+  // ---------------- actions ----------------
 
+  /** Import a new Excel list: bump list version so previous completions don’t hide new list items. */
   const setAddresses = React.useCallback((rows: AddressRow[]) => {
     setState((s) => ({
       ...s,
       addresses: Array.isArray(rows) ? rows : [],
       activeIndex: null,
-      // keep history/sessions/arrangements
-      currentListVersion: (s.currentListVersion ?? 1) + 1, // bump on each import
+      currentListVersion: (s.currentListVersion || 1) + 1,
     }));
   }, []);
 
+  /** Add a single address (used by Arrangements “manual address”). Returns new index. */
   const addAddress = React.useCallback((addressRow: AddressRow) => {
     return new Promise<number>((resolve) => {
       setState((s) => {
@@ -91,37 +115,52 @@ export function useAppState() {
     setState((s) => ({ ...s, activeIndex: null }));
   }, []);
 
-  const complete = React.useCallback((index: number, outcome: Outcome, amount?: string) => {
-    setState((s) => {
-      const a = s.addresses[index];
-      if (!a) return s;
-      const nowISO = new Date().toISOString();
-      const c: Completion = {
-        index,
-        address: a.address,
-        lat: a.lat ?? null,
-        lng: a.lng ?? null,
-        outcome,
-        amount,
-        timestamp: nowISO,
-        listVersion: s.currentListVersion ?? 1,
-      };
-      const next: AppState = { ...s, completions: [c, ...s.completions] };
-      if (s.activeIndex === index) next.activeIndex = null;
-      return next;
-    });
-  }, []);
+  /**
+   * Record a completion for an address index.
+   * Stamps both timestamp and listVersion (so imports don't clash).
+   */
+  const complete = React.useCallback(
+    (index: number, outcome: Outcome, amount?: string) => {
+      setState((s) => {
+        const a = s.addresses[index];
+        if (!a) return s;
 
+        const nowISO = new Date().toISOString();
+        const c: Completion = {
+          index,
+          address: a.address,
+          lat: a.lat ?? null,
+          lng: a.lng ?? null,
+          outcome,
+          amount,
+          timestamp: nowISO,
+          listVersion: s.currentListVersion, // <- crucial
+        };
+
+        const next: AppState = {
+          ...s,
+          completions: [c, ...s.completions],
+        };
+        if (s.activeIndex === index) next.activeIndex = null;
+        return next;
+      });
+    },
+    []
+  );
+
+  /** Undo the most recent completion for a given index (for the current list version). */
   const undo = React.useCallback((index: number) => {
     setState((s) => {
       const arr = s.completions.slice();
-      const pos = arr.findIndex((c) => Number(c.index) === Number(index));
+      const pos = arr.findIndex(
+        (c) => Number(c.index) === Number(index) && c.listVersion === s.currentListVersion
+      );
       if (pos >= 0) arr.splice(pos, 1);
       return { ...s, completions: arr };
     });
   }, []);
 
-  // day sessions
+  // ---- day tracking ----
 
   const startDay = React.useCallback(() => {
     setState((s) => {
@@ -153,34 +192,7 @@ export function useAppState() {
     });
   }, []);
 
-  /** Edit the start time for a given YYYY-MM-DD session (latest one for that date). */
-  const editStartForDate = React.useCallback((dateStr: string, newISO: string) => {
-    setState((s) => {
-      const idx = (() => {
-        let last = -1;
-        for (let i = 0; i < s.daySessions.length; i++) {
-          if (s.daySessions[i].date === dateStr) last = i;
-        }
-        return last;
-      })();
-      if (idx === -1) return s;
-      const arr = s.daySessions.slice();
-      const sess = { ...arr[idx], start: newISO };
-      if (sess.end) {
-        const startMs = Date.parse(sess.start);
-        const endMs = Date.parse(sess.end);
-        if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs) {
-          sess.durationSeconds = Math.floor((endMs - startMs) / 1000);
-        } else {
-          delete sess.durationSeconds;
-        }
-      }
-      arr[idx] = sess;
-      return { ...s, daySessions: arr };
-    });
-  }, []);
-
-  // arrangements
+  // ---- arrangements ----
 
   const addArrangement = React.useCallback(
     (arrangementData: Omit<Arrangement, "id" | "createdAt" | "updatedAt">) => {
@@ -214,7 +226,7 @@ export function useAppState() {
     }));
   }, []);
 
-  // backup / restore
+  // ---- backup / restore (with migration) ----
 
   function isValidState(obj: any): obj is AppState {
     return (
@@ -234,21 +246,25 @@ export function useAppState() {
       activeIndex: state.activeIndex,
       daySessions: state.daySessions,
       arrangements: state.arrangements,
-      currentListVersion: state.currentListVersion ?? 1,
+      currentListVersion: state.currentListVersion,
     };
     return snap;
   }, [state]);
 
   const restoreState = React.useCallback((obj: unknown) => {
     if (!isValidState(obj)) throw new Error("Invalid backup file format");
+    const version =
+      typeof (obj as any).currentListVersion === "number" ? (obj as any).currentListVersion : 1;
+
     const snapshot: AppState = {
       addresses: obj.addresses,
-      completions: obj.completions,
+      completions: stampCompletionsWithVersion(obj.completions, version),
       activeIndex: obj.activeIndex ?? null,
       daySessions: obj.daySessions ?? [],
       arrangements: obj.arrangements ?? [],
-      currentListVersion: (obj as any).currentListVersion ?? 1,
+      currentListVersion: version,
     };
+
     setState(snapshot);
     set(STORAGE_KEY, snapshot).catch(() => {});
   }, []);
@@ -256,7 +272,7 @@ export function useAppState() {
   return {
     state,
     loading,
-    setState,
+    setState, // for cloud sync etc.
     // addresses
     setAddresses,
     addAddress,
@@ -269,7 +285,6 @@ export function useAppState() {
     // day sessions
     startDay,
     endDay,
-    editStartForDate, // ✅ new
     // arrangements
     addArrangement,
     updateArrangement,
