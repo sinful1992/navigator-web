@@ -1,5 +1,6 @@
 // src/AddressList.tsx
 import * as React from "react";
+import { Virtuoso } from "react-virtuoso";
 import type { AppState, Outcome, AddressRow, Completion } from "./types";
 import { AddressCard } from "./AddressCard";
 
@@ -28,6 +29,21 @@ function makeMapsHref(row: AddressRow) {
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
 
+/** Only the indices completed for the *current* list version. */
+function getCompletedIdxForCurrentVersion(
+  completions: Completion[] | undefined,
+  currentLV: number
+) {
+  const set = new Set<number>();
+  if (!completions?.length) return set;
+  for (const c of completions) {
+    if (c && typeof c.index !== "undefined" && c.listVersion === currentLV) {
+      set.add(Number(c.index));
+    }
+  }
+  return set;
+}
+
 export function AddressList({
   state,
   setActive,
@@ -38,26 +54,15 @@ export function AddressList({
   ensureDayStarted,
 }: Props) {
   const items = state.addresses ?? [];
-  const completions: Completion[] = state.completions ?? [];
+  const completions = state.completions ?? [];
   const currentLV = state.currentListVersion;
 
-  /**
-   * ✅ FIX: Only hide completions that are explicitly tagged
-   * with the current list version. Legacy completions without
-   * listVersion are ignored (i.e., they won’t hide items in the new list).
-   */
-  const completedIdx = React.useMemo(() => {
-    const set = new Set<number>();
-    for (const c of completions) {
-      if (c && typeof c.index !== "undefined" && c.listVersion === currentLV) {
-        set.add(Number(c.index));
-      }
-    }
-    return set;
-  }, [completions, currentLV]);
+  const completedIdx = React.useMemo(
+    () => getCompletedIdxForCurrentVersion(completions, currentLV),
+    [completions, currentLV]
+  );
 
-  // Prepare [row, originalIndex] tuples so we can filter safely
-  // without losing the original index (which completions use).
+  // Keep original index for stable references (completions use original index)
   const tuples = React.useMemo(
     () => items.map((row, index) => ({ row, index })),
     [items]
@@ -82,7 +87,7 @@ export function AddressList({
 
   const handleNavigate = React.useCallback(
     (originalIndex: number) => {
-      // Optionally: auto-start day on first navigate
+      // Auto-start the day on first navigate if not already started
       if (!state.day?.startTime) {
         ensureDayStarted();
       }
@@ -93,15 +98,15 @@ export function AddressList({
 
   const handleComplete = React.useCallback(
     (originalIndex: number, outcome: Outcome, amount?: string) => {
-      // Delegate to parent. Ensure your write path stamps listVersion (see note below).
       onComplete(originalIndex, outcome, amount);
     },
     [onComplete]
   );
 
-  return (
-    <div className="address-list">
-      {visible.map(({ row, index: originalIndex }) => (
+  const itemContent = React.useCallback(
+    (i: number) => {
+      const { row, index: originalIndex } = visible[i];
+      return (
         <AddressCard
           key={row.id ?? originalIndex}
           index={originalIndex}
@@ -112,13 +117,34 @@ export function AddressList({
           onComplete={(outcome, amount) => handleComplete(originalIndex, outcome, amount)}
           onCreateArrangement={() => onCreateArrangement(originalIndex)}
         />
-      ))}
-      {visible.length === 0 && (
-        <div className="p-4 text-sm opacity-70">
-          No results. Try clearing filters or check if all current-list items are completed.
-        </div>
-      )}
-    </div>
+      );
+    },
+    [visible, cancelActive, handleComplete, handleNavigate, onCreateArrangement]
+  );
+
+  if (!items.length) {
+    return (
+      <div className="p-4 text-sm opacity-70">
+        No addresses loaded yet. Import a list to begin.
+      </div>
+    );
+  }
+
+  if (visible.length === 0) {
+    return (
+      <div className="p-4 text-sm opacity-70">
+        No results to show. Clear filters or check if all current-list items are completed.
+      </div>
+    );
+  }
+
+  return (
+    <Virtuoso
+      totalCount={visible.length}
+      itemContent={itemContent}
+      useWindowScroll
+      increaseViewportBy={{ top: 400, bottom: 600 }} // smoother near edges
+    />
   );
 }
 
