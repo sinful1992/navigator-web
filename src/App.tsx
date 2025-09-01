@@ -1,16 +1,20 @@
 // src/App.tsx
 import * as React from "react";
+import "./App.css"; // ⬅️ bring back the original design system
 import { AddressList } from "./AddressList";
 import { Completed } from "./Completed";
 import type { AppState, Outcome } from "./types";
 import { BackupsPanel } from "./components/BackupsPanel";
 
+// Version-safe outcome updates
 import { updateOutcomeByIndexAndVersion } from "./state/updateOutcome";
+// Creation path (listVersion + snapshot)
 import { createCompletion, upsertCompletion } from "./state/createCompletion";
+// Version-scoped stats
 import { computeCurrentStats } from "./state/selectors";
+// Backup helpers
 import { localDateKey, makeDaySnapshot, performBackup } from "./backup/backup";
-
-// ✅ correct path (file is at src/useAppState.ts)
+// App state
 import { useAppState } from "./useAppState";
 
 export default function App() {
@@ -23,7 +27,6 @@ export default function App() {
     (index: number) => setState((s: AppState) => ({ ...s, activeIndex: index })),
     [setState]
   );
-
   const cancelActive = React.useCallback(
     () => setState((s: AppState) => ({ ...s, activeIndex: undefined })),
     [setState]
@@ -57,6 +60,7 @@ export default function App() {
     [setState]
   );
 
+  // Backups (Supabase)
   const handleBackupNow = React.useCallback(async () => {
     try {
       setIsBackingUp(true);
@@ -99,62 +103,65 @@ export default function App() {
   const stats = React.useMemo(() => computeCurrentStats(state), [state]);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="p-3 border-b flex flex-wrap items-center gap-3">
-        <h1 className="text-lg font-semibold">Address Navigator</h1>
+    <div className="container">
+      {/* Header restored to original style */}
+      <header className="app-header">
+        <div className="left">
+          <h1 className="app-title">📍 Address Navigator</h1>
+          <div style={{ fontSize: "0.875rem", color: "var(--text-secondary)" }}>
+            <strong>List v{state.currentListVersion}</strong>
+            <span className="ml-6">Total: {stats.total}</span>
+            <span className="ml-6">PIF: {stats.pifCount}</span>
+            <span className="ml-6">DA: {stats.daCount}</span>
+            <span className="ml-6">Done: {stats.doneCount}</span>
+            <span className="ml-6">ARR: {stats.arrCount}</span>
+            {state?.lastBackupAt && (
+              <span className="ml-6">Last backup: {new Date(state.lastBackupAt).toLocaleString()}</span>
+            )}
+          </div>
 
-        <div className="ml-2 text-sm">
-          <span className="mr-3">List v{state.currentListVersion}</span>
-          <span className="mr-2">Total: {stats.total}</span>
-          <span className="mr-2">PIF: {stats.pifCount}</span>
-          <span className="mr-2">DA: {stats.daCount}</span>
-          <span className="mr-2">Done: {stats.doneCount}</span>
-          <span className="mr-2">ARR: {stats.arrCount}</span>
-          {state?.lastBackupAt && (
-            <span className="ml-2 opacity-70">
-              Last backup: {new Date(state.lastBackupAt).toLocaleString()}
-            </span>
-          )}
+          <div className="btn-row" style={{ marginTop: "0.5rem" }}>
+            <button
+              onClick={() => setShowBackups(true)}
+              className="btn btn-ghost"
+              title="View/restore previous backups"
+            >
+              📦 Backups
+            </button>
+            <button
+              onClick={handleBackupNow}
+              disabled={isBackingUp}
+              className="btn btn-primary"
+              title="Backup current data to Supabase"
+            >
+              {isBackingUp ? "Backing up…" : "💾 Backup now"}
+            </button>
+            <button
+              onClick={handleFinishDay}
+              disabled={isBackingUp}
+              className="btn btn-outline"
+              title="Set end time and back up today’s data"
+            >
+              {isBackingUp ? "Finishing…" : "✅ Finish Day"}
+            </button>
+          </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="right">
           <input
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
             placeholder="Search address or postcode…"
-            className="border rounded px-3 py-1 text-sm"
+            className="input"
+            style={{ minWidth: 260 }}
           />
-          <button
-            onClick={() => setShowBackups(true)}
-            className="border rounded px-3 py-1 text-sm"
-            title="View/restore previous backups"
-          >
-            Backups
-          </button>
-          <button
-            onClick={handleBackupNow}
-            disabled={isBackingUp}
-            className="border rounded px-3 py-1 text-sm"
-            title="Backup current data to Supabase"
-          >
-            {isBackingUp ? "Backing up…" : "Backup now"}
-          </button>
-          <button
-            onClick={handleFinishDay}
-            disabled={isBackingUp}
-            className="border rounded px-3 py-1 text-sm"
-            title="Set end time and back up today’s data"
-          >
-            {isBackingUp ? "Finishing…" : "Finish Day"}
-          </button>
         </div>
       </header>
 
-      <main className="grid md:grid-cols-2 gap-4 p-3">
-        <section className="min-w-0">
-          <h2 className="text-sm font-medium mb-2">
-            Active List (v{state.currentListVersion})
-          </h2>
+      {/* Two-column content (kept simple; styled by cards/rows CSS) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
+        <section>
+          <h2 className="section-title" style={{ marginBottom: 8 }}>Active List</h2>
           <AddressList
             state={state}
             setActive={setActive}
@@ -166,8 +173,8 @@ export default function App() {
           />
         </section>
 
-        <section className="min-w-0">
-          <h2 className="text-sm font-medium mb-2">Completed</h2>
+        <section style={{ marginTop: 20 }}>
+          <h2 className="section-title" style={{ marginBottom: 8 }}>Completed</h2>
           <Completed
             addresses={state.addresses ?? []}
             completions={state.completions ?? []}
@@ -175,7 +182,7 @@ export default function App() {
             onChangeOutcome={handleChangeOutcome}
           />
         </section>
-      </main>
+      </div>
 
       <BackupsPanel open={showBackups} onClose={() => setShowBackups(false)} setState={setState} />
     </div>
