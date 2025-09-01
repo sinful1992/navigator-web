@@ -1,3 +1,4 @@
+// src/App.tsx
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -431,6 +432,17 @@ function AuthedApp() {
   const restoreFromCloud = React.useCallback(
     async (objectPath: string) => {
       if (!supabase) return;
+
+      // Confirmation dialog before restoring (prevents accidental overwrite)
+      const fileName = objectPath.split("/").pop() || objectPath;
+      const ok = window.confirm(
+        'Restore "' +
+          fileName +
+          '" from cloud?\n\n' +
+          "This will overwrite your current addresses, completions, arrangements and sessions on this device."
+      );
+      if (!ok) return;
+
       setCloudBusy(true);
       setCloudErr(null);
       try {
@@ -546,7 +558,7 @@ function AuthedApp() {
             background: "var(--surface)",
             padding: "1.5rem",
             borderRadius: "var(--radius-lg)",
-            border: "1px solid var(--border-light)",
+            border: "1px solid " + "var(--border-light)",
             boxShadow: "var(--shadow-sm)",
             marginBottom: "1rem",
           }}
@@ -603,7 +615,7 @@ function AuthedApp() {
                     left: 0,
                     minWidth: 280,
                     background: "var(--surface)",
-                    border: "1px solid var(--border-light)",
+                    border: "1px solid " + "var(--border-light)",
                     borderRadius: 12,
                     padding: "0.5rem",
                     boxShadow: "var(--shadow-lg)",
