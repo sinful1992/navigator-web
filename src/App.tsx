@@ -1,4 +1,3 @@
-// src/App.tsx
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -10,7 +9,7 @@ import { Completed } from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
-import type { AddressRow } from "./types";
+import type { AddressRow, Outcome } from "./types";
 import { supabase } from "./lib/supabaseClient";
 
 type Tab = "list" | "completed" | "arrangements";
@@ -29,6 +28,7 @@ function normalizeState(raw: any) {
   };
 }
 
+/** Error boundary keeps the UI from going blank on runtime errors */
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -53,6 +53,7 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+/** Upload a JSON snapshot to Supabase Storage; log a row in `backups` (quietly no-ops if not configured) */
 async function uploadBackupToStorage(
   data: unknown,
   label: "finish" | "manual" = "manual"
@@ -178,6 +179,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
+  // Bootstrap: prefer local if present; always subscribe to cloud updates
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: undefined | (() => void);
@@ -219,6 +221,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
+  // Debounced push local -> cloud
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
@@ -242,12 +245,14 @@ function AuthedApp() {
     setAutoCreateArrangementFor(addressIndex);
   }, []);
 
+  // Ensure a session exists when Navigation is used
   const ensureDayStarted = React.useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
     const hasToday = daySessions.some((d) => d.date === today);
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
+  // DayPanel -> edit today's start time
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
       const parsed =
@@ -277,6 +282,7 @@ function AuthedApp() {
     [setState]
   );
 
+  // Finish Day with cloud backup (non-blocking)
   const endDayWithBackup = React.useCallback(() => {
     const snap = backupState();
     uploadBackupToStorage(snap, "finish").catch((e: any) => {
@@ -285,12 +291,13 @@ function AuthedApp() {
     endDay();
   }, [backupState, endDay]);
 
-  // ✅ Wrap undo in a proper click handler
+  // Wrap undo for onClick type
   const handleUndoClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
     e.preventDefault();
     undo(-1);
   };
 
+  // Handle manual backup (local download + optional cloud upload)
   const onBackup = React.useCallback(async () => {
     const snap = backupState();
     const stamp = new Date();
@@ -307,6 +314,7 @@ function AuthedApp() {
     }
   }, [backupState]);
 
+  // Restore from file
   const onRestore: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -326,6 +334,7 @@ function AuthedApp() {
     }
   };
 
+  // Stats
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
     const completedIdx = new Set(
@@ -346,6 +355,25 @@ function AuthedApp() {
     return { total, pending, completed, pifCount, doneCount, daCount };
   }, [addresses, completions, state.currentListVersion]);
 
+  // Required by Completed: allow changing a completion’s outcome (by completion index)
+  const handleChangeOutcome = React.useCallback(
+    (targetCompletionIndex: number, outcome: Outcome, amount?: string) => {
+      setState((s) => {
+        if (
+          !Number.isInteger(targetCompletionIndex) ||
+          targetCompletionIndex < 0 ||
+          targetCompletionIndex >= s.completions.length
+        ) {
+          return s;
+        }
+        const comps = s.completions.slice();
+        comps[targetCompletionIndex] = { ...comps[targetCompletionIndex], outcome, amount };
+        return { ...s, completions: comps };
+      });
+    },
+    [setState]
+  );
+
   if (loading) {
     return (
       <div className="container">
@@ -359,10 +387,19 @@ function AuthedApp() {
 
   return (
     <div className="container">
+      {/* Header */}
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+            }}
+          >
             {cloudSync.isOnline ? (
               <>
                 <span style={{ color: "var(--success)" }}>🟢</span>
@@ -379,7 +416,9 @@ function AuthedApp() {
 
         <div className="right">
           <div className="user-chip" role="group" aria-label="Account">
-            <span className="avatar" aria-hidden>👤</span>
+            <span className="avatar" aria-hidden>
+              👤
+            </span>
             <span className="email" title={cloudSync.user?.email ?? ""}>
               {cloudSync.user?.email ?? "Signed in"}
             </span>
@@ -392,33 +431,70 @@ function AuthedApp() {
             <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
               📋 List ({stats.pending})
             </button>
-            <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "completed"}
+              onClick={() => setTab("completed")}
+            >
               ✅ Completed ({stats.completed})
             </button>
-            <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "arrangements"}
+              onClick={() => setTab("arrangements")}
+            >
               📅 Arrangements ({arrangements.length})
             </button>
           </div>
         </div>
       </header>
 
+      {/* Tools */}
       <div style={{ marginBottom: "2rem" }}>
-        <div style={{ background: "var(--surface)", padding: "1.5rem", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-light)", boxShadow: "var(--shadow-sm)", marginBottom: "1rem" }}>
-          <div style={{ fontSize: "0.875rem", color: "var(--text-secondary)", marginBottom: "1rem", lineHeight: "1.5" }}>
-            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>, <strong>lng</strong> columns to get started.
+        <div
+          style={{
+            background: "var(--surface)",
+            padding: "1.5rem",
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border-light)",
+            boxShadow: "var(--shadow-sm)",
+            marginBottom: "1rem",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "0.875rem",
+              color: "var(--text-secondary)",
+              marginBottom: "1rem",
+              lineHeight: "1.5",
+            }}
+          >
+            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>,{" "}
+            <strong>lng</strong> columns to get started.
           </div>
 
           <div className="btn-row">
             <ImportExcel onImported={setAddresses} />
             <div className="btn-spacer" />
-            <button className="btn btn-ghost" onClick={onBackup}>💾 Backup</button>
+            <button className="btn btn-ghost" onClick={onBackup}>
+              💾 Backup
+            </button>
 
-            <input type="file" accept="application/json" onChange={onRestore} className="file-input" id="restore-input" />
-            <label htmlFor="restore-input" className="file-input-label">📤 Restore</label>
+            <input
+              type="file"
+              accept="application/json"
+              onChange={onRestore}
+              className="file-input"
+              id="restore-input"
+            />
+            <label htmlFor="restore-input" className="file-input-label">
+              📤 Restore
+            </label>
           </div>
         </div>
       </div>
 
+      {/* Tabs content */}
       {tab === "list" ? (
         <>
           <div className="search-container">
@@ -449,7 +525,15 @@ function AuthedApp() {
             ensureDayStarted={ensureDayStarted}
           />
 
-          <div style={{ display: "flex", gap: "0.5rem", margin: "1.25rem 0 3rem", flexWrap: "wrap", alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "0.5rem",
+              margin: "1.25rem 0 3rem",
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
             <button className="btn btn-ghost" onClick={handleUndoClick} title="Undo last completion for this list">
               ⎌ Undo Last
             </button>
@@ -460,7 +544,7 @@ function AuthedApp() {
           </div>
         </>
       ) : tab === "completed" ? (
-        <Completed state={safeState} />
+        <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
       ) : (
         <Arrangements
           state={safeState}
