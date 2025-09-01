@@ -1,5 +1,6 @@
 // src/AddressList.tsx
 import * as React from "react";
+import { openMaps } from "./maps";
 import type { AppState, Outcome } from "./types";
 
 type Props = {
@@ -111,6 +112,14 @@ export function AddressList({
 
             {/* Row actions */}
             <div className="row-actions">
+              <button 
+                className="btn btn-outline btn-sm" 
+                onClick={() => openMaps(a.address, a.lat ?? undefined, a.lng ?? undefined)}
+                title="Open in Google Maps"
+              >
+                🗺️ Navigate
+              </button>
+
               {!isActive ? (
                 <button className="btn btn-outline btn-sm" onClick={() => setActive(i)}>
                   🎯 Set Active
