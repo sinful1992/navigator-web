@@ -31,25 +31,42 @@ export function useCloudSync() {
 
   // ---- Session bootstrap
   useEffect(() => {
-    const client = supabase; // capture locally for narrowing in closures
+    const client = supabase;
     if (!client) {
       setIsLoading(false);
       return;
     }
 
-    (async () => {
-      const { data: { session }, error } = await client.auth.getSession();
-      if (error) console.error(error);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    })();
+    let mounted = true;
 
-    const { data: sub } = client.auth.onAuthStateChange((_evt, session) => {
-      setUser(session?.user ?? null);
+    const initAuth = async () => {
+      try {
+        const { data: { session }, error } = await client.auth.getSession();
+        if (error) console.error(error);
+        if (mounted) {
+          setUser(session?.user ?? null);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error('Auth init error:', err);
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initAuth();
+
+    const { data: authListener } = client.auth.onAuthStateChange((_evt, session) => {
+      if (mounted) {
+        setUser(session?.user ?? null);
+      }
     });
 
-    // ✅ fix: guard both levels with optional chaining
-    return () => sub?.subscription?.unsubscribe();
+    return () => {
+      mounted = false;
+      authListener?.subscription?.unsubscribe();
+    };
   }, []);
 
   // ---- Auth API
@@ -111,30 +128,38 @@ export function useCloudSync() {
 
   // ---- Subscribe cloud -> local
   const subscribeToData = useCallback((onChange: (s: AppState) => void) => {
-    const client = supabase; // captured non-null locally
+    const client = supabase;
     if (!client || !user) return () => {};
 
     // Initial fetch
     let cancelled = false;
-    (async () => {
-      const { data, error } = await client
-        .from("navigator_state")
-        .select("data, updated_at")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (!cancelled && data && !error) {
-        lastPulledAt.current = data.updated_at ?? new Date().toISOString();
-        onChange(data.data);
+    const fetchInitial = async () => {
+      try {
+        const { data, error } = await client
+          .from("navigator_state")
+          .select("data, updated_at")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (!cancelled && data && !error) {
+          lastPulledAt.current = data.updated_at ?? new Date().toISOString();
+          onChange(data.data);
+        }
+      } catch (err) {
+        console.error('Initial fetch error:', err);
       }
-    })();
+    };
 
-    // Realtime
+    fetchInitial();
+
+    // Realtime - simplified to avoid cleanup issues
     const channel = client
       .channel(`realtime:navigator_state:${user.id}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "navigator_state", filter: `user_id=eq.${user.id}` },
         (payload) => {
+          if (cancelled) return;
+          
           const row: any = payload.new ?? payload.old;
           const updatedAt = row?.updated_at as string | undefined;
           if (!updatedAt) return;
@@ -147,8 +172,10 @@ export function useCloudSync() {
       .subscribe();
 
     return () => {
-      client.removeChannel(channel);
       cancelled = true;
+      if (client && channel) {
+        client.removeChannel(channel);
+      }
     };
   }, [user]);
 
