@@ -1,58 +1,55 @@
-export type AddressRow = {
-  address: string;
-  lat?: number | null;
-  lng?: number | null;
-};
+// src/types.ts
 
-export type Outcome = "PIF" | "DA" | "Done" | "ARR";
+// Outcomes recorded for a completion
+export type Outcome = "PIF" | "DA" | "DONE" | "ARR";
 
-export type Completion = {
-  index: number;
+// A single address row in the active list
+export interface AddressRow {
+  id?: string;
+  address?: string;
+  postcode?: string;
+  lat?: number;
+  lng?: number;
+}
+
+// A completion event tied to a specific list version + index
+export interface Completion {
+  index: number;               // original index in that list version
   outcome: Outcome;
   amount?: string;
   completedAt?: string;
   updatedAt?: string;
-  listVersion?: number;     // legacy-safe: optional, Step C writes it going forward
-  addressSnapshot?: string; // stable label captured at completion time
-  addressId?: string;       // optional if rows have stable IDs
-};
 
-export type DaySession = {
-  date: string;             // "YYYY-MM-DD"
-  start: string;            // ISO string
-  end?: string;             // ISO string (undefined while active)
-  durationSeconds?: number; // computed on end
-};
+  // Versioning & stability
+  listVersion?: number;        // optional for legacy; new writes should set it
+  addressSnapshot?: string;    // stable label captured at completion time
+  addressId?: string;          // optional if your rows have stable IDs
+}
 
-export type ArrangementStatus =
-  | "Scheduled"
-  | "Confirmed"
-  | "Cancelled"
-  | "Completed"
-  | "Missed";
+// Day/session timings
+export interface AppDay {
+  startTime?: string;
+  endTime?: string;
+}
 
-export type Arrangement = {
-  id: string;               // unique identifier
-  addressIndex: number;     // links to address in the main list
-  address: string;          // cached for display
-  customerName?: string;
-  phoneNumber?: string;
-  scheduledDate: string;    // ISO date string (YYYY-MM-DD)
-  scheduledTime?: string;   // optional time (HH:MM)
-  status: ArrangementStatus;
-  notes?: string;
-  amount?: string;
-  createdAt: string;
-  updatedAt: string;
-};
+// Migration flags for one-off data fixes
+export interface Migrations {
+  backfill_completion_snapshots_v1?: boolean;
+}
 
-export type AppState = {
+// Global app state shape
+export interface AppState {
   currentListVersion: number;
-  addresses?: Array<{ id?: string; address?: string; postcode?: string; lat?: number; lng?: number }>;
+
+  addresses?: AddressRow[];
   completions?: Completion[];
-  day?: { startTime?: string; endTime?: string };
+
+  day?: AppDay;
   activeIndex?: number;
-  // track simple migration flags
-  migrations?: {
-    backfill_completion_snapshots_v1?: boolean;
-};
+
+  // Last successful cloud backup timestamp
+  lastBackupAt?: string;
+
+  // One-off migration flags
+  migrations?: Migrations;
+}
