@@ -35,8 +35,8 @@ export default function App() {
     signIn,
     signUp,
     signOut,
-    syncData,
-    subscribeToData,
+    // syncData,
+    // subscribeToData,
   } = cloudSync || {};
 
   const [filterText, setFilterText] = React.useState("");
