@@ -28,6 +28,7 @@ function normalizeState(raw: any) {
   };
 }
 
+// Simple error boundary
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -112,7 +113,6 @@ function AuthedApp() {
     updateArrangement,
     deleteArrangement,
     setState,
-    editStartForDate, // keep if your hook provides it
   } = useAppState();
 
   const cloudSync = useCloudSync();
@@ -136,7 +136,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // bootstrap sync
+  // Bootstrap cloud sync
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: (() => void) | undefined;
@@ -177,7 +177,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // push local -> cloud (debounced)
+  // Push local -> cloud (debounced)
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
@@ -208,7 +208,7 @@ function AuthedApp() {
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
-  // backup / restore
+  // Backup / Restore
   const onBackup = React.useCallback(() => {
     const snap = backupState();
     const stamp = new Date();
@@ -379,14 +379,13 @@ function AuthedApp() {
             completions={completions}
             startDay={startDay}
             endDay={endDay}
-            onEditStart={editStartForDate}
           />
 
           <AddressList
             state={safeState}
             setActive={setActive}
             cancelActive={cancelActive}
-            onComplete={complete}                   {/* ✅ REQUIRED */}
+            complete={complete}
             onCreateArrangement={handleCreateArrangement}
             filterText={search}
             ensureDayStarted={ensureDayStarted}
