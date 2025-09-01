@@ -1,6 +1,7 @@
 // src/AddressList.tsx
 import * as React from "react";
-import type { AppState, Outcome, AddressRow } from "./types";
+import type { AppState, Outcome, AddressRow, Completion } from "./types";
+import { AddressCard } from "./AddressCard";
 
 type Props = {
   state: AppState;
@@ -9,7 +10,7 @@ type Props = {
   onComplete: (index: number, outcome: Outcome, amount?: string) => void;
   onCreateArrangement: (addressIndex: number) => void;
   filterText: string;
-  ensureDayStarted: () => void; // auto-start day on first Navigate
+  ensureDayStarted: () => void;
 };
 
 function makeMapsHref(row: AddressRow) {
@@ -36,193 +37,89 @@ export function AddressList({
   filterText,
   ensureDayStarted,
 }: Props) {
-  const addresses = Array.isArray(state.addresses) ? state.addresses : [];
-  const completions = Array.isArray(state.completions) ? state.completions : [];
-  const activeIndex = state.activeIndex;
+  const items = state.addresses ?? [];
+  const completions: Completion[] = state.completions ?? [];
+  const currentLV = state.currentListVersion;
 
-  // Hide only items completed for the CURRENT list version.
-  // If a completion has no listVersion (older backups), treat it as the current one.
+  /**
+   * ✅ FIX: Only hide completions that are explicitly tagged
+   * with the current list version. Legacy completions without
+   * listVersion are ignored (i.e., they won’t hide items in the new list).
+   */
   const completedIdx = React.useMemo(() => {
     const set = new Set<number>();
     for (const c of completions) {
-      const lv =
-        typeof c?.listVersion === "number"
-          ? c.listVersion
-          : state.currentListVersion;
-      if (lv === state.currentListVersion) set.add(Number(c.index));
+      if (c && typeof c.index !== "undefined" && c.listVersion === currentLV) {
+        set.add(Number(c.index));
+      }
     }
     return set;
-  }, [completions, state.currentListVersion]);
+  }, [completions, currentLV]);
 
-  const lowerQ = (filterText ?? "").trim().toLowerCase();
+  // Prepare [row, originalIndex] tuples so we can filter safely
+  // without losing the original index (which completions use).
+  const tuples = React.useMemo(
+    () => items.map((row, index) => ({ row, index })),
+    [items]
+  );
+
+  const normalizedQuery = filterText.trim().toLowerCase();
+
+  const filtered = React.useMemo(() => {
+    if (!normalizedQuery) return tuples;
+    return tuples.filter(({ row }) => {
+      const a = (row.address ?? "").toLowerCase();
+      const p = (row.postcode ?? "").toLowerCase();
+      return a.includes(normalizedQuery) || p.includes(normalizedQuery);
+    });
+  }, [tuples, normalizedQuery]);
+
+  // Hide only those indices completed in *this* list version
   const visible = React.useMemo(
-    () =>
-      addresses
-        .map((a, i) => ({ a, i }))
-        .filter(
-          ({ a }) =>
-            !lowerQ || (a.address ?? "").toLowerCase().includes(lowerQ)
-        )
-        .filter(({ i }) => !completedIdx.has(i)),
-    [addresses, lowerQ, completedIdx]
+    () => filtered.filter(({ index }) => !completedIdx.has(index)),
+    [filtered, completedIdx]
   );
 
-  // local UI for outcome panel & PIF
-  const [outcomeOpenFor, setOutcomeOpenFor] = React.useState<number | null>(
-    null
+  const handleNavigate = React.useCallback(
+    (originalIndex: number) => {
+      // Optionally: auto-start day on first navigate
+      if (!state.day?.startTime) {
+        ensureDayStarted();
+      }
+      setActive(originalIndex);
+    },
+    [ensureDayStarted, setActive, state.day?.startTime]
   );
-  const [pifAmount, setPifAmount] = React.useState<string>("");
 
-  // closing outcomes when active changes
-  React.useEffect(() => {
-    if (activeIndex === null) {
-      setOutcomeOpenFor(null);
-      setPifAmount("");
-    }
-  }, [activeIndex]);
-
-  if (visible.length === 0) {
-    return (
-      <div className="empty-box">
-        <div>No pending addresses</div>
-        <p>Import a list or clear filters to see items.</p>
-      </div>
-    );
-  }
+  const handleComplete = React.useCallback(
+    (originalIndex: number, outcome: Outcome, amount?: string) => {
+      // Delegate to parent. Ensure your write path stamps listVersion (see note below).
+      onComplete(originalIndex, outcome, amount);
+    },
+    [onComplete]
+  );
 
   return (
-    <div className="list">
-      {visible.map(({ a, i }) => {
-        const isActive = activeIndex === i;
-        const mapHref = makeMapsHref(a);
-
-        return (
-          <div key={i} className={`row-card ${isActive ? "card-active" : ""}`}>
-            {/* Row header */}
-            <div className="row-head">
-              <div className="row-index">{i + 1}</div>
-              <div className="row-title" title={a.address}>
-                {a.address}
-              </div>
-              {isActive && <span className="active-badge">Active</span>}
-            </div>
-
-            {/* Actions row */}
-            <div className="row-actions">
-              <a
-                className="btn btn-outline btn-sm"
-                href={mapHref}
-                target="_blank"
-                rel="noreferrer"
-                title="Open in Google Maps"
-                onClick={() => ensureDayStarted()}
-              >
-                🧭 Navigate
-              </a>
-
-              {!isActive ? (
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setActive(i)}
-                >
-                  ▶️ Set Active
-                </button>
-              ) : (
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={cancelActive}
-                >
-                  ❎ Cancel
-                </button>
-              )}
-
-              {isActive && (
-                <button
-                  className="btn btn-success btn-sm"
-                  onClick={() => {
-                    const willOpen = outcomeOpenFor !== i;
-                    setOutcomeOpenFor(willOpen ? i : null);
-                    setPifAmount("");
-                  }}
-                >
-                  ✅ Complete
-                </button>
-              )}
-            </div>
-
-            {/* Outcome bar (only when active + Complete pressed) */}
-            {isActive && outcomeOpenFor === i && (
-              <div className="card-body">
-                <div className="complete-bar">
-                  <div className="complete-btns">
-                    <button
-                      className="btn btn-success"
-                      onClick={() => {
-                        onComplete(i, "Done");
-                        setOutcomeOpenFor(null);
-                      }}
-                      title="Mark as Done"
-                    >
-                      ✅ Done
-                    </button>
-
-                    <button
-                      className="btn btn-danger"
-                      onClick={() => {
-                        onComplete(i, "DA");
-                        setOutcomeOpenFor(null);
-                      }}
-                      title="Mark as DA"
-                    >
-                      🚫 DA
-                    </button>
-
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => {
-                        onComplete(i, "ARR");
-                        setOutcomeOpenFor(null);
-                        onCreateArrangement(i);
-                      }}
-                      title="Create arrangement and mark completed"
-                    >
-                      📅 Arrangement
-                    </button>
-                  </div>
-
-                  <div className="pif-group">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      inputMode="decimal"
-                      className="input amount-input"
-                      placeholder="PIF £"
-                      value={pifAmount}
-                      onChange={(e) => setPifAmount(e.target.value)}
-                    />
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => {
-                        const n = Number(pifAmount);
-                        if (!Number.isFinite(n) || n <= 0) {
-                          alert("Enter a valid PIF amount (e.g. 50)");
-                          return;
-                        }
-                        onComplete(i, "PIF", n.toFixed(2));
-                        setOutcomeOpenFor(null);
-                      }}
-                      title="Save PIF amount"
-                    >
-                      💷 Save PIF
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
+    <div className="address-list">
+      {visible.map(({ row, index: originalIndex }) => (
+        <AddressCard
+          key={row.id ?? originalIndex}
+          index={originalIndex}
+          row={row}
+          mapsHref={makeMapsHref(row)}
+          setActive={() => handleNavigate(originalIndex)}
+          cancelActive={cancelActive}
+          onComplete={(outcome, amount) => handleComplete(originalIndex, outcome, amount)}
+          onCreateArrangement={() => onCreateArrangement(originalIndex)}
+        />
+      ))}
+      {visible.length === 0 && (
+        <div className="p-4 text-sm opacity-70">
+          No results. Try clearing filters or check if all current-list items are completed.
+        </div>
+      )}
     </div>
   );
 }
+
+export default AddressList;
