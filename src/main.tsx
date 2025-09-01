@@ -1,14 +1,14 @@
-// src/main.tsx
+// src/main.tsx (HashRouter variant)
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { HashRouter } from "react-router-dom";
 import App from "./App";
-import "./index.css"; // keep if present
-
-// No PWA plugin import here.
-// The service worker is registered from index.html for GitHub Pages.
+import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <HashRouter>
+      <App />
+    </HashRouter>
   </React.StrictMode>
 );
