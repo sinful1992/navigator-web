@@ -1,3 +1,4 @@
+// src/useAppState.ts
 import * as React from "react";
 import { get, set } from "idb-keyval";
 import type {
@@ -9,7 +10,7 @@ import type {
   Arrangement,
 } from "./types";
 
-const STORAGE_KEY = "navigator_state_v3"; // versioned for arrangements + listVersion
+const STORAGE_KEY = "navigator_state_v3";
 
 const initial: AppState = {
   addresses: [],
@@ -17,31 +18,30 @@ const initial: AppState = {
   completions: [],
   daySessions: [],
   arrangements: [],
-  currentListVersion: 1, // ✅ required by AppState
+  currentListVersion: 1, // make sure this exists
 };
 
 export function useAppState() {
   const [state, setState] = React.useState<AppState>(initial);
   const [loading, setLoading] = React.useState(true);
 
-  // ---- load from IndexedDB ----
+  // load
   React.useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const saved = (await get(STORAGE_KEY)) as Partial<AppState> | undefined;
+        const saved = (await get(STORAGE_KEY)) as AppState | undefined;
         if (alive && saved) {
           setState({
             addresses: Array.isArray(saved.addresses) ? saved.addresses : [],
-            activeIndex:
-              typeof saved.activeIndex === "number" ? saved.activeIndex : null,
+            activeIndex: saved.activeIndex ?? null,
             completions: Array.isArray(saved.completions) ? saved.completions : [],
             daySessions: Array.isArray(saved.daySessions) ? saved.daySessions : [],
             arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
             currentListVersion:
-              typeof saved.currentListVersion === "number"
-                ? saved.currentListVersion
-                : 1, // ✅ default if missing in older snapshots
+              typeof (saved as any).currentListVersion === "number"
+                ? (saved as any).currentListVersion
+                : 1,
           });
         }
       } finally {
@@ -53,43 +53,32 @@ export function useAppState() {
     };
   }, []);
 
-  // ---- persist to IndexedDB (debounced) ----
+  // persist (debounced)
   React.useEffect(() => {
     if (loading) return;
-    const t = setTimeout(() => {
-      set(STORAGE_KEY, state).catch(() => {});
-    }, 150);
+    const t = setTimeout(() => set(STORAGE_KEY, state).catch(() => {}), 150);
     return () => clearTimeout(t);
   }, [state, loading]);
 
-  // ---------------- actions ----------------
+  // ── actions ────────────────────────────────────────────────────────────────
 
-  /** Replace the address list (e.g. after importing a new Excel file).
-   *  We bump `currentListVersion` so future completions can record which list they belong to.
-   *  (No dedupe: duplicate addresses remain separate rows.)
-   */
   const setAddresses = React.useCallback((rows: AddressRow[]) => {
     setState((s) => ({
       ...s,
       addresses: Array.isArray(rows) ? rows : [],
       activeIndex: null,
-      currentListVersion: (s.currentListVersion ?? 1) + 1, // ✅ bump version on new list
-      // keep completions/daySessions/arrangements
+      // keep history/sessions/arrangements
+      currentListVersion: (s.currentListVersion ?? 1) + 1, // bump on each import
     }));
   }, []);
 
-  /** Append a single address row and return its index. */
   const addAddress = React.useCallback((addressRow: AddressRow) => {
     return new Promise<number>((resolve) => {
       setState((s) => {
         const newAddresses = [...s.addresses, addressRow];
         const newIndex = newAddresses.length - 1;
-        // resolve on next tick so state is applied
         setTimeout(() => resolve(newIndex), 0);
-        return {
-          ...s,
-          addresses: newAddresses,
-        };
+        return { ...s, addresses: newAddresses };
       });
     });
   }, []);
@@ -102,40 +91,27 @@ export function useAppState() {
     setState((s) => ({ ...s, activeIndex: null }));
   }, []);
 
-  /**
-   * Record a completion for an address index.
-   * Also stamps the current listVersion so history remains clear across imports.
-   */
-  const complete = React.useCallback(
-    (index: number, outcome: Outcome, amount?: string) => {
-      setState((s) => {
-        const a = s.addresses[index];
-        if (!a) return s;
+  const complete = React.useCallback((index: number, outcome: Outcome, amount?: string) => {
+    setState((s) => {
+      const a = s.addresses[index];
+      if (!a) return s;
+      const nowISO = new Date().toISOString();
+      const c: Completion = {
+        index,
+        address: a.address,
+        lat: a.lat ?? null,
+        lng: a.lng ?? null,
+        outcome,
+        amount,
+        timestamp: nowISO,
+        listVersion: s.currentListVersion ?? 1,
+      };
+      const next: AppState = { ...s, completions: [c, ...s.completions] };
+      if (s.activeIndex === index) next.activeIndex = null;
+      return next;
+    });
+  }, []);
 
-        const nowISO = new Date().toISOString();
-        const c: Completion = {
-          index,
-          address: a.address,
-          lat: a.lat ?? null,
-          lng: a.lng ?? null,
-          outcome,
-          amount,
-          timestamp: nowISO,
-          listVersion: s.currentListVersion, // ✅ track which list this belonged to
-        };
-
-        const next: AppState = {
-          ...s,
-          completions: [c, ...s.completions],
-        };
-        if (s.activeIndex === index) next.activeIndex = null;
-        return next;
-      });
-    },
-    []
-  );
-
-  /** Undo the most recent completion for the given address index (first match removal). */
   const undo = React.useCallback((index: number) => {
     setState((s) => {
       const arr = s.completions.slice();
@@ -145,7 +121,7 @@ export function useAppState() {
     });
   }, []);
 
-  // ---- day tracking ----
+  // day sessions
 
   const startDay = React.useCallback(() => {
     setState((s) => {
@@ -171,15 +147,40 @@ export function useAppState() {
         const start = new Date(act.start).getTime();
         const end = now.getTime();
         if (end > start) act.durationSeconds = Math.floor((end - start) / 1000);
-      } catch {
-        /* ignore */
-      }
+      } catch {}
       arr[i] = act;
       return { ...s, daySessions: arr };
     });
   }, []);
 
-  // ---- arrangements ----
+  /** Edit the start time for a given YYYY-MM-DD session (latest one for that date). */
+  const editStartForDate = React.useCallback((dateStr: string, newISO: string) => {
+    setState((s) => {
+      const idx = (() => {
+        let last = -1;
+        for (let i = 0; i < s.daySessions.length; i++) {
+          if (s.daySessions[i].date === dateStr) last = i;
+        }
+        return last;
+      })();
+      if (idx === -1) return s;
+      const arr = s.daySessions.slice();
+      const sess = { ...arr[idx], start: newISO };
+      if (sess.end) {
+        const startMs = Date.parse(sess.start);
+        const endMs = Date.parse(sess.end);
+        if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs) {
+          sess.durationSeconds = Math.floor((endMs - startMs) / 1000);
+        } else {
+          delete sess.durationSeconds;
+        }
+      }
+      arr[idx] = sess;
+      return { ...s, daySessions: arr };
+    });
+  }, []);
+
+  // arrangements
 
   const addArrangement = React.useCallback(
     (arrangementData: Omit<Arrangement, "id" | "createdAt" | "updatedAt">) => {
@@ -191,29 +192,20 @@ export function useAppState() {
           createdAt: now,
           updatedAt: now,
         };
-
-        return {
-          ...s,
-          arrangements: [...s.arrangements, newArrangement],
-        };
+        return { ...s, arrangements: [...s.arrangements, newArrangement] };
       });
     },
     []
   );
 
-  const updateArrangement = React.useCallback(
-    (id: string, updates: Partial<Arrangement>) => {
-      setState((s) => ({
-        ...s,
-        arrangements: s.arrangements.map((arr) =>
-          arr.id === id
-            ? { ...arr, ...updates, updatedAt: new Date().toISOString() }
-            : arr
-        ),
-      }));
-    },
-    []
-  );
+  const updateArrangement = React.useCallback((id: string, updates: Partial<Arrangement>) => {
+    setState((s) => ({
+      ...s,
+      arrangements: s.arrangements.map((arr) =>
+        arr.id === id ? { ...arr, ...updates, updatedAt: new Date().toISOString() } : arr
+      ),
+    }));
+  }, []);
 
   const deleteArrangement = React.useCallback((id: string) => {
     setState((s) => ({
@@ -222,7 +214,7 @@ export function useAppState() {
     }));
   }, []);
 
-  // ---- backup / restore ----
+  // backup / restore
 
   function isValidState(obj: any): obj is AppState {
     return (
@@ -242,23 +234,20 @@ export function useAppState() {
       activeIndex: state.activeIndex,
       daySessions: state.daySessions,
       arrangements: state.arrangements,
-      currentListVersion: state.currentListVersion, // ✅ include in backup
+      currentListVersion: state.currentListVersion ?? 1,
     };
     return snap;
   }, [state]);
 
   const restoreState = React.useCallback((obj: unknown) => {
     if (!isValidState(obj)) throw new Error("Invalid backup file format");
-    const src = obj as AppState;
     const snapshot: AppState = {
-      addresses: Array.isArray(src.addresses) ? src.addresses : [],
-      completions: Array.isArray(src.completions) ? src.completions : [],
-      activeIndex:
-        typeof src.activeIndex === "number" ? src.activeIndex : null,
-      daySessions: Array.isArray(src.daySessions) ? src.daySessions : [],
-      arrangements: Array.isArray(src.arrangements) ? src.arrangements : [],
-      currentListVersion:
-        typeof src.currentListVersion === "number" ? src.currentListVersion : 1, // ✅ default if missing
+      addresses: obj.addresses,
+      completions: obj.completions,
+      activeIndex: obj.activeIndex ?? null,
+      daySessions: obj.daySessions ?? [],
+      arrangements: obj.arrangements ?? [],
+      currentListVersion: (obj as any).currentListVersion ?? 1,
     };
     setState(snapshot);
     set(STORAGE_KEY, snapshot).catch(() => {});
@@ -267,10 +256,10 @@ export function useAppState() {
   return {
     state,
     loading,
-    setState, // for cloud sync integrations
+    setState,
     // addresses
     setAddresses,
-    addAddress, // add single address and get its index
+    addAddress,
     // active
     setActive,
     cancelActive,
@@ -280,6 +269,7 @@ export function useAppState() {
     // day sessions
     startDay,
     endDay,
+    editStartForDate, // ✅ new
     // arrangements
     addArrangement,
     updateArrangement,
