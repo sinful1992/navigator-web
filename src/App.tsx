@@ -28,7 +28,7 @@ function normalizeState(raw: any) {
   };
 }
 
-// ----- Error boundary -----
+/** Simple error boundary to avoid blank screen */
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -197,7 +197,7 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [cloudSync.user, loading, hydrated, safeState, cloudSync]);
 
-  // ---- Handlers ----
+  // ---- handlers ----
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
     setTab("arrangements");
@@ -205,26 +205,24 @@ function AuthedApp() {
 
   const ensureDayStarted = React.useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
-    const hasToday = daySessions.some((d: any) => d.date === today);
+    const hasToday = daySessions.some((d) => d.date === today);
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
-  // Allow DayPanel to edit today's start time (or create a session with that start)
+  // Let DayPanel edit today's start time (or open a new session with that start)
   const handleEditStart = React.useCallback(
-    (newStartISO: any) => {
+    (newStartISO: string | Date) => {
       const parsed =
-        typeof newStartISO === "string" ? new Date(newStartISO) : new Date(newStartISO?.value ?? Date.now());
+        typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
       if (Number.isNaN(parsed.getTime())) return;
 
       const newISO = parsed.toISOString();
       setState((s) => {
         const today = newISO.slice(0, 10);
         const idx = s.daySessions.findIndex((d) => d.date === today && !d.end);
-        // if active session today exists, edit its start
         if (idx >= 0) {
           const arr = s.daySessions.slice();
           const sess = { ...arr[idx], start: newISO };
-          // recompute duration if ended (shouldn't be ended per predicate, but safe)
           if (sess.end) {
             try {
               const start = new Date(sess.start).getTime();
@@ -235,14 +233,7 @@ function AuthedApp() {
           arr[idx] = sess;
           return { ...s, daySessions: arr };
         }
-        // otherwise, create a new session for today with this start
-        return {
-          ...s,
-          daySessions: [
-            ...s.daySessions,
-            { date: today, start: newISO },
-          ],
-        };
+        return { ...s, daySessions: [...s.daySessions, { date: today, start: newISO }] };
       });
     },
     [setState]
@@ -279,16 +270,26 @@ function AuthedApp() {
     }
   };
 
-  // Stats (simple global counts)
+  // Stats — based on current list version (unique indices)
   const stats = React.useMemo(() => {
+    const currentVer = state.currentListVersion;
+    const completedIdx = new Set(
+      completions.filter((c) => c.listVersion === currentVer).map((c) => c.index)
+    );
     const total = addresses.length;
-    const completedCount = completions.length;
-    const pending = total - completedCount;
-    const pifCount = completions.filter((c: any) => c.outcome === "PIF").length;
-    const doneCount = completions.filter((c: any) => c.outcome === "Done").length;
-    const daCount = completions.filter((c: any) => c.outcome === "DA").length;
-    return { total, completed: completedCount, pending, pifCount, doneCount, daCount };
-  }, [addresses, completions]);
+    const pending = total - completedIdx.size;
+    const pifCount = completions.filter(
+      (c) => c.listVersion === currentVer && c.outcome === "PIF"
+    ).length;
+    const doneCount = completions.filter(
+      (c) => c.listVersion === currentVer && c.outcome === "Done"
+    ).length;
+    const daCount = completions.filter(
+      (c) => c.listVersion === currentVer && c.outcome === "DA"
+    ).length;
+    const completed = completedIdx.size;
+    return { total, pending, completed, pifCount, doneCount, daCount };
+  }, [addresses, completions, state.currentListVersion]);
 
   if (loading) {
     return (
@@ -307,7 +308,6 @@ function AuthedApp() {
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
-
           <div
             style={{
               display: "flex",
@@ -334,7 +334,9 @@ function AuthedApp() {
 
         <div className="right">
           <div className="user-chip" role="group" aria-label="Account">
-            <span className="avatar" aria-hidden>👤</span>
+            <span className="avatar" aria-hidden>
+              👤
+            </span>
             <span className="email" title={cloudSync.user?.email ?? ""}>
               {cloudSync.user?.email ?? "Signed in"}
             </span>
@@ -347,10 +349,18 @@ function AuthedApp() {
             <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
               📋 List ({stats.pending})
             </button>
-            <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "completed"}
+              onClick={() => setTab("completed")}
+            >
               ✅ Completed ({stats.completed})
             </button>
-            <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "arrangements"}
+              onClick={() => setTab("arrangements")}
+            >
               📅 Arrangements ({arrangements.length})
             </button>
           </div>
@@ -384,7 +394,9 @@ function AuthedApp() {
           <div className="btn-row">
             <ImportExcel onImported={setAddresses} />
             <div className="btn-spacer" />
-            <button className="btn btn-ghost" onClick={onBackup}>💾 Backup</button>
+            <button className="btn btn-ghost" onClick={onBackup}>
+              💾 Backup
+            </button>
 
             <div className="file-input-wrapper">
               <input
@@ -402,7 +414,7 @@ function AuthedApp() {
         </div>
       </div>
 
-      {/* Tab content */}
+      {/* Tabs */}
       {tab === "list" ? (
         <>
           <div className="search-container">
@@ -420,14 +432,14 @@ function AuthedApp() {
             completions={completions}
             startDay={startDay}
             endDay={endDay}
-            onEditStart={handleEditStart}   {/* ✅ new prop wired */}
+            onEditStart={handleEditStart} // ✅ DayPanel now gets this prop
           />
 
           <AddressList
             state={safeState}
             setActive={setActive}
             cancelActive={cancelActive}
-            onComplete={complete}           {/* ✅ AddressList expects onComplete */}
+            onComplete={complete} // ✅ matches your AddressList.tsx
             onCreateArrangement={handleCreateArrangement}
             filterText={search}
             ensureDayStarted={ensureDayStarted}
@@ -470,7 +482,7 @@ function AuthedApp() {
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
           onAddAddress={async (addr: AddressRow) => addAddress(addr)}
-          onComplete={complete}            {/* ✅ provide to Arrangements if it needs to mark done */}
+          onComplete={complete} // in case Arrangements marks an address as completed
           autoCreateForAddress={autoCreateArrangementFor}
           onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
         />
