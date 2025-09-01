@@ -1,6 +1,5 @@
 // src/AddressList.tsx
 import * as React from "react";
-import { Virtuoso } from "react-virtuoso";
 import type { AppState, Outcome, AddressRow, Completion } from "./types";
 import { AddressCard } from "./AddressCard";
 
@@ -97,10 +96,16 @@ export function AddressList({
     [onComplete]
   );
 
-  const itemContent = React.useCallback(
-    (i: number) => {
-      const { row, index: originalIndex } = visible[i];
-      return (
+  if (!items.length) {
+    return <div className="p-4 text-sm opacity-70">No addresses loaded yet.</div>;
+  }
+  if (!visible.length) {
+    return <div className="p-4 text-sm opacity-70">No results. Clear filters or items are completed.</div>;
+  }
+
+  return (
+    <div className="address-list">
+      {visible.map(({ row, index: originalIndex }) => (
         <AddressCard
           key={row.id ?? originalIndex}
           index={originalIndex}
@@ -111,25 +116,8 @@ export function AddressList({
           onComplete={(outcome, amount) => handleComplete(originalIndex, outcome, amount)}
           onCreateArrangement={() => onCreateArrangement(originalIndex)}
         />
-      );
-    },
-    [visible, cancelActive, handleComplete, handleNavigate, onCreateArrangement]
-  );
-
-  if (!items.length) {
-    return <div className="p-4 text-sm opacity-70">No addresses loaded yet.</div>;
-  }
-  if (!visible.length) {
-    return <div className="p-4 text-sm opacity-70">No results. Clear filters or items are completed.</div>;
-  }
-
-  return (
-    <Virtuoso
-      totalCount={visible.length}
-      itemContent={itemContent}
-      useWindowScroll
-      increaseViewportBy={{ top: 400, bottom: 600 }}
-    />
+      ))}
+    </div>
   );
 }
 
