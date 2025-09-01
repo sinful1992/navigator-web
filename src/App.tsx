@@ -45,7 +45,8 @@ export default function App() {
   const [showArrangements, setShowArrangements] = React.useState(false);
   const [autoCreateArrangementForAddress, setAutoCreateArrangementForAddress] = React.useState<number | null>(null);
 
-  // Cloud sync effects - only if cloud sync is available
+  // Cloud sync effects - completely remove to test if this is causing the issue
+  /*
   React.useEffect(() => {
     if (!user || !isOnline || !subscribeToData) return;
     const unsubscribe = subscribeToData((cloudState) => {
@@ -67,6 +68,7 @@ export default function App() {
     
     return () => clearInterval(syncInterval);
   }, [user, isOnline]); // Only depend on auth state, not full state
+  */
 
   // Wrapper functions to match Auth component expectations
   const handleSignIn = React.useCallback(async (email: string, password: string): Promise<void> => {
@@ -81,8 +83,14 @@ export default function App() {
     }
   }, [signUp]);
 
-  // Debug logging
-  console.log('Auth state:', { user: !!user, authLoading, authError });
+  // Debug logging - expand the object
+  console.log('Auth state details:', { 
+    user: user ? `${user.email} (${user.id})` : null, 
+    authLoading, 
+    authError,
+    isOnline,
+    supabaseAvailable: !!cloudSync
+  });
 
   // Show auth screen if not authenticated
   if (authLoading) {
