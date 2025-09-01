@@ -1,93 +1,69 @@
+// src/AddressCard.tsx
 import * as React from "react";
-import { openMaps } from "./maps";
-import type { AddressRow, Completion, Outcome } from "./types";
+import type { AddressRow, Outcome } from "./types";
 
 type Props = {
   index: number;
   row: AddressRow;
-  completion?: Completion;
-  isActive: boolean;
-  onActivate: (i: number) => void;
-  onCancelActive: () => void;
-  onComplete: (i: number, outcome: Outcome, amount?: string) => void;
-  onUndo: (i: number) => void;
+  mapsHref?: string;
+  setActive: () => void;
+  cancelActive: () => void;
+  onComplete: (outcome: Outcome, amount?: string) => void;
+  onCreateArrangement: () => void;
 };
 
-const statusStyle = (p: Props) => {
-  if (p.isActive) return { color: "#1976d2", fontWeight: 600 };         // ACTIVE
-  if (p.completion?.outcome === "PIF") return { color: "#2e7d32" };      // green
-  if (p.completion?.outcome === "DA") return { color: "#c62828" };       // red
-  if (p.completion?.outcome === "Done") return { color: "#1565c0" };     // blue-ish
-  return { color: "#777" };                                              // pending
-};
-
-export const AddressCard: React.FC<Props> = (p) => {
-  const left = (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ fontWeight: 600 }}>
-        {p.index + 1}. {p.row.address}
-      </div>
-      <div style={{ fontSize: 12, ...statusStyle(p) }}>
-        {p.isActive
-          ? "ACTIVE"
-          : p.completion
-          ? p.completion.outcome === "PIF" && p.completion.amount
-            ? `PIF £${p.completion.amount}`
-            : p.completion.outcome
-          : "PENDING"}
-      </div>
-    </div>
-  );
-
-  const onPIF = () => {
-    const raw = window.prompt("Enter amount (£):", "");
-    if (!raw) return;
-    const num = Number(raw);
-    if (!Number.isFinite(num) || num <= 0) {
-      alert("Please enter a valid amount > 0");
-      return;
-    }
-    p.onComplete(p.index, "PIF", num.toFixed(2));
-  };
-
-  const actions = () => {
-    if (p.completion) {
-      return (
-        <button onClick={() => p.onUndo(p.index)}>Undo</button>
-      );
-    }
-    if (p.isActive) {
-      return (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={() => p.onComplete(p.index, "Done")}>Done</button>
-          <button onClick={() => p.onComplete(p.index, "DA")}>DA</button>
-          <button onClick={onPIF}>PIF</button>
-          <button onClick={p.onCancelActive}>Cancel</button>
-        </div>
-      );
-    }
-    return <button onClick={() => p.onActivate(p.index)}>Set Active</button>;
-  };
+export function AddressCard({
+  index,
+  row,
+  mapsHref,
+  setActive,
+  cancelActive,
+  onComplete,
+  onCreateArrangement,
+}: Props) {
+  const [amount, setAmount] = React.useState<string>("");
 
   return (
-    <div
-      style={{
-        border: "1px solid #e0e0e0",
-        borderRadius: 8,
-        padding: 12,
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 12,
-      }}
-    >
-      {left}
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <button onClick={() => openMaps(p.row.address, p.row.lat ?? undefined, p.row.lng ?? undefined)}>
-          Navigate
+    <div className="border rounded-xl p-3 mb-2">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="font-medium">{index + 1}. {row.address ?? "(no address)"}</div>
+          <div className="text-xs opacity-70">{row.postcode ?? ""}</div>
+          {mapsHref && (
+            <a className="text-xs underline" href={mapsHref} target="_blank" rel="noreferrer">
+              Open in Maps
+            </a>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <button className="border rounded px-2 py-1 text-sm" onClick={setActive}>Navigate</button>
+          <button className="border rounded px-2 py-1 text-sm" onClick={cancelActive}>Cancel</button>
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          className="border rounded px-2 py-1 text-sm"
+          placeholder="£ Amount (for PIF)"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+        <button className="border rounded px-2 py-1 text-sm" onClick={() => onComplete("PIF", amount || undefined)}>
+          PIF
         </button>
-        {actions()}
+        <button className="border rounded px-2 py-1 text-sm" onClick={() => onComplete("DA")}>
+          DA
+        </button>
+        <button className="border rounded px-2 py-1 text-sm" onClick={() => onComplete("DONE")}>
+          Done
+        </button>
+        <button className="border rounded px-2 py-1 text-sm" onClick={() => onComplete("ARR")}>
+          ARR
+        </button>
+        <button className="border rounded px-2 py-1 text-sm" onClick={onCreateArrangement}>
+          New Arrangement
+        </button>
       </div>
     </div>
   );
-};
+}
