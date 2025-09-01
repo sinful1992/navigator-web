@@ -19,10 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+
       - run: npm ci
 
       - name: Create .env.local
@@ -34,25 +36,31 @@ jobs:
           VITE_DEMO_PASSWORD=${{ secrets.VITE_DEMO_PASSWORD }}
           EOF
 
+      # ⬇️ CI-only Tailwind build (no repo devDeps; uses npx on the runner)
+      - name: Generate Tailwind CSS (CI-only)
+        run: |
+          cat > tailwind.config.cjs <<'EOF'
+          module.exports = {
+            content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
+            theme: { extend: {} },
+            plugins: [],
+          }
+          EOF
+
+          cat > tw.css <<'EOF'
+          @tailwind base;
+          @tailwind components;
+          @tailwind utilities;
+          EOF
+
+          npx --yes tailwindcss -c tailwind.config.cjs -i ./tw.css -o ./src/index.css --minify
+
       - name: Build
         run: npm run build
 
-      # SPA fallback so /route refreshes don’t 404 on Pages
+      # SPA refresh support on Pages
       - name: Add SPA 404 fallback
         run: cp dist/index.html dist/404.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./dist
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
