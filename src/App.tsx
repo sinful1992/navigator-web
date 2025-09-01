@@ -4,39 +4,34 @@ import { AddressList } from "./AddressList";
 import { Completed } from "./Completed";
 import type { AppState, Outcome } from "./types";
 
-// Step B: version-safe outcome updates
+// Version-safe outcome updates (Step B)
 import { updateOutcomeByIndexAndVersion } from "./state/updateOutcome";
 
-// Step C: stamped creation + safe backfill
+// Creation path you already added (listVersion+snapshot)
 import { createCompletion, upsertCompletion } from "./state/createCompletion";
-import { backfillCompletionSnapshotsOnce } from "./migrations/backfillCompletionSnapshots";
 
-// Step D: centralised stats
+// Optional stats header
 import { computeCurrentStats } from "./state/selectors";
 
-// Keep your existing state hook
+// ✅ Backup helpers
+import { localDateKey, makeDaySnapshot, performBackup } from "./backup/backup";
+
 import { useAppState } from "./state/useAppState";
 
 export default function App() {
   const { state, setState } = useAppState();
   const [filterText, setFilterText] = React.useState("");
+  const [isBackingUp, setIsBackingUp] = React.useState(false);
 
-  // Step C: one-time safe backfill for legacy completions missing snapshots
-  React.useEffect(() => {
-    setState((s: AppState) => backfillCompletionSnapshotsOnce(s));
-  }, [setState]);
-
-  // Basic handlers (keep your own if you have them)
   const setActive = React.useCallback(
-    (index: number) => {
-      setState((s: AppState) => ({ ...s, activeIndex: index }));
-    },
+    (index: number) => setState((s: AppState) => ({ ...s, activeIndex: index })),
     [setState]
   );
 
-  const cancelActive = React.useCallback(() => {
-    setState((s: AppState) => ({ ...s, activeIndex: undefined }));
-  }, [setState]);
+  const cancelActive = React.useCallback(
+    () => setState((s: AppState) => ({ ...s, activeIndex: undefined })),
+    [setState]
+  );
 
   const ensureDayStarted = React.useCallback(() => {
     setState((s: AppState) => {
@@ -46,11 +41,10 @@ export default function App() {
   }, [setState]);
 
   const onCreateArrangement = React.useCallback((addressIndex: number) => {
-    // open arrangement form, etc. Keep your existing logic here.
     console.debug("Create arrangement for index", addressIndex);
   }, []);
 
-  // Step C: new completion write path (stamped + upserted)
+  // Stamped creation + upsert (you already use this)
   const onComplete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string) => {
       setState((s: AppState) => {
@@ -61,7 +55,7 @@ export default function App() {
     [setState]
   );
 
-  // Step B: version-safe outcome updates used by Completed.tsx
+  // Version-safe outcome updates (used by Completed)
   const handleChangeOutcome = React.useCallback(
     (index: number, o: Outcome, amount?: string, listVersion?: number) => {
       setState((s: AppState) => updateOutcomeByIndexAndVersion(s, index, o, amount, listVersion));
@@ -69,30 +63,90 @@ export default function App() {
     [setState]
   );
 
-  // Step D: compute stats for current list
+  // ✅ Manual "Backup now"
+  const handleBackupNow = React.useCallback(async () => {
+    try {
+      setIsBackingUp(true);
+      const dayKey = localDateKey(new Date(), "Europe/London");
+      const snapshot = makeDaySnapshot(state, dayKey);
+      await performBackup(dayKey, snapshot);
+      alert("Backup completed.");
+      setState((s) => ({ ...s, lastBackupAt: new Date().toISOString() } as AppState));
+    } catch (e) {
+      console.error(e);
+      alert("Backup failed. Please try again.");
+    } finally {
+      setIsBackingUp(false);
+    }
+  }, [state, setState]);
+
+  // ✅ Finish Day → set endTime and back up the final snapshot
+  const handleFinishDay = React.useCallback(async () => {
+    try {
+      setIsBackingUp(true);
+      const nowIso = new Date().toISOString();
+      const dayKey = localDateKey(new Date(), "Europe/London");
+      const snapshot = makeDaySnapshot(state, dayKey, { endTime: nowIso });
+
+      // Update endTime locally for UX consistency
+      setState((s: AppState) => ({
+        ...s,
+        day: { ...(s.day ?? {}), endTime: nowIso },
+      }));
+
+      await performBackup(dayKey, snapshot);
+      alert(`Day ${dayKey} finished and backed up.`);
+      setState((s) => ({ ...s, lastBackupAt: nowIso } as AppState));
+    } catch (e) {
+      console.error(e);
+      alert("Finish Day backup failed. Your data is still on this device.");
+    } finally {
+      setIsBackingUp(false);
+    }
+  }, [state, setState]);
+
   const stats = React.useMemo(() => computeCurrentStats(state), [state]);
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="p-3 border-b flex items-center gap-3">
+      <header className="p-3 border-b flex flex-wrap items-center gap-3">
         <h1 className="text-lg font-semibold">Address Navigator</h1>
 
-        <div className="ml-6 text-sm">
+        <div className="ml-2 text-sm">
           <span className="mr-3">List v{state.currentListVersion}</span>
           <span className="mr-2">Total: {stats.total}</span>
           <span className="mr-2">PIF: {stats.pifCount}</span>
           <span className="mr-2">DA: {stats.daCount}</span>
           <span className="mr-2">Done: {stats.doneCount}</span>
           <span className="mr-2">ARR: {stats.arrCount}</span>
+          {state?.lastBackupAt && (
+            <span className="ml-2 opacity-70">Last backup: {new Date(state.lastBackupAt).toLocaleString()}</span>
+          )}
         </div>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <input
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
             placeholder="Search address or postcode…"
             className="border rounded px-3 py-1 text-sm"
           />
+          <button
+            onClick={handleBackupNow}
+            disabled={isBackingUp}
+            className="border rounded px-3 py-1 text-sm"
+            title="Backup current data to Supabase"
+          >
+            {isBackingUp ? "Backing up…" : "Backup now"}
+          </button>
+          <button
+            onClick={handleFinishDay}
+            disabled={isBackingUp}
+            className="border rounded px-3 py-1 text-sm"
+            title="Set end time and back up today’s data"
+          >
+            {isBackingUp ? "Finishing…" : "Finish Day"}
+          </button>
         </div>
       </header>
 
@@ -117,8 +171,6 @@ export default function App() {
             completions={state.completions ?? []}
             currentListVersion={state.currentListVersion}
             onChangeOutcome={handleChangeOutcome}
-            // If you support deletions, wire your delete handler here:
-            // onDeleteCompletion={(index, ver) => setState((s) => deleteCompletionByIndexAndVersion(s, index, ver))}
           />
         </section>
       </main>
