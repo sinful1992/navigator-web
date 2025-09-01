@@ -1,3 +1,4 @@
+// src/App.tsx
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -13,7 +14,7 @@ import type { AddressRow } from "./types";
 
 type Tab = "list" | "completed" | "arrangements";
 
-// --- helper: make sure arrays exist so .length never crashes ---
+// Normalize state coming from cloud/restore to avoid undefined arrays
 function normalizeState(raw: any) {
   const r = raw ?? {};
   return {
@@ -28,7 +29,7 @@ function normalizeState(raw: any) {
   };
 }
 
-// Simple error boundary (avoids blank screen on unexpected errors)
+// Simple error boundary (avoid blank screen)
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -59,7 +60,6 @@ class ErrorBoundary extends React.Component<
 export default function App() {
   const cloudSync = useCloudSync();
 
-  // Wait for Supabase session restore
   if (cloudSync.isLoading) {
     return (
       <div className="container">
@@ -71,12 +71,10 @@ export default function App() {
     );
   }
 
-  // Auth screen
   if (!cloudSync.user) {
     return (
       <ErrorBoundary>
         <Auth
-          // Wrap to match Auth’s Promise<void> signature
           onSignIn={async (email, password) => {
             await cloudSync.signIn(email, password);
           }}
@@ -116,7 +114,7 @@ function AuthedApp() {
     updateArrangement,
     deleteArrangement,
     setState,
-    editStartForDate, // if present in your hook; safe to leave if you’ve added it
+    editStartForDate, // keep if present in your hook
   } = useAppState();
 
   const cloudSync = useCloudSync();
@@ -127,23 +125,22 @@ function AuthedApp() {
     React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
-  // Hydration / echo guards
+  // hydration guard vs cloud sync echo
   const [hydrated, setHydrated] = React.useState(false);
-  const lastFromCloudRef = React.useRef<string | null>(null); // JSON of last cloud snapshot we applied
+  const lastFromCloudRef = React.useRef<string | null>(null);
 
-  // --- safe arrays (never undefined) ---
+  // safe arrays
   const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
   const completions = Array.isArray(state?.completions) ? state.completions : [];
   const arrangements = Array.isArray(state?.arrangements) ? state.arrangements : [];
   const daySessions = Array.isArray(state?.daySessions) ? state.daySessions : [];
 
-  // State passed to children
   const safeState = React.useMemo(
     () => ({ ...(state ?? {}), addresses, completions, arrangements, daySessions }),
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ---- Bootstrap sync ----
+  // bootstrap: push local if any, then subscribe; record baseline to prevent loops
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: (() => void) | undefined;
@@ -160,7 +157,6 @@ function AuthedApp() {
         if (localHasData) {
           await cloudSync.syncData(safeState);
           if (cancelled) return;
-          // Baseline equals what we just pushed
           lastFromCloudRef.current = JSON.stringify(safeState);
           setHydrated(true);
         }
@@ -168,12 +164,8 @@ function AuthedApp() {
         cleanup = cloudSync.subscribeToData((newState) => {
           if (!newState) return;
           const normalized = normalizeState(newState);
-
-          // Update local from cloud
           setState(normalized);
           setLastSyncTime(new Date());
-
-          // Set baseline & hydration
           lastFromCloudRef.current = JSON.stringify(normalized);
           setHydrated(true);
         });
@@ -186,44 +178,41 @@ function AuthedApp() {
       cancelled = true;
       if (cleanup) cleanup();
     };
-    // run once per session
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // ---- Auto push local changes -> cloud (debounced) ----
+  // debounced push local -> cloud
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
     const currentStr = JSON.stringify(safeState);
-    if (currentStr === lastFromCloudRef.current) return; // no change vs cloud baseline
+    if (currentStr === lastFromCloudRef.current) return;
 
     const t = setTimeout(() => {
       cloudSync
         .syncData(safeState)
         .then(() => {
           setLastSyncTime(new Date());
-          lastFromCloudRef.current = currentStr; // advance baseline
+          lastFromCloudRef.current = currentStr;
         })
-        .catch((err: unknown) => console.error("Sync failed:", err));
+        .catch((err) => console.error("Sync failed:", err));
     }, 400);
 
     return () => clearTimeout(t);
   }, [cloudSync.user, loading, hydrated, safeState, cloudSync]);
 
-  // ----- UI helpers -----
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
     setTab("arrangements");
   }, []);
 
-  // Start day automatically on first Navigate of the day (if you pass ensureDayStarted to AddressList)
   const ensureDayStarted = React.useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
     const hasToday = daySessions.some((d: any) => d.date === today);
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
-  // ----- Backup / Restore -----
+  // backup / restore
   const onBackup = React.useCallback(() => {
     const snap = backupState();
     const stamp = new Date();
@@ -241,8 +230,8 @@ function AuthedApp() {
     try {
       const raw = await readJsonFile(file);
       const data = normalizeState(raw);
-      restoreState(data); // local
-      await cloudSync.syncData(data); // cloud
+      restoreState(data);
+      await cloudSync.syncData(data);
       lastFromCloudRef.current = JSON.stringify(data);
       setHydrated(true);
       alert("✅ Restore completed successfully!");
@@ -254,7 +243,7 @@ function AuthedApp() {
     }
   };
 
-  // ----- Stats (safe arrays) -----
+  // stats
   const stats = React.useMemo(() => {
     const total = addresses.length;
     const completedCount = completions.length;
@@ -309,7 +298,6 @@ function AuthedApp() {
         </div>
 
         <div className="right">
-          {/* Account pill */}
           <div className="user-chip" role="group" aria-label="Account">
             <span className="avatar" aria-hidden>
               👤
@@ -322,7 +310,6 @@ function AuthedApp() {
             </button>
           </div>
 
-          {/* Tabs */}
           <div className="tabs">
             <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
               📋 List ({stats.pending})
@@ -345,7 +332,7 @@ function AuthedApp() {
         </div>
       </header>
 
-      {/* Import & Tools Section */}
+      {/* Import & Tools */}
       <div style={{ marginBottom: "2rem" }}>
         <div
           style={{
@@ -371,9 +358,7 @@ function AuthedApp() {
 
           <div className="btn-row">
             <ImportExcel onImported={setAddresses} />
-
             <div className="btn-spacer" />
-
             <button className="btn btn-ghost" onClick={onBackup}>
               💾 Backup
             </button>
@@ -394,10 +379,9 @@ function AuthedApp() {
         </div>
       </div>
 
-      {/* Tab Content */}
+      {/* Tabs */}
       {tab === "list" ? (
         <>
-          {/* Search Bar */}
           <div className="search-container">
             <input
               type="search"
@@ -408,7 +392,6 @@ function AuthedApp() {
             />
           </div>
 
-          {/* Day Panel */}
           <DayPanel
             sessions={daySessions}
             completions={completions}
@@ -417,18 +400,16 @@ function AuthedApp() {
             onEditStart={editStartForDate}
           />
 
-          {/* Address List */}
           <AddressList
             state={safeState}
             setActive={setActive}
             cancelActive={cancelActive}
-            onComplete={complete}                 {/* ✅ updated prop name */}
+            onComplete={complete}
             onCreateArrangement={handleCreateArrangement}
             filterText={search}
             ensureDayStarted={ensureDayStarted}
           />
 
-          {/* Keyboard Shortcuts Help */}
           <div
             style={{
               marginTop: "2rem",
