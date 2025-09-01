@@ -4,78 +4,64 @@ import { AddressList } from "./AddressList";
 import { Completed } from "./Completed";
 import type { AppState, Outcome } from "./types";
 
-// STEP B: version-safe outcome update helper
+// Step B: version-safe outcome updates
 import { updateOutcomeByIndexAndVersion } from "./state/updateOutcome";
 
-// If you already have a custom hook for state, keep it.
-// This assumes your hook exposes { state, setState }.
+// Step C: stamped creation + safe backfill
+import { createCompletion, upsertCompletion } from "./state/createCompletion";
+import { backfillCompletionSnapshotsOnce } from "./migrations/backfillCompletionSnapshots";
+
+// Step D: centralised stats
+import { computeCurrentStats } from "./state/selectors";
+
+// Keep your existing state hook
 import { useAppState } from "./state/useAppState";
 
 export default function App() {
-  const { state, setState } = useAppState(); // keep your existing source of truth
+  const { state, setState } = useAppState();
   const [filterText, setFilterText] = React.useState("");
 
-  // --- Utility handlers you likely already have; keep your versions if present ---
+  // Step C: one-time safe backfill for legacy completions missing snapshots
+  React.useEffect(() => {
+    setState((s: AppState) => backfillCompletionSnapshotsOnce(s));
+  }, [setState]);
+
+  // Basic handlers (keep your own if you have them)
   const setActive = React.useCallback(
     (index: number) => {
-      setState((s: AppState) => ({
-        ...s,
-        activeIndex: index,
-      }));
+      setState((s: AppState) => ({ ...s, activeIndex: index }));
     },
     [setState]
   );
 
   const cancelActive = React.useCallback(() => {
-    setState((s: AppState) => ({
-      ...s,
-      activeIndex: undefined,
-    }));
+    setState((s: AppState) => ({ ...s, activeIndex: undefined }));
   }, [setState]);
 
-  // If you have your own implementation, keep it.
   const ensureDayStarted = React.useCallback(() => {
     setState((s: AppState) => {
       if (s?.day?.startTime) return s;
-      const startTime = new Date().toISOString();
-      return {
-        ...s,
-        day: { ...(s.day ?? {}), startTime },
-      };
+      return { ...s, day: { ...(s.day ?? {}), startTime: new Date().toISOString() } };
     });
   }, [setState]);
 
-  // Placeholder — keep your real arrangement creator if you already have one.
   const onCreateArrangement = React.useCallback((addressIndex: number) => {
-    // open arrangement form for addressIndex, etc.
-    // keep your existing logic here
+    // open arrangement form, etc. Keep your existing logic here.
     console.debug("Create arrangement for index", addressIndex);
   }, []);
 
-  // NOTE (Step C will refine this): this creates a new completion when an item is
-  // completed from the active list. For Step B, it can remain as-is.
+  // Step C: new completion write path (stamped + upserted)
   const onComplete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string) => {
       setState((s: AppState) => {
-        const completions = (s.completions ?? []).slice();
-        // If your app prevents duplicate completions for the same item+version,
-        // you can early-return here. Otherwise, append a new completion.
-        completions.push({
-          index,
-          outcome,
-          amount: outcome === "PIF" ? amount : undefined,
-          completedAt: new Date().toISOString(),
-          // In Step C we’ll ensure listVersion and addressSnapshot are stamped here.
-          // listVersion: s.currentListVersion,
-          // addressSnapshot: s.addresses?.[index]?.address ?? `#${index + 1}`,
-        });
-        return { ...s, completions };
+        const comp = createCompletion(s, index, outcome, amount);
+        return upsertCompletion(s, comp);
       });
     },
     [setState]
   );
 
-  // STEP B: version-safe outcome updates (used by Completed.tsx)
+  // Step B: version-safe outcome updates used by Completed.tsx
   const handleChangeOutcome = React.useCallback(
     (index: number, o: Outcome, amount?: string, listVersion?: number) => {
       setState((s: AppState) => updateOutcomeByIndexAndVersion(s, index, o, amount, listVersion));
@@ -83,11 +69,23 @@ export default function App() {
     [setState]
   );
 
-  // Simple layout — keep your real shell/navigation if you already have it
+  // Step D: compute stats for current list
+  const stats = React.useMemo(() => computeCurrentStats(state), [state]);
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="p-3 border-b flex items-center gap-3">
         <h1 className="text-lg font-semibold">Address Navigator</h1>
+
+        <div className="ml-6 text-sm">
+          <span className="mr-3">List v{state.currentListVersion}</span>
+          <span className="mr-2">Total: {stats.total}</span>
+          <span className="mr-2">PIF: {stats.pifCount}</span>
+          <span className="mr-2">DA: {stats.daCount}</span>
+          <span className="mr-2">Done: {stats.doneCount}</span>
+          <span className="mr-2">ARR: {stats.arrCount}</span>
+        </div>
+
         <div className="ml-auto">
           <input
             value={filterText}
@@ -118,9 +116,8 @@ export default function App() {
             addresses={state.addresses ?? []}
             completions={state.completions ?? []}
             currentListVersion={state.currentListVersion}
-            // STEP B: pass the version-safe updater
             onChangeOutcome={handleChangeOutcome}
-            // (Optional) If you support deletions, wire your delete handler here:
+            // If you support deletions, wire your delete handler here:
             // onDeleteCompletion={(index, ver) => setState((s) => deleteCompletionByIndexAndVersion(s, index, ver))}
           />
         </section>
