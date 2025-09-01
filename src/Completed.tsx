@@ -123,7 +123,9 @@ export function Completed({ state, onChangeOutcome, onUndo }: Props) {
                           ? "pill-pif"
                           : c.outcome === "DA"
                           ? "pill-da"
-                          : /* style ARR like Done to avoid needing .pill-arr in CSS */ "pill-done")
+                          : c.outcome === "ARR"
+                          ? "pill-arr"
+                          : "pill-done")
                       }
                     >
                       {c.outcome}
