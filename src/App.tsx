@@ -1,8 +1,11 @@
 // src/App.tsx
 import * as React from "react";
-import "./App.css"; // ⬅️ bring back the original design system
+import "./App.css";
 import { AddressList } from "./AddressList";
 import { Completed } from "./Completed";
+import { Auth } from "./Auth";
+import { ImportExcel } from "./ImportExcel";
+import { Arrangements } from "./Arrangements";
 import type { AppState, Outcome } from "./types";
 import { BackupsPanel } from "./components/BackupsPanel";
 
@@ -14,14 +17,66 @@ import { createCompletion, upsertCompletion } from "./state/createCompletion";
 import { computeCurrentStats } from "./state/selectors";
 // Backup helpers
 import { localDateKey, makeDaySnapshot, performBackup } from "./backup/backup";
-// App state
+// App state and cloud sync
 import { useAppState } from "./useAppState";
+import { useCloudSync } from "./useCloudSync";
 
 export default function App() {
   const { state, setState } = useAppState();
+  const {
+    user,
+    isLoading: authLoading,
+    isOnline,
+    error: authError,
+    clearError,
+    signIn,
+    signUp,
+    signOut,
+    signInDemo,
+    syncData,
+    subscribeToData,
+  } = useCloudSync();
+
   const [filterText, setFilterText] = React.useState("");
   const [isBackingUp, setIsBackingUp] = React.useState(false);
   const [showBackups, setShowBackups] = React.useState(false);
+  const [showArrangements, setShowArrangements] = React.useState(false);
+  const [autoCreateArrangementForAddress, setAutoCreateArrangementForAddress] = React.useState<number | null>(null);
+
+  // Cloud sync effects
+  React.useEffect(() => {
+    if (!user || !isOnline) return;
+    return subscribeToData((cloudState) => {
+      setState(cloudState);
+    });
+  }, [user, isOnline, subscribeToData, setState]);
+
+  React.useEffect(() => {
+    if (user && isOnline) {
+      syncData(state);
+    }
+  }, [state, user, isOnline, syncData]);
+
+  // Show auth screen if not authenticated
+  if (authLoading) {
+    return (
+      <div className="container" style={{ textAlign: "center", paddingTop: "2rem" }}>
+        <div>Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Auth
+        onSignIn={signIn}
+        onSignUp={signUp}
+        isLoading={authLoading}
+        error={authError}
+        onClearError={clearError}
+      />
+    );
+  }
 
   const setActive = React.useCallback(
     (index: number) => setState((s: AppState) => ({ ...s, activeIndex: index })),
@@ -40,7 +95,8 @@ export default function App() {
   }, [setState]);
 
   const onCreateArrangement = React.useCallback((addressIndex: number) => {
-    console.debug("Create arrangement for index", addressIndex);
+    setAutoCreateArrangementForAddress(addressIndex);
+    setShowArrangements(true);
   }, []);
 
   const onComplete = React.useCallback(
@@ -59,6 +115,57 @@ export default function App() {
     },
     [setState]
   );
+
+  // Import addresses
+  const handleImportAddresses = React.useCallback((rows: any[]) => {
+    setState((s: AppState) => ({
+      ...s,
+      addresses: rows,
+      currentListVersion: (s.currentListVersion || 1) + 1,
+      activeIndex: undefined,
+    }));
+  }, [setState]);
+
+  // Arrangements
+  const handleAddArrangement = React.useCallback((arrangement: any) => {
+    setState((s: AppState) => {
+      const now = new Date().toISOString();
+      const newArrangement = {
+        ...arrangement,
+        id: `arr_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+      return { ...s, arrangements: [...s.arrangements, newArrangement] };
+    });
+  }, [setState]);
+
+  const handleUpdateArrangement = React.useCallback((id: string, updates: any) => {
+    setState((s: AppState) => ({
+      ...s,
+      arrangements: s.arrangements.map((arr) =>
+        arr.id === id ? { ...arr, ...updates, updatedAt: new Date().toISOString() } : arr
+      ),
+    }));
+  }, [setState]);
+
+  const handleDeleteArrangement = React.useCallback((id: string) => {
+    setState((s: AppState) => ({
+      ...s,
+      arrangements: s.arrangements.filter((arr) => arr.id !== id),
+    }));
+  }, [setState]);
+
+  const handleAddAddress = React.useCallback(async (address: any): Promise<number> => {
+    return new Promise((resolve) => {
+      setState((s: AppState) => {
+        const newAddresses = [...s.addresses, address];
+        const newIndex = newAddresses.length - 1;
+        setTimeout(() => resolve(newIndex), 0);
+        return { ...s, addresses: newAddresses };
+      });
+    });
+  }, [setState]);
 
   // Backups (Supabase)
   const handleBackupNow = React.useCallback(async () => {
@@ -104,7 +211,7 @@ export default function App() {
 
   return (
     <div className="container">
-      {/* Header restored to original style */}
+      {/* Header with auth info */}
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
@@ -118,9 +225,22 @@ export default function App() {
             {state?.lastBackupAt && (
               <span className="ml-6">Last backup: {new Date(state.lastBackupAt).toLocaleString()}</span>
             )}
+            {user && (
+              <span className="ml-6">
+                👤 {user.email} {isOnline ? "🟢" : "🔴"}
+              </span>
+            )}
           </div>
 
           <div className="btn-row" style={{ marginTop: "0.5rem" }}>
+            <ImportExcel onImported={handleImportAddresses} />
+            <button
+              onClick={() => setShowArrangements(true)}
+              className="btn btn-ghost"
+              title="View payment arrangements"
+            >
+              📅 Arrangements ({state.arrangements?.length || 0})
+            </button>
             <button
               onClick={() => setShowBackups(true)}
               className="btn btn-ghost"
@@ -140,9 +260,16 @@ export default function App() {
               onClick={handleFinishDay}
               disabled={isBackingUp}
               className="btn btn-outline"
-              title="Set end time and back up today’s data"
+              title="Set end time and back up today's data"
             >
               {isBackingUp ? "Finishing…" : "✅ Finish Day"}
+            </button>
+            <button
+              onClick={signOut}
+              className="btn btn-ghost"
+              title="Sign out"
+            >
+              🚪 Sign Out
             </button>
           </div>
         </div>
@@ -158,7 +285,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Two-column content (kept simple; styled by cards/rows CSS) */}
+      {/* Main content */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
         <section>
           <h2 className="section-title" style={{ marginBottom: 8 }}>Active List</h2>
@@ -184,7 +311,39 @@ export default function App() {
         </section>
       </div>
 
+      {/* Modals */}
       <BackupsPanel open={showBackups} onClose={() => setShowBackups(false)} setState={setState} />
+      
+      {showArrangements && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white w-[min(1100px,95vw)] max-h-[90vh] rounded-xl shadow overflow-hidden flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Payment Arrangements</h2>
+              <button
+                onClick={() => {
+                  setShowArrangements(false);
+                  setAutoCreateArrangementForAddress(null);
+                }}
+                className="btn btn-ghost"
+              >
+                ✖ Close
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <Arrangements
+                state={state}
+                onAddArrangement={handleAddArrangement}
+                onUpdateArrangement={handleUpdateArrangement}
+                onDeleteArrangement={handleDeleteArrangement}
+                onAddAddress={handleAddAddress}
+                onComplete={onComplete}
+                autoCreateForAddress={autoCreateArrangementForAddress}
+                onAutoCreateHandled={() => setAutoCreateArrangementForAddress(null)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
