@@ -1,83 +1,139 @@
-/* src/index.css — lightweight utility set (no build tools needed) */
-
-/* Base */
-* { box-sizing: border-box; }
-html, body, #root { height: 100%; }
-body { margin: 0; background:#f8fafc; color:#0f172a;
-  font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans",sans-serif;
+/* Base styles that don't conflict with App.css */
+* {
+  box-sizing: border-box;
 }
 
-/* Layout */
-.min-h-screen{min-height:100vh}
-.flex{display:flex}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}
-.items-center{align-items:center}.items-start{align-items:flex-start}
-.justify-between{justify-content:space-between}
-.grid{display:grid}
-.gap-2{gap:.5rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}
-.min-w-0{min-width:0}
-.ml-auto{margin-left:auto}
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  overflow-x: hidden;
+}
 
-/* Responsive */
-@media (min-width:768px){.md\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}}
+html {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  
+  /* Ensure proper mobile scaling */
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+}
 
-/* Spacing */
-.p-3{padding:.75rem}.p-4{padding:1rem}
-.px-2{padding-left:.5rem;padding-right:.5rem}
-.px-3{padding-left:.75rem;padding-right:.75rem}
-.py-1{padding-top:.25rem;padding-bottom:.25rem}
-.mb-2{margin-bottom:.5rem}.mt-2{margin-top:.5rem}
-.ml-2{margin-left:.5rem}.ml-6{margin-left:1.5rem}
-.mr-2{margin-right:.5rem}.mr-3{margin-right:.75rem}
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  background: #f8fafc;
+  color: #1e293b;
+  
+  /* Prevent zoom on input focus (mobile) and horizontal scroll */
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+  width: 100%;
+}
 
-/* Typography */
-.text-xs{font-size:.75rem;line-height:1rem}
-.text-sm{font-size:.875rem;line-height:1.25rem}
-.text-base{font-size:1rem;line-height:1.5rem}
-.text-lg{font-size:1.125rem;line-height:1.75rem}
-.font-medium{font-weight:500}.font-semibold{font-weight:600}
-.opacity-70{opacity:.7}
-.underline{text-decoration:underline}
+#root {
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+}
 
-/* Colors / backgrounds */
-.bg-white{background:#fff}
-.bg-gray-50{background:#f9fafb}
-.text-gray-500{color:#6b7280}
-.text-gray-900{color:#111827}
+/* Remove default button styles that conflict with our design system */
+button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+}
 
-/* The class with a slash from JSX */
-.bg-black\/40{background:rgba(0,0,0,.40)}
+/* Remove default link styles */
+a {
+  color: inherit;
+  text-decoration: none;
+}
 
-/* Borders & radius */
-.border{border:1px solid #e2e8f0}
-.border-b{border-bottom:1px solid #e2e8f0}
-.rounded{border-radius:.25rem}
-.rounded-xl{border-radius:.75rem}
+/* Form elements */
+input, textarea, select {
+  font: inherit;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+}
 
-/* Positioning & z */
-.fixed{position:fixed}
-.inset-0{top:0;right:0;bottom:0;left:0}
-.sticky{position:sticky}
-.top-0{top:0}
-.z-50{z-index:50}
+/* Remove focus outline - our design system handles this */
+button:focus,
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+}
 
-/* Width/height helpers used by BackupsPanel */
-.w-\[min\(900px,95vw\)\]{width:min(900px,95vw)}
-.max-h-\[85vh\]{max-height:85vh}
+/* Ensure images are responsive */
+img {
+  max-width: 100%;
+  height: auto;
+}
 
-/* Overflow */
-.overflow-hidden{overflow:hidden}
-.overflow-auto{overflow:auto}
+/* Typography reset */
+h1, h2, h3, h4, h5, h6, p {
+  margin: 0;
+  font-weight: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
 
-/* Tables */
-table{border-collapse:collapse;width:100%}
-thead tr{background:#f9fafb}
-td,th{border-top:1px solid #e5e7eb}
+/* List reset */
+ul, ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
 
-/* Buttons & inputs */
-button{cursor:pointer;background:#fff}
-button:disabled{opacity:.6;cursor:default}
-input{background:#fff;border:1px solid #e5e7eb;border-radius:.25rem;padding:.25rem .5rem}
-button.border, .border.rounded{border-color:#e5e7eb}
+/* Table reset */
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
 
-/* Simple shadows */
-.shadow{box-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1)}
+/* Remove default fieldset/legend styles */
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+legend {
+  padding: 0;
+}
+
+/* Mobile-specific fixes */
+@media (max-width: 768px) {
+  /* Prevent zoom on input focus */
+  input[type="color"],
+  input[type="date"],
+  input[type="datetime"],
+  input[type="datetime-local"],
+  input[type="email"],
+  input[type="month"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="text"],
+  input[type="time"],
+  input[type="url"],
+  input[type="week"],
+  select:focus,
+  textarea {
+    font-size: 16px !important;
+  }
+}
