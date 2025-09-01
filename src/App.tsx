@@ -70,18 +70,18 @@ export default function App() {
   }, [user, isOnline]); // Only depend on auth state, not full state
   */
 
-  // Wrapper functions to match Auth component expectations
-  const handleSignIn = React.useCallback(async (email: string, password: string): Promise<void> => {
+  // Wrapper functions to match Auth component expectations - simplified without useCallback
+  const handleSignIn = async (email: string, password: string): Promise<void> => {
     if (signIn) {
       await signIn(email, password);
     }
-  }, [signIn]);
+  };
 
-  const handleSignUp = React.useCallback(async (email: string, password: string): Promise<void> => {
+  const handleSignUp = async (email: string, password: string): Promise<void> => {
     if (signUp) {
       await signUp(email, password);
     }
-  }, [signUp]);
+  };
 
   // Debug logging - expand the object
   console.log('Auth state details:', { 
@@ -113,56 +113,44 @@ export default function App() {
     );
   }
 
-  const setActive = React.useCallback(
-    (index: number) => setState((s: AppState) => ({ ...s, activeIndex: index })),
-    [setState]
-  );
-  const cancelActive = React.useCallback(
-    () => setState((s: AppState) => ({ ...s, activeIndex: undefined })),
-    [setState]
-  );
+  const setActive = (index: number) => setState((s: AppState) => ({ ...s, activeIndex: index }));
+  const cancelActive = () => setState((s: AppState) => ({ ...s, activeIndex: undefined }));
 
-  const ensureDayStarted = React.useCallback(() => {
+  const ensureDayStarted = () => {
     setState((s: AppState) => {
       if (s?.day?.startTime) return s;
       return { ...s, day: { ...(s.day ?? {}), startTime: new Date().toISOString() } };
     });
-  }, [setState]);
+  };
 
-  const onCreateArrangement = React.useCallback((addressIndex: number) => {
+  const onCreateArrangement = (addressIndex: number) => {
     setAutoCreateArrangementForAddress(addressIndex);
     setShowArrangements(true);
-  }, []);
+  };
 
-  const onComplete = React.useCallback(
-    (index: number, outcome: Outcome, amount?: string) => {
-      setState((s: AppState) => {
-        const comp = createCompletion(s, index, outcome, amount);
-        return upsertCompletion(s, comp);
-      });
-    },
-    [setState]
-  );
+  const onComplete = (index: number, outcome: Outcome, amount?: string) => {
+    setState((s: AppState) => {
+      const comp = createCompletion(s, index, outcome, amount);
+      return upsertCompletion(s, comp);
+    });
+  };
 
-  const handleChangeOutcome = React.useCallback(
-    (index: number, o: Outcome, amount?: string, listVersion?: number) => {
-      setState((s: AppState) => updateOutcomeByIndexAndVersion(s, index, o, amount, listVersion));
-    },
-    [setState]
-  );
+  const handleChangeOutcome = (index: number, o: Outcome, amount?: string, listVersion?: number) => {
+    setState((s: AppState) => updateOutcomeByIndexAndVersion(s, index, o, amount, listVersion));
+  };
 
-  // Import addresses
-  const handleImportAddresses = React.useCallback((rows: any[]) => {
+  // Import addresses - simplified without useCallback
+  const handleImportAddresses = (rows: any[]) => {
     setState((s: AppState) => ({
       ...s,
       addresses: rows,
       currentListVersion: (s.currentListVersion || 1) + 1,
       activeIndex: undefined,
     }));
-  }, [setState]);
+  };
 
-  // Arrangements
-  const handleAddArrangement = React.useCallback((arrangement: any) => {
+  // Arrangements - simplified without useCallback
+  const handleAddArrangement = (arrangement: any) => {
     setState((s: AppState) => {
       const now = new Date().toISOString();
       const newArrangement = {
@@ -173,25 +161,25 @@ export default function App() {
       };
       return { ...s, arrangements: [...s.arrangements, newArrangement] };
     });
-  }, [setState]);
+  };
 
-  const handleUpdateArrangement = React.useCallback((id: string, updates: any) => {
+  const handleUpdateArrangement = (id: string, updates: any) => {
     setState((s: AppState) => ({
       ...s,
       arrangements: s.arrangements.map((arr) =>
         arr.id === id ? { ...arr, ...updates, updatedAt: new Date().toISOString() } : arr
       ),
     }));
-  }, [setState]);
+  };
 
-  const handleDeleteArrangement = React.useCallback((id: string) => {
+  const handleDeleteArrangement = (id: string) => {
     setState((s: AppState) => ({
       ...s,
       arrangements: s.arrangements.filter((arr) => arr.id !== id),
     }));
-  }, [setState]);
+  };
 
-  const handleAddAddress = React.useCallback(async (address: any): Promise<number> => {
+  const handleAddAddress = async (address: any): Promise<number> => {
     return new Promise((resolve) => {
       setState((s: AppState) => {
         const newAddresses = [...s.addresses, address];
@@ -200,10 +188,10 @@ export default function App() {
         return { ...s, addresses: newAddresses };
       });
     });
-  }, [setState]);
+  };
 
-  // Backups (Supabase)
-  const handleBackupNow = React.useCallback(async () => {
+  // Backups (Supabase) - simplified without useCallback  
+  const handleBackupNow = async () => {
     try {
       setIsBackingUp(true);
       const dayKey = localDateKey(new Date(), "Europe/London");
@@ -217,9 +205,9 @@ export default function App() {
     } finally {
       setIsBackingUp(false);
     }
-  }, [state, setState]);
+  };
 
-  const handleFinishDay = React.useCallback(async () => {
+  const handleFinishDay = async () => {
     try {
       setIsBackingUp(true);
       const nowIso = new Date().toISOString();
@@ -240,7 +228,7 @@ export default function App() {
     } finally {
       setIsBackingUp(false);
     }
-  }, [state, setState]);
+  };
 
   const stats = React.useMemo(() => computeCurrentStats(state), [state]);
 
