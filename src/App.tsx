@@ -3,6 +3,7 @@ import * as React from "react";
 import { AddressList } from "./AddressList";
 import { Completed } from "./Completed";
 import type { AppState, Outcome } from "./types";
+import { BackupsPanel } from "./components/BackupsPanel";
 
 // Version-safe outcome updates (Step B)
 import { updateOutcomeByIndexAndVersion } from "./state/updateOutcome";
