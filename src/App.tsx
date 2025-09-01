@@ -14,7 +14,6 @@ import type { AddressRow } from "./types";
 
 type Tab = "list" | "completed" | "arrangements";
 
-// Normalize state coming from cloud/restore to avoid undefined arrays
 function normalizeState(raw: any) {
   const r = raw ?? {};
   return {
@@ -29,7 +28,6 @@ function normalizeState(raw: any) {
   };
 }
 
-// Simple error boundary (avoid blank screen)
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -114,7 +112,7 @@ function AuthedApp() {
     updateArrangement,
     deleteArrangement,
     setState,
-    editStartForDate, // keep if present in your hook
+    editStartForDate, // keep if your hook provides it
   } = useAppState();
 
   const cloudSync = useCloudSync();
@@ -125,11 +123,9 @@ function AuthedApp() {
     React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
-  // hydration guard vs cloud sync echo
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
-  // safe arrays
   const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
   const completions = Array.isArray(state?.completions) ? state.completions : [];
   const arrangements = Array.isArray(state?.arrangements) ? state.arrangements : [];
@@ -140,7 +136,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // bootstrap: push local if any, then subscribe; record baseline to prevent loops
+  // bootstrap sync
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: (() => void) | undefined;
@@ -181,7 +177,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // debounced push local -> cloud
+  // push local -> cloud (debounced)
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
@@ -243,7 +239,6 @@ function AuthedApp() {
     }
   };
 
-  // stats
   const stats = React.useMemo(() => {
     const total = addresses.length;
     const completedCount = completions.length;
@@ -272,7 +267,6 @@ function AuthedApp() {
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
 
-          {/* Sync Status */}
           <div
             style={{
               display: "flex",
@@ -299,9 +293,7 @@ function AuthedApp() {
 
         <div className="right">
           <div className="user-chip" role="group" aria-label="Account">
-            <span className="avatar" aria-hidden>
-              👤
-            </span>
+            <span className="avatar" aria-hidden>👤</span>
             <span className="email" title={cloudSync.user?.email ?? ""}>
               {cloudSync.user?.email ?? "Signed in"}
             </span>
@@ -314,18 +306,10 @@ function AuthedApp() {
             <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
               📋 List ({stats.pending})
             </button>
-            <button
-              className="tab-btn"
-              aria-selected={tab === "completed"}
-              onClick={() => setTab("completed")}
-            >
+            <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>
               ✅ Completed ({stats.completed})
             </button>
-            <button
-              className="tab-btn"
-              aria-selected={tab === "arrangements"}
-              onClick={() => setTab("arrangements")}
-            >
+            <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
               📅 Arrangements ({arrangements.length})
             </button>
           </div>
@@ -359,9 +343,7 @@ function AuthedApp() {
           <div className="btn-row">
             <ImportExcel onImported={setAddresses} />
             <div className="btn-spacer" />
-            <button className="btn btn-ghost" onClick={onBackup}>
-              💾 Backup
-            </button>
+            <button className="btn btn-ghost" onClick={onBackup}>💾 Backup</button>
 
             <div className="file-input-wrapper">
               <input
@@ -404,7 +386,7 @@ function AuthedApp() {
             state={safeState}
             setActive={setActive}
             cancelActive={cancelActive}
-            onComplete={complete}
+            onComplete={complete}                   {/* ✅ REQUIRED */}
             onCreateArrangement={handleCreateArrangement}
             filterText={search}
             ensureDayStarted={ensureDayStarted}
@@ -421,8 +403,8 @@ function AuthedApp() {
               textAlign: "center",
             }}
           >
-            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo • S
-            Start Day • E End Day
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo •
+            S Start Day • E End Day
           </div>
         </>
       ) : tab === "completed" ? (
