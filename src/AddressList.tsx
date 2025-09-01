@@ -29,7 +29,6 @@ function makeMapsHref(row: AddressRow) {
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
 
-/** Only the indices completed for the *current* list version. */
 function getCompletedIdxForCurrentVersion(
   completions: Completion[] | undefined,
   currentLV: number
@@ -62,7 +61,6 @@ export function AddressList({
     [completions, currentLV]
   );
 
-  // Keep original index for stable references (completions use original index)
   const tuples = React.useMemo(
     () => items.map((row, index) => ({ row, index })),
     [items]
@@ -79,7 +77,6 @@ export function AddressList({
     });
   }, [tuples, normalizedQuery]);
 
-  // Hide only those indices completed in *this* list version
   const visible = React.useMemo(
     () => filtered.filter(({ index }) => !completedIdx.has(index)),
     [filtered, completedIdx]
@@ -87,10 +84,7 @@ export function AddressList({
 
   const handleNavigate = React.useCallback(
     (originalIndex: number) => {
-      // Auto-start the day on first navigate if not already started
-      if (!state.day?.startTime) {
-        ensureDayStarted();
-      }
+      if (!state.day?.startTime) ensureDayStarted();
       setActive(originalIndex);
     },
     [ensureDayStarted, setActive, state.day?.startTime]
@@ -123,19 +117,10 @@ export function AddressList({
   );
 
   if (!items.length) {
-    return (
-      <div className="p-4 text-sm opacity-70">
-        No addresses loaded yet. Import a list to begin.
-      </div>
-    );
+    return <div className="p-4 text-sm opacity-70">No addresses loaded yet.</div>;
   }
-
-  if (visible.length === 0) {
-    return (
-      <div className="p-4 text-sm opacity-70">
-        No results to show. Clear filters or check if all current-list items are completed.
-      </div>
-    );
+  if (!visible.length) {
+    return <div className="p-4 text-sm opacity-70">No results. Clear filters or items are completed.</div>;
   }
 
   return (
@@ -143,7 +128,7 @@ export function AddressList({
       totalCount={visible.length}
       itemContent={itemContent}
       useWindowScroll
-      increaseViewportBy={{ top: 400, bottom: 600 }} // smoother near edges
+      increaseViewportBy={{ top: 400, bottom: 600 }}
     />
   );
 }
