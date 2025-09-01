@@ -1,10 +1,9 @@
 // src/types.ts
 
-// ---- Core outcome union ------------------------------------------------------
-/** Uppercase outcomes used by current UI; include "Done" for legacy comparisons */
-export type Outcome = "PIF" | "DA" | "DONE" | "ARR" | "Done";
+// Outcomes — keep both variants for legacy compatibility
+export type Outcome = "PIF" | "DA" | "ARR" | "DONE" | "Done";
 
-// ---- Address row -------------------------------------------------------------
+// Address rows
 export interface AddressRow {
   id?: string;
   address?: string;
@@ -13,107 +12,100 @@ export interface AddressRow {
   lng?: number;
 }
 
-// ---- Completion (versioned) --------------------------------------------------
+// Completions (versioned)
 export interface Completion {
-  /** Original index within the list version this completion belongs to */
   index: number;
-
-  /** Outcome recorded */
   outcome: Outcome;
-
-  /** Optional £ amount (PIF) */
   amount?: string;
 
-  /** Timestamps (legacy + new) */
-  timestamp?: string;       // legacy key used in some components
-  completedAt?: string;     // newer key
+  // timestamps (old + new)
+  timestamp?: string;
+  completedAt?: string;
   updatedAt?: string;
 
-  /** Versioning & stability */
-  listVersion?: number;     // legacy-safe optional; all new writes should set it
-  addressSnapshot?: string; // stable human-readable label captured at completion time
-  addressId?: string;       // optional if rows have stable IDs
+  // versioning & stability
+  listVersion?: number;
+  addressSnapshot?: string;
+  addressId?: string;
 
-  /** Legacy convenience fields some views read */
+  // legacy convenience fields
   address?: string;
-
-  /** Optional coords captured at completion time (your useAppState writes nulls) */
   lat?: number | null;
   lng?: number | null;
 
-  /** Legacy aggregate counters some panels referenced */
+  // legacy aggregate fields some panels referenced
   PIF?: number;
   DA?: number;
   ARR?: number;
   Done?: number;
 }
 
-// ---- Day / session tracking --------------------------------------------------
+// Day/session
 export interface AppDay {
   startTime?: string;
   endTime?: string;
 }
 
-/** What your useAppState.ts manipulates in startDay/endDay */
 export interface DaySession {
-  date: string;                 // YYYY-MM-DD
-  start: string;                // ISO
-  end?: string;                 // ISO
-  durationSeconds?: number;     // computed on end
+  date: string;              // YYYY-MM-DD
+  start: string;             // ISO
+  end?: string;              // ISO
+  durationSeconds?: number;
 }
 
-// ---- Arrangements (shape used by Arrangements.tsx/useAppState.ts) -----------
+// Arrangements — include all fields that Arrangements.tsx reads
 export type ArrangementStatus =
-  | "ACTIVE"
-  | "PAUSED"
-  | "CANCELLED"
-  | "COMPLETED";
+  | "Scheduled"
+  | "Confirmed"
+  | "Completed"
+  | "Cancelled"
+  | "Missed";
 
 export type ArrangementFrequency = "WEEKLY" | "FORTNIGHTLY" | "MONTHLY";
 
-/**
- * Minimal but complete fields to satisfy existing reads/updates:
- * - id/createdAt/updatedAt (you create & update these in useAppState)
- * - addressIndex (ties back to an address row)
- * - amount/frequency/firstPaymentOn/status/notes
- */
 export interface Arrangement {
   id: string;
   addressIndex: number;
-  amount: number;
-  frequency: ArrangementFrequency;
-  firstPaymentOn: string;        // ISO date
-  status: ArrangementStatus;
+
+  // fields Arrangements.tsx expects:
+  address?: string;
+  customerName?: string;
+  phoneNumber?: string;
+  scheduledDate?: string;    // ISO date (YYYY-MM-DD)
+  scheduledTime?: string;    // HH:mm
   notes?: string;
 
-  createdAt: string;             // ISO
-  updatedAt: string;             // ISO
+  // amount is treated as string in some places and number in others
+  amount: number | string;
+
+  status: ArrangementStatus;
+
+  // make optional so Omit<...> callers don’t fail
+  frequency?: ArrangementFrequency;
+  firstPaymentOn?: string;
+
+  createdAt: string;
+  updatedAt: string;
 }
 
-// ---- Migrations flags --------------------------------------------------------
+// Migrations
 export interface Migrations {
   backfill_completion_snapshots_v1?: boolean;
 }
 
-// ---- Global app state --------------------------------------------------------
+// Global app state
 export interface AppState {
   currentListVersion: number;
 
-  /** Keep these non-optional to avoid "possibly undefined" in consumers */
   addresses: AddressRow[];
   completions: Completion[];
 
-  /** Day & UI */
   day?: AppDay;
   activeIndex?: number | null;
 
-  /** Optional metadata */
   lastBackupAt?: string;
-
-  /** Migrations */
   migrations?: Migrations;
 
-  /** Slices referenced by your useAppState & panels */
   daySessions: DaySession[];
   arrangements: Arrangement[];
 }
