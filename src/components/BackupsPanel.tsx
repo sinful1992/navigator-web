@@ -34,7 +34,7 @@ export function BackupsPanel({ open, onClose, setState }: Props) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
       <div className="bg-white w-[min(900px,95vw)] max-h-[85vh] rounded-xl shadow p-4 overflow-hidden flex flex-col">
         <div className="flex items-center gap-3">
           <h3 className="text-base font-semibold">Backups</h3>
@@ -46,7 +46,7 @@ export function BackupsPanel({ open, onClose, setState }: Props) {
           </div>
         </div>
 
-        {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
+        {error && <div className="mt-2 text-sm" style={{color:"#b91c1c"}}>{error}</div>}
 
         <div className="mt-3 overflow-auto border rounded">
           <table className="w-full text-sm">
@@ -69,7 +69,7 @@ export function BackupsPanel({ open, onClose, setState }: Props) {
                     <td className="p-2">{r.day_key}</td>
                     <td className="p-2 whitespace-nowrap">{created}</td>
                     <td className="p-2">{kb} KB</td>
-                    <td className="p-2 break-all">{r.object_path}</td>
+                    <td className="p-2" style={{wordBreak:"break-all"}}>{r.object_path}</td>
                     <td className="p-2">
                       <div className="flex gap-2">
                         <button
@@ -94,9 +94,7 @@ export function BackupsPanel({ open, onClose, setState }: Props) {
                           className="border rounded px-2 py-1"
                           disabled={working}
                           onClick={async () => {
-                            if (!confirm(`Restore snapshot from ${r.day_key}? This will replace current addresses & completions.`)) {
-                              return;
-                            }
+                            if (!confirm(`Restore snapshot from ${r.day_key}? This will replace current addresses & completions.`)) return;
                             setBusyId(r.id);
                             try {
                               const snap = await downloadSnapshot(r.object_path);
