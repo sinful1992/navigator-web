@@ -32,7 +32,6 @@ export default function App() {
     signIn,
     signUp,
     signOut,
-    signInDemo,
     syncData,
     subscribeToData,
   } = useCloudSync();
@@ -57,6 +56,15 @@ export default function App() {
     }
   }, [state, user, isOnline, syncData]);
 
+  // Wrapper functions to match Auth component expectations
+  const handleSignIn = React.useCallback(async (email: string, password: string): Promise<void> => {
+    await signIn(email, password);
+  }, [signIn]);
+
+  const handleSignUp = React.useCallback(async (email: string, password: string): Promise<void> => {
+    await signUp(email, password);
+  }, [signUp]);
+
   // Show auth screen if not authenticated
   if (authLoading) {
     return (
@@ -69,8 +77,8 @@ export default function App() {
   if (!user) {
     return (
       <Auth
-        onSignIn={signIn}
-        onSignUp={signUp}
+        onSignIn={handleSignIn}
+        onSignUp={handleSignUp}
         isLoading={authLoading}
         error={authError}
         onClearError={clearError}
