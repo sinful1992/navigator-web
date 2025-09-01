@@ -11,7 +11,7 @@ import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
 import type { AddressRow } from "./types";
-import { supabase } from "./lib/supabaseClient"; // added for storage backup
+import { supabase } from "./lib/supabaseClient";
 
 type Tab = "list" | "completed" | "arrangements";
 
@@ -29,7 +29,6 @@ function normalizeState(raw: any) {
   };
 }
 
-/** Simple error boundary to avoid blank screen */
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -54,25 +53,49 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-/** Upload a JSON snapshot to Supabase Storage (optional; no-op if not configured) */
-async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" = "manual") {
-  if (!supabase) return; // cloud disabled
-  const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET ?? "navigator-backups";
+async function uploadBackupToStorage(
+  data: unknown,
+  label: "finish" | "manual" = "manual"
+) {
+  if (!supabase) return;
+
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth?.user?.id;
+  if (!userId) return;
+
   const tz = "Europe/London";
   const now = new Date();
   const yyyy = now.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
   const mm = now.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
   const dd = now.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
+  const dayKey = `${yyyy}-${mm}-${dd}`;
   const time = now
     .toLocaleTimeString("en-GB", { timeZone: tz, hour12: false })
     .replace(/:/g, "");
-  const name = `backup_${yyyy}-${mm}-${dd}_${time}_${label}.json`;
+
+  const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET ?? "navigator-backups";
+  const name = `backup_${dayKey}_${time}_${label}.json`;
+  const objectPath = `${userId}/${dayKey}/${name}`;
+
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const { error } = await supabase.storage
+
+  const { error: upErr } = await supabase.storage
     .from(bucket)
-    .upload(name, blob, { upsert: false, contentType: "application/json" });
-  if (error) throw new Error(error.message);
-  return name;
+    .upload(objectPath, blob, { upsert: false, contentType: "application/json" });
+  if (upErr) throw new Error(upErr.message);
+
+  try {
+    await supabase.from("backups").insert({
+      user_id: userId,
+      day_key: dayKey,
+      object_path: objectPath,
+      size_bytes: blob.size,
+    });
+  } catch (e) {
+    console.warn("Backups table insert failed (non-fatal):", (e as any)?.message || e);
+  }
+
+  return objectPath;
 }
 
 export default function App() {
@@ -155,7 +178,6 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ---- Bootstrap: prefer local if present, else subscribe to cloud and hydrate ----
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: undefined | (() => void);
@@ -197,7 +219,6 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // ---- Debounced push local -> cloud ----
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
@@ -217,19 +238,16 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
 
-  // Create arrangement from AddressList request
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
   }, []);
 
-  // Ensure day session exists when Navigation is used
   const ensureDayStarted = React.useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
     const hasToday = daySessions.some((d) => d.date === today);
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
-  // Let DayPanel edit today's start time (or open a new session with that start)
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
       const parsed =
@@ -259,7 +277,6 @@ function AuthedApp() {
     [setState]
   );
 
-  // Finish Day with cloud backup (non-blocking)
   const endDayWithBackup = React.useCallback(() => {
     const snap = backupState();
     uploadBackupToStorage(snap, "finish").catch((e: any) => {
@@ -268,7 +285,12 @@ function AuthedApp() {
     endDay();
   }, [backupState, endDay]);
 
-  // Backup / Restore
+  // ✅ Wrap undo in a proper click handler
+  const handleUndoClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
+    e.preventDefault();
+    undo(-1);
+  };
+
   const onBackup = React.useCallback(async () => {
     const snap = backupState();
     const stamp = new Date();
@@ -277,9 +299,7 @@ function AuthedApp() {
     const d = String(stamp.getDate()).padStart(2, "0");
     const hh = String(stamp.getHours()).padStart(2, "0");
     const mm = String(stamp.getMinutes()).padStart(2, "0");
-    // Local download (existing behaviour)
     downloadJson(`navigator-backup-${y}${m}${d}-${hh}${mm}.json`, snap);
-    // Cloud upload (optional)
     try {
       await uploadBackupToStorage(snap, "manual");
     } catch (e: any) {
@@ -306,7 +326,6 @@ function AuthedApp() {
     }
   };
 
-  // Stats
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
     const completedIdx = new Set(
@@ -340,19 +359,10 @@ function AuthedApp() {
 
   return (
     <div className="container">
-      {/* Header */}
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              fontSize: "0.75rem",
-              color: "var(--text-muted)",
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
             {cloudSync.isOnline ? (
               <>
                 <span style={{ color: "var(--success)" }}>🟢</span>
@@ -369,9 +379,7 @@ function AuthedApp() {
 
         <div className="right">
           <div className="user-chip" role="group" aria-label="Account">
-            <span className="avatar" aria-hidden>
-              👤
-            </span>
+            <span className="avatar" aria-hidden>👤</span>
             <span className="email" title={cloudSync.user?.email ?? ""}>
               {cloudSync.user?.email ?? "Signed in"}
             </span>
@@ -384,70 +392,33 @@ function AuthedApp() {
             <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
               📋 List ({stats.pending})
             </button>
-            <button
-              className="tab-btn"
-              aria-selected={tab === "completed"}
-              onClick={() => setTab("completed")}
-            >
+            <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>
               ✅ Completed ({stats.completed})
             </button>
-            <button
-              className="tab-btn"
-              aria-selected={tab === "arrangements"}
-              onClick={() => setTab("arrangements")}
-            >
+            <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
               📅 Arrangements ({arrangements.length})
             </button>
           </div>
         </div>
       </header>
 
-      {/* Import & Tools */}
       <div style={{ marginBottom: "2rem" }}>
-        <div
-          style={{
-            background: "var(--surface)",
-            padding: "1.5rem",
-            borderRadius: "var(--radius-lg)",
-            border: "1px solid var(--border-light)",
-            boxShadow: "var(--shadow-sm)",
-            marginBottom: "1rem",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "0.875rem",
-              color: "var(--text-secondary)",
-              marginBottom: "1rem",
-              lineHeight: "1.5",
-            }}
-          >
-            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>,{" "}
-            <strong>lng</strong> columns to get started.
+        <div style={{ background: "var(--surface)", padding: "1.5rem", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-light)", boxShadow: "var(--shadow-sm)", marginBottom: "1rem" }}>
+          <div style={{ fontSize: "0.875rem", color: "var(--text-secondary)", marginBottom: "1rem", lineHeight: "1.5" }}>
+            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>, <strong>lng</strong> columns to get started.
           </div>
 
           <div className="btn-row">
             <ImportExcel onImported={setAddresses} />
             <div className="btn-spacer" />
-            <button className="btn btn-ghost" onClick={onBackup}>
-              💾 Backup
-            </button>
+            <button className="btn btn-ghost" onClick={onBackup}>💾 Backup</button>
 
-            <input
-              type="file"
-              accept="application/json"
-              onChange={onRestore}
-              className="file-input"
-              id="restore-input"
-            />
-            <label htmlFor="restore-input" className="file-input-label">
-              📤 Restore
-            </label>
+            <input type="file" accept="application/json" onChange={onRestore} className="file-input" id="restore-input" />
+            <label htmlFor="restore-input" className="file-input-label">📤 Restore</label>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
       {tab === "list" ? (
         <>
           <div className="search-container">
@@ -465,7 +436,7 @@ function AuthedApp() {
             completions={completions}
             startDay={startDay}
             endDay={endDayWithBackup}
-            onEditStart={handleEditStart} // DayPanel edits today's start time
+            onEditStart={handleEditStart}
           />
 
           <AddressList
@@ -478,16 +449,8 @@ function AuthedApp() {
             ensureDayStarted={ensureDayStarted}
           />
 
-          <div
-            style={{
-              display: "flex",
-              gap: "0.5rem",
-              margin: "1.25rem 0 3rem",
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
-            <button className="btn btn-ghost" onClick={undo} title="Undo last completion for this list">
+          <div style={{ display: "flex", gap: "0.5rem", margin: "1.25rem 0 3rem", flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn btn-ghost" onClick={handleUndoClick} title="Undo last completion for this list">
               ⎌ Undo Last
             </button>
             <span className="pill pill-pif">PIF {stats.pifCount}</span>
@@ -497,10 +460,7 @@ function AuthedApp() {
           </div>
         </>
       ) : tab === "completed" ? (
-        <Completed
-          state={safeState}
-          onRestoreAddress={async (_index: number, addr: AddressRow) => addAddress(addr)}
-        />
+        <Completed state={safeState} />
       ) : (
         <Arrangements
           state={safeState}
