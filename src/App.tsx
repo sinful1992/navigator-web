@@ -23,10 +23,13 @@ import { useCloudSync } from "./useCloudSync";
 
 export default function App() {
   const { state, setState } = useAppState();
+  const cloudSync = useCloudSync();
+  
+  // Handle case where cloud sync might not be available
   const {
     user,
-    isLoading: authLoading,
-    isOnline,
+    isLoading: authLoading = false,
+    isOnline = false,
     error: authError,
     clearError,
     signIn,
@@ -34,7 +37,7 @@ export default function App() {
     signOut,
     syncData,
     subscribeToData,
-  } = useCloudSync();
+  } = cloudSync || {};
 
   const [filterText, setFilterText] = React.useState("");
   const [isBackingUp, setIsBackingUp] = React.useState(false);
@@ -42,34 +45,50 @@ export default function App() {
   const [showArrangements, setShowArrangements] = React.useState(false);
   const [autoCreateArrangementForAddress, setAutoCreateArrangementForAddress] = React.useState<number | null>(null);
 
-  // Cloud sync effects
+  // Cloud sync effects - only if cloud sync is available
   React.useEffect(() => {
-    if (!user || !isOnline) return;
-    return subscribeToData((cloudState) => {
+    if (!user || !isOnline || !subscribeToData) return;
+    const unsubscribe = subscribeToData((cloudState) => {
       setState(cloudState);
     });
-  }, [user, isOnline, subscribeToData, setState]);
+    return unsubscribe;
+  }, [user, isOnline]); // Removed subscribeToData and setState from deps
 
+  // Sync data periodically instead of on every state change
   React.useEffect(() => {
-    if (user && isOnline) {
+    if (!user || !isOnline || !syncData) return;
+    
+    const syncInterval = setInterval(() => {
       syncData(state);
-    }
-  }, [state, user, isOnline, syncData]);
+    }, 10000); // Sync every 10 seconds
+    
+    // Also sync immediately
+    syncData(state);
+    
+    return () => clearInterval(syncInterval);
+  }, [user, isOnline]); // Only depend on auth state, not full state
 
   // Wrapper functions to match Auth component expectations
   const handleSignIn = React.useCallback(async (email: string, password: string): Promise<void> => {
-    await signIn(email, password);
+    if (signIn) {
+      await signIn(email, password);
+    }
   }, [signIn]);
 
   const handleSignUp = React.useCallback(async (email: string, password: string): Promise<void> => {
-    await signUp(email, password);
+    if (signUp) {
+      await signUp(email, password);
+    }
   }, [signUp]);
+
+  // Debug logging
+  console.log('Auth state:', { user: !!user, authLoading, authError });
 
   // Show auth screen if not authenticated
   if (authLoading) {
     return (
       <div className="container" style={{ textAlign: "center", paddingTop: "2rem" }}>
-        <div>Loading...</div>
+        <div>Loading authentication...</div>
       </div>
     );
   }
