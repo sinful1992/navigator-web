@@ -23,8 +23,7 @@ function normalizeState(raw: any) {
     arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
     daySessions: Array.isArray(r.daySessions) ? r.daySessions : [],
     activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
-    currentListVersion:
-      typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
+    currentListVersion: typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
   };
 }
 
@@ -54,14 +53,11 @@ class ErrorBoundary extends React.Component<
 }
 
 /** Upload a JSON snapshot to Supabase Storage; log a row in `backups` (quietly no-ops if not configured) */
-async function uploadBackupToStorage(
-  data: unknown,
-  label: "finish" | "manual" = "manual"
-) {
+async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" = "manual") {
   if (!supabase) return;
 
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth?.user?.id;
+  const authResp = await supabase.auth.getUser();
+  const userId = authResp && authResp.data && authResp.data.user ? authResp.data.user.id : undefined;
   if (!userId) return;
 
   const tz = "Europe/London";
@@ -69,22 +65,25 @@ async function uploadBackupToStorage(
   const yyyy = now.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
   const mm = now.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
   const dd = now.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
-  const dayKey = `${yyyy}-${mm}-${dd}`;
+  const dayKey = yyyy + "-" + mm + "-" + dd;
   const time = now
     .toLocaleTimeString("en-GB", { timeZone: tz, hour12: false })
     .replace(/:/g, "");
 
-  const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET ?? "navigator-backups";
-  const name = `backup_${dayKey}_${time}_${label}.json`;
-  const objectPath = `${userId}/${dayKey}/${name}`;
+  const bucket =
+    (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
+      ? (import.meta as any).env.VITE_SUPABASE_BUCKET
+      : "navigator-backups";
+  const name = "backup_" + dayKey + "_" + time + "_" + label + ".json";
+  const objectPath = userId + "/" + dayKey + "/" + name;
 
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
 
   // 1) Upload file
-  const { error: upErr } = await supabase.storage
+  const uploadRes = await supabase.storage
     .from(bucket)
     .upload(objectPath, blob, { upsert: false, contentType: "application/json" });
-  if (upErr) throw new Error(upErr.message);
+  if ((uploadRes as any).error) throw new Error((uploadRes as any).error.message);
 
   // 2) Log row (best-effort)
   try {
@@ -97,8 +96,6 @@ async function uploadBackupToStorage(
   } catch (e) {
     console.warn("Backups table insert failed (non-fatal):", (e as any)?.message || e);
   }
-
-  return objectPath;
 }
 
 export default function App() {
@@ -164,8 +161,9 @@ function AuthedApp() {
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
-  const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
-    React.useState<number | null>(null);
+  const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(
+    null
+  );
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
   const [hydrated, setHydrated] = React.useState(false);
@@ -257,8 +255,7 @@ function AuthedApp() {
   // DayPanel -> edit today's start time
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
-      const parsed =
-        typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
+      const parsed = typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
       if (Number.isNaN(parsed.getTime())) return;
 
       const newISO = parsed.toISOString();
@@ -267,7 +264,7 @@ function AuthedApp() {
         const idx = s.daySessions.findIndex((d) => d.date === today && !d.end);
         if (idx >= 0) {
           const arr = s.daySessions.slice();
-          const sess = { ...arr[idx], start: newISO };
+          const sess: any = { ...arr[idx], start: newISO };
           if (sess.end) {
             try {
               const start = new Date(sess.start).getTime();
@@ -309,7 +306,7 @@ function AuthedApp() {
     const d = String(stamp.getDate()).padStart(2, "0");
     const hh = String(stamp.getHours()).padStart(2, "0");
     const mm = String(stamp.getMinutes()).padStart(2, "0");
-    downloadJson(`navigator-backup-${y}${m}${d}-${hh}${mm}.json`, snap);
+    downloadJson("navigator-backup-" + y + m + d + "-" + hh + mm + ".json", snap);
     try {
       await uploadBackupToStorage(snap, "manual");
     } catch (e: any) {
@@ -331,7 +328,7 @@ function AuthedApp() {
       alert("✅ Restore completed successfully!");
     } catch (err: any) {
       console.error(err);
-      alert(`❌ Restore failed: ${err?.message || err}`);
+      alert("❌ Restore failed: " + (err?.message || err));
     } finally {
       e.target.value = "";
     }
@@ -390,7 +387,7 @@ function AuthedApp() {
     const y = d.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
     const m = d.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
     const dd = d.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
-    return `${y}-${m}-${dd}`;
+    return y + "-" + m + "-" + dd;
   }
 
   const loadTodayCloudBackups = React.useCallback(async () => {
@@ -398,24 +395,28 @@ function AuthedApp() {
     setCloudBusy(true);
     setCloudErr(null);
     try {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth?.user?.id;
+      const authResp = await supabase.auth.getUser();
+      const userId = authResp && authResp.data && authResp.data.user ? authResp.data.user.id : undefined;
       if (!userId) throw new Error("Not authenticated");
 
-      const dayKey = todayKey();
-      const { data, error } = await supabase
+      const day = todayKey();
+      const q = await supabase
         .from("backups")
         .select("object_path,size_bytes,created_at")
         .eq("user_id", userId)
-        .eq("day_key", dayKey)
+        .eq("day_key", day)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if ((q as any).error) throw (q as any).error;
 
-      // Fallback secondary sort by filename time segment if needed
-      const list = (data ?? []).slice().sort((a, b) => {
-        const ta = a.object_path.split("_")[2] ?? "";
-        const tb = b.object_path.split("_")[2] ?? "";
+      const data = (q as any).data as CloudBackupRow[] | null;
+
+      // Secondary filename sort by time segment (backup_YYYY-MM-DD_HHMM_label.json)
+      const list = (data || []).slice().sort((a, b) => {
+        const aSegs = a.object_path.split("_");
+        const bSegs = b.object_path.split("_");
+        const ta = aSegs.length > 2 ? aSegs[2] : "";
+        const tb = bSegs.length > 2 ? bSegs[2] : "";
         return tb.localeCompare(ta);
       });
 
@@ -433,9 +434,13 @@ function AuthedApp() {
       setCloudBusy(true);
       setCloudErr(null);
       try {
-        const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET ?? "navigator-backups";
-        const { data: blob, error } = await supabase.storage.from(bucket).download(objectPath);
-        if (error) throw error;
+        const bucket =
+          (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
+            ? (import.meta as any).env.VITE_SUPABASE_BUCKET
+            : "navigator-backups";
+        const dl = await supabase.storage.from(bucket).download(objectPath);
+        if ((dl as any).error) throw (dl as any).error;
+        const blob: Blob = (dl as any).data as Blob;
         const text = await blob.text();
         const raw = JSON.parse(text);
         const data = normalizeState(raw);
@@ -459,7 +464,7 @@ function AuthedApp() {
     if (!cloudMenuOpen) return;
     function onDocClick(e: MouseEvent) {
       const target = e.target as HTMLElement;
-      if (!target.closest?.(".btn-row")) setCloudMenuOpen(false);
+      if (!target.closest || !target.closest(".btn-row")) setCloudMenuOpen(false);
     }
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
@@ -524,18 +529,10 @@ function AuthedApp() {
             <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
               📋 List ({stats.pending})
             </button>
-            <button
-              className="tab-btn"
-              aria-selected={tab === "completed"}
-              onClick={() => setTab("completed")}
-            >
+            <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>
               ✅ Completed ({stats.completed})
             </button>
-            <button
-              className="tab-btn"
-              aria-selected={tab === "arrangements"}
-              onClick={() => setTab("arrangements")}
-            >
+            <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
               📅 Arrangements ({arrangements.length})
             </button>
           </div>
@@ -584,12 +581,12 @@ function AuthedApp() {
               📤 Restore
             </label>
 
-            {/* ☁️ Restore from Cloud (today) */}
+            {/* Restore from Cloud (today) */}
             <div style={{ position: "relative", display: "inline-block" }}>
               <button
                 className="btn btn-ghost"
                 onClick={async () => {
-                  setCloudMenuOpen((o) => !o);
+                  setCloudMenuOpen(!cloudMenuOpen);
                   if (!cloudMenuOpen) await loadTodayCloudBackups();
                 }}
                 title="List today's cloud backups"
@@ -607,47 +604,27 @@ function AuthedApp() {
                     minWidth: 280,
                     background: "var(--surface)",
                     border: "1px solid var(--border-light)",
-                    borderRadius: "12px",
+                    borderRadius: 12,
                     padding: "0.5rem",
                     boxShadow: "var(--shadow-lg)",
                   }}
                 >
-                  <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>
-                    Today’s backups
-                  </div>
+                  <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>Today's backups</div>
 
                   {cloudBusy && (
-                    <div
-                      style={{
-                        padding: "0.5rem 0.5rem",
-                        fontSize: 12,
-                        color: "var(--text-secondary)",
-                      }}
-                    >
+                    <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
                       Loading…
                     </div>
                   )}
 
                   {!cloudBusy && cloudErr && (
-                    <div
-                      style={{
-                        padding: "0.5rem 0.5rem",
-                        fontSize: 12,
-                        color: "var(--error)",
-                      }}
-                    >
+                    <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--error)" }}>
                       {cloudErr}
                     </div>
                   )}
 
                   {!cloudBusy && !cloudErr && cloudBackups.length === 0 && (
-                    <div
-                      style={{
-                        padding: "0.5rem 0.5rem",
-                        fontSize: 12,
-                        color: "var(--text-secondary)",
-                      }}
-                    >
+                    <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
                       No backups yet today.
                     </div>
                   )}
@@ -655,7 +632,8 @@ function AuthedApp() {
                   {!cloudBusy &&
                     !cloudErr &&
                     cloudBackups.map((row) => {
-                      const name = row.object_path.split("/").pop() || row.object_path;
+                      const parts = row.object_path.split("/");
+                      const fname = parts.length > 0 ? parts[parts.length - 1] : row.object_path;
                       return (
                         <button
                           key={row.object_path}
@@ -670,9 +648,9 @@ function AuthedApp() {
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
                             }}
-                            title={name}
+                            title={fname}
                           >
-                            {name}
+                            {fname}
                           </span>
                           <span style={{ opacity: 0.7, fontSize: 12 }}>
                             {row.size_bytes ? Math.round(row.size_bytes / 1024) + " KB" : ""}
@@ -695,7 +673,7 @@ function AuthedApp() {
             <input
               type="search"
               value={search}
-              placeholder="🔍 Search addresses..."
+              placeholder="Search addresses..."
               onChange={(e) => setSearch(e.target.value)}
               className="input search-input"
             />
@@ -758,4 +736,3 @@ function AuthedApp() {
     </div>
   );
 }
-```0
