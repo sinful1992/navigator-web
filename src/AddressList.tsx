@@ -6,10 +6,10 @@ type Props = {
   state: AppState;
   setActive: (index: number) => void;
   cancelActive: () => void;
-  onComplete: (index: number, outcome: Outcome, amount?: string) => void; // ✅ renamed
+  onComplete: (index: number, outcome: Outcome, amount?: string) => void;
   onCreateArrangement: (addressIndex: number) => void;
   filterText: string;
-  ensureDayStarted: () => void;
+  ensureDayStarted: () => void; // auto-start day on first Navigate
 };
 
 function makeMapsHref(row: AddressRow) {
@@ -31,7 +31,7 @@ export function AddressList({
   state,
   setActive,
   cancelActive,
-  onComplete,                 // ✅ use new prop
+  onComplete,
   onCreateArrangement,
   filterText,
   ensureDayStarted,
@@ -40,13 +40,16 @@ export function AddressList({
   const completions = Array.isArray(state.completions) ? state.completions : [];
   const activeIndex = state.activeIndex;
 
-  // Only hide items completed for the *current* imported list version
+  // Hide only items completed for the CURRENT list version.
+  // If a completion has no listVersion (older backups), treat it as the current one.
   const completedIdx = React.useMemo(() => {
     const set = new Set<number>();
     for (const c of completions) {
-      if (c && c.listVersion === state.currentListVersion) {
-        set.add(Number(c.index));
-      }
+      const lv =
+        typeof c?.listVersion === "number"
+          ? c.listVersion
+          : state.currentListVersion;
+      if (lv === state.currentListVersion) set.add(Number(c.index));
     }
     return set;
   }, [completions, state.currentListVersion]);
@@ -64,11 +67,13 @@ export function AddressList({
     [addresses, lowerQ, completedIdx]
   );
 
+  // local UI for outcome panel & PIF
   const [outcomeOpenFor, setOutcomeOpenFor] = React.useState<number | null>(
     null
   );
   const [pifAmount, setPifAmount] = React.useState<string>("");
 
+  // closing outcomes when active changes
   React.useEffect(() => {
     if (activeIndex === null) {
       setOutcomeOpenFor(null);
@@ -93,6 +98,7 @@ export function AddressList({
 
         return (
           <div key={i} className={`row-card ${isActive ? "card-active" : ""}`}>
+            {/* Row header */}
             <div className="row-head">
               <div className="row-index">{i + 1}</div>
               <div className="row-title" title={a.address}>
@@ -101,6 +107,7 @@ export function AddressList({
               {isActive && <span className="active-badge">Active</span>}
             </div>
 
+            {/* Actions row */}
             <div className="row-actions">
               <a
                 className="btn btn-outline btn-sm"
@@ -108,7 +115,7 @@ export function AddressList({
                 target="_blank"
                 rel="noreferrer"
                 title="Open in Google Maps"
-                onClick={() => ensureDayStarted()} // auto-start day on first navigate
+                onClick={() => ensureDayStarted()}
               >
                 🧭 Navigate
               </a>
@@ -143,6 +150,7 @@ export function AddressList({
               )}
             </div>
 
+            {/* Outcome bar (only when active + Complete pressed) */}
             {isActive && outcomeOpenFor === i && (
               <div className="card-body">
                 <div className="complete-bar">
@@ -153,6 +161,7 @@ export function AddressList({
                         onComplete(i, "Done");
                         setOutcomeOpenFor(null);
                       }}
+                      title="Mark as Done"
                     >
                       ✅ Done
                     </button>
@@ -163,6 +172,7 @@ export function AddressList({
                         onComplete(i, "DA");
                         setOutcomeOpenFor(null);
                       }}
+                      title="Mark as DA"
                     >
                       🚫 DA
                     </button>
@@ -174,6 +184,7 @@ export function AddressList({
                         setOutcomeOpenFor(null);
                         onCreateArrangement(i);
                       }}
+                      title="Create arrangement and mark completed"
                     >
                       📅 Arrangement
                     </button>
@@ -201,6 +212,7 @@ export function AddressList({
                         onComplete(i, "PIF", n.toFixed(2));
                         setOutcomeOpenFor(null);
                       }}
+                      title="Save PIF amount"
                     >
                       💷 Save PIF
                     </button>
