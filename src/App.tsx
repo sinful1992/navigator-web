@@ -11,7 +11,7 @@ import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
 import type { AddressRow } from "./types";
-import { supabase } from "./lib/supabaseClient"; // ✅ added
+import { supabase } from "./lib/supabaseClient"; // added for storage backup
 
 type Tab = "list" | "completed" | "arrangements";
 
@@ -54,14 +54,10 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-/** ✅ Minimal helper: upload a JSON snapshot to Supabase Storage */
-async function uploadBackupToStorage(
-  data: unknown,
-  label: "finish" | "manual" = "manual"
-) {
+/** Upload a JSON snapshot to Supabase Storage (optional; no-op if not configured) */
+async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" = "manual") {
+  if (!supabase) return; // cloud disabled
   const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET ?? "navigator-backups";
-  if (!supabase) throw new Error("Supabase client not configured");
-
   const tz = "Europe/London";
   const now = new Date();
   const yyyy = now.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
@@ -71,15 +67,10 @@ async function uploadBackupToStorage(
     .toLocaleTimeString("en-GB", { timeZone: tz, hour12: false })
     .replace(/:/g, "");
   const name = `backup_${yyyy}-${mm}-${dd}_${time}_${label}.json`;
-
-  const file = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json",
-  });
-
-  const { error } = await supabase.storage.from(bucket).upload(name, file, {
-    upsert: false,
-    contentType: "application/json",
-  });
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(name, blob, { upsert: false, contentType: "application/json" });
   if (error) throw new Error(error.message);
   return name;
 }
@@ -108,9 +99,9 @@ export default function App() {
           onSignUp={async (email, password) => {
             await cloudSync.signUp(email, password);
           }}
-          onSignOut={async () => {
-            await cloudSync.signOut();
-          }}
+          isLoading={cloudSync.isLoading}
+          error={cloudSync.error}
+          onClearError={cloudSync.clearError}
         />
       </ErrorBoundary>
     );
@@ -118,100 +109,85 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <InnerApp />
+      <AuthedApp />
     </ErrorBoundary>
   );
 }
 
-function InnerApp() {
+function AuthedApp() {
   const {
     state,
     loading,
-    hydrated,
-    setHydrated,
     setAddresses,
     addAddress,
     setActive,
     cancelActive,
     complete,
-    createSessionIfMissing,
-    // day sessions
-    addSession,
+    undo,
+    startDay,
     endDay,
-    setStartTime,
-    setEndTime,
-    ensureDayStarted,
-    // arrangements
+    backupState,
+    restoreState,
     addArrangement,
     updateArrangement,
     deleteArrangement,
+    setState,
   } = useAppState();
 
   const cloudSync = useCloudSync();
+
   const [tab, setTab] = React.useState<Tab>("list");
-  const [filter, setFilter] = React.useState("");
+  const [search, setSearch] = React.useState("");
   const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
     React.useState<number | null>(null);
+  const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
+
+  const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
-  const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
-  const completions = Array.isArray(state?.completions) ? state.completions : [];
-  const arrangements = Array.isArray(state?.arrangements) ? state.arrangements : [];
-  const daySessions = Array.isArray(state?.daySessions) ? state.daySessions : [];
+  const addresses = Array.isArray(state.addresses) ? state.addresses : [];
+  const completions = Array.isArray(state.completions) ? state.completions : [];
+  const arrangements = Array.isArray(state.arrangements) ? state.arrangements : [];
+  const daySessions = Array.isArray(state.daySessions) ? state.daySessions : [];
 
   const safeState = React.useMemo(
-    () => ({ ...(state ?? {}), addresses, completions, arrangements, daySessions }),
+    () => ({ ...state, addresses, completions, arrangements, daySessions }),
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ---- Cloud sync bootstrap ----
+  // ---- Bootstrap: prefer local if present, else subscribe to cloud and hydrate ----
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
-    let cleanup: (() => void) | undefined;
+    let cleanup: undefined | (() => void);
     let cancelled = false;
 
     (async () => {
-      const localHasData =
-        addresses.length > 0 ||
-        completions.length > 0 ||
-        arrangements.length > 0 ||
-        daySessions.length > 0;
-
       try {
+        const localHasData =
+          addresses.length > 0 ||
+          completions.length > 0 ||
+          arrangements.length > 0 ||
+          daySessions.length > 0;
+
         if (localHasData) {
           await cloudSync.syncData(safeState);
-          if (cancelled) return;
-          lastFromCloudRef.current = JSON.stringify(safeState);
-          setHydrated(true);
-        } else {
-          const fromCloud = await cloudSync.getLatest();
-          if (cancelled) return;
-          if (fromCloud) {
-            await cloudSync.applyCloudState(fromCloud);
-            lastFromCloudRef.current = JSON.stringify(fromCloud);
-            setHydrated(true);
-          } else {
-            // first time ever for this user
+          if (!cancelled) {
+            lastFromCloudRef.current = JSON.stringify(safeState);
             setHydrated(true);
           }
         }
-      } catch (e) {
-        console.warn("Initial sync failed", e);
-        setHydrated(true);
-      }
 
-      cleanup = cloudSync.subscribeToChanges(async (incoming) => {
-        try {
-          const last = lastFromCloudRef.current;
-          const incomingStr = JSON.stringify(incoming);
-        if (last !== incomingStr) {
-            await cloudSync.applyCloudState(incoming);
-            lastFromCloudRef.current = incomingStr;
-          }
-        } catch (e) {
-          console.warn("applyCloudState failed", e);
-        }
-      });
+        cleanup = cloudSync.subscribeToData((newState) => {
+          if (!newState) return;
+          const normalized = normalizeState(newState);
+          setState(normalized);
+          setLastSyncTime(new Date());
+          lastFromCloudRef.current = JSON.stringify(normalized);
+          setHydrated(true);
+        });
+      } catch (err) {
+        console.error("Bootstrap sync failed:", err);
+      }
     })();
 
     return () => {
@@ -221,53 +197,93 @@ function InnerApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // ---- Push local changes to cloud ----
+  // ---- Debounced push local -> cloud ----
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
-    const current = JSON.stringify(safeState);
-    if (current === lastFromCloudRef.current) return;
 
-    let cancelled = false;
-    (async () => {
-      try {
-        await cloudSync.syncData(safeState);
-        if (!cancelled) {
-          lastFromCloudRef.current = current;
-        }
-      } catch (e) {
-        console.warn("syncData failed", e);
-      }
-    })();
+    const currentStr = JSON.stringify(safeState);
+    if (currentStr === lastFromCloudRef.current) return;
 
-    return () => {
-      cancelled = true;
-    };
+    const t = setTimeout(() => {
+      cloudSync
+        .syncData(safeState)
+        .then(() => {
+          setLastSyncTime(new Date());
+          lastFromCloudRef.current = currentStr;
+        })
+        .catch((err) => console.error("Sync failed:", err));
+    }, 400);
+
+    return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
 
-  // backup/restore helpers
-  const backupState = React.useCallback(() => {
-    const snap = normalizeState(state);
-    return snap;
-  }, [state]);
+  // Create arrangement from AddressList request
+  const handleCreateArrangement = React.useCallback((addressIndex: number) => {
+    setAutoCreateArrangementFor(addressIndex);
+  }, []);
 
+  // Ensure day session exists when Navigation is used
+  const ensureDayStarted = React.useCallback(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const hasToday = daySessions.some((d) => d.date === today);
+    if (!hasToday) startDay();
+  }, [daySessions, startDay]);
+
+  // Let DayPanel edit today's start time (or open a new session with that start)
+  const handleEditStart = React.useCallback(
+    (newStartISO: string | Date) => {
+      const parsed =
+        typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
+      if (Number.isNaN(parsed.getTime())) return;
+
+      const newISO = parsed.toISOString();
+      setState((s) => {
+        const today = newISO.slice(0, 10);
+        const idx = s.daySessions.findIndex((d) => d.date === today && !d.end);
+        if (idx >= 0) {
+          const arr = s.daySessions.slice();
+          const sess = { ...arr[idx], start: newISO };
+          if (sess.end) {
+            try {
+              const start = new Date(sess.start).getTime();
+              const end = new Date(sess.end).getTime();
+              if (end > start) sess.durationSeconds = Math.floor((end - start) / 1000);
+            } catch {}
+          }
+          arr[idx] = sess;
+          return { ...s, daySessions: arr };
+        }
+        return { ...s, daySessions: [...s.daySessions, { date: today, start: newISO }] };
+      });
+    },
+    [setState]
+  );
+
+  // Finish Day with cloud backup (non-blocking)
+  const endDayWithBackup = React.useCallback(() => {
+    const snap = backupState();
+    uploadBackupToStorage(snap, "finish").catch((e: any) => {
+      console.warn("Supabase storage backup (finish) failed:", e?.message || e);
+    });
+    endDay();
+  }, [backupState, endDay]);
+
+  // Backup / Restore
   const onBackup = React.useCallback(async () => {
     const snap = backupState();
-    // Local download (existing behaviour)
     const stamp = new Date();
     const y = String(stamp.getFullYear());
     const m = String(stamp.getMonth() + 1).padStart(2, "0");
     const d = String(stamp.getDate()).padStart(2, "0");
     const hh = String(stamp.getHours()).padStart(2, "0");
     const mm = String(stamp.getMinutes()).padStart(2, "0");
+    // Local download (existing behaviour)
     downloadJson(`navigator-backup-${y}${m}${d}-${hh}${mm}.json`, snap);
-
-    // ✅ New: Supabase Storage upload (manual)
+    // Cloud upload (optional)
     try {
       await uploadBackupToStorage(snap, "manual");
-      // optional: alert("✅ Backed up to Supabase");
     } catch (e: any) {
       console.warn("Supabase storage backup failed:", e?.message || e);
-      // optional: alert("⚠️ Cloud backup failed: " + (e?.message || e));
     }
   }, [backupState]);
 
@@ -290,82 +306,101 @@ function InnerApp() {
     }
   };
 
-  // Stats — based on current list version (unique indices)
+  // Stats
   const stats = React.useMemo(() => {
-    const set = new Set<number>();
-    for (const c of completions) {
-      if (c.listVersion === state?.currentListVersion) {
-        set.add(c.addressIndex);
-      }
-    }
-    const done = set.size;
-    const pif = completions.filter(
-      (c) => c.listVersion === state?.currentListVersion && c.outcome === "PIF"
+    const currentVer = state.currentListVersion;
+    const completedIdx = new Set(
+      completions.filter((c) => c.listVersion === currentVer).map((c) => c.index)
+    );
+    const total = addresses.length;
+    const pending = total - completedIdx.size;
+    const pifCount = completions.filter(
+      (c) => c.listVersion === currentVer && c.outcome === "PIF"
     ).length;
-    const da = completions.filter(
-      (c) => c.listVersion === state?.currentListVersion && c.outcome === "DA"
+    const doneCount = completions.filter(
+      (c) => c.listVersion === currentVer && c.outcome === "Done"
     ).length;
-    const arr = completions.filter(
-      (c) => c.listVersion === state?.currentListVersion && c.outcome === "ARR"
+    const daCount = completions.filter(
+      (c) => c.listVersion === currentVer && c.outcome === "DA"
     ).length;
-    return { done, pif, da, arr };
-  }, [completions, state?.currentListVersion]);
+    const completed = completedIdx.size;
+    return { total, pending, completed, pifCount, doneCount, daCount };
+  }, [addresses, completions, state.currentListVersion]);
 
-  const restoreState = (data: any) => {
-    // naive full reload: let cloud apply happen via applyCloudState
-    cloudSync.applyCloudState(data);
-  };
-
-  // derived session info
-  const todaySession = daySessions.find((s) => s.dateKey === state?.todayKey);
-  const sessionStarted = !!todaySession?.start;
-  const sessionEnded = !!todaySession?.end;
+  if (loading) {
+    return (
+      <div className="container">
+        <div className="loading">
+          <div className="spinner" />
+          Preparing your workspace…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container">
-      {/* Top bar */}
-      <div className="topbar">
-        <div className="brand">
-          <span className="pin">📍</span> Address Navigator
+      {/* Header */}
+      <header className="app-header">
+        <div className="left">
+          <h1 className="app-title">📍 Address Navigator</h1>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+            }}
+          >
+            {cloudSync.isOnline ? (
+              <>
+                <span style={{ color: "var(--success)" }}>🟢</span>
+                Online
+              </>
+            ) : (
+              <>
+                <span style={{ color: "var(--warning)" }}>🟡</span>
+                Offline
+              </>
+            )}
+          </div>
         </div>
-        <div className="spacer" />
-        <div className="status">
-          <span className="dot online" /> Online
-          <span className="muted"> · </span>
-          <span className="muted">
-            Last sync {cloudSync.lastSyncedAt ? cloudSync.lastSyncedAt : "—"}
-          </span>
-        </div>
-        <div className="spacer" />
-        <div className="user">
-          <span>{cloudSync.user?.email}</span>
-          <button className="btn btn-ghost" onClick={() => cloudSync.signOut()}>
-            Sign Out
-          </button>
-        </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="tabs">
-        <button
-          className={`tab ${tab === "list" ? "active" : ""}`}
-          onClick={() => setTab("list")}
-        >
-          List ({addresses.length})
-        </button>
-        <button
-          className={`tab ${tab === "completed" ? "active" : ""}`}
-          onClick={() => setTab("completed")}
-        >
-          Completed ({completions.length})
-        </button>
-        <button
-          className={`tab ${tab === "arrangements" ? "active" : ""}`}
-          onClick={() => setTab("arrangements")}
-        >
-          Arrangements ({arrangements.length})
-        </button>
-      </div>
+        <div className="right">
+          <div className="user-chip" role="group" aria-label="Account">
+            <span className="avatar" aria-hidden>
+              👤
+            </span>
+            <span className="email" title={cloudSync.user?.email ?? ""}>
+              {cloudSync.user?.email ?? "Signed in"}
+            </span>
+            <button className="signout-btn" onClick={cloudSync.signOut} title="Sign out">
+              Sign Out
+            </button>
+          </div>
+
+          <div className="tabs">
+            <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
+              📋 List ({stats.pending})
+            </button>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "completed"}
+              onClick={() => setTab("completed")}
+            >
+              ✅ Completed ({stats.completed})
+            </button>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "arrangements"}
+              onClick={() => setTab("arrangements")}
+            >
+              📅 Arrangements ({arrangements.length})
+            </button>
+          </div>
+        </div>
+      </header>
 
       {/* Import & Tools */}
       <div style={{ marginBottom: "2rem" }}>
@@ -397,100 +432,74 @@ function InnerApp() {
             <button className="btn btn-ghost" onClick={onBackup}>
               💾 Backup
             </button>
-            <label className="btn btn-ghost">
-              ♻️ Restore
-              <input type="file" accept="application/json" hidden onChange={onRestore} />
+
+            <input
+              type="file"
+              accept="application/json"
+              onChange={onRestore}
+              className="file-input"
+              id="restore-input"
+            />
+            <label htmlFor="restore-input" className="file-input-label">
+              📤 Restore
             </label>
           </div>
         </div>
+      </div>
 
-        <div className="search-row">
-          <input
-            type="text"
-            placeholder="Search addresses…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+      {/* Tabs */}
+      {tab === "list" ? (
+        <>
+          <div className="search-container">
+            <input
+              type="search"
+              value={search}
+              placeholder="🔍 Search addresses..."
+              onChange={(e) => setSearch(e.target.value)}
+              className="input search-input"
+            />
+          </div>
+
+          <DayPanel
+            sessions={daySessions}
+            completions={completions}
+            startDay={startDay}
+            endDay={endDayWithBackup}
+            onEditStart={handleEditStart} // DayPanel edits today's start time
           />
-        </div>
-      </div>
 
-      {/* Day / session panel */}
-      <DayPanel
-        state={safeState}
-        onStartDay={() => {
-          createSessionIfMissing();
-        }}
-        onEditStart={(date) => setStartTime(date)}
-        onEditEnd={(date) => setEndTime(date)}
-        onEndDay={async () => {
-          // ✅ New: Upload a finish-of-day snapshot before ending the day
-          const snapshot = backupState();
-          try {
-            await uploadBackupToStorage(snapshot, "finish");
-          } catch (e: any) {
-            console.warn("Supabase storage backup (finish) failed:", e?.message || e);
-          }
-          endDay();
-        }}
-      />
+          <AddressList
+            state={safeState}
+            setActive={setActive}
+            cancelActive={cancelActive}
+            onComplete={complete}
+            onCreateArrangement={handleCreateArrangement}
+            filterText={search}
+            ensureDayStarted={ensureDayStarted}
+          />
 
-      {/* Quick stats */}
-      <div className="stats">
-        <span className="pill">
-          PIF <strong>{stats.pif}</strong>
-        </span>
-        <span className="pill">
-          Done <strong>{stats.done}</strong>
-        </span>
-        <span className="pill red">
-          DA <strong>{stats.da}</strong>
-        </span>
-        <span className="pill">
-          ARR <strong>{stats.arr}</strong>
-        </span>
-      </div>
-
-      {/* Start day button (if not started) */}
-      {!sessionStarted && !sessionEnded && (
-        <div className="session-row">
-          <button className="btn btn-primary" onClick={() => createSessionIfMissing()}>
-            ▶️ Start Day
-          </button>
-          <button
-            className="btn"
-            onClick={() => {
-              const raw = prompt("Set start time (HH:MM, 24h)", "08:30");
-              if (!raw) return;
-              const [hh, mm] = raw.split(":").map((x) => parseInt(x.trim(), 10));
-              if (Number.isFinite(hh) && Number.isFinite(mm)) {
-                const d = new Date();
-                d.setHours(hh, mm, 0, 0);
-                setStartTime(d);
-              }
+          <div
+            style={{
+              display: "flex",
+              gap: "0.5rem",
+              margin: "1.25rem 0 3rem",
+              flexWrap: "wrap",
+              alignItems: "center",
             }}
           >
-            ✏️ Edit start
-          </button>
-        </div>
-      )}
-
-      {/* Address list / Completed / Arrangements */}
-      {tab === "list" ? (
-        <AddressList
-          state={safeState}
-          filterText={filter}
-          setActive={setActive}
-          cancelActive={cancelActive}
-          onComplete={complete}
-          onCreateArrangement={(addressIndex) =>
-            setAutoCreateArrangementFor(addressIndex)
-          }
-          ensureDayStarted={() => ensureDayStarted()}
-        />
+            <button className="btn btn-ghost" onClick={undo} title="Undo last completion for this list">
+              ⎌ Undo Last
+            </button>
+            <span className="pill pill-pif">PIF {stats.pifCount}</span>
+            <span className="pill pill-done">Done {stats.doneCount}</span>
+            <span className="pill pill-da">DA {stats.daCount}</span>
+            {lastSyncTime && <span>• Last sync {lastSyncTime.toLocaleTimeString()}</span>}
+          </div>
+        </>
       ) : tab === "completed" ? (
         <Completed
           state={safeState}
-          onRestoreAddress={(index: number, addr: AddressRow) => addAddress(addr)}
+          onRestoreAddress={async (_index: number, addr: AddressRow) => addAddress(addr)}
         />
       ) : (
         <Arrangements
@@ -499,7 +508,7 @@ function InnerApp() {
           onUpdateArrangement={updateArrangement}
           onDeleteArrangement={deleteArrangement}
           onAddAddress={async (addr: AddressRow) => addAddress(addr)}
-          onComplete={complete} // in case Arrangements marks an address as completed
+          onComplete={complete}
           autoCreateForAddress={autoCreateArrangementFor}
           onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
         />
