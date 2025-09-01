@@ -1,4 +1,3 @@
-// src/App.tsx
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -10,11 +9,11 @@ import { Completed } from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { downloadJson, readJsonFile } from "./backup";
-import type { Outcome, Completion, AddressRow } from "./types";
+import type { AddressRow } from "./types";
 
 type Tab = "list" | "completed" | "arrangements";
 
-// normalize helper
+// --- helper: make sure arrays exist so .length never crashes ---
 function normalizeState(raw: any) {
   const r = raw ?? {};
   return {
@@ -24,11 +23,16 @@ function normalizeState(raw: any) {
     arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
     daySessions: Array.isArray(r.daySessions) ? r.daySessions : [],
     activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
-    currentListVersion: typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
+    currentListVersion:
+      typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
   };
 }
 
-class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; msg?: string }> {
+// Simple error boundary (avoids blank screen on unexpected errors)
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; msg?: string }
+> {
   constructor(p: any) {
     super(p);
     this.state = { hasError: false };
@@ -55,6 +59,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 export default function App() {
   const cloudSync = useCloudSync();
 
+  // Wait for Supabase session restore
   if (cloudSync.isLoading) {
     return (
       <div className="container">
@@ -66,12 +71,18 @@ export default function App() {
     );
   }
 
+  // Auth screen
   if (!cloudSync.user) {
     return (
       <ErrorBoundary>
         <Auth
-          onSignIn={async (email, password) => { await cloudSync.signIn(email, password); }}
-          onSignUp={async (email, password) => { await cloudSync.signUp(email, password); }}
+          // Wrap to match Auth’s Promise<void> signature
+          onSignIn={async (email, password) => {
+            await cloudSync.signIn(email, password);
+          }}
+          onSignUp={async (email, password) => {
+            await cloudSync.signUp(email, password);
+          }}
           isLoading={cloudSync.isLoading}
           error={cloudSync.error}
           onClearError={cloudSync.clearError}
@@ -91,7 +102,6 @@ function AuthedApp() {
   const {
     state,
     loading,
-    setState,
     setAddresses,
     addAddress,
     setActive,
@@ -100,35 +110,40 @@ function AuthedApp() {
     undo,
     startDay,
     endDay,
-    editStartForDate, // ✅
     backupState,
     restoreState,
     addArrangement,
     updateArrangement,
     deleteArrangement,
+    setState,
+    editStartForDate, // if present in your hook; safe to leave if you’ve added it
   } = useAppState();
 
   const cloudSync = useCloudSync();
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
-  const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(null);
+  const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
+    React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
+  // Hydration / echo guards
   const [hydrated, setHydrated] = React.useState(false);
-  const lastFromCloudRef = React.useRef<string | null>(null);
+  const lastFromCloudRef = React.useRef<string | null>(null); // JSON of last cloud snapshot we applied
 
+  // --- safe arrays (never undefined) ---
   const addresses = Array.isArray(state?.addresses) ? state.addresses : [];
   const completions = Array.isArray(state?.completions) ? state.completions : [];
   const arrangements = Array.isArray(state?.arrangements) ? state.arrangements : [];
   const daySessions = Array.isArray(state?.daySessions) ? state.daySessions : [];
 
+  // State passed to children
   const safeState = React.useMemo(
     () => ({ ...(state ?? {}), addresses, completions, arrangements, daySessions }),
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // cloud bootstrap
+  // ---- Bootstrap sync ----
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: (() => void) | undefined;
@@ -136,20 +151,29 @@ function AuthedApp() {
 
     (async () => {
       const localHasData =
-        addresses.length > 0 || completions.length > 0 || arrangements.length > 0 || daySessions.length > 0;
+        addresses.length > 0 ||
+        completions.length > 0 ||
+        arrangements.length > 0 ||
+        daySessions.length > 0;
 
       try {
         if (localHasData) {
           await cloudSync.syncData(safeState);
           if (cancelled) return;
+          // Baseline equals what we just pushed
           lastFromCloudRef.current = JSON.stringify(safeState);
           setHydrated(true);
         }
+
         cleanup = cloudSync.subscribeToData((newState) => {
           if (!newState) return;
           const normalized = normalizeState(newState);
+
+          // Update local from cloud
           setState(normalized);
           setLastSyncTime(new Date());
+
+          // Set baseline & hydration
           lastFromCloudRef.current = JSON.stringify(normalized);
           setHydrated(true);
         });
@@ -162,46 +186,54 @@ function AuthedApp() {
       cancelled = true;
       if (cleanup) cleanup();
     };
+    // run once per session
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // debounced push
+  // ---- Auto push local changes -> cloud (debounced) ----
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
+
     const currentStr = JSON.stringify(safeState);
-    if (currentStr === lastFromCloudRef.current) return;
+    if (currentStr === lastFromCloudRef.current) return; // no change vs cloud baseline
+
     const t = setTimeout(() => {
       cloudSync
         .syncData(safeState)
         .then(() => {
           setLastSyncTime(new Date());
-          lastFromCloudRef.current = currentStr;
+          lastFromCloudRef.current = currentStr; // advance baseline
         })
-        .catch((err) => console.error("Sync failed:", err));
+        .catch((err: unknown) => console.error("Sync failed:", err));
     }, 400);
+
     return () => clearTimeout(t);
   }, [cloudSync.user, loading, hydrated, safeState, cloudSync]);
 
-  // stats
-  const stats = React.useMemo(() => {
-    const total = addresses.length;
-    const completedCount = completions.length;
-    const pending = total - completedCount;
-    const pifCount = completions.filter((c) => c.outcome === "PIF").length;
-    const doneCount = completions.filter((c) => c.outcome === "Done").length;
-    const daCount = completions.filter((c) => c.outcome === "DA").length;
-    return { total, completed: completedCount, pending, pifCount, doneCount, daCount };
-  }, [addresses, completions]);
+  // ----- UI helpers -----
+  const handleCreateArrangement = React.useCallback((addressIndex: number) => {
+    setAutoCreateArrangementFor(addressIndex);
+    setTab("arrangements");
+  }, []);
 
-  // import / backup / restore
-  const onBackup = () => {
+  // Start day automatically on first Navigate of the day (if you pass ensureDayStarted to AddressList)
+  const ensureDayStarted = React.useCallback(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const hasToday = daySessions.some((d: any) => d.date === today);
+    if (!hasToday) startDay();
+  }, [daySessions, startDay]);
+
+  // ----- Backup / Restore -----
+  const onBackup = React.useCallback(() => {
     const snap = backupState();
     const stamp = new Date();
     const y = String(stamp.getFullYear());
     const m = String(stamp.getMonth() + 1).padStart(2, "0");
     const d = String(stamp.getDate()).padStart(2, "0");
-    downloadJson(`navigator-backup-${y}${m}${d}.json`, snap);
-  };
+    const hh = String(stamp.getHours()).padStart(2, "0");
+    const mm = String(stamp.getMinutes()).padStart(2, "0");
+    downloadJson(`navigator-backup-${y}${m}${d}-${hh}${mm}.json`, snap);
+  }, [backupState]);
 
   const onRestore: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
@@ -209,8 +241,8 @@ function AuthedApp() {
     try {
       const raw = await readJsonFile(file);
       const data = normalizeState(raw);
-      restoreState(data);
-      await cloudSync.syncData(data);
+      restoreState(data); // local
+      await cloudSync.syncData(data); // cloud
       lastFromCloudRef.current = JSON.stringify(data);
       setHydrated(true);
       alert("✅ Restore completed successfully!");
@@ -222,32 +254,16 @@ function AuthedApp() {
     }
   };
 
-  // ensure day starts on first navigate of the calendar day
-  const ensureDayStarted = React.useCallback(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const hasToday = daySessions.some((d) => d.date === today);
-    if (!hasToday) startDay();
-  }, [daySessions, startDay]);
-
-  // Finish day + auto-backup (give React a tick to write end time)
-  const finishDayWithBackup = React.useCallback(() => {
-    endDay();
-    setTimeout(() => {
-      const snap = backupState();
-      const t = new Date();
-      const fmt = (n: number) => String(n).padStart(2, "0");
-      const fname = `navigator-backup-${t.getFullYear()}${fmt(t.getMonth() + 1)}${fmt(t.getDate())}-${fmt(
-        t.getHours()
-      )}${fmt(t.getMinutes())}.json`;
-      downloadJson(fname, snap);
-    }, 200);
-  }, [endDay, backupState]);
-
-  // arrangement from list
-  const handleCreateArrangement = React.useCallback((addressIndex: number) => {
-    setAutoCreateArrangementFor(addressIndex);
-    setTab("arrangements");
-  }, []);
+  // ----- Stats (safe arrays) -----
+  const stats = React.useMemo(() => {
+    const total = addresses.length;
+    const completedCount = completions.length;
+    const pending = total - completedCount;
+    const pifCount = completions.filter((c: any) => c.outcome === "PIF").length;
+    const doneCount = completions.filter((c: any) => c.outcome === "Done").length;
+    const daCount = completions.filter((c: any) => c.outcome === "DA").length;
+    return { total, completed: completedCount, pending, pifCount, doneCount, daCount };
+  }, [addresses, completions]);
 
   if (loading) {
     return (
@@ -266,7 +282,17 @@ function AuthedApp() {
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+
+          {/* Sync Status */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+            }}
+          >
             {cloudSync.isOnline ? (
               <>
                 <span style={{ color: "var(--success)" }}>🟢</span>
@@ -283,75 +309,156 @@ function AuthedApp() {
         </div>
 
         <div className="right">
+          {/* Account pill */}
           <div className="user-chip" role="group" aria-label="Account">
-            <span className="avatar" aria-hidden>👤</span>
-            <span className="email" title={cloudSync.user?.email ?? ""}>{cloudSync.user?.email ?? "Signed in"}</span>
-            <button className="signout-btn" onClick={cloudSync.signOut} title="Sign out">Sign Out</button>
+            <span className="avatar" aria-hidden>
+              👤
+            </span>
+            <span className="email" title={cloudSync.user?.email ?? ""}>
+              {cloudSync.user?.email ?? "Signed in"}
+            </span>
+            <button className="signout-btn" onClick={cloudSync.signOut} title="Sign out">
+              Sign Out
+            </button>
           </div>
 
-          <nav className="tabs" aria-label="Primary">
-            <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>📋 List ({stats.pending})</button>
-            <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>✅ Completed ({stats.completed})</button>
-            <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>📅 Arrangements ({arrangements.length})</button>
-          </nav>
+          {/* Tabs */}
+          <div className="tabs">
+            <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
+              📋 List ({stats.pending})
+            </button>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "completed"}
+              onClick={() => setTab("completed")}
+            >
+              ✅ Completed ({stats.completed})
+            </button>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "arrangements"}
+              onClick={() => setTab("arrangements")}
+            >
+              📅 Arrangements ({arrangements.length})
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Tools */}
+      {/* Import & Tools Section */}
       <div style={{ marginBottom: "2rem" }}>
-        <div style={{ background: "var(--surface)", padding: "1.5rem", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-light)", boxShadow: "var(--shadow-sm)", marginBottom: "1rem" }}>
-          <div style={{ fontSize: "0.875rem", color: "var(--text-secondary)", marginBottom: "1rem", lineHeight: "1.5" }}>
-            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>, <strong>lng</strong>.
+        <div
+          style={{
+            background: "var(--surface)",
+            padding: "1.5rem",
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border-light)",
+            boxShadow: "var(--shadow-sm)",
+            marginBottom: "1rem",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "0.875rem",
+              color: "var(--text-secondary)",
+              marginBottom: "1rem",
+              lineHeight: "1.5",
+            }}
+          >
+            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>,{" "}
+            <strong>lng</strong> columns to get started.
           </div>
+
           <div className="btn-row">
             <ImportExcel onImported={setAddresses} />
+
             <div className="btn-spacer" />
-            <button className="btn btn-ghost" onClick={onBackup}>💾 Backup</button>
+
+            <button className="btn btn-ghost" onClick={onBackup}>
+              💾 Backup
+            </button>
+
             <div className="file-input-wrapper">
-              <input type="file" accept="application/json" onChange={onRestore} className="file-input" id="restore-input" />
-              <label htmlFor="restore-input" className="file-input-label">📤 Restore</label>
+              <input
+                type="file"
+                accept="application/json"
+                onChange={onRestore}
+                className="file-input"
+                id="restore-input"
+              />
+              <label htmlFor="restore-input" className="file-input-label">
+                📤 Restore
+              </label>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tab Content */}
       {tab === "list" ? (
         <>
+          {/* Search Bar */}
           <div className="search-container">
-            <input type="search" value={search} placeholder="🔍 Search addresses..." onChange={(e) => setSearch(e.target.value)} className="input search-input" />
+            <input
+              type="search"
+              value={search}
+              placeholder="🔍 Search addresses..."
+              onChange={(e) => setSearch(e.target.value)}
+              className="input search-input"
+            />
           </div>
 
+          {/* Day Panel */}
           <DayPanel
             sessions={daySessions}
             completions={completions}
             startDay={startDay}
-            endDay={finishDayWithBackup}          // ✅ backup when finishing
-            onEditStart={editStartForDate}        // ✅ allow editing start time
+            endDay={endDay}
+            onEditStart={editStartForDate}
           />
 
-          {/* (your stats & list) */}
+          {/* Address List */}
           <AddressList
             state={safeState}
             setActive={setActive}
             cancelActive={cancelActive}
-            complete={complete}
+            onComplete={complete}                 {/* ✅ updated prop name */}
             onCreateArrangement={handleCreateArrangement}
             filterText={search}
-            ensureDayStarted={ensureDayStarted}   // ✅ auto-start on first navigate
+            ensureDayStarted={ensureDayStarted}
           />
+
+          {/* Keyboard Shortcuts Help */}
+          <div
+            style={{
+              marginTop: "2rem",
+              padding: "1rem",
+              background: "var(--bg-tertiary)",
+              borderRadius: "var(--radius)",
+              fontSize: "0.8125rem",
+              color: "var(--text-muted)",
+              textAlign: "center",
+            }}
+          >
+            ⌨️ <strong>Shortcuts:</strong> ↑↓ Navigate • Enter Complete (or type 'ARR') • U Undo • S
+            Start Day • E End Day
+          </div>
         </>
       ) : tab === "completed" ? (
-        <Completed state={safeState} onChangeOutcome={(index, o, amount) => {
-          setState((s) => {
-            const arr = s.completions.slice();
-            const pos = arr.findIndex((c) => Number(c.index) === Number(index));
-            if (pos === -1) return s;
-            const old = arr[pos];
-            arr[pos] = { ...old, outcome: o, amount: o === "PIF" ? amount : undefined };
-            return { ...s, completions: arr };
-          });
-        }} onUndo={undo} />
+        <Completed
+          state={safeState}
+          onChangeOutcome={(index, o, amount) => {
+            setState((s) => {
+              const arr = s.completions.slice();
+              const pos = arr.findIndex((c) => Number(c.index) === Number(index));
+              if (pos === -1) return s;
+              const old = arr[pos];
+              arr[pos] = { ...old, outcome: o, amount: o === "PIF" ? amount : undefined };
+              return { ...s, completions: arr };
+            });
+          }}
+          onUndo={undo}
+        />
       ) : (
         <Arrangements
           state={safeState}
