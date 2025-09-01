@@ -80,11 +80,13 @@ async function uploadBackupToStorage(
 
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
 
+  // 1) Upload file
   const { error: upErr } = await supabase.storage
     .from(bucket)
     .upload(objectPath, blob, { upsert: false, contentType: "application/json" });
   if (upErr) throw new Error(upErr.message);
 
+  // 2) Log row (best-effort)
   try {
     await supabase.from("backups").insert({
       user_id: userId,
@@ -179,7 +181,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // Bootstrap: prefer local if present; always subscribe to cloud updates
+  // ---- Bootstrap: prefer local if present; always subscribe to cloud updates ----
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: undefined | (() => void);
@@ -221,7 +223,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // Debounced push local -> cloud
+  // ---- Debounced push local -> cloud ----
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
@@ -294,6 +296,7 @@ function AuthedApp() {
   // Wrap undo for onClick type
   const handleUndoClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
     e.preventDefault();
+    // If your undo expects the last entry as -1, keep -1. Otherwise adjust as needed.
     undo(-1);
   };
 
@@ -373,6 +376,96 @@ function AuthedApp() {
     },
     [setState]
   );
+
+  /** ---------- Restore from Cloud (today) ---------- */
+  type CloudBackupRow = { object_path: string; size_bytes?: number; created_at?: string };
+
+  const [cloudMenuOpen, setCloudMenuOpen] = React.useState(false);
+  const [cloudBackups, setCloudBackups] = React.useState<CloudBackupRow[]>([]);
+  const [cloudBusy, setCloudBusy] = React.useState(false);
+  const [cloudErr, setCloudErr] = React.useState<string | null>(null);
+
+  function todayKey(tz = "Europe/London") {
+    const d = new Date();
+    const y = d.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
+    const m = d.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
+    const dd = d.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
+    return `${y}-${m}-${dd}`;
+  }
+
+  const loadTodayCloudBackups = React.useCallback(async () => {
+    if (!supabase) return;
+    setCloudBusy(true);
+    setCloudErr(null);
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      const userId = auth?.user?.id;
+      if (!userId) throw new Error("Not authenticated");
+
+      const dayKey = todayKey();
+      const { data, error } = await supabase
+        .from("backups")
+        .select("object_path,size_bytes,created_at")
+        .eq("user_id", userId)
+        .eq("day_key", dayKey)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // Fallback secondary sort by filename time segment if needed
+      const list = (data ?? []).slice().sort((a, b) => {
+        const ta = a.object_path.split("_")[2] ?? "";
+        const tb = b.object_path.split("_")[2] ?? "";
+        return tb.localeCompare(ta);
+      });
+
+      setCloudBackups(list);
+    } catch (e: any) {
+      setCloudErr(e?.message || String(e));
+    } finally {
+      setCloudBusy(false);
+    }
+  }, []);
+
+  const restoreFromCloud = React.useCallback(
+    async (objectPath: string) => {
+      if (!supabase) return;
+      setCloudBusy(true);
+      setCloudErr(null);
+      try {
+        const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET ?? "navigator-backups";
+        const { data: blob, error } = await supabase.storage.from(bucket).download(objectPath);
+        if (error) throw error;
+        const text = await blob.text();
+        const raw = JSON.parse(text);
+        const data = normalizeState(raw);
+        restoreState(data);
+        await cloudSync.syncData(data);
+        lastFromCloudRef.current = JSON.stringify(data);
+        setHydrated(true);
+        alert("✅ Restored from cloud");
+        setCloudMenuOpen(false);
+      } catch (e: any) {
+        setCloudErr(e?.message || String(e));
+      } finally {
+        setCloudBusy(false);
+      }
+    },
+    [cloudSync, restoreState]
+  );
+
+  // Close dropdown when clicking outside the tools row
+  React.useEffect(() => {
+    if (!cloudMenuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest?.(".btn-row")) setCloudMenuOpen(false);
+    }
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [cloudMenuOpen]);
+
+  /** ----------------- UI ----------------- */
 
   if (loading) {
     return (
@@ -473,7 +566,7 @@ function AuthedApp() {
             <strong>lng</strong> columns to get started.
           </div>
 
-          <div className="btn-row">
+          <div className="btn-row" style={{ position: "relative" }}>
             <ImportExcel onImported={setAddresses} />
             <div className="btn-spacer" />
             <button className="btn btn-ghost" onClick={onBackup}>
@@ -490,6 +583,107 @@ function AuthedApp() {
             <label htmlFor="restore-input" className="file-input-label">
               📤 Restore
             </label>
+
+            {/* ☁️ Restore from Cloud (today) */}
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <button
+                className="btn btn-ghost"
+                onClick={async () => {
+                  setCloudMenuOpen((o) => !o);
+                  if (!cloudMenuOpen) await loadTodayCloudBackups();
+                }}
+                title="List today's cloud backups"
+              >
+                ☁️ Restore from Cloud
+              </button>
+
+              {cloudMenuOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    zIndex: 100,
+                    top: "110%",
+                    left: 0,
+                    minWidth: 280,
+                    background: "var(--surface)",
+                    border: "1px solid var(--border-light)",
+                    borderRadius: "12px",
+                    padding: "0.5rem",
+                    boxShadow: "var(--shadow-lg)",
+                  }}
+                >
+                  <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>
+                    Today’s backups
+                  </div>
+
+                  {cloudBusy && (
+                    <div
+                      style={{
+                        padding: "0.5rem 0.5rem",
+                        fontSize: 12,
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      Loading…
+                    </div>
+                  )}
+
+                  {!cloudBusy && cloudErr && (
+                    <div
+                      style={{
+                        padding: "0.5rem 0.5rem",
+                        fontSize: 12,
+                        color: "var(--error)",
+                      }}
+                    >
+                      {cloudErr}
+                    </div>
+                  )}
+
+                  {!cloudBusy && !cloudErr && cloudBackups.length === 0 && (
+                    <div
+                      style={{
+                        padding: "0.5rem 0.5rem",
+                        fontSize: 12,
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      No backups yet today.
+                    </div>
+                  )}
+
+                  {!cloudBusy &&
+                    !cloudErr &&
+                    cloudBackups.map((row) => {
+                      const name = row.object_path.split("/").pop() || row.object_path;
+                      return (
+                        <button
+                          key={row.object_path}
+                          className="btn btn-ghost"
+                          style={{ width: "100%", justifyContent: "space-between" }}
+                          onClick={() => restoreFromCloud(row.object_path)}
+                        >
+                          <span
+                            style={{
+                              maxWidth: 170,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                            title={name}
+                          >
+                            {name}
+                          </span>
+                          <span style={{ opacity: 0.7, fontSize: 12 }}>
+                            {row.size_bytes ? Math.round(row.size_bytes / 1024) + " KB" : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+            {/* end cloud dropdown */}
           </div>
         </div>
       </div>
@@ -534,7 +728,11 @@ function AuthedApp() {
               alignItems: "center",
             }}
           >
-            <button className="btn btn-ghost" onClick={handleUndoClick} title="Undo last completion for this list">
+            <button
+              className="btn btn-ghost"
+              onClick={handleUndoClick}
+              title="Undo last completion for this list"
+            >
               ⎌ Undo Last
             </button>
             <span className="pill pill-pif">PIF {stats.pifCount}</span>
@@ -560,3 +758,4 @@ function AuthedApp() {
     </div>
   );
 }
+```0
