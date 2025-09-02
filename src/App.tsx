@@ -171,7 +171,7 @@ function AuthedApp() {
   const lastFromCloudRef = React.useRef<string | null>(null);
 
   const addresses = Array.isArray(state.addresses) ? state.addresses : [];
-  const completions = Array.isArray(state.completions) ? state.completions : [];
+  the completions = Array.isArray(state.completions) ? state.completions : [];
   const arrangements = Array.isArray(state.arrangements) ? state.arrangements : [];
   const daySessions = Array.isArray(state.daySessions) ? state.daySessions : [];
 
@@ -294,7 +294,6 @@ function AuthedApp() {
   // Wrap undo for onClick type
   const handleUndoClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
     e.preventDefault();
-    // If your undo expects the last entry as -1, keep -1. Otherwise adjust as needed.
     undo(-1);
   };
 
@@ -375,23 +374,27 @@ function AuthedApp() {
     [setState]
   );
 
-  /** ---------- Restore from Cloud (today) ---------- */
-  type CloudBackupRow = { object_path: string; size_bytes?: number; created_at?: string };
+  /** ---------- Restore from Cloud (last 7 days) ---------- */
+  type CloudBackupRow = {
+    object_path: string;
+    size_bytes?: number;
+    created_at?: string;
+    day_key?: string;
+  };
 
   const [cloudMenuOpen, setCloudMenuOpen] = React.useState(false);
   const [cloudBackups, setCloudBackups] = React.useState<CloudBackupRow[]>([]);
   const [cloudBusy, setCloudBusy] = React.useState(false);
   const [cloudErr, setCloudErr] = React.useState<string | null>(null);
 
-  function todayKey(tz = "Europe/London") {
-    const d = new Date();
+  function formatKey(d: Date, tz = "Europe/London") {
     const y = d.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
     const m = d.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
     const dd = d.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
     return y + "-" + m + "-" + dd;
   }
 
-  const loadTodayCloudBackups = React.useCallback(async () => {
+  const loadRecentCloudBackups = React.useCallback(async () => {
     if (!supabase) return;
     setCloudBusy(true);
     setCloudErr(null);
@@ -400,24 +403,32 @@ function AuthedApp() {
       const userId = authResp && authResp.data && authResp.data.user ? authResp.data.user.id : undefined;
       if (!userId) throw new Error("Not authenticated");
 
-      const day = todayKey();
+      const end = new Date(); // today
+      const start = new Date();
+      start.setDate(start.getDate() - 6); // last 7 days window
+
+      const fromKey = formatKey(start);
+      const toKey = formatKey(end);
+
       const q = await supabase
         .from("backups")
-        .select("object_path,size_bytes,created_at")
+        .select("object_path,size_bytes,created_at,day_key")
         .eq("user_id", userId)
-        .eq("day_key", day)
+        .gte("day_key", fromKey)
+        .lte("day_key", toKey)
+        .order("day_key", { ascending: false })
         .order("created_at", { ascending: false });
 
       if ((q as any).error) throw (q as any).error;
 
-      const data = (q as any).data as CloudBackupRow[] | null;
+      const data = ((q as any).data ?? []) as CloudBackupRow[];
 
-      // Secondary filename sort by time segment (backup_YYYY-MM-DD_HHMM_label.json)
-      const list = (data || []).slice().sort((a, b) => {
-        const aSegs = a.object_path.split("_");
-        const bSegs = b.object_path.split("_");
-        const ta = aSegs.length > 2 ? aSegs[2] : "";
-        const tb = bSegs.length > 2 ? bSegs[2] : "";
+      // Secondary sort using filename time segment
+      const list = data.slice().sort((a, b) => {
+        const aParts = a.object_path.split("_");
+        const bParts = b.object_path.split("_");
+        const ta = (aParts[1] || "") + (aParts[2] || "");
+        const tb = (bParts[1] || "") + (bParts[2] || "");
         return tb.localeCompare(ta);
       });
 
@@ -558,7 +569,7 @@ function AuthedApp() {
             background: "var(--surface)",
             padding: "1.5rem",
             borderRadius: "var(--radius-lg)",
-            border: "1px solid " + "var(--border-light)",
+            border: "1px solid var(--border-light)",
             boxShadow: "var(--shadow-sm)",
             marginBottom: "1rem",
           }}
@@ -593,15 +604,15 @@ function AuthedApp() {
               📤 Restore
             </label>
 
-            {/* Restore from Cloud (today) */}
+            {/* Restore from Cloud (last 7 days) */}
             <div style={{ position: "relative", display: "inline-block" }}>
               <button
                 className="btn btn-ghost"
                 onClick={async () => {
                   setCloudMenuOpen(!cloudMenuOpen);
-                  if (!cloudMenuOpen) await loadTodayCloudBackups();
+                  if (!cloudMenuOpen) await loadRecentCloudBackups();
                 }}
-                title="List today's cloud backups"
+                title="List recent cloud backups"
               >
                 ☁️ Restore from Cloud
               </button>
@@ -615,13 +626,15 @@ function AuthedApp() {
                     left: 0,
                     minWidth: 280,
                     background: "var(--surface)",
-                    border: "1px solid " + "var(--border-light)",
+                    border: "1px solid var(--border-light)",
                     borderRadius: 12,
                     padding: "0.5rem",
                     boxShadow: "var(--shadow-lg)",
                   }}
                 >
-                  <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>Today's backups</div>
+                  <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>
+                    Recent backups (7 days)
+                  </div>
 
                   {cloudBusy && (
                     <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
@@ -637,7 +650,7 @@ function AuthedApp() {
 
                   {!cloudBusy && !cloudErr && cloudBackups.length === 0 && (
                     <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
-                      No backups yet today.
+                      No backups found.
                     </div>
                   )}
 
@@ -646,6 +659,7 @@ function AuthedApp() {
                     cloudBackups.map((row) => {
                       const parts = row.object_path.split("/");
                       const fname = parts.length > 0 ? parts[parts.length - 1] : row.object_path;
+                      const day = row.day_key || "";
                       return (
                         <button
                           key={row.object_path}
@@ -665,6 +679,7 @@ function AuthedApp() {
                             {fname}
                           </span>
                           <span style={{ opacity: 0.7, fontSize: 12 }}>
+                            {day ? day + " · " : ""}
                             {row.size_bytes ? Math.round(row.size_bytes / 1024) + " KB" : ""}
                           </span>
                         </button>
@@ -748,3 +763,4 @@ function AuthedApp() {
     </div>
   );
 }
+```0
