@@ -28,7 +28,6 @@ function normalizeState(raw: any) {
   };
 }
 
-/** Error boundary keeps the UI from going blank on runtime errors */
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -80,13 +79,11 @@ async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" =
 
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
 
-  // 1) Upload file
   const uploadRes = await supabase.storage
     .from(bucket)
     .upload(objectPath, blob, { upsert: false, contentType: "application/json" });
   if ((uploadRes as any).error) throw new Error((uploadRes as any).error.message);
 
-  // 2) Log row (best-effort)
   try {
     await supabase.from("backups").insert({
       user_id: userId,
@@ -162,16 +159,14 @@ function AuthedApp() {
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
-  const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(
-    null
-  );
+  const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
   const addresses = Array.isArray(state.addresses) ? state.addresses : [];
-  the completions = Array.isArray(state.completions) ? state.completions : [];
+  const completions = Array.isArray(state.completions) ? state.completions : [];
   const arrangements = Array.isArray(state.arrangements) ? state.arrangements : [];
   const daySessions = Array.isArray(state.daySessions) ? state.daySessions : [];
 
@@ -180,7 +175,6 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ---- Bootstrap: prefer local if present; always subscribe to cloud updates ----
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: undefined | (() => void);
@@ -222,7 +216,6 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // ---- Debounced push local -> cloud ----
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
@@ -246,14 +239,12 @@ function AuthedApp() {
     setAutoCreateArrangementFor(addressIndex);
   }, []);
 
-  // Ensure a session exists when Navigation is used
   const ensureDayStarted = React.useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
     const hasToday = daySessions.some((d) => d.date === today);
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
-  // DayPanel -> edit today's start time
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
       const parsed = typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
@@ -282,7 +273,6 @@ function AuthedApp() {
     [setState]
   );
 
-  // Finish Day with cloud backup (non-blocking)
   const endDayWithBackup = React.useCallback(() => {
     const snap = backupState();
     uploadBackupToStorage(snap, "finish").catch((e: any) => {
@@ -291,13 +281,11 @@ function AuthedApp() {
     endDay();
   }, [backupState, endDay]);
 
-  // Wrap undo for onClick type
   const handleUndoClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
     e.preventDefault();
     undo(-1);
   };
 
-  // Handle manual backup (local download + optional cloud upload)
   const onBackup = React.useCallback(async () => {
     const snap = backupState();
     const stamp = new Date();
@@ -314,7 +302,6 @@ function AuthedApp() {
     }
   }, [backupState]);
 
-  // Restore from file
   const onRestore: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -334,7 +321,6 @@ function AuthedApp() {
     }
   };
 
-  // Stats
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
     const completedIdx = new Set(
@@ -355,7 +341,6 @@ function AuthedApp() {
     return { total, pending, completed, pifCount, doneCount, daCount };
   }, [addresses, completions, state.currentListVersion]);
 
-  // Required by Completed: allow changing a completion’s outcome (by completion index)
   const handleChangeOutcome = React.useCallback(
     (targetCompletionIndex: number, outcome: Outcome, amount?: string) => {
       setState((s) => {
@@ -374,7 +359,6 @@ function AuthedApp() {
     [setState]
   );
 
-  /** ---------- Restore from Cloud (last 7 days) ---------- */
   type CloudBackupRow = {
     object_path: string;
     size_bytes?: number;
@@ -403,9 +387,9 @@ function AuthedApp() {
       const userId = authResp && authResp.data && authResp.data.user ? authResp.data.user.id : undefined;
       if (!userId) throw new Error("Not authenticated");
 
-      const end = new Date(); // today
+      const end = new Date();
       const start = new Date();
-      start.setDate(start.getDate() - 6); // last 7 days window
+      start.setDate(start.getDate() - 6);
 
       const fromKey = formatKey(start);
       const toKey = formatKey(end);
@@ -423,7 +407,6 @@ function AuthedApp() {
 
       const data = ((q as any).data ?? []) as CloudBackupRow[];
 
-      // Secondary sort using filename time segment
       const list = data.slice().sort((a, b) => {
         const aParts = a.object_path.split("_");
         const bParts = b.object_path.split("_");
@@ -444,7 +427,6 @@ function AuthedApp() {
     async (objectPath: string) => {
       if (!supabase) return;
 
-      // Confirmation dialog before restoring (prevents accidental overwrite)
       const fileName = objectPath.split("/").pop() || objectPath;
       const ok = window.confirm(
         'Restore "' +
@@ -482,7 +464,6 @@ function AuthedApp() {
     [cloudSync, restoreState]
   );
 
-  // Close dropdown when clicking outside the tools row
   React.useEffect(() => {
     if (!cloudMenuOpen) return;
     function onDocClick(e: MouseEvent) {
@@ -492,8 +473,6 @@ function AuthedApp() {
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   }, [cloudMenuOpen]);
-
-  /** ----------------- UI ----------------- */
 
   if (loading) {
     return (
@@ -508,7 +487,6 @@ function AuthedApp() {
 
   return (
     <div className="container">
-      {/* Header */}
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
@@ -562,7 +540,6 @@ function AuthedApp() {
         </div>
       </header>
 
-      {/* Tools */}
       <div style={{ marginBottom: "2rem" }}>
         <div
           style={{
@@ -604,7 +581,6 @@ function AuthedApp() {
               📤 Restore
             </label>
 
-            {/* Restore from Cloud (last 7 days) */}
             <div style={{ position: "relative", display: "inline-block" }}>
               <button
                 className="btn btn-ghost"
@@ -688,12 +664,10 @@ function AuthedApp() {
                 </div>
               )}
             </div>
-            {/* end cloud dropdown */}
           </div>
         </div>
       </div>
 
-      {/* Tabs content */}
       {tab === "list" ? (
         <>
           <div className="search-container">
@@ -733,11 +707,7 @@ function AuthedApp() {
               alignItems: "center",
             }}
           >
-            <button
-              className="btn btn-ghost"
-              onClick={handleUndoClick}
-              title="Undo last completion for this list"
-            >
+            <button className="btn btn-ghost" onClick={handleUndoClick} title="Undo last completion for this list">
               ⎌ Undo Last
             </button>
             <span className="pill pill-pif">PIF {stats.pifCount}</span>
@@ -763,4 +733,3 @@ function AuthedApp() {
     </div>
   );
 }
-```0
