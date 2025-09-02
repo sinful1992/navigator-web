@@ -28,7 +28,7 @@ function normalizeState(raw: any) {
   };
 }
 
-/** Simple error boundary to avoid a blank screen */
+/* Error boundary */
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -53,7 +53,7 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-/** Upload a JSON snapshot to Supabase Storage and log a row in `backups` */
+/* Upload a JSON snapshot to Supabase Storage and log a row in backups */
 async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" = "manual") {
   if (!supabase) return;
 
@@ -158,7 +158,6 @@ function AuthedApp() {
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
-
   const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
@@ -171,6 +170,37 @@ function AuthedApp() {
     return true;
   });
 
+  // Swipe-to-change-tabs state
+  const tabsOrder: Tab[] = ["list", "completed", "arrangements"];
+  const goToNextTab = React.useCallback(() => {
+    const i = tabsOrder.indexOf(tab);
+    setTab(tabsOrder[(i + 1) % tabsOrder.length]);
+  }, [tab]);
+  const goToPrevTab = React.useCallback(() => {
+    const i = tabsOrder.indexOf(tab);
+    setTab(tabsOrder[(i - 1 + tabsOrder.length) % tabsOrder.length]);
+  }, [tab]);
+  const swipe = React.useRef({ x: 0, y: 0, t: 0, active: false });
+  const handleTouchStart: React.TouchEventHandler<HTMLDivElement> = (e) => {
+    const t = e.changedTouches[0];
+    swipe.current = { x: t.clientX, y: t.clientY, t: Date.now(), active: true };
+  };
+  const handleTouchEnd: React.TouchEventHandler<HTMLDivElement> = (e) => {
+    if (!swipe.current.active) return;
+    swipe.current.active = false;
+    if (typeof window !== "undefined" && window.innerWidth >= 768) return; // mobile only
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipe.current.x;
+    const dy = t.clientY - swipe.current.y;
+    const dt = Date.now() - swipe.current.t;
+    const quick = dt <= 600;
+    const far = Math.abs(dx) >= 60;
+    const horizontal = Math.abs(dx) > Math.abs(dy) * 1.5;
+    if (!(quick && far && horizontal)) return;
+    if (dx < 0) goToNextTab();
+    else goToPrevTab();
+  };
+
   const addresses = Array.isArray(state.addresses) ? state.addresses : [];
   const completions = Array.isArray(state.completions) ? state.completions : [];
   const arrangements = Array.isArray(state.arrangements) ? state.arrangements : [];
@@ -181,7 +211,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // Bootstrap: push local -> cloud once, then subscribe cloud -> local
+  // Bootstrap: push local -> cloud once if local has data, subscribe cloud -> local
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: undefined | (() => void);
@@ -226,10 +256,8 @@ function AuthedApp() {
   // Debounced local -> cloud sync on changes
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
-
     const currentStr = JSON.stringify(safeState);
     if (currentStr === lastFromCloudRef.current) return;
-
     const t = setTimeout(() => {
       cloudSync
         .syncData(safeState)
@@ -239,7 +267,6 @@ function AuthedApp() {
         })
         .catch((err) => console.error("Sync failed:", err));
     }, 400);
-
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
 
@@ -303,10 +330,10 @@ function AuthedApp() {
       await cloudSync.syncData(data);
       lastFromCloudRef.current = JSON.stringify(data);
       setHydrated(true);
-      alert("✅ Restore completed successfully!");
+      alert("Restore completed successfully!");
     } catch (err: any) {
       console.error(err);
-      alert("❌ Restore failed: " + (err?.message || err));
+      alert("Restore failed: " + (err?.message || err));
     } finally {
       e.target.value = "";
     }
@@ -352,7 +379,7 @@ function AuthedApp() {
     [setState]
   );
 
-  /** ---------- Restore from Cloud (last 7 days) ---------- */
+  /* ---------- Restore from Cloud (last 7 days) ---------- */
   type CloudBackupRow = {
     object_path: string;
     size_bytes?: number;
@@ -401,6 +428,7 @@ function AuthedApp() {
 
       const data = ((q as any).data ?? []) as CloudBackupRow[];
 
+      // Secondary sort using filename time segment
       const list = data.slice().sort((a, b) => {
         const aParts = a.object_path.split("_");
         const bParts = b.object_path.split("_");
@@ -447,7 +475,7 @@ function AuthedApp() {
         await cloudSync.syncData(data);
         lastFromCloudRef.current = JSON.stringify(data);
         setHydrated(true);
-        alert("✅ Restored from cloud");
+        alert("Restored from cloud");
         setCloudMenuOpen(false);
       } catch (e: any) {
         setCloudErr(e?.message || String(e));
@@ -564,7 +592,7 @@ function AuthedApp() {
                 lineHeight: "1.4",
               }}
             >
-              📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>, <strong>lng</strong> columns.
+              Load an Excel file with address, optional lat, lng columns.
             </div>
 
             <div className="btn-row" style={{ position: "relative" }}>
@@ -630,30 +658,32 @@ function AuthedApp() {
                       </div>
                     )}
 
-                    {!cloudBusy && !cloudErr && cloudBackups.map((row) => {
-                      const parts = row.object_path.split("/");
-                      const fname = parts.length > 0 ? parts[parts.length - 1] : row.object_path;
-                      const day = row.day_key || "";
-                      const sizeText = row.size_bytes ? Math.round(row.size_bytes / 1024) + " KB" : "";
-                      return (
-                        <button
-                          key={row.object_path}
-                          className="btn btn-ghost"
-                          style={{ width: "100%", justifyContent: "space-between" }}
-                          onClick={() => restoreFromCloud(row.object_path)}
-                        >
-                          <span
-                            style={{ maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                            title={fname}
+                    {!cloudBusy &&
+                      !cloudErr &&
+                      cloudBackups.map((row) => {
+                        const parts = row.object_path.split("/");
+                        const fname = parts.length > 0 ? parts[parts.length - 1] : row.object_path;
+                        const day = row.day_key || "";
+                        const sizeText = row.size_bytes ? Math.round(row.size_bytes / 1024) + " KB" : "";
+                        return (
+                          <button
+                            key={row.object_path}
+                            className="btn btn-ghost"
+                            style={{ width: "100%", justifyContent: "space-between" }}
+                            onClick={() => restoreFromCloud(row.object_path)}
                           >
-                            {fname}
-                          </span>
-                          <span style={{ opacity: 0.7, fontSize: 12 }}>
-                            {(day ? day + " · " : "") + sizeText}
-                          </span>
-                        </button>
-                      );
-                    })}
+                            <span
+                              style={{ maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                              title={fname}
+                            >
+                              {fname}
+                            </span>
+                            <span style={{ opacity: 0.7, fontSize: 12 }}>
+                              {(day ? day + " · " : "") + sizeText}
+                            </span>
+                          </button>
+                        );
+                      })}
                   </div>
                 )}
               </div>
@@ -662,76 +692,79 @@ function AuthedApp() {
         </div>
       )}
 
-      {/* Main content */}
-      {tab === "list" ? (
-        <>
-          <div className="search-container">
-            <input
-              type="search"
-              value={search}
-              placeholder="Search addresses..."
-              onChange={(e) => setSearch(e.target.value)}
-              className="input search-input"
+      {/* Tabs content with swipe navigation on mobile */}
+      <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+        {tab === "list" ? (
+          <>
+            <div className="search-container">
+              <input
+                type="search"
+                value={search}
+                placeholder="Search addresses..."
+                onChange={(e) => setSearch(e.target.value)}
+                className="input search-input"
+              />
+            </div>
+
+            <DayPanel
+              sessions={daySessions}
+              completions={completions}
+              startDay={startDay}
+              endDay={endDayWithBackup}
+              onEditStart={handleEditStart}
             />
-          </div>
 
-          <DayPanel
-            sessions={daySessions}
-            completions={completions}
-            startDay={startDay}
-            endDay={endDayWithBackup}
-            onEditStart={handleEditStart}
-          />
+            <AddressList
+              state={safeState}
+              setActive={setActive}
+              cancelActive={cancelActive}
+              onComplete={complete}
+              onCreateArrangement={handleCreateArrangement}
+              filterText={search}
+              ensureDayStarted={ensureDayStarted}
+            />
 
-          <AddressList
-            state={safeState}
-            setActive={setActive}
-            cancelActive={cancelActive}
-            onComplete={complete}
-            onCreateArrangement={handleCreateArrangement}
-            filterText={search}
-            ensureDayStarted={ensureDayStarted}
-          />
-
-          <div
-            style={{
-              display: "flex",
-              gap: "0.5rem",
-              margin: "1.25rem 0 3rem",
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
-            <button
-              className="btn btn-ghost"
-              onClick={(e) => {
-                e.preventDefault();
-                undo(-1);
+            <div
+              style={{
+                display: "flex",
+                gap: "0.5rem",
+                margin: "1.25rem 0 3rem",
+                flexWrap: "wrap",
+                alignItems: "center",
               }}
-              title="Undo last completion for this list"
             >
-              ⎌ Undo Last
-            </button>
-            <span className="pill pill-pif">PIF {stats.pifCount}</span>
-            <span className="pill pill-done">Done {stats.doneCount}</span>
-            <span className="pill pill-da">DA {stats.daCount}</span>
-            {lastSyncTime && <span>• Last sync {lastSyncTime.toLocaleTimeString()}</span>}
-          </div>
-        </>
-      ) : tab === "completed" ? (
-        <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
-      ) : (
-        <Arrangements
-          state={safeState}
-          onAddArrangement={addArrangement}
-          onUpdateArrangement={updateArrangement}
-          onDeleteArrangement={deleteArrangement}
-          onAddAddress={async (addr: AddressRow) => addAddress(addr)}
-          onComplete={complete}
-          autoCreateForAddress={autoCreateArrangementFor}
-          onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
-        />
-      )}
+              <button
+                className="btn btn-ghost"
+                onClick={(e) => {
+                  e.preventDefault();
+                  undo(-1);
+                }}
+                title="Undo last completion for this list"
+              >
+                ⎌ Undo Last
+              </button>
+              <span className="pill pill-pif">PIF {stats.pifCount}</span>
+              <span className="pill pill-done">Done {stats.doneCount}</span>
+              <span className="pill pill-da">DA {stats.daCount}</span>
+              {lastSyncTime && <span>• Last sync {lastSyncTime.toLocaleTimeString()}</span>}
+            </div>
+          </>
+        ) : tab === "completed" ? (
+          <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
+        ) : (
+          <Arrangements
+            state={safeState}
+            onAddArrangement={addArrangement}
+            onUpdateArrangement={updateArrangement}
+            onDeleteArrangement={deleteArrangement}
+            onAddAddress={async (addr: AddressRow) => addAddress(addr)}
+            onComplete={complete}
+            autoCreateForAddress={autoCreateArrangementFor}
+            onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
+          />
+        )}
+      </div>
     </div>
   );
 }
+```0
