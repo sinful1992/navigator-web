@@ -1,14 +1,11 @@
 // src/Completed.tsx
 import * as React from "react";
-import type { AddressRow, Completion, Arrangement, DaySession, Outcome } from "./types";
+import type { AddressRow, Completion, DaySession, Outcome } from "./types";
 
 type AppStateSlice = {
   addresses: AddressRow[];
   completions: Completion[];
-  arrangements: Arrangement[];
   daySessions: DaySession[];
-  activeIndex: number | null;
-  currentListVersion: number;
 };
 
 type Props = {
@@ -16,16 +13,40 @@ type Props = {
   onChangeOutcome: (completionArrayIndex: number, outcome: Outcome, amount?: string) => void;
 };
 
-function toKey(d: Date, tz = "Europe/London") {
+const TZ = "Europe/London";
+
+/* ----------------------- Date helpers ----------------------- */
+function toKey(d: Date, tz = TZ) {
   const y = d.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
   const m = d.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
   const dd = d.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
   return y + "-" + m + "-" + dd;
 }
-
+function fromKey(key: string) {
+  const [y, m, d] = key.split("-").map((x) => parseInt(x, 10));
+  return new Date(y, m - 1, d);
+}
+function addDays(d: Date, days: number) {
+  const nd = new Date(d.getTime());
+  nd.setDate(nd.getDate() + days);
+  return nd;
+}
+function startOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+function sameDayKey(a: string, b: string) {
+  return a === b;
+}
+function keyBetween(key: string, a: string, b: string) {
+  return key >= a && key <= b;
+}
+function hoursFmt(totalSeconds: number) {
+  const h = totalSeconds / 3600;
+  return h.toFixed(2);
+}
 function safeDurationSeconds(s: DaySession): number {
-  const asAny: any = s as any;
-  if (typeof asAny.durationSeconds === "number") return Math.max(0, asAny.durationSeconds);
+  const anyS: any = s as any;
+  if (typeof anyS.durationSeconds === "number") return Math.max(0, anyS.durationSeconds);
   if (s.start && s.end) {
     try {
       const st = new Date(s.start).getTime();
@@ -35,12 +56,193 @@ function safeDurationSeconds(s: DaySession): number {
   }
   return 0;
 }
-
-function hoursFmt(totalSeconds: number) {
-  const h = totalSeconds / 3600;
-  return h.toFixed(2);
+function buildDays(startKey: string, endKey: string): string[] {
+  if (!startKey || !endKey) return [];
+  const start = fromKey(startKey);
+  const end = fromKey(endKey);
+  if (!(start <= end)) return [startKey];
+  const out: string[] = [];
+  let cur = new Date(start.getTime());
+  while (cur <= end) {
+    out.push(toKey(cur));
+    cur = addDays(cur, 1);
+  }
+  return out;
 }
 
+/* ------------------- Calendar (single/range) ------------------- */
+type CalendarRangeProps = {
+  startKey: string;
+  endKey: string;
+  onChange: (startKey: string, endKey: string) => void;
+};
+
+function CalendarRange({ startKey, endKey, onChange }: CalendarRangeProps) {
+  const initial = fromKey(endKey || startKey || toKey(new Date()));
+  const [viewDate, setViewDate] = React.useState<Date>(startOfMonth(initial));
+  const [pickingEnd, setPickingEnd] = React.useState<boolean>(false);
+
+  function buildGrid(dateInMonth: Date) {
+    const first = startOfMonth(dateInMonth);
+    const dow = first.getDay(); // 0=Sun..6=Sat
+    const mondayOffset = (dow + 6) % 7; // Monday as start
+    const gridStart = addDays(first, -mondayOffset);
+    const cells: { key: string; inMonth: boolean; date: Date }[] = [];
+    for (let i = 0; i < 42; i++) {
+      const d = addDays(gridStart, i);
+      cells.push({ key: toKey(d), inMonth: d.getMonth() === dateInMonth.getMonth(), date: d });
+    }
+    return cells;
+  }
+
+  const cells = buildGrid(viewDate);
+  const monthLabel = viewDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const minKey = startKey <= endKey ? startKey : endKey;
+  const maxKey = startKey <= endKey ? endKey : startKey;
+  const todayKey = toKey(new Date());
+
+  function gotoPrevMonth() {
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
+  }
+  function gotoNextMonth() {
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+  }
+  function handlePick(dayKey: string) {
+    if (!pickingEnd) {
+      onChange(dayKey, dayKey);
+      setPickingEnd(true);
+      return;
+    }
+    let s = startKey || dayKey;
+    let e = dayKey;
+    if (e < s) {
+      const tmp = s;
+      s = e;
+      e = tmp;
+    }
+    onChange(s, e);
+    setPickingEnd(false);
+  }
+
+  return (
+    <div
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border-light)",
+        borderRadius: 12,
+        padding: "0.75rem",
+        boxShadow: "var(--shadow-sm)",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "0.5rem",
+        }}
+      >
+        <button className="btn btn-ghost" onClick={gotoPrevMonth} aria-label="Previous month">
+          ‹
+        </button>
+        <div style={{ fontWeight: 600 }}>{monthLabel}</div>
+        <button className="btn btn-ghost" onClick={gotoNextMonth} aria-label="Next month">
+          ›
+        </button>
+      </div>
+
+      {/* Weekdays */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7, 1fr)",
+          gap: 4,
+          fontSize: 12,
+          color: "var(--text-secondary)",
+          textAlign: "center",
+          marginBottom: 4,
+        }}
+      >
+        <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+      </div>
+
+      {/* Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        {cells.map((c) => {
+          const selected = keyBetween(c.key, minKey, maxKey);
+          const isStart = sameDayKey(c.key, startKey);
+          const isEnd = sameDayKey(c.key, endKey);
+          const isToday = sameDayKey(c.key, todayKey);
+          const baseStyle: React.CSSProperties = {
+            padding: "0.5rem 0",
+            borderRadius: 8,
+            border: "1px solid var(--border-light)",
+            background: selected ? "var(--surface-strong)" : "var(--surface)",
+            textAlign: "center",
+            cursor: "pointer",
+            opacity: c.inMonth ? 1 : 0.45,
+            position: "relative",
+            userSelect: "none",
+          };
+          const dotStyle: React.CSSProperties = {
+            position: "absolute",
+            top: 6,
+            right: 6,
+            width: 6,
+            height: 6,
+            borderRadius: 6,
+            background: isToday ? "currentColor" : "transparent",
+            opacity: isToday ? 0.7 : 0,
+          };
+          const ringStyle: React.CSSProperties = {
+            position: "absolute",
+            inset: 0,
+            borderRadius: 8,
+            border: isStart || isEnd ? "2px solid var(--primary, #4f46e5)" : "2px solid transparent",
+            pointerEvents: "none",
+          };
+          return (
+            <div key={c.key} style={baseStyle} title={c.key} onClick={() => handlePick(c.key)}>
+              <div style={{ fontWeight: isStart || isEnd ? 700 : 500 }}>{String(c.date.getDate())}</div>
+              <div style={dotStyle} />
+              <div style={ringStyle} />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Quick ranges */}
+      <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+        <button
+          className="btn btn-ghost"
+          onClick={() => {
+            const k = toKey(new Date());
+            onChange(k, k);
+            setViewDate(startOfMonth(new Date()));
+            setPickingEnd(false);
+          }}
+        >
+          Today
+        </button>
+        <button
+          className="btn btn-ghost"
+          onClick={() => {
+            const end = new Date();
+            const start = addDays(new Date(), -6);
+            onChange(toKey(start), toKey(end));
+            setViewDate(startOfMonth(end));
+            setPickingEnd(false);
+          }}
+        >
+          Last 7 days
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------- Completed ------------------------- */
 function getCompletionDateKey(c: Completion, fallbackSessions: DaySession[]): string | null {
   const anyC: any = c as any;
   const candidates = [anyC.date, anyC.day, anyC.at, anyC.timestamp, anyC.completedAt, anyC.created_at];
@@ -54,30 +256,19 @@ function getCompletionDateKey(c: Completion, fallbackSessions: DaySession[]): st
   return null;
 }
 
-function buildDays(startKey: string, endKey: string): string[] {
-  if (!startKey || !endKey) return [];
-  const start = new Date(startKey + "T00:00:00");
-  const end = new Date(endKey + "T00:00:00");
-  if (!(start <= end)) return [startKey];
-  const out: string[] = [];
-  const cur = new Date(start.getTime());
-  while (cur <= end) {
-    out.push(cur.toISOString().slice(0, 10));
-    cur.setDate(cur.getDate() + 1);
-  }
-  return out;
-}
-
 export function Completed({ state, onChangeOutcome }: Props) {
   const { addresses, completions, daySessions } = state;
 
-  // Initial range: last active day if exists, else today
+  // Initial range: last session day or today
   const lastSessionKey =
     daySessions.length > 0 ? daySessions[daySessions.length - 1].date : toKey(new Date());
   const [startKey, setStartKey] = React.useState<string>(lastSessionKey);
   const [endKey, setEndKey] = React.useState<string>(lastSessionKey);
 
-  // Map: dayKey -> seconds worked
+  // Show/hide the per-day detail cards
+  const [detailsOpen, setDetailsOpen] = React.useState<boolean>(false);
+
+  // Aggregate session seconds per day
   const secondsByDay = React.useMemo(() => {
     const m = new Map<string, number>();
     for (const s of daySessions) {
@@ -89,7 +280,7 @@ export function Completed({ state, onChangeOutcome }: Props) {
     return m;
   }, [daySessions]);
 
-  // Map: dayKey -> list of completion indices (indices into state.completions array)
+  // Map day -> indices of completions for that day
   const completionIdxByDay = React.useMemo(() => {
     const m = new Map<string, number[]>();
     completions.forEach((c, idx) => {
@@ -102,13 +293,12 @@ export function Completed({ state, onChangeOutcome }: Props) {
     return m;
   }, [completions, daySessions]);
 
-  // Aggregate for selected range
   const dayKeys = buildDays(startKey, endKey);
 
+  // Range totals
   let totalSeconds = 0;
   let totalCompleted = 0;
   let totalPIF = 0;
-
   dayKeys.forEach((k) => {
     totalSeconds += secondsByDay.get(k) || 0;
     const idxs = completionIdxByDay.get(k) || [];
@@ -118,99 +308,27 @@ export function Completed({ state, onChangeOutcome }: Props) {
       .filter((c) => (c as any).outcome === "PIF").length;
   });
 
-  // For per-day expand/collapse
+  // Per-day expand/collapse (when details are open)
   const [openDays, setOpenDays] = React.useState<Record<string, boolean>>({});
-
   function toggleDay(key: string) {
     setOpenDays((o) => ({ ...o, [key]: !o[key] }));
   }
 
-  function outcomeSelect(
-    current: Outcome | string | undefined,
-    onChange: (v: Outcome) => void
-  ) {
-    const cur = (current as string) || "";
-    return (
-      <select
-        value={cur}
-        onChange={(e) => onChange(e.target.value as Outcome)}
-        className="input"
-        style={{ padding: "0.25rem 0.5rem", height: 32 }}
-      >
-        <option value="">—</option>
-        <option value="Done">Done</option>
-        <option value="PIF">PIF</option>
-        <option value="DA">DA</option>
-      </select>
-    );
-  }
-
   return (
     <div>
-      {/* Range picker */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr auto",
-          gap: "0.75rem",
-          marginBottom: "1rem",
-          alignItems: "end",
-        }}
-      >
-        <div>
-          <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>Start</label>
-          <input
-            type="date"
-            className="input"
-            value={startKey}
-            onChange={(e) => {
-              const v = e.target.value;
-              setStartKey(v);
-              if (v > endKey) setEndKey(v);
-            }}
-          />
-        </div>
-        <div>
-          <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>End</label>
-          <input
-            type="date"
-            className="input"
-            value={endKey}
-            onChange={(e) => {
-              const v = e.target.value;
-              setEndKey(v);
-              if (v < startKey) setStartKey(v);
-            }}
-          />
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            className="btn btn-ghost"
-            onClick={() => {
-              const t = new Date();
-              const k = toKey(t);
-              setStartKey(k);
-              setEndKey(k);
-            }}
-          >
-            Today
-          </button>
-          <button
-            className="btn btn-ghost"
-            onClick={() => {
-              const end = new Date();
-              const start = new Date();
-              start.setDate(start.getDate() - 6);
-              setStartKey(toKey(start));
-              setEndKey(toKey(end));
-            }}
-          >
-            Last 7 days
-          </button>
-        </div>
+      {/* Single calendar (pick day or range) */}
+      <div style={{ marginBottom: "0.9rem" }}>
+        <CalendarRange
+          startKey={startKey}
+          endKey={endKey}
+          onChange={(s, e) => {
+            setStartKey(s);
+            setEndKey(e);
+          }}
+        />
       </div>
 
-      {/* Range summary */}
+      {/* Range summary (with details toggle) */}
       <div
         style={{
           background: "var(--surface)",
@@ -221,9 +339,24 @@ export function Completed({ state, onChangeOutcome }: Props) {
           marginBottom: "1rem",
         }}
       >
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>
-          {"Summary " + (startKey === endKey ? "(" + startKey + ")" : "(" + startKey + " → " + endKey + ")")}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "0.75rem",
+            marginBottom: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ fontWeight: 600 }}>
+            {"Summary " + (startKey === endKey ? "(" + startKey + ")" : "(" + startKey + " → " + endKey + ")")}
+          </div>
+          <button className="btn btn-ghost" onClick={() => setDetailsOpen((v) => !v)}>
+            {detailsOpen ? "Hide details" : "View details"}
+          </button>
         </div>
+
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
           <span className="pill">Hours {hoursFmt(totalSeconds)}</span>
           <span className="pill pill-done">Completed {totalCompleted}</span>
@@ -231,97 +364,112 @@ export function Completed({ state, onChangeOutcome }: Props) {
         </div>
       </div>
 
-      {/* Per-day cards */}
-      <div style={{ display: "grid", gap: "0.75rem" }}>
-        {dayKeys.map((k) => {
-          const seconds = secondsByDay.get(k) || 0;
-          const idxs = completionIdxByDay.get(k) || [];
-          const pif = idxs
-            .map((i) => completions[i])
-            .filter((c) => (c as any).outcome === "PIF").length;
-          const total = idxs.length;
+      {/* Per-day cards (shown only when detailsOpen) */}
+      {detailsOpen && (
+        <div style={{ display: "grid", gap: "0.75rem" }}>
+          {dayKeys.map((k) => {
+            const seconds = secondsByDay.get(k) || 0;
+            const idxs = completionIdxByDay.get(k) || [];
+            const pif = idxs
+              .map((i) => completions[i])
+              .filter((c) => (c as any).outcome === "PIF").length;
+            const total = idxs.length;
 
-          return (
-            <div
-              key={k}
-              style={{
-                background: "var(--surface)",
-                border: "1px solid var(--border-light)",
-                borderRadius: 12,
-                padding: "0.75rem",
-                boxShadow: "var(--shadow-sm)",
-              }}
-            >
+            return (
               <div
+                key={k}
                 style={{
-                  display: "flex",
-                  gap: "0.75rem",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  flexWrap: "wrap",
+                  background: "var(--surface)",
+                  border: "1px solid var(--border-light)",
+                  borderRadius: 12,
+                  padding: "0.75rem",
+                  boxShadow: "var(--shadow-sm)",
                 }}
               >
-                <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-                  <strong>{k}</strong>
-                  <span className="pill">Hours {hoursFmt(seconds)}</span>
-                  <span className="pill pill-done">Completed {total}</span>
-                  <span className="pill pill-pif">PIF {pif}</span>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.75rem",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+                    <strong>{k}</strong>
+                    <span className="pill">Hours {hoursFmt(seconds)}</span>
+                    <span className="pill pill-done">Completed {total}</span>
+                    <span className="pill pill-pif">PIF {pif}</span>
+                  </div>
+                  <button className="btn btn-ghost" onClick={() => toggleDay(k)}>
+                    {openDays[k] ? "Hide" : "View"}
+                  </button>
                 </div>
-                <button className="btn btn-ghost" onClick={() => toggleDay(k)}>
-                  {openDays[k] ? "Hide" : "View"}
-                </button>
-              </div>
 
-              {openDays[k] && (
-                <div style={{ marginTop: "0.75rem" }}>
-                  {idxs.length === 0 ? (
-                    <div style={{ fontSize: 14, color: "var(--text-secondary)" }}>No entries for this day.</div>
-                  ) : (
-                    <div style={{ display: "grid", gap: "0.5rem" }}>
-                      {idxs.map((compIndex) => {
-                        const comp = completions[compIndex] as any;
-                        const addr = addresses[comp.index] as AddressRow | undefined;
-                        const line =
-                          (addr && (addr as any).address) ||
-                          (addr && (addr as any).name) ||
-                          (typeof comp.index === "number" ? "Address #" + comp.index : "Address");
-                        const currentOutcome: Outcome | string | undefined = comp.outcome;
+                {openDays[k] && (
+                  <div style={{ marginTop: "0.75rem" }}>
+                    {idxs.length === 0 ? (
+                      <div style={{ fontSize: 14, color: "var(--text-secondary)" }}>No entries for this day.</div>
+                    ) : (
+                      <div style={{ display: "grid", gap: "0.5rem" }}>
+                        {idxs.map((compIndex) => {
+                          const comp = completions[compIndex] as any;
+                          const addr = addresses[comp.index] as AddressRow | undefined;
+                          const line =
+                            (addr && (addr as any).address) ||
+                            (addr && (addr as any).name) ||
+                            (typeof comp.index === "number" ? "Address #" + comp.index : "Address");
+                          const currentOutcome: Outcome | string | undefined = comp.outcome;
 
-                        return (
-                          <div
-                            key={compIndex}
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "1fr auto",
-                              gap: "0.5rem",
-                              alignItems: "center",
-                              border: "1px dashed var(--border-light)",
-                              borderRadius: 10,
-                              padding: "0.5rem 0.75rem",
-                            }}
-                          >
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>{line}</div>
-                              <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                                {"Index " + String(comp.index) + (comp.amount ? " · £" + String(comp.amount) : "")}
+                          return (
+                            <div
+                              key={compIndex}
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr auto",
+                                gap: "0.5rem",
+                                alignItems: "center",
+                                border: "1px dashed var(--border-light)",
+                                borderRadius: 10,
+                                padding: "0.5rem 0.75rem",
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  {line}
+                                </div>
+                                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                                  {"Index " + String(comp.index) + (comp.amount ? " · £" + String(comp.amount) : "")}
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                <select
+                                  value={(currentOutcome as string) || ""}
+                                  onChange={(e) => onChangeOutcome(compIndex, e.target.value as Outcome)}
+                                  className="input"
+                                  style={{ padding: "0.25rem 0.5rem", height: 32 }}
+                                >
+                                  <option value="">—</option>
+                                  <option value="Done">Done</option>
+                                  <option value="PIF">PIF</option>
+                                  <option value="DA">DA</option>
+                                </select>
                               </div>
                             </div>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              {outcomeSelect(currentOutcome, (v) => onChangeOutcome(compIndex, v))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
 export default Completed;
+```0
