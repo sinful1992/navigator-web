@@ -6,7 +6,7 @@ import { useAppState } from "./useAppState";
 import { useCloudSync } from "./useCloudSync";
 import { Auth } from "./Auth";
 import { AddressList } from "./AddressList";
-import { Completed } from "./Completed";
+import Completed from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { readJsonFile } from "./backup";
