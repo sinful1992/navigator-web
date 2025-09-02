@@ -9,7 +9,7 @@ import { AddressList } from "./AddressList";
 import { Completed } from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
-import { downloadJson, readJsonFile } from "./backup";
+import { readJsonFile } from "./backup";
 import type { AddressRow, Outcome } from "./types";
 import { supabase } from "./lib/supabaseClient";
 
