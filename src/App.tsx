@@ -28,6 +28,7 @@ function normalizeState(raw: any) {
   };
 }
 
+/** Simple error boundary to avoid a blank screen */
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -52,7 +53,7 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-/** Upload a JSON snapshot to Supabase Storage; log a row in `backups` (quietly no-ops if not configured) */
+/** Upload a JSON snapshot to Supabase Storage and log a row in `backups` */
 async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" = "manual") {
   if (!supabase) return;
 
@@ -66,9 +67,7 @@ async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" =
   const mm = now.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
   const dd = now.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
   const dayKey = yyyy + "-" + mm + "-" + dd;
-  const time = now
-    .toLocaleTimeString("en-GB", { timeZone: tz, hour12: false })
-    .replace(/:/g, "");
+  const time = now.toLocaleTimeString("en-GB", { timeZone: tz, hour12: false }).replace(/:/g, "");
 
   const bucket =
     (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
@@ -159,11 +158,18 @@ function AuthedApp() {
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
+
   const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
+
+  // Collapsible Tools panel: closed on mobile, open on desktop
+  const [toolsOpen, setToolsOpen] = React.useState<boolean>(() => {
+    if (typeof window !== "undefined") return window.innerWidth >= 768;
+    return true;
+  });
 
   const addresses = Array.isArray(state.addresses) ? state.addresses : [];
   const completions = Array.isArray(state.completions) ? state.completions : [];
@@ -175,6 +181,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
+  // Bootstrap: push local -> cloud once, then subscribe cloud -> local
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: undefined | (() => void);
@@ -216,6 +223,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
+  // Debounced local -> cloud sync on changes
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
@@ -239,12 +247,14 @@ function AuthedApp() {
     setAutoCreateArrangementFor(addressIndex);
   }, []);
 
+  // Ensure a session exists when Navigation is used
   const ensureDayStarted = React.useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
     const hasToday = daySessions.some((d) => d.date === today);
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
+  // DayPanel -> edit today's start time
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
       const parsed = typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
@@ -273,6 +283,7 @@ function AuthedApp() {
     [setState]
   );
 
+  // Finish Day with cloud snapshot
   const endDayWithBackup = React.useCallback(() => {
     const snap = backupState();
     uploadBackupToStorage(snap, "finish").catch((e: any) => {
@@ -281,27 +292,7 @@ function AuthedApp() {
     endDay();
   }, [backupState, endDay]);
 
-  const handleUndoClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
-    e.preventDefault();
-    undo(-1);
-  };
-
-  const onBackup = React.useCallback(async () => {
-    const snap = backupState();
-    const stamp = new Date();
-    const y = String(stamp.getFullYear());
-    const m = String(stamp.getMonth() + 1).padStart(2, "0");
-    const d = String(stamp.getDate()).padStart(2, "0");
-    const hh = String(stamp.getHours()).padStart(2, "0");
-    const mm = String(stamp.getMinutes()).padStart(2, "0");
-    downloadJson("navigator-backup-" + y + m + d + "-" + hh + mm + ".json", snap);
-    try {
-      await uploadBackupToStorage(snap, "manual");
-    } catch (e: any) {
-      console.warn("Supabase storage backup failed:", e?.message || e);
-    }
-  }, [backupState]);
-
+  // Restore from local file
   const onRestore: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -321,6 +312,7 @@ function AuthedApp() {
     }
   };
 
+  // Stats for header pills
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
     const completedIdx = new Set(
@@ -341,6 +333,7 @@ function AuthedApp() {
     return { total, pending, completed, pifCount, doneCount, daCount };
   }, [addresses, completions, state.currentListVersion]);
 
+  // Allow changing a completion’s outcome (by completion array index)
   const handleChangeOutcome = React.useCallback(
     (targetCompletionIndex: number, outcome: Outcome, amount?: string) => {
       setState((s) => {
@@ -359,6 +352,7 @@ function AuthedApp() {
     [setState]
   );
 
+  /** ---------- Restore from Cloud (last 7 days) ---------- */
   type CloudBackupRow = {
     object_path: string;
     size_bytes?: number;
@@ -387,9 +381,9 @@ function AuthedApp() {
       const userId = authResp && authResp.data && authResp.data.user ? authResp.data.user.id : undefined;
       if (!userId) throw new Error("Not authenticated");
 
-      const end = new Date();
+      const end = new Date(); // today
       const start = new Date();
-      start.setDate(start.getDate() - 6);
+      start.setDate(start.getDate() - 6); // last 7 days
 
       const fromKey = formatKey(start);
       const toKey = formatKey(end);
@@ -464,6 +458,7 @@ function AuthedApp() {
     [cloudSync, restoreState]
   );
 
+  // Close dropdown when clicking outside the tools row
   React.useEffect(() => {
     if (!cloudMenuOpen) return;
     function onDocClick(e: MouseEvent) {
@@ -487,6 +482,7 @@ function AuthedApp() {
 
   return (
     <div className="container">
+      {/* Header */}
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">📍 Address Navigator</h1>
@@ -515,9 +511,7 @@ function AuthedApp() {
 
         <div className="right">
           <div className="user-chip" role="group" aria-label="Account">
-            <span className="avatar" aria-hidden>
-              👤
-            </span>
+            <span className="avatar" aria-hidden>👤</span>
             <span className="email" title={cloudSync.user?.email ?? ""}>
               {cloudSync.user?.email ?? "Signed in"}
             </span>
@@ -540,102 +534,107 @@ function AuthedApp() {
         </div>
       </header>
 
-      <div style={{ marginBottom: "2rem" }}>
-        <div
-          style={{
-            background: "var(--surface)",
-            padding: "1.5rem",
-            borderRadius: "var(--radius-lg)",
-            border: "1px solid var(--border-light)",
-            boxShadow: "var(--shadow-sm)",
-            marginBottom: "1rem",
-          }}
+      {/* Tools toggle */}
+      <div style={{ marginBottom: "0.75rem", display: "flex", justifyContent: "center" }}>
+        <button
+          className="btn btn-ghost"
+          onClick={() => setToolsOpen((o) => !o)}
+          title={toolsOpen ? "Hide tools" : "Show tools"}
         >
+          {toolsOpen ? "Hide tools ▲" : "Show tools ▼"}
+        </button>
+      </div>
+
+      {toolsOpen && (
+        <div style={{ marginBottom: "1rem" }}>
           <div
             style={{
-              fontSize: "0.875rem",
-              color: "var(--text-secondary)",
-              marginBottom: "1rem",
-              lineHeight: "1.5",
+              background: "var(--surface)",
+              padding: "1.0rem",
+              borderRadius: "var(--radius-lg)",
+              border: "1px solid var(--border-light)",
+              boxShadow: "var(--shadow-sm)",
             }}
           >
-            📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>,{" "}
-            <strong>lng</strong> columns to get started.
-          </div>
+            <div
+              style={{
+                fontSize: "0.875rem",
+                color: "var(--text-secondary)",
+                marginBottom: "0.75rem",
+                lineHeight: "1.4",
+              }}
+            >
+              📁 Load an Excel file with <strong>address</strong>, optional <strong>lat</strong>, <strong>lng</strong> columns.
+            </div>
 
-          <div className="btn-row" style={{ position: "relative" }}>
-            <ImportExcel onImported={setAddresses} />
-            <div className="btn-spacer" />
-            <button className="btn btn-ghost" onClick={onBackup}>
-              💾 Backup
-            </button>
+            <div className="btn-row" style={{ position: "relative" }}>
+              <ImportExcel onImported={setAddresses} />
 
-            <input
-              type="file"
-              accept="application/json"
-              onChange={onRestore}
-              className="file-input"
-              id="restore-input"
-            />
-            <label htmlFor="restore-input" className="file-input-label">
-              📤 Restore
-            </label>
+              {/* Local file restore */}
+              <input
+                type="file"
+                accept="application/json"
+                onChange={onRestore}
+                className="file-input"
+                id="restore-input"
+              />
+              <label htmlFor="restore-input" className="file-input-label">📤 Restore</label>
 
-            <div style={{ position: "relative", display: "inline-block" }}>
-              <button
-                className="btn btn-ghost"
-                onClick={async () => {
-                  setCloudMenuOpen(!cloudMenuOpen);
-                  if (!cloudMenuOpen) await loadRecentCloudBackups();
-                }}
-                title="List recent cloud backups"
-              >
-                ☁️ Restore from Cloud
-              </button>
-
-              {cloudMenuOpen && (
-                <div
-                  style={{
-                    position: "absolute",
-                    zIndex: 100,
-                    top: "110%",
-                    left: 0,
-                    minWidth: 280,
-                    background: "var(--surface)",
-                    border: "1px solid var(--border-light)",
-                    borderRadius: 12,
-                    padding: "0.5rem",
-                    boxShadow: "var(--shadow-lg)",
+              {/* Restore from Cloud (last 7 days) */}
+              <div style={{ position: "relative", display: "inline-block" }}>
+                <button
+                  className="btn btn-ghost"
+                  onClick={async () => {
+                    setCloudMenuOpen((o) => !o);
+                    if (!cloudMenuOpen) await loadRecentCloudBackups();
                   }}
+                  title="List recent cloud backups"
                 >
-                  <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>
-                    Recent backups (7 days)
-                  </div>
+                  ☁️ Restore from Cloud
+                </button>
 
-                  {cloudBusy && (
-                    <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
-                      Loading…
+                {cloudMenuOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      zIndex: 100,
+                      top: "110%",
+                      left: 0,
+                      minWidth: 280,
+                      background: "var(--surface)",
+                      border: "1px solid var(--border-light)",
+                      borderRadius: 12,
+                      padding: "0.5rem",
+                      boxShadow: "var(--shadow-lg)",
+                    }}
+                  >
+                    <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>
+                      Recent backups (7 days)
                     </div>
-                  )}
 
-                  {!cloudBusy && cloudErr && (
-                    <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--error)" }}>
-                      {cloudErr}
-                    </div>
-                  )}
+                    {cloudBusy && (
+                      <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
+                        Loading…
+                      </div>
+                    )}
 
-                  {!cloudBusy && !cloudErr && cloudBackups.length === 0 && (
-                    <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
-                      No backups found.
-                    </div>
-                  )}
+                    {!cloudBusy && cloudErr && (
+                      <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--error)" }}>
+                        {cloudErr}
+                      </div>
+                    )}
 
-                  {!cloudBusy &&
-                    !cloudErr &&
-                    cloudBackups.map((row) => {
+                    {!cloudBusy && !cloudErr && cloudBackups.length === 0 && (
+                      <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
+                        No backups found.
+                      </div>
+                    )}
+
+                    {!cloudBusy && !cloudErr && cloudBackups.map((row) => {
                       const parts = row.object_path.split("/");
                       const fname = parts.length > 0 ? parts[parts.length - 1] : row.object_path;
                       const day = row.day_key || "";
+                      const sizeText = row.size_bytes ? Math.round(row.size_bytes / 1024) + " KB" : "";
                       return (
                         <button
                           key={row.object_path}
@@ -644,30 +643,26 @@ function AuthedApp() {
                           onClick={() => restoreFromCloud(row.object_path)}
                         >
                           <span
-                            style={{
-                              maxWidth: 170,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
+                            style={{ maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                             title={fname}
                           >
                             {fname}
                           </span>
                           <span style={{ opacity: 0.7, fontSize: 12 }}>
-                            {day ? day + " · " : ""}
-                            {row.size_bytes ? Math.round(row.size_bytes / 1024) + " KB" : ""}
+                            {(day ? day + " · " : "") + sizeText}
                           </span>
                         </button>
                       );
                     })}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
+      {/* Main content */}
       {tab === "list" ? (
         <>
           <div className="search-container">
@@ -707,7 +702,14 @@ function AuthedApp() {
               alignItems: "center",
             }}
           >
-            <button className="btn btn-ghost" onClick={handleUndoClick} title="Undo last completion for this list">
+            <button
+              className="btn btn-ghost"
+              onClick={(e) => {
+                e.preventDefault();
+                undo(-1);
+              }}
+              title="Undo last completion for this list"
+            >
               ⎌ Undo Last
             </button>
             <span className="pill pill-pif">PIF {stats.pifCount}</span>
