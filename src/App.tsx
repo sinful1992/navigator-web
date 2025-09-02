@@ -28,7 +28,6 @@ function normalizeState(raw: any) {
   };
 }
 
-/* Error boundary */
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -53,7 +52,7 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-/* Upload a JSON snapshot to Supabase Storage and log a row in backups */
+/** Upload JSON snapshot to Supabase Storage and log in backups table */
 async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" = "manual") {
   if (!supabase) return;
 
@@ -103,7 +102,7 @@ export default function App() {
       <div className="container">
         <div className="loading">
           <div className="spinner" />
-          Restoring session…
+          Restoring session...
         </div>
       </div>
     );
@@ -170,7 +169,7 @@ function AuthedApp() {
     return true;
   });
 
-  // Swipe-to-change-tabs state
+  // Swipe-to-change-tabs (mobile only)
   const tabsOrder: Tab[] = ["list", "completed", "arrangements"];
   const goToNextTab = React.useCallback(() => {
     const i = tabsOrder.indexOf(tab);
@@ -188,7 +187,7 @@ function AuthedApp() {
   const handleTouchEnd: React.TouchEventHandler<HTMLDivElement> = (e) => {
     if (!swipe.current.active) return;
     swipe.current.active = false;
-    if (typeof window !== "undefined" && window.innerWidth >= 768) return; // mobile only
+    if (typeof window !== "undefined" && window.innerWidth >= 768) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - swipe.current.x;
     const dy = t.clientY - swipe.current.y;
@@ -211,7 +210,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // Bootstrap: push local -> cloud once if local has data, subscribe cloud -> local
+  // Bootstrap: push local -> cloud once (if local has data), then subscribe cloud -> local
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     let cleanup: undefined | (() => void);
@@ -360,7 +359,7 @@ function AuthedApp() {
     return { total, pending, completed, pifCount, doneCount, daCount };
   }, [addresses, completions, state.currentListVersion]);
 
-  // Allow changing a completion’s outcome (by completion array index)
+  // Allow changing a completion outcome (by completion array index)
   const handleChangeOutcome = React.useCallback(
     (targetCompletionIndex: number, outcome: Outcome, amount?: string) => {
       setState((s) => {
@@ -379,7 +378,7 @@ function AuthedApp() {
     [setState]
   );
 
-  /* ---------- Restore from Cloud (last 7 days) ---------- */
+  // -------- Restore from Cloud (last 7 days) --------
   type CloudBackupRow = {
     object_path: string;
     size_bytes?: number;
@@ -408,9 +407,9 @@ function AuthedApp() {
       const userId = authResp && authResp.data && authResp.data.user ? authResp.data.user.id : undefined;
       if (!userId) throw new Error("Not authenticated");
 
-      const end = new Date(); // today
+      const end = new Date();
       const start = new Date();
-      start.setDate(start.getDate() - 6); // last 7 days
+      start.setDate(start.getDate() - 6);
 
       const fromKey = formatKey(start);
       const toKey = formatKey(end);
@@ -428,7 +427,6 @@ function AuthedApp() {
 
       const data = ((q as any).data ?? []) as CloudBackupRow[];
 
-      // Secondary sort using filename time segment
       const list = data.slice().sort((a, b) => {
         const aParts = a.object_path.split("_");
         const bParts = b.object_path.split("_");
@@ -486,7 +484,6 @@ function AuthedApp() {
     [cloudSync, restoreState]
   );
 
-  // Close dropdown when clicking outside the tools row
   React.useEffect(() => {
     if (!cloudMenuOpen) return;
     function onDocClick(e: MouseEvent) {
@@ -502,7 +499,7 @@ function AuthedApp() {
       <div className="container">
         <div className="loading">
           <div className="spinner" />
-          Preparing your workspace…
+          Preparing your workspace...
         </div>
       </div>
     );
@@ -513,7 +510,7 @@ function AuthedApp() {
       {/* Header */}
       <header className="app-header">
         <div className="left">
-          <h1 className="app-title">📍 Address Navigator</h1>
+          <h1 className="app-title">Address Navigator</h1>
           <div
             style={{
               display: "flex",
@@ -525,13 +522,11 @@ function AuthedApp() {
           >
             {cloudSync.isOnline ? (
               <>
-                <span style={{ color: "var(--success)" }}>🟢</span>
-                Online
+                <span style={{ color: "var(--success)" }}>ONLINE</span>
               </>
             ) : (
               <>
-                <span style={{ color: "var(--warning)" }}>🟡</span>
-                Offline
+                <span style={{ color: "var(--warning)" }}>OFFLINE</span>
               </>
             )}
           </div>
@@ -539,7 +534,7 @@ function AuthedApp() {
 
         <div className="right">
           <div className="user-chip" role="group" aria-label="Account">
-            <span className="avatar" aria-hidden>👤</span>
+            <span className="avatar" aria-hidden>USER</span>
             <span className="email" title={cloudSync.user?.email ?? ""}>
               {cloudSync.user?.email ?? "Signed in"}
             </span>
@@ -550,13 +545,13 @@ function AuthedApp() {
 
           <div className="tabs">
             <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
-              📋 List ({stats.pending})
+              List ({stats.pending})
             </button>
             <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>
-              ✅ Completed ({stats.completed})
+              Completed ({stats.completed})
             </button>
             <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
-              📅 Arrangements ({arrangements.length})
+              Arrangements ({arrangements.length})
             </button>
           </div>
         </div>
@@ -569,7 +564,7 @@ function AuthedApp() {
           onClick={() => setToolsOpen((o) => !o)}
           title={toolsOpen ? "Hide tools" : "Show tools"}
         >
-          {toolsOpen ? "Hide tools ▲" : "Show tools ▼"}
+          {toolsOpen ? "Hide tools ^" : "Show tools v"}
         </button>
       </div>
 
@@ -592,7 +587,7 @@ function AuthedApp() {
                 lineHeight: "1.4",
               }}
             >
-              Load an Excel file with address, optional lat, lng columns.
+              Load an Excel file with columns: address, optional lat, lng.
             </div>
 
             <div className="btn-row" style={{ position: "relative" }}>
@@ -606,7 +601,7 @@ function AuthedApp() {
                 className="file-input"
                 id="restore-input"
               />
-              <label htmlFor="restore-input" className="file-input-label">📤 Restore</label>
+              <label htmlFor="restore-input" className="file-input-label">Restore (file)</label>
 
               {/* Restore from Cloud (last 7 days) */}
               <div style={{ position: "relative", display: "inline-block" }}>
@@ -618,7 +613,7 @@ function AuthedApp() {
                   }}
                   title="List recent cloud backups"
                 >
-                  ☁️ Restore from Cloud
+                  Restore from Cloud
                 </button>
 
                 {cloudMenuOpen && (
@@ -642,7 +637,7 @@ function AuthedApp() {
 
                     {cloudBusy && (
                       <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
-                        Loading…
+                        Loading...
                       </div>
                     )}
 
@@ -741,12 +736,12 @@ function AuthedApp() {
                 }}
                 title="Undo last completion for this list"
               >
-                ⎌ Undo Last
+                Undo Last
               </button>
               <span className="pill pill-pif">PIF {stats.pifCount}</span>
               <span className="pill pill-done">Done {stats.doneCount}</span>
               <span className="pill pill-da">DA {stats.daCount}</span>
-              {lastSyncTime && <span>• Last sync {lastSyncTime.toLocaleTimeString()}</span>}
+              {lastSyncTime && <span>- Last sync {lastSyncTime.toLocaleTimeString()}</span>}
             </div>
           </>
         ) : tab === "completed" ? (
@@ -767,4 +762,3 @@ function AuthedApp() {
     </div>
   );
 }
-```0
