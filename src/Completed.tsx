@@ -23,8 +23,8 @@ function toKey(d: Date, tz = TZ) {
   return y + "-" + m + "-" + dd;
 }
 function fromKey(key: string) {
-  const [y, m, d] = key.split("-").map((x) => parseInt(x, 10));
-  return new Date(y, m - 1, d);
+  const parts = key.split("-");
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
 }
 function addDays(d: Date, days: number) {
   const nd = new Date(d.getTime());
@@ -96,7 +96,8 @@ function CalendarRange({ startKey, endKey, onChange }: CalendarRangeProps) {
   }
 
   const cells = buildGrid(viewDate);
-  const monthLabel = viewDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const monthLabel =
+    viewDate.toLocaleDateString("en-GB", { month: "long" }) + " " + String(viewDate.getFullYear());
   const minKey = startKey <= endKey ? startKey : endKey;
   const maxKey = startKey <= endKey ? endKey : startKey;
   const todayKey = toKey(new Date());
@@ -108,6 +109,7 @@ function CalendarRange({ startKey, endKey, onChange }: CalendarRangeProps) {
     setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
   }
   function handlePick(dayKey: string) {
+    // First click picks start (single day). Second click sets range end.
     if (!pickingEnd) {
       onChange(dayKey, dayKey);
       setPickingEnd(true);
@@ -144,11 +146,11 @@ function CalendarRange({ startKey, endKey, onChange }: CalendarRangeProps) {
         }}
       >
         <button className="btn btn-ghost" onClick={gotoPrevMonth} aria-label="Previous month">
-          ‹
+          Prev
         </button>
         <div style={{ fontWeight: 600 }}>{monthLabel}</div>
         <button className="btn btn-ghost" onClick={gotoNextMonth} aria-label="Next month">
-          ›
+          Next
         </button>
       </div>
 
@@ -256,7 +258,7 @@ function getCompletionDateKey(c: Completion, fallbackSessions: DaySession[]): st
   return null;
 }
 
-export function Completed({ state, onChangeOutcome }: Props) {
+export default function Completed({ state, onChangeOutcome }: Props) {
   const { addresses, completions, daySessions } = state;
 
   // Initial range: last session day or today
@@ -303,9 +305,7 @@ export function Completed({ state, onChangeOutcome }: Props) {
     totalSeconds += secondsByDay.get(k) || 0;
     const idxs = completionIdxByDay.get(k) || [];
     totalCompleted += idxs.length;
-    totalPIF += idxs
-      .map((i) => completions[i])
-      .filter((c) => (c as any).outcome === "PIF").length;
+    totalPIF += idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "PIF").length;
   });
 
   // Per-day expand/collapse (when details are open)
@@ -350,7 +350,7 @@ export function Completed({ state, onChangeOutcome }: Props) {
           }}
         >
           <div style={{ fontWeight: 600 }}>
-            {"Summary " + (startKey === endKey ? "(" + startKey + ")" : "(" + startKey + " → " + endKey + ")")}
+            {"Summary " + (startKey === endKey ? "(" + startKey + ")" : "(" + startKey + " -> " + endKey + ")")}
           </div>
           <button className="btn btn-ghost" onClick={() => setDetailsOpen((v) => !v)}>
             {detailsOpen ? "Hide details" : "View details"}
@@ -370,9 +370,7 @@ export function Completed({ state, onChangeOutcome }: Props) {
           {dayKeys.map((k) => {
             const seconds = secondsByDay.get(k) || 0;
             const idxs = completionIdxByDay.get(k) || [];
-            const pif = idxs
-              .map((i) => completions[i])
-              .filter((c) => (c as any).outcome === "PIF").length;
+            const pif = idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "PIF").length;
             const total = idxs.length;
 
             return (
@@ -439,7 +437,7 @@ export function Completed({ state, onChangeOutcome }: Props) {
                                   {line}
                                 </div>
                                 <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                                  {"Index " + String(comp.index) + (comp.amount ? " · £" + String(comp.amount) : "")}
+                                  {"Index " + String(comp.index) + (comp.amount ? " · GBP" + String(comp.amount) : "")}
                                 </div>
                               </div>
                               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -449,7 +447,7 @@ export function Completed({ state, onChangeOutcome }: Props) {
                                   className="input"
                                   style={{ padding: "0.25rem 0.5rem", height: 32 }}
                                 >
-                                  <option value="">—</option>
+                                  <option value="">-</option>
                                   <option value="Done">Done</option>
                                   <option value="PIF">PIF</option>
                                   <option value="DA">DA</option>
@@ -470,6 +468,3 @@ export function Completed({ state, onChangeOutcome }: Props) {
     </div>
   );
 }
-
-export default Completed;
-```0
