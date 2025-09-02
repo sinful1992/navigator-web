@@ -24,7 +24,6 @@ function toKey(d: Date, tz = "Europe/London") {
 }
 
 function safeDurationSeconds(s: DaySession): number {
-  // If durationSeconds present, trust it; else compute from start/end
   const asAny: any = s as any;
   if (typeof asAny.durationSeconds === "number") return Math.max(0, asAny.durationSeconds);
   if (s.start && s.end) {
@@ -50,14 +49,9 @@ function getCompletionDateKey(c: Completion, fallbackSessions: DaySession[]): st
     const d = new Date(cand);
     if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   }
-  // no timestamp on the completion: try to place it on any same-day session if there is exactly one
   const keys = new Set(fallbackSessions.map((s) => s.date));
   if (keys.size === 1) return Array.from(keys)[0] || null;
   return null;
-}
-
-function inRange(key: string, startKey: string, endKey: string) {
-  return key >= startKey && key <= endKey;
 }
 
 function buildDays(startKey: string, endKey: string): string[] {
@@ -132,7 +126,6 @@ export function Completed({ state, onChangeOutcome }: Props) {
   }
 
   function outcomeSelect(
-    completionArrayIndex: number,
     current: Outcome | string | undefined,
     onChange: (v: Outcome) => void
   ) {
@@ -229,7 +222,7 @@ export function Completed({ state, onChangeOutcome }: Props) {
         }}
       >
         <div style={{ fontWeight: 600, marginBottom: 8 }}>
-          Summary {startKey === endKey ? "(" + startKey + ")" : "(" + startKey + " → " + endKey + ")"}
+          {"Summary " + (startKey === endKey ? "(" + startKey + ")" : "(" + startKey + " → " + endKey + ")")}
         </div>
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
           <span className="pill">Hours {hoursFmt(totalSeconds)}</span>
@@ -310,12 +303,11 @@ export function Completed({ state, onChangeOutcome }: Props) {
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>{line}</div>
                               <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                                Index {String(comp.index)}
-                                {comp.amount ? " · £" + String(comp.amount) : ""}
+                                {"Index " + String(comp.index) + (comp.amount ? " · £" + String(comp.amount) : "")}
                               </div>
                             </div>
                             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              {outcomeSelect(compIndex, currentOutcome, (v) => onChangeOutcome(compIndex, v))}
+                              {outcomeSelect(currentOutcome, (v) => onChangeOutcome(compIndex, v))}
                             </div>
                           </div>
                         );
