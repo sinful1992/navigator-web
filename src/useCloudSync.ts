@@ -26,9 +26,10 @@ export function useCloudSync(): UseCloudSync {
   );
   const [error, setError] = useState<string | null>(null);
 
-  const lastPulledAt = useRef<string>("");
-  const lastPushedAt = useRef<string>("");
-  const lastPushedHash = useRef<string>("");
+  // Track last server timestamps and last payload we pushed
+  const lastPulledAt = useRef<string>("");   // server updated_at for last accepted pull
+  const lastPushedAt = useRef<string>("");   // server updated_at returned after our push
+  const lastPushedHash = useRef<string>(""); // JSON string of the last state we successfully pushed
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -154,11 +155,17 @@ export function useCloudSync(): UseCloudSync {
   // ---- Cloud subscribe (pull) ----
   const subscribeToData = useCallback(
     (onChange: (s: any) => void) => {
+      // Runtime guard
       if (!user || !supabase) return () => {};
 
+      // NON-NULL alias for TypeScript (prevents TS18047 in cleanup)
+      const sb = supabase as NonNullable<typeof supabase>;
+
+      // Clear prior error
       clearError();
 
-      const channel = supabase.channel("navigator_state_" + user.id);
+      // Open channel
+      const channel = sb.channel("navigator_state_" + user.id);
 
       channel.on(
         "postgres_changes",
@@ -171,11 +178,13 @@ export function useCloudSync(): UseCloudSync {
             const updatedAt: string | undefined = row.updated_at;
             const dataObj: any = row.data;
 
+            // Ignore our own echo
             if (dataObj) {
               const json = JSON.stringify(dataObj);
               if (json === lastPushedHash.current) return;
             }
 
+            // Basic timestamp guard; allow differing content even if timestamp <= lastPulledAt
             if (updatedAt && lastPulledAt.current) {
               if (updatedAt <= lastPulledAt.current && dataObj) {
                 const json = JSON.stringify(dataObj);
@@ -191,12 +200,15 @@ export function useCloudSync(): UseCloudSync {
         }
       );
 
-      channel.subscribe();
+      channel.subscribe(); // activate
 
+      // Cleanup uses the non-null alias 'sb' so TS knows it's safe
       return () => {
         try {
-          supabase.removeChannel(channel);
-        } catch {}
+          sb.removeChannel(channel);
+        } catch {
+          // ignore
+        }
       };
     },
     [user, clearError]
