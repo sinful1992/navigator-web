@@ -7,22 +7,19 @@ type Props = {
   completions: Completion[];
   startDay: () => void;
   endDay: () => void;
-  /** Called with a Date or ISO string. App will update (or create) today's session. */
+  /** Called with a Date or ISO string. App will update (or create) today's session start. */
   onEditStart: (newStart: string | Date) => void;
+  /** Called with a Date or ISO string. App will update (or create) today's session end. */
+  onEditEnd: (newEnd: string | Date) => void;
 };
 
 function toISO(dateStr: string, timeStr: string) {
   // dateStr "YYYY-MM-DD"; timeStr "HH:MM"
   const [y, m, d] = dateStr.split("-").map(Number);
-  const [hh = 0, mm = 0] = timeStr ? timeStr.split(":").map(Number) : [0, 0];
-  const dt = new Date(y, (m ?? 1) - 1, d ?? 1, hh, mm, 0, 0);
-  return dt.toISOString();
-}
-
-function fmtTime(iso: string) {
+  const [hh, mm] = timeStr.split(":").map(Number);
   try {
-    const d = new Date(iso);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1, hh || 0, mm || 0));
+    return dt.toISOString();
   } catch {
     return "";
   }
@@ -34,26 +31,39 @@ export function DayPanel({
   startDay,
   endDay,
   onEditStart,
+  onEditEnd,
 }: Props) {
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  // Find today's session (prefer an active one; otherwise, most recent today)
-  const todaysSessions = (sessions ?? []).filter((s) => s.date === todayStr);
-  const activeIdx = todaysSessions.findIndex((s) => !s.end);
-  const active = activeIdx >= 0 ? todaysSessions[activeIdx] : null;
+  // Prefer an active session; else the most recent for today
+  const todaySessions = sessions.filter((s) => s.date === todayStr);
+  const active = todaySessions.find((s) => !s.end) || null;
   const latestToday =
-    active ?? todaysSessions[todaysSessions.length - 1] ?? null;
+    active ||
+    todaySessions.slice().sort((a, b) => {
+      const ta = new Date(a.start || a.date + "T00:00:00.000Z").getTime();
+      const tb = new Date(b.start || b.date + "T00:00:00.000Z").getTime();
+      return tb - ta;
+    })[0];
 
   const isActive = !!active;
 
-  // Today’s completion stats
-  const todays = (completions ?? []).filter(
-    (c) => (c.timestamp ?? "").slice(0, 10) === todayStr
-  );
+  function fmtTime(iso?: string) {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${hh}:${mm}`;
+    } catch {
+      return "—";
+    }
+  }
 
+  // Today’s completions summary
+  const todays = completions.filter((c) => (c.timestamp || "").slice(0, 10) === todayStr);
   const outcomeCounts = todays.reduce<Record<Outcome, number>>(
     (acc, c) => {
-      // Narrow to known outcomes
       if (c.outcome === "PIF" || c.outcome === "DA" || c.outcome === "Done" || c.outcome === "ARR") {
         acc[c.outcome] += 1;
       }
@@ -63,52 +73,64 @@ export function DayPanel({
   );
 
   // --- Edit start controls ---
-  const [editing, setEditing] = React.useState(false);
-  const [dateVal, setDateVal] = React.useState<string>(todayStr);
-  const [timeVal, setTimeVal] = React.useState<string>(() => {
+  const [editingStart, setEditingStart] = React.useState(false);
+  const [startDate, setStartDate] = React.useState<string>(todayStr);
+  const [startTime, setStartTime] = React.useState<string>(() => {
     if (latestToday?.start) {
       const d = new Date(latestToday.start);
-      return `${String(d.getHours()).padStart(2, "0")}:${String(
-        d.getMinutes()
-      ).padStart(2, "0")}`;
+      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
     }
-    // default to now
     const now = new Date();
-    return `${String(now.getHours()).padStart(2, "0")}:${String(
-      now.getMinutes()
-    ).padStart(2, "0")}`;
+    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   });
 
   React.useEffect(() => {
-    // Keep the editor fields in sync when a session (start) changes
     if (latestToday?.start) {
       const d = new Date(latestToday.start);
-      setDateVal(latestToday.date);
-      setTimeVal(
-        `${String(d.getHours()).padStart(2, "0")}:${String(
-          d.getMinutes()
-        ).padStart(2, "0")}`
-      );
+      setStartDate(latestToday.date);
+      setStartTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
     } else {
-      setDateVal(todayStr);
+      setStartDate(todayStr);
       const now = new Date();
-      setTimeVal(
-        `${String(now.getHours()).padStart(2, "0")}:${String(
-          now.getMinutes()
-        ).padStart(2, "0")}`
-      );
+      setStartTime(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
     }
   }, [latestToday?.start, latestToday?.date, todayStr]);
 
-  const saveEdit = () => {
-    if (!dateVal) {
-      alert("Please choose a date.");
-      return;
+  const saveStart = React.useCallback(() => {
+    const iso = toISO(startDate, startTime);
+    if (iso) onEditStart(iso);
+    setEditingStart(false);
+  }, [startDate, startTime, onEditStart]);
+
+  // --- Edit finish controls ---
+  const [editingEnd, setEditingEnd] = React.useState(false);
+  const [endDate, setEndDate] = React.useState<string>(todayStr);
+  const [endTime, setEndTime] = React.useState<string>(() => {
+    if (latestToday?.end) {
+      const d = new Date(latestToday.end);
+      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
     }
-    const iso = toISO(dateVal, timeVal || "09:00");
-    onEditStart(iso); // App.tsx will update or create today's session
-    setEditing(false);
-  };
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  });
+
+  React.useEffect(() => {
+    if (latestToday?.end) {
+      const d = new Date(latestToday.end);
+      setEndDate(latestToday.date);
+      setEndTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+    } else {
+      setEndDate(todayStr);
+      const now = new Date();
+      setEndTime(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+    }
+  }, [latestToday?.end, latestToday?.date, todayStr]);
+
+  const saveEnd = React.useCallback(() => {
+    const iso = toISO(endDate, endTime);
+    if (iso) onEditEnd(iso);
+    setEditingEnd(false);
+  }, [endDate, endTime, onEditEnd]);
 
   return (
     <div className={`day-panel ${isActive ? "day-panel-active" : ""}`}>
@@ -144,34 +166,38 @@ export function DayPanel({
           </div>
         </div>
 
-        <div className="day-panel-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="day-panel-actions" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           {!isActive ? (
             <button className="btn btn-success" onClick={startDay}>▶️ Start Day</button>
           ) : (
             <button className="btn btn-danger" onClick={endDay}>⏹️ End Day</button>
           )}
 
-          {/* Edit start is available always for today (lets you backfill). */}
-          {!editing ? (
-            <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)} title="Edit today's start time">
+          {/* Edit START */}
+          {!editingStart ? (
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditingStart(true)} title="Edit today's start time">
               ✏️ Edit start
             </button>
           ) : (
             <div className="btn-group" style={{ alignItems: "center" }}>
-              <input
-                type="date"
-                className="input"
-                value={dateVal}
-                onChange={(e) => setDateVal(e.target.value)}
-              />
-              <input
-                type="time"
-                className="input"
-                value={timeVal}
-                onChange={(e) => setTimeVal(e.target.value)}
-              />
-              <button className="btn btn-primary btn-sm" onClick={saveEdit}>💾 Save</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+              <input type="date" className="input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <input type="time" className="input" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+              <button className="btn btn-primary btn-sm" onClick={saveStart}>💾 Save</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditingStart(false)}>Cancel</button>
+            </div>
+          )}
+
+          {/* Edit END */}
+          {!editingEnd ? (
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditingEnd(true)} title="Edit today's finish time">
+              ✏️ Edit finish
+            </button>
+          ) : (
+            <div className="btn-group" style={{ alignItems: "center" }}>
+              <input type="date" className="input" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <input type="time" className="input" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+              <button className="btn btn-primary btn-sm" onClick={saveEnd}>💾 Save</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditingEnd(false)}>Cancel</button>
             </div>
           )}
         </div>
