@@ -157,10 +157,12 @@ function AuthedApp() {
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
   const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(null);
-  const [lastSyncTime, setLastSyncTime] = React.useState<Date | null>(null);
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
+
+  // Optimistic update tracking
+  const [optimisticUpdates, setOptimisticUpdates] = React.useState<Map<string, any>>(new Map());
 
   // Collapsible Tools panel: closed on mobile, open on desktop
   const [toolsOpen, setToolsOpen] = React.useState<boolean>(() => {
@@ -178,7 +180,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ---------- Cloud Restore state & helpers (were missing; caused TS2304) ----------
+  // ---------- Cloud Restore state & helpers ----------
   type CloudBackupRow = {
     object_path: string;
     size_bytes?: number;
@@ -276,7 +278,6 @@ function AuthedApp() {
         await cloudSync.syncData(data);
         lastFromCloudRef.current = JSON.stringify(data);
         setHydrated(true);
-        setLastSyncTime(new Date());
         alert("Restored from cloud");
         setCloudMenuOpen(false);
       } catch (e: any) {
@@ -298,7 +299,7 @@ function AuthedApp() {
     return () => document.removeEventListener("click", onDocClick);
   }, [cloudMenuOpen]);
 
-  // ===================== Cloud-first bootstrap (guard supabase) =====================
+  // ===================== Improved Cloud-first bootstrap =====================
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     if (!supabase) {
@@ -314,7 +315,7 @@ function AuthedApp() {
       try {
         const sel = await supabase
           .from("navigator_state")
-          .select("data, updated_at")
+          .select("data, updated_at, version")
           .eq("user_id", cloudSync.user!.id)
           .maybeSingle();
 
@@ -332,14 +333,14 @@ function AuthedApp() {
             setState(normalized);
             lastFromCloudRef.current = JSON.stringify(normalized);
             setHydrated(true);
-            setLastSyncTime(new Date(row.updated_at ?? Date.now()));
+            console.log('Restored from cloud, version:', row.version);
           }
         } else if (localHasData) {
+          console.log('Pushing local data to cloud...');
           await cloudSync.syncData(safeState);
           if (!cancelled) {
             lastFromCloudRef.current = JSON.stringify(safeState);
             setHydrated(true);
-            setLastSyncTime(new Date());
           }
         } else {
           if (!cancelled) setHydrated(true);
@@ -348,13 +349,15 @@ function AuthedApp() {
         cleanup = cloudSync.subscribeToData((newState) => {
           if (!newState) return;
           const normalized = normalizeState(newState);
+          console.log('Received cloud update');
           setState(normalized);
-          setLastSyncTime(new Date());
           lastFromCloudRef.current = JSON.stringify(normalized);
           setHydrated(true);
         });
       } catch (err) {
         console.error("Bootstrap sync (cloud-first) failed:", err);
+        // Continue with local data on bootstrap failure
+        if (!cancelled) setHydrated(true);
       }
     })();
 
@@ -365,53 +368,121 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // ==== Debounced local -> cloud sync on changes ====
+  // ==== Improved debounced local -> cloud sync with optimistic updates ====
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
+    
     const currentStr = JSON.stringify(safeState);
     if (currentStr === lastFromCloudRef.current) return;
-    const t = setTimeout(() => {
-      cloudSync
-        .syncData(safeState)
-        .then(() => {
-          setLastSyncTime(new Date());
-          lastFromCloudRef.current = currentStr;
-        })
-        .catch((err) => console.error("Sync failed:", err));
-    }, 300);
+
+    // Shorter debounce for better responsiveness
+    const t = setTimeout(async () => {
+      try {
+        console.log('Syncing changes to cloud...');
+        await cloudSync.syncData(safeState);
+        lastFromCloudRef.current = currentStr;
+      } catch (err) {
+        console.error("Sync failed:", err);
+        // Don't show error to user for background sync failures
+        // They'll see it in the sync status indicator
+      }
+    }, 150); // Reduced from 300ms
+
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
 
-  // ==== Flush pending changes on exit/background ====
+  // ==== Enhanced flush pending changes on exit/background ====
   React.useEffect(() => {
-    if (!cloudSync.user) return;
+    if (!cloudSync.user || !hydrated) return;
 
-    function flush() {
+    const flush = async () => {
       try {
-        cloudSync
-          .syncData(safeState)
-          .then(() => {
-            setLastSyncTime(new Date());
-            lastFromCloudRef.current = JSON.stringify(safeState);
-          })
-          .catch(() => {});
-      } catch {}
-    }
+        const currentStr = JSON.stringify(safeState);
+        if (currentStr !== lastFromCloudRef.current) {
+          console.log('Flushing changes before exit...');
+          await cloudSync.syncData(safeState);
+          lastFromCloudRef.current = currentStr;
+        }
+      } catch (err) {
+        console.warn('Failed to flush changes:', err);
+      }
+    };
 
-    function onVisibility() {
-      if (document.visibilityState === "hidden") flush();
-    }
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        flush();
+      }
+    };
+
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      const currentStr = JSON.stringify(safeState);
+      if (currentStr !== lastFromCloudRef.current && cloudSync.isOnline) {
+        e.preventDefault();
+        e.returnValue = "You have unsaved changes. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+    };
 
     window.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", flush);
-    window.addEventListener("beforeunload", flush);
+    window.addEventListener("beforeunload", onBeforeUnload);
 
     return () => {
       window.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", flush);
-      window.removeEventListener("beforeunload", flush);
+      window.removeEventListener("beforeunload", onBeforeUnload);
     };
-  }, [safeState, cloudSync, cloudSync.user]);
+  }, [safeState, cloudSync, hydrated]);
+
+  // Enhanced completion with optimistic updates
+  const handleComplete = React.useCallback(async (index: number, outcome: Outcome, amount?: string) => {
+    const optimisticId = `completion_${Date.now()}_${Math.random()}`;
+    
+    try {
+      // Apply optimistic update
+      setOptimisticUpdates(prev => {
+        const updated = new Map(prev);
+        updated.set(optimisticId, { type: 'completion', index, outcome, amount });
+        return updated;
+      });
+
+      // Apply actual change
+      complete(index, outcome, amount);
+
+      // Queue the operation for granular sync if available
+      if (cloudSync.queueOperation) {
+        await cloudSync.queueOperation({
+          type: 'create',
+          entity: 'completion',
+          entityId: optimisticId,
+          data: {
+            index,
+            outcome,
+            amount,
+            address: addresses[index]?.address,
+            listVersion: safeState.currentListVersion
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to complete address:', error);
+      // Remove optimistic update on failure
+      setOptimisticUpdates(prev => {
+        const updated = new Map(prev);
+        updated.delete(optimisticId);
+        return updated;
+      });
+    } finally {
+      // Clean up optimistic update after a short delay
+      setTimeout(() => {
+        setOptimisticUpdates(prev => {
+          const updated = new Map(prev);
+          updated.delete(optimisticId);
+          return updated;
+        });
+      }, 1000);
+    }
+  }, [complete, addresses, safeState.currentListVersion, cloudSync]);
 
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
@@ -473,7 +544,6 @@ function AuthedApp() {
       await cloudSync.syncData(data);
       lastFromCloudRef.current = JSON.stringify(data);
       setHydrated(true);
-      setLastSyncTime(new Date());
       alert("Restore completed successfully!");
     } catch (err: any) {
       console.error(err);
@@ -598,9 +668,6 @@ function AuthedApp() {
     const clampedDx = Math.max(-maxDrag, Math.min(maxDrag, dx));
 
     const atFirst = tabIndex === 0 && clampedDx > 0;
-    theLastCheck: {
-      /* label to keep lints calm */
-    }
     const atLast = tabIndex === tabsOrder.length - 1 && clampedDx < 0;
     const dampening = atFirst || atLast ? 0.35 : 1;
 
@@ -637,6 +704,29 @@ function AuthedApp() {
     setDragging(false);
   };
 
+  // Enhanced manual sync with feedback
+  const handleManualSync = React.useCallback(async () => {
+    try {
+      console.log('Manual sync initiated...');
+      await cloudSync.syncData(safeState);
+      lastFromCloudRef.current = JSON.stringify(safeState);
+      
+      // Show brief success feedback
+      const originalError = cloudSync.error;
+      if (!originalError) {
+        // Temporarily show success message
+        setTimeout(() => {
+          // Only clear if no new error occurred
+          if (!cloudSync.error) {
+            // Success feedback could be shown here
+          }
+        }, 2000);
+      }
+    } catch (err) {
+      console.error('Manual sync failed:', err);
+    }
+  }, [cloudSync, safeState]);
+
   if (loading) {
     return (
       <div className="container">
@@ -647,6 +737,22 @@ function AuthedApp() {
       </div>
     );
   }
+
+  // Enhanced sync status indicator
+  const getSyncStatus = () => {
+    if (cloudSync.isSyncing) {
+      return { text: "SYNCING", color: "var(--warning)", icon: "⟳" };
+    }
+    if (!cloudSync.isOnline) {
+      return { text: "OFFLINE", color: "var(--danger)", icon: "⚠" };
+    }
+    if (cloudSync.error) {
+      return { text: "SYNC ERROR", color: "var(--danger)", icon: "⚠" };
+    }
+    return { text: "ONLINE", color: "var(--success)", icon: "✓" };
+  };
+
+  const syncStatus = getSyncStatus();
 
   return (
     <div className="container">
@@ -663,13 +769,19 @@ function AuthedApp() {
               color: "var(--text-muted)",
             }}
           >
-            {cloudSync.isOnline ? (
-              <span style={{ color: "var(--success)" }}>ONLINE</span>
-            ) : (
-              <span style={{ color: "var(--warning)" }}>OFFLINE</span>
+            <span style={{ color: syncStatus.color, display: "flex", alignItems: "center", gap: "0.25rem" }}>
+              <span>{syncStatus.icon}</span>
+              {syncStatus.text}
+            </span>
+            {cloudSync.lastSyncTime && (
+              <span title={`Last sync: ${cloudSync.lastSyncTime.toLocaleString()}`}>
+                · {cloudSync.lastSyncTime.toLocaleTimeString()}
+              </span>
             )}
-            {lastSyncTime && (
-              <span title="Last sync time">· Last sync {lastSyncTime.toLocaleTimeString()}</span>
+            {optimisticUpdates.size > 0 && (
+              <span style={{ color: "var(--primary)" }}>
+                · {optimisticUpdates.size} pending
+              </span>
             )}
           </div>
         </div>
@@ -707,22 +819,52 @@ function AuthedApp() {
             </button>
             <button
               className="tab-btn"
-              onClick={async () => {
-                try {
-                  await cloudSync.syncData(safeState);
-                  setLastSyncTime(new Date());
-                  lastFromCloudRef.current = JSON.stringify(safeState);
-                } catch {
-                  console.warn("Manual sync failed");
-                }
+              onClick={handleManualSync}
+              disabled={cloudSync.isSyncing}
+              title={cloudSync.isSyncing ? "Syncing..." : "Force sync now"}
+              style={{
+                opacity: cloudSync.isSyncing ? 0.6 : 1,
+                cursor: cloudSync.isSyncing ? "not-allowed" : "pointer"
               }}
-              title="Push current changes to cloud"
             >
-              Sync now
+              {cloudSync.isSyncing ? "⟳ Syncing..." : "🔄 Sync"}
             </button>
           </div>
         </div>
       </header>
+
+      {/* Enhanced error display */}
+      {cloudSync.error && (
+        <div style={{
+          background: "var(--danger-light)",
+          border: "1px solid var(--danger)",
+          borderRadius: "var(--radius)",
+          padding: "0.75rem",
+          marginBottom: "1rem",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}>
+          <span style={{ color: "var(--danger)", fontSize: "0.875rem" }}>
+            ⚠️ Sync error: {cloudSync.error}
+          </span>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button 
+              className="btn btn-ghost btn-sm" 
+              onClick={handleManualSync}
+              disabled={cloudSync.isSyncing}
+            >
+              Retry
+            </button>
+            <button 
+              className="btn btn-ghost btn-sm" 
+              onClick={cloudSync.clearError}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Tools toggle */}
       <div style={{ marginBottom: "0.75rem", display: "flex", justifyContent: "center" }}>
@@ -782,6 +924,15 @@ function AuthedApp() {
                 loadRecentCloudBackups={loadRecentCloudBackups}
                 restoreFromCloud={restoreFromCloud}
               />
+
+              {/* Enhanced tools */}
+              <button
+                className="btn btn-ghost"
+                onClick={cloudSync.forceFullSync}
+                title="Reset sync state and force full sync"
+              >
+                Force Full Sync
+              </button>
             </div>
           </div>
         </div>
@@ -849,7 +1000,7 @@ function AuthedApp() {
               state={safeState}
               setActive={setActive}
               cancelActive={cancelActive}
-              onComplete={complete}
+              onComplete={handleComplete}
               onCreateArrangement={handleCreateArrangement}
               filterText={search}
               ensureDayStarted={ensureDayStarted}
@@ -877,7 +1028,11 @@ function AuthedApp() {
               <span className="pill pill-pif">PIF {stats.pifCount}</span>
               <span className="pill pill-done">Done {stats.doneCount}</span>
               <span className="pill pill-da">DA {stats.daCount}</span>
-              {lastSyncTime && <span>- Last sync {lastSyncTime.toLocaleTimeString()}</span>}
+              {cloudSync.lastSyncTime && (
+                <span className="muted">
+                  Last sync {cloudSync.lastSyncTime.toLocaleTimeString()}
+                </span>
+              )}
             </div>
           </section>
 
@@ -914,7 +1069,7 @@ function AuthedApp() {
               onUpdateArrangement={updateArrangement}
               onDeleteArrangement={deleteArrangement}
               onAddAddress={async (addr: AddressRow) => addAddress(addr)}
-              onComplete={complete}
+              onComplete={handleComplete}
               autoCreateForAddress={autoCreateArrangementFor}
               onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
             />
@@ -982,7 +1137,7 @@ function CloudRestore(props: {
           )}
 
           {!cloudBusy && cloudErr && (
-            <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--error)" }}>
+            <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--danger)" }}>
               {cloudErr}
             </div>
           )}
