@@ -557,3 +557,245 @@ html, body { overflow-x: hidden; }
   .arrangement-actions { justify-content: center; }
   .user-chip .email { max-width: 50vw; }
 }
+
+/* ==== Critical Overflow Fixes ==== */
+
+/* 1. Ensure no horizontal overflow at root level */
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* 2. Fix container to prevent overflow */
+.container {
+  max-width: 100vw; /* Changed from 1200px */
+  margin: 0 auto;
+  padding: 1.5rem;
+  min-height: 100vh;
+  overflow-x: hidden;
+  width: 100%;
+  box-sizing: border-box; /* Ensure padding is included */
+}
+
+/* 3. Fix tabs viewport to prevent overflow */
+.tabs-viewport {
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  max-width: 100%; /* Add explicit max-width */
+  touch-action: pan-y;
+  box-sizing: border-box;
+}
+
+/* 4. Fix tabs track dimensions */
+.tabs-track {
+  display: flex;
+  transition: transform 280ms ease;
+  will-change: transform;
+  width: 300%; /* 3 panels × 100% each */
+  max-width: 300%;
+}
+
+/* 5. Ensure tab panels don't overflow */
+.tab-panel {
+  flex: 0 0 33.333333%; /* 100% ÷ 3 panels */
+  min-width: 33.333333%;
+  max-width: 33.333333%;
+  box-sizing: border-box;
+  padding: 0; /* Remove any padding that could cause overflow */
+  overflow-x: hidden; /* Prevent content from overflowing */
+}
+
+/* 6. Fix header wrapping issues */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-light);
+  max-width: 100%; /* Prevent overflow */
+  overflow: hidden; /* Hide any overflow */
+}
+
+.app-header .left,
+.app-header .right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  min-width: 0; /* Allow shrinking */
+  max-width: 100%;
+}
+
+/* 7. Fix tabs container overflow */
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  padding: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  max-width: 100%; /* Prevent tabs from overflowing */
+}
+
+/* 8. Fix form elements that might cause overflow */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.input, .btn {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* 9. Fix specific components that might overflow */
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  font-size: 0.875rem;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.user-chip .email {
+  max-width: 30vw; /* Reduced from 44vw */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* 10. Fix cards and content areas */
+.card, .row-card, .day-card, .arrangement-card {
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* 11. Enhanced mobile fixes */
+@media (max-width: 768px) {
+  .container {
+    padding: 0.75rem;
+    max-width: 100vw;
+  }
+
+  .app-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .tabs {
+    order: -1;
+    gap: 0.125rem;
+    padding: 0.25rem;
+    max-width: calc(100vw - 1.5rem); /* Account for container padding */
+  }
+
+  .tab-btn {
+    padding: 0.5rem 0.65rem;
+    font-size: 0.75rem;
+    min-width: max-content;
+    flex-shrink: 1; /* Allow shrinking on small screens */
+  }
+
+  .user-chip .email {
+    max-width: 40vw;
+  }
+
+  /* Fix button groups on mobile */
+  .btn-group, .btn-row {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .btn-group::-webkit-scrollbar,
+  .btn-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Fix form elements on mobile */
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .search-input {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0.5rem;
+  }
+
+  .user-chip .email {
+    max-width: 35vw;
+  }
+
+  .tabs {
+    max-width: calc(100vw - 1rem);
+  }
+}
+
+/* 12. Fix specific layout issues in arrangements and other sections */
+.arrangement-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.arrangement-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0; /* Allow text truncation */
+  overflow: hidden;
+}
+
+.arrangement-address,
+.arrangement-customer,
+.arrangement-time,
+.arrangement-phone,
+.arrangement-notes {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 13. Fix any remaining text overflow issues */
+.row-title {
+  min-width: 0;
+  font-weight: 700;
+  letter-spacing: .2px;
+  color: var(--text-primary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
