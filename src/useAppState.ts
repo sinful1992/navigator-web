@@ -20,6 +20,7 @@ const STORAGE_KEY = "navigator_state_v4";       // App state
 const DEVICE_ID_KEY = "navigator_device_id_v1";
 const OPSEQ_KEY = "navigator_opseq_v1";
 const OPQUEUE_KEY = "navigator_opqueue_v1";
+const LAST_SYNC_KEY = "navigator_last_sync_v1"; // NEW: server pull watermark
 
 /** ================================
  *  Optimistic update types
@@ -168,6 +169,9 @@ export function useAppState() {
   const drainingRef = React.useRef(false);
   const [backoffMs, setBackoffMs] = React.useState(0);
 
+  // Pull watermark
+  const [lastSyncAt, setLastSyncAt] = React.useState<string | null>(null);
+
   // Conflicts
   type Conflict =
     | {
@@ -191,7 +195,7 @@ export function useAppState() {
     return applyOptimisticUpdates(baseState, optimisticState.updates);
   }, [baseState, optimisticState.updates]);
 
-  /** -------- Boot: load device ID + opSeq + state + queue -------- */
+  /** -------- Boot: load device ID + opSeq + state + queue + watermark -------- */
   React.useEffect(() => {
     let alive = true;
 
@@ -245,6 +249,11 @@ export function useAppState() {
         const savedQueue = (await get(OPQUEUE_KEY)) as SyncOp[] | undefined;
         if (!alive) return;
         setOpQueue(Array.isArray(savedQueue) ? savedQueue : []);
+
+        // Watermark
+        const savedSync = (await get(LAST_SYNC_KEY)) as string | null;
+        if (!alive) return;
+        setLastSyncAt(savedSync ?? null);
       } catch (error) {
         console.warn("Failed to init device/state/queue:", error);
       } finally {
@@ -269,6 +278,12 @@ export function useAppState() {
     if (loading) return;
     set(OPQUEUE_KEY, opQueue).catch(() => {});
   }, [opQueue, loading]);
+
+  /** -------- Persist lastSyncAt whenever it changes -------- */
+  React.useEffect(() => {
+    if (loading) return;
+    set(LAST_SYNC_KEY, lastSyncAt).catch(() => {});
+  }, [lastSyncAt, loading]);
 
   /** -------- opSeq increment (synchronous, persisted) -------- */
   const nextOpSeqSync = React.useCallback((): number => {
@@ -466,13 +481,16 @@ export function useAppState() {
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    const onOnline = () => tryDrain();
+    const onOnline = () => {
+      tryDrain();
+      pullSince(); // also pull any missed server changes when back online
+    };
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
   }, [tryDrain]);
 
   /** ================================
-   *  Enhanced actions (addresses)
+   *  Actions (addresses)
    *  ================================ */
   const setAddresses = React.useCallback(
     (rows: AddressRow[]) => {
@@ -490,7 +508,7 @@ export function useAppState() {
         currentListVersion: (s.currentListVersion || 1) + 1,
       }));
 
-      // NOTE: server currently ignores address-bulk ops (no id). We'll support later.
+      // (Optional: persist 'addresses snapshot' server-side in a future step)
       enqueueOp("address", "update", { addresses: rows }, operationId);
       confirmOptimisticUpdate(operationId);
     },
@@ -507,7 +525,6 @@ export function useAppState() {
           const newAddresses = [...s.addresses, addressRow];
           const newIndex = newAddresses.length - 1;
 
-          // (not persisted to server yet)
           enqueueOp("address", "create", addressRow, operationId);
           setTimeout(() => {
             confirmOptimisticUpdate(operationId);
@@ -530,7 +547,7 @@ export function useAppState() {
   }, []);
 
   /** ================================
-   *  Completions (now with server IDs)
+   *  Completions (server id in op payload)
    *  ================================ */
   const complete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string): Promise<string> => {
@@ -554,8 +571,7 @@ export function useAppState() {
             listVersion: s.currentListVersion,
           };
 
-          // For server persistence, include an id in the op payload (state type stays the same)
-          const completionId = `c_${nowISO}`; // deterministic
+          const completionId = `c_${nowISO}`;
           const forServer = {
             ...completion,
             id: completionId,
@@ -600,7 +616,6 @@ export function useAppState() {
           const operationId = generateOperationId("delete", "completion", completion);
           addOptimisticUpdate("delete", "completion", completion, operationId);
 
-          // derive completion id the same way we created it
           const completionId = `c_${completion.timestamp}`;
           enqueueOp("completion", "delete", { id: completionId, timestamp: completion.timestamp }, operationId);
 
@@ -615,27 +630,25 @@ export function useAppState() {
   );
 
   /** ================================
-   *  Day sessions (add ids; server persists)
+   *  Day sessions (server natural id = date)
    *  ================================ */
   const startDay = React.useCallback(() => {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
 
     setBaseState((s) => {
-      if (s.daySessions.some((d) => !d.end)) return s; // already active
+      if (s.daySessions.some((d) => !d.end)) return s;
 
       const sess: DaySession = {
         date: today,
         start: now.toISOString(),
       };
-      // local meta (not in type)
       (sess as any).updatedAt = now.toISOString();
       (sess as any).updatedBy = deviceId;
 
       const operationId = generateOperationId("create", "session", sess);
       addOptimisticUpdate("create", "session", sess, operationId);
 
-      // server payload MUST include an id; we use date as the natural key
       const forServer = {
         ...sess,
         id: today,
@@ -675,7 +688,7 @@ export function useAppState() {
 
       const forServer = {
         ...act,
-        id: act.date,           // natural key
+        id: act.date,
         updatedAt: now.toISOString(),
         updatedBy: deviceId,
       };
@@ -689,7 +702,7 @@ export function useAppState() {
   }, [deviceId, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]);
 
   /** ================================
-   *  Arrangements (unchanged client shape; already have ids)
+   *  Arrangements
    *  ================================ */
   const addArrangement = React.useCallback(
     (
@@ -998,7 +1011,6 @@ export function useAppState() {
             return { ...s, arrangements: s.arrangements.filter(a => a.id !== id) };
           }
 
-          // Merge by id, prefer newer updatedAt
           const existing = s.arrangements.find(a => a.id === id);
           if (!existing) {
             const arr = [
@@ -1019,7 +1031,6 @@ export function useAppState() {
         }
 
         case "completion": {
-          // We store completions without id; reconcile by timestamp
           const ts = payload?.timestamp as string | undefined;
           if (!ts) return s;
 
@@ -1027,7 +1038,6 @@ export function useAppState() {
             return { ...s, completions: s.completions.filter(c => c.timestamp !== ts) };
           }
 
-          // Avoid duplicate
           if (s.completions.some(c => c.timestamp === ts)) return s;
 
           const list = [payload as Completion, ...s.completions].sort(
@@ -1041,7 +1051,6 @@ export function useAppState() {
           if (!dateKey) return s;
 
           if (deleted) {
-            // If you ever hard-delete, you'd remove here; we soft-delete, so ignore.
             return s;
           }
 
@@ -1063,7 +1072,6 @@ export function useAppState() {
   }, [deviceId]);
 
   React.useEffect(() => {
-    // Subscribe to all changes on public.entity_store
     const ch = supabase
       .channel("entity_store_changes")
       .on(
@@ -1072,6 +1080,9 @@ export function useAppState() {
         (payload: any) => {
           const row = payload?.new ?? payload?.record ?? payload?.old;
           if (row) applyServerRow(row);
+          // Advance watermark opportunistically
+          const updated = row?.updated_at;
+          if (updated && (!lastSyncAt || updated > lastSyncAt)) setLastSyncAt(updated);
         }
       )
       .subscribe();
@@ -1079,10 +1090,47 @@ export function useAppState() {
     return () => {
       try { supabase.removeChannel(ch); } catch {}
     };
-  }, [applyServerRow]);
+  }, [applyServerRow, lastSyncAt]);
 
   /** ================================
-   *  Return API
+   *  PULL: initial + incremental from server (entity_store)
+   *  ================================ */
+  const pullSince = React.useCallback(async () => {
+    try {
+      // Fetch in ascending order to preserve causality
+      let query = (supabase as any)
+        .from("entity_store")
+        .select("entity,id,payload,updated_at,updated_by,deleted_at")
+        .order("updated_at", { ascending: true })
+        .limit(1000);
+      if (lastSyncAt) query = query.gt("updated_at", lastSyncAt);
+
+      const { data, error } = await query;
+      if (error) {
+        console.warn("[pullSince] error:", error);
+        return;
+      }
+      if (!Array.isArray(data) || data.length === 0) return;
+
+      let maxUpdated: string | null = lastSyncAt ?? null;
+      for (const row of data) {
+        applyServerRow(row);
+        const u = row?.updated_at as string | undefined;
+        if (u && (!maxUpdated || u > maxUpdated)) maxUpdated = u;
+      }
+      if (maxUpdated && maxUpdated !== lastSyncAt) setLastSyncAt(maxUpdated);
+    } catch (e) {
+      console.warn("[pullSince] exception:", e);
+    }
+  }, [lastSyncAt, applyServerRow]);
+
+  // Initial pull on boot (after local load)
+  React.useEffect(() => {
+    if (!loading) pullSince();
+  }, [loading, pullSince]);
+
+  /** ================================
+   *  Return API (added diagnostics+pull)
    *  ================================ */
   return {
     // State
@@ -1090,9 +1138,12 @@ export function useAppState() {
     baseState, // raw base
     loading,
 
-    // Device + opSeq (read-only)
+    // Diagnostics
     deviceId,
     opSeq,
+    queueLength: opQueue.length,
+    lastSyncAt,
+    forcePull: pullSince,
 
     // Public setters
     setState,
