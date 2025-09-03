@@ -90,7 +90,7 @@ async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" =
       size_bytes: blob.size,
     });
   } catch (e) {
-    console.warn("Backups table insert failed (non-fatal):", (e as any)?.message || e);
+    console.warn("Backups table insert failed:", (e as any)?.message || e);
   }
 }
 
@@ -249,7 +249,7 @@ function AuthedApp() {
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
-  // DayPanel -> edit today's start time
+  // DayPanel - edit start time
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
       const parsed = typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
@@ -536,7 +536,7 @@ function AuthedApp() {
 
     const quick = dt <= 600;
     const farPx = Math.abs(dx) >= 60;
-    const farFrac = Math.abs(dx) / Math.max(1, w) >= 0.18; // about 18 percent of width
+    const farFrac = Math.abs(dx) / Math.max(1, w) >= 0.18;
     const horizontal = Math.abs(dx) > Math.abs(dy) * 1.2;
 
     if (horizontal && (farPx || farFrac || quick)) {
@@ -544,7 +544,6 @@ function AuthedApp() {
       else if (dx > 0 && tabIndex > 0) goToPrevTab();
     }
 
-    // Snap back or finish transition
     setDragX(0);
     setDragging(false);
   };
@@ -669,18 +668,20 @@ function AuthedApp() {
         </div>
       )}
 
-      {/* Tabs content with swipe + live drag + slide animation */}
+      {/* Tabs content with swipe + live drag + slide animation (inline styles to guarantee clipping) */}
       <div
         ref={viewportRef}
-        className="tabs-viewport"
+        style={{ overflow: "hidden", position: "relative", width: "100%" }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
         <div
-          className="tabs-track"
           style={{
+            display: "flex",
             width: String(["list", "completed", "arrangements"].length * 100) + "%",
+            willChange: "transform",
+            transition: dragging ? "none" : "transform 280ms ease",
             transform: (function () {
               const count = 3;
               const basePct = (-tabIndex / count) * 100;
@@ -688,11 +689,10 @@ function AuthedApp() {
               const dragPct = dragging ? (dragX / Math.max(1, viewportW) / count) * 100 : 0;
               return "translateX(" + String(basePct + dragPct) + "%)";
             })(),
-            transition: dragging ? "none" : undefined,
           }}
         >
           {/* Panel 1: List */}
-          <section className="tab-panel">
+          <section style={{ flex: "0 0 100%", minWidth: "100%", maxWidth: "100%" }}>
             <div className="search-container">
               <input
                 type="search"
@@ -748,12 +748,12 @@ function AuthedApp() {
           </section>
 
           {/* Panel 2: Completed */}
-          <section className="tab-panel">
+          <section style={{ flex: "0 0 100%", minWidth: "100%", maxWidth: "100%" }}>
             <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
           </section>
 
           {/* Panel 3: Arrangements */}
-          <section className="tab-panel">
+          <section style={{ flex: "0 0 100%", minWidth: "100%", maxWidth: "100%" }}>
             <Arrangements
               state={safeState}
               onAddArrangement={addArrangement}
