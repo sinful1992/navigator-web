@@ -12,6 +12,7 @@ import { Arrangements } from "./Arrangements";
 import { readJsonFile } from "./backup";
 import type { AddressRow, Outcome } from "./types";
 import { supabase } from "./lib/supabaseClient";
+import ManualAddressFAB from "./ManualAddressFAB"; // NEW
 
 type Tab = "list" | "completed" | "arrangements";
 
@@ -24,7 +25,8 @@ function normalizeState(raw: any) {
     arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
     daySessions: Array.isArray(r.daySessions) ? r.daySessions : [],
     activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
-    currentListVersion: typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
+    currentListVersion:
+      typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
   };
 }
 
@@ -53,11 +55,17 @@ class ErrorBoundary extends React.Component<
 }
 
 /** Upload JSON snapshot to Supabase Storage and log in backups table */
-async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" = "manual") {
+async function uploadBackupToStorage(
+  data: unknown,
+  label: "finish" | "manual" = "manual"
+) {
   if (!supabase) return;
 
   const authResp = await supabase.auth.getUser();
-  const userId = authResp && authResp.data && authResp.data.user ? authResp.data.user.id : undefined;
+  const userId =
+    authResp && authResp.data && authResp.data.user
+      ? authResp.data.user.id
+      : undefined;
   if (!userId) return;
 
   const tz = "Europe/London";
@@ -65,18 +73,23 @@ async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" =
   const yyyy = now.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
   const mm = now.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
   const dd = now.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
-  const dayKey = yyyy + "-" + mm + "-" + dd;
-  const time = now.toLocaleTimeString("en-GB", { timeZone: tz, hour12: false }).replace(/:/g, "");
+  const dayKey = `${yyyy}-${mm}-${dd}`;
+  const time = now
+    .toLocaleTimeString("en-GB", { timeZone: tz, hour12: false })
+    .replace(/:/g, "");
 
   const bucket =
     (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
       ? (import.meta as any).env.VITE_SUPABASE_BUCKET
       : "navigator-backups";
-  const name = "backup_" + dayKey + "_" + time + "_" + label + ".json";
-  const objectPath = userId + "/" + dayKey + "/" + name;
+  const name = `backup_${dayKey}_${time}_${label}.json`;
+  const objectPath = `${userId}/${dayKey}/${name}`;
 
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const uploadRes = await supabase.storage
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json",
+  });
+  const uploadRes = await supabase
+    .storage
     .from(bucket)
     .upload(objectPath, blob, { upsert: false, contentType: "application/json" });
   if ((uploadRes as any).error) throw new Error((uploadRes as any).error.message);
@@ -156,13 +169,16 @@ function AuthedApp() {
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
-  const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(null);
+  const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
+    React.useState<number | null>(null);
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
   // Optimistic update tracking
-  const [optimisticUpdates, setOptimisticUpdates] = React.useState<Map<string, any>>(new Map());
+  const [optimisticUpdates, setOptimisticUpdates] = React.useState<
+    Map<string, any>
+  >(new Map());
 
   // Collapsible Tools panel: closed on mobile, open on desktop
   const [toolsOpen, setToolsOpen] = React.useState<boolean>(() => {
@@ -172,7 +188,9 @@ function AuthedApp() {
 
   const addresses = Array.isArray(state.addresses) ? state.addresses : [];
   const completions = Array.isArray(state.completions) ? state.completions : [];
-  const arrangements = Array.isArray(state.arrangements) ? state.arrangements : [];
+  const arrangements = Array.isArray(state.arrangements)
+    ? state.arrangements
+    : [];
   const daySessions = Array.isArray(state.daySessions) ? state.daySessions : [];
 
   const safeState = React.useMemo(
@@ -197,7 +215,7 @@ function AuthedApp() {
     const y = d.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
     const m = d.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
     const dd = d.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
-    return y + "-" + m + "-" + dd;
+    return `${y}-${m}-${dd}`;
   }
 
   const loadRecentCloudBackups = React.useCallback(async () => {
@@ -209,7 +227,10 @@ function AuthedApp() {
     setCloudErr(null);
     try {
       const authResp = await supabase.auth.getUser();
-      const userId = authResp && authResp.data && authResp.data.user ? authResp.data.user.id : undefined;
+      const userId =
+        authResp && authResp.data && authResp.data.user
+          ? authResp.data.user.id
+          : undefined;
       if (!userId) throw new Error("Not authenticated");
 
       const end = new Date();
@@ -255,9 +276,7 @@ function AuthedApp() {
       }
       const fileName = objectPath.split("/").pop() || objectPath;
       const ok = window.confirm(
-        'Restore "' +
-          fileName +
-          "\" from cloud?\n\nThis will overwrite your current addresses, completions, arrangements and sessions on this device."
+        `Restore "${fileName}" from cloud?\n\nThis will overwrite your current addresses, completions, arrangements and sessions on this device.`
       );
       if (!ok) return;
 
@@ -293,7 +312,8 @@ function AuthedApp() {
     if (!cloudMenuOpen) return;
     function onDocClick(e: MouseEvent) {
       const target = e.target as HTMLElement;
-      if (!target.closest || !target.closest(".btn-row")) setCloudMenuOpen(false);
+      if (!target.closest || !target.closest(".btn-row"))
+        setCloudMenuOpen(false);
     }
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
@@ -303,7 +323,6 @@ function AuthedApp() {
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     if (!supabase) {
-      // No client configured; continue locally
       setHydrated(true);
       return;
     }
@@ -333,10 +352,10 @@ function AuthedApp() {
             setState(normalized);
             lastFromCloudRef.current = JSON.stringify(normalized);
             setHydrated(true);
-            console.log('Restored from cloud, version:', row.version);
+            console.log("Restored from cloud, version:", row.version);
           }
         } else if (localHasData) {
-          console.log('Pushing local data to cloud...');
+          console.log("Pushing local data to cloud...");
           await cloudSync.syncData(safeState);
           if (!cancelled) {
             lastFromCloudRef.current = JSON.stringify(safeState);
@@ -349,14 +368,13 @@ function AuthedApp() {
         cleanup = cloudSync.subscribeToData((newState) => {
           if (!newState) return;
           const normalized = normalizeState(newState);
-          console.log('Received cloud update');
+          console.log("Received cloud update");
           setState(normalized);
           lastFromCloudRef.current = JSON.stringify(normalized);
           setHydrated(true);
         });
       } catch (err) {
         console.error("Bootstrap sync (cloud-first) failed:", err);
-        // Continue with local data on bootstrap failure
         if (!cancelled) setHydrated(true);
       }
     })();
@@ -371,22 +389,19 @@ function AuthedApp() {
   // ==== Improved debounced local -> cloud sync with optimistic updates ====
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
-    
+
     const currentStr = JSON.stringify(safeState);
     if (currentStr === lastFromCloudRef.current) return;
 
-    // Shorter debounce for better responsiveness
     const t = setTimeout(async () => {
       try {
-        console.log('Syncing changes to cloud...');
+        console.log("Syncing changes to cloud...");
         await cloudSync.syncData(safeState);
         lastFromCloudRef.current = currentStr;
       } catch (err) {
         console.error("Sync failed:", err);
-        // Don't show error to user for background sync failures
-        // They'll see it in the sync status indicator
       }
-    }, 150); // Reduced from 300ms
+    }, 150);
 
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
@@ -399,12 +414,12 @@ function AuthedApp() {
       try {
         const currentStr = JSON.stringify(safeState);
         if (currentStr !== lastFromCloudRef.current) {
-          console.log('Flushing changes before exit...');
+          console.log("Flushing changes before exit...");
           await cloudSync.syncData(safeState);
           lastFromCloudRef.current = currentStr;
         }
       } catch (err) {
-        console.warn('Failed to flush changes:', err);
+        console.warn("Failed to flush changes:", err);
       }
     };
 
@@ -418,7 +433,8 @@ function AuthedApp() {
       const currentStr = JSON.stringify(safeState);
       if (currentStr !== lastFromCloudRef.current && cloudSync.isOnline) {
         e.preventDefault();
-        e.returnValue = "You have unsaved changes. Are you sure you want to leave?";
+        e.returnValue =
+          "You have unsaved changes. Are you sure you want to leave?";
         return e.returnValue;
       }
     };
@@ -435,70 +451,68 @@ function AuthedApp() {
   }, [safeState, cloudSync, hydrated]);
 
   // Enhanced completion with optimistic updates
-  const handleComplete = React.useCallback(async (index: number, outcome: Outcome, amount?: string) => {
-    const optimisticId = `completion_${Date.now()}_${Math.random()}`;
-    
-    try {
-      // Apply optimistic update
-      setOptimisticUpdates(prev => {
-        const updated = new Map(prev);
-        updated.set(optimisticId, { type: 'completion', index, outcome, amount });
-        return updated;
-      });
+  const handleComplete = React.useCallback(
+    async (index: number, outcome: Outcome, amount?: string) => {
+      const optimisticId = `completion_${Date.now()}_${Math.random()}`;
 
-      // Apply actual change
-      complete(index, outcome, amount);
-
-      // Queue the operation for granular sync if available
-      if (cloudSync.queueOperation) {
-        await cloudSync.queueOperation({
-          type: 'create',
-          entity: 'completion',
-          entityId: optimisticId,
-          data: {
-            index,
-            outcome,
-            amount,
-            address: addresses[index]?.address,
-            listVersion: safeState.currentListVersion
-          }
+      try {
+        setOptimisticUpdates((prev) => {
+          const updated = new Map(prev);
+          updated.set(optimisticId, { type: "completion", index, outcome, amount });
+          return updated;
         });
-      }
-    } catch (error) {
-      console.error('Failed to complete address:', error);
-      // Remove optimistic update on failure
-      setOptimisticUpdates(prev => {
-        const updated = new Map(prev);
-        updated.delete(optimisticId);
-        return updated;
-      });
-    } finally {
-      // Clean up optimistic update after a short delay
-      setTimeout(() => {
-        setOptimisticUpdates(prev => {
+
+        complete(index, outcome, amount);
+
+        if (cloudSync.queueOperation) {
+          await cloudSync.queueOperation({
+            type: "create",
+            entity: "completion",
+            entityId: optimisticId,
+            data: {
+              index,
+              outcome,
+              amount,
+              address: addresses[index]?.address,
+              listVersion: safeState.currentListVersion,
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Failed to complete address:", error);
+        setOptimisticUpdates((prev) => {
           const updated = new Map(prev);
           updated.delete(optimisticId);
           return updated;
         });
-      }, 1000);
-    }
-  }, [complete, addresses, safeState.currentListVersion, cloudSync]);
+      } finally {
+        setTimeout(() => {
+          setOptimisticUpdates((prev) => {
+            const updated = new Map(prev);
+            updated.delete(optimisticId);
+            return updated;
+          });
+        }, 1000);
+      }
+    },
+    [complete, addresses, safeState.currentListVersion, cloudSync]
+  );
 
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
   }, []);
 
-  // Ensure a session exists when Navigation is used
   const ensureDayStarted = React.useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
     const hasToday = daySessions.some((d) => d.date === today);
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
-  // DayPanel - edit start time
+  // ----- Edit START time -----
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
-      const parsed = typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
+      const parsed =
+        typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
       if (Number.isNaN(parsed.getTime())) return;
 
       const newISO = parsed.toISOString();
@@ -512,13 +526,51 @@ function AuthedApp() {
             try {
               const start = new Date(sess.start).getTime();
               const end = new Date(sess.end).getTime();
-              if (end > start) sess.durationSeconds = Math.floor((end - start) / 1000);
+              if (end > start)
+                sess.durationSeconds = Math.floor((end - start) / 1000);
             } catch {}
           }
           arr[idx] = sess;
           return { ...s, daySessions: arr };
         }
-        return { ...s, daySessions: [...s.daySessions, { date: today, start: newISO }] };
+        return {
+          ...s,
+          daySessions: [...s.daySessions, { date: today, start: newISO }],
+        };
+      });
+    },
+    [setState]
+  );
+
+  // ----- Edit FINISH time (NEW) -----
+  const handleEditEnd = React.useCallback(
+    (newEndISO: string | Date) => {
+      const parsed =
+        typeof newEndISO === "string" ? new Date(newEndISO) : newEndISO;
+      if (Number.isNaN(parsed.getTime())) return;
+
+      const newISO = parsed.toISOString();
+      setState((s) => {
+        const dayKey = newISO.slice(0, 10);
+        const idx = s.daySessions.findIndex((d) => d.date === dayKey);
+        if (idx >= 0) {
+          const arr = s.daySessions.slice();
+          const sess: any = { ...arr[idx], end: newISO };
+          if (sess.start) {
+            try {
+              const start = new Date(sess.start).getTime();
+              const end = new Date(sess.end).getTime();
+              if (end > start)
+                sess.durationSeconds = Math.floor((end - start) / 1000);
+            } catch {}
+          }
+          arr[idx] = sess;
+          return { ...s, daySessions: arr };
+        }
+        return {
+          ...s,
+          daySessions: [...s.daySessions, { date: dayKey, end: newISO }],
+        };
       });
     },
     [setState]
@@ -557,7 +609,9 @@ function AuthedApp() {
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
     const completedIdx = new Set(
-      completions.filter((c) => c.listVersion === currentVer).map((c) => c.index)
+      completions
+        .filter((c) => c.listVersion === currentVer)
+        .map((c) => c.index)
     );
     const total = addresses.length;
     const pending = total - completedIdx.size;
@@ -586,7 +640,11 @@ function AuthedApp() {
           return s;
         }
         const comps = s.completions.slice();
-        comps[targetCompletionIndex] = { ...comps[targetCompletionIndex], outcome, amount };
+        comps[targetCompletionIndex] = {
+          ...comps[targetCompletionIndex],
+          outcome,
+          amount,
+        };
         return { ...s, completions: comps };
       });
     },
@@ -628,12 +686,12 @@ function AuthedApp() {
     const basePercent = (-tabIndex / tabCount) * 100;
 
     if (!dragging || !viewportRef.current) {
-      return "translateX(" + String(basePercent) + "%)";
+      return `translateX(${basePercent}%)`;
     }
 
     const viewportWidth = viewportRef.current.clientWidth;
     if (viewportWidth <= 0) {
-      return "translateX(" + String(basePercent) + "%)";
+      return `translateX(${basePercent}%)`;
     }
 
     const dragPercent = (dragX / viewportWidth) * 100;
@@ -648,7 +706,7 @@ function AuthedApp() {
     const maxPercent = 10;
     const clampedPercent = Math.max(minPercent - 10, Math.min(maxPercent, finalPercent));
 
-    return "translateX(" + String(clampedPercent) + "%)";
+    return `translateX(${clampedPercent}%)`;
   }, [tabIndex, dragging, dragX]);
 
   const handleTouchMove: React.TouchEventHandler<HTMLDivElement> = (e) => {
@@ -707,23 +765,11 @@ function AuthedApp() {
   // Enhanced manual sync with feedback
   const handleManualSync = React.useCallback(async () => {
     try {
-      console.log('Manual sync initiated...');
+      console.log("Manual sync initiated...");
       await cloudSync.syncData(safeState);
       lastFromCloudRef.current = JSON.stringify(safeState);
-      
-      // Show brief success feedback
-      const originalError = cloudSync.error;
-      if (!originalError) {
-        // Temporarily show success message
-        setTimeout(() => {
-          // Only clear if no new error occurred
-          if (!cloudSync.error) {
-            // Success feedback could be shown here
-          }
-        }, 2000);
-      }
     } catch (err) {
-      console.error('Manual sync failed:', err);
+      console.error("Manual sync failed:", err);
     }
   }, [cloudSync, safeState]);
 
@@ -738,7 +784,6 @@ function AuthedApp() {
     );
   }
 
-  // Enhanced sync status indicator
   const getSyncStatus = () => {
     if (cloudSync.isSyncing) {
       return { text: "SYNCING", color: "var(--warning)", icon: "⟳" };
@@ -769,7 +814,14 @@ function AuthedApp() {
               color: "var(--text-muted)",
             }}
           >
-            <span style={{ color: syncStatus.color, display: "flex", alignItems: "center", gap: "0.25rem" }}>
+            <span
+              style={{
+                color: syncStatus.color,
+                display: "flex",
+                alignItems: "center",
+                gap: "0.25rem",
+              }}
+            >
               <span>{syncStatus.icon}</span>
               {syncStatus.text}
             </span>
@@ -824,7 +876,7 @@ function AuthedApp() {
               title={cloudSync.isSyncing ? "Syncing..." : "Force sync now"}
               style={{
                 opacity: cloudSync.isSyncing ? 0.6 : 1,
-                cursor: cloudSync.isSyncing ? "not-allowed" : "pointer"
+                cursor: cloudSync.isSyncing ? "not-allowed" : "pointer",
               }}
             >
               {cloudSync.isSyncing ? "⟳ Syncing..." : "🔄 Sync"}
@@ -835,31 +887,30 @@ function AuthedApp() {
 
       {/* Enhanced error display */}
       {cloudSync.error && (
-        <div style={{
-          background: "var(--danger-light)",
-          border: "1px solid var(--danger)",
-          borderRadius: "var(--radius)",
-          padding: "0.75rem",
-          marginBottom: "1rem",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
-        }}>
+        <div
+          style={{
+            background: "var(--danger-light)",
+            border: "1px solid var(--danger)",
+            borderRadius: "var(--radius)",
+            padding: "0.75rem",
+            marginBottom: "1rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <span style={{ color: "var(--danger)", fontSize: "0.875rem" }}>
             ⚠️ Sync error: {cloudSync.error}
           </span>
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button 
-              className="btn btn-ghost btn-sm" 
+            <button
+              className="btn btn-ghost btn-sm"
               onClick={handleManualSync}
               disabled={cloudSync.isSyncing}
             >
               Retry
             </button>
-            <button 
-              className="btn btn-ghost btn-sm" 
-              onClick={cloudSync.clearError}
-            >
+            <button className="btn btn-ghost btn-sm" onClick={cloudSync.clearError}>
               Dismiss
             </button>
           </div>
@@ -867,7 +918,9 @@ function AuthedApp() {
       )}
 
       {/* Tools toggle */}
-      <div style={{ marginBottom: "0.75rem", display: "flex", justifyContent: "center" }}>
+      <div
+        style={{ marginBottom: "0.75rem", display: "flex", justifyContent: "center" }}
+      >
         <button
           className="btn btn-ghost"
           onClick={() => setToolsOpen((o) => !o)}
@@ -978,6 +1031,17 @@ function AuthedApp() {
               padding: "0",
             }}
           >
+            {/* Day panel FIRST */}
+            <DayPanel
+              sessions={daySessions}
+              completions={completions}
+              startDay={startDay}
+              endDay={endDayWithBackup}
+              onEditStart={handleEditStart}
+              onEditEnd={handleEditEnd} // NEW
+            />
+
+            {/* SEARCH BAR UNDER THE DAY PANEL */}
             <div className="search-container">
               <input
                 type="search"
@@ -987,14 +1051,6 @@ function AuthedApp() {
                 className="input search-input"
               />
             </div>
-
-            <DayPanel
-              sessions={daySessions}
-              completions={completions}
-              startDay={startDay}
-              endDay={endDayWithBackup}
-              onEditStart={handleEditStart}
-            />
 
             <AddressList
               state={safeState}
@@ -1034,6 +1090,9 @@ function AuthedApp() {
                 </span>
               )}
             </div>
+
+            {/* Floating + Address button */}
+            <ManualAddressFAB />
           </section>
 
           {/* Panel 2: Completed */}
@@ -1084,7 +1143,12 @@ function AuthedApp() {
 function CloudRestore(props: {
   cloudBusy: boolean;
   cloudErr: string | null;
-  cloudBackups: { object_path: string; size_bytes?: number; created_at?: string; day_key?: string }[];
+  cloudBackups: {
+    object_path: string;
+    size_bytes?: number;
+    created_at?: string;
+    day_key?: string;
+  }[];
   cloudMenuOpen: boolean;
   setCloudMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
   loadRecentCloudBackups: () => Promise<void>;
@@ -1128,22 +1192,38 @@ function CloudRestore(props: {
             boxShadow: "var(--shadow-lg)",
           }}
         >
-          <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>Recent backups (7 days)</div>
+          <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>
+            Recent backups (7 days)
+          </div>
 
           {cloudBusy && (
-            <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
+            <div
+              style={{
+                padding: "0.5rem 0.5rem",
+                fontSize: 12,
+                color: "var(--text-secondary)",
+              }}
+            >
               Loading...
             </div>
           )}
 
           {!cloudBusy && cloudErr && (
-            <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--danger)" }}>
+            <div
+              style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--danger)" }}
+            >
               {cloudErr}
             </div>
           )}
 
           {!cloudBusy && !cloudErr && cloudBackups.length === 0 && (
-            <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
+            <div
+              style={{
+                padding: "0.5rem 0.5rem",
+                fontSize: 12,
+                color: "var(--text-secondary)",
+              }}
+            >
               No backups found.
             </div>
           )}
@@ -1152,9 +1232,12 @@ function CloudRestore(props: {
             !cloudErr &&
             cloudBackups.map((row) => {
               const parts = row.object_path.split("/");
-              const fname = parts.length > 0 ? parts[parts.length - 1] : row.object_path;
+              const fname =
+                parts.length > 0 ? parts[parts.length - 1] : row.object_path;
               const day = row.day_key || "";
-              const sizeText = row.size_bytes ? Math.round(row.size_bytes / 1024) + " KB" : "";
+              const sizeText = row.size_bytes
+                ? Math.round(row.size_bytes / 1024) + " KB"
+                : "";
               return (
                 <button
                   key={row.object_path}
