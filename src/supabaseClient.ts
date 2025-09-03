@@ -2,19 +2,17 @@
 import { createClient } from "@supabase/supabase-js";
 
 const url =
-  (import.meta as any)?.env?.VITE_SUPABASE_URL ||
-  (globalThis as any)?.VITE_SUPABASE_URL;
+  import.meta.env.VITE_SUPABASE_URL;
 
-const anonKey =
-  (import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY ||
-  (globalThis as any)?.VITE_SUPABASE_ANON_KEY;
+const anon =
+  // Prefer the canonical name, but fall back to your existing secret name.
+  import.meta.env.VITE_SUPABASE_ANON_KEY ??
+  import.meta.env.VITE_SUPABASE_KEY;
 
-if (!url || !anonKey) {
-  console.warn(
-    "[supabaseClient] Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY envs."
-  );
+if (!url || !anon) {
+  console.warn("[supabaseClient] Missing VITE_SUPABASE_URL and/or VITE_SUPABASE_ANON_KEY/VITE_SUPABASE_KEY");
 }
 
-export const supabase = createClient(url || "", anonKey || "", {
+export const supabase = createClient(url ?? "", anon ?? "", {
   auth: { persistSession: false, autoRefreshToken: false },
 });
