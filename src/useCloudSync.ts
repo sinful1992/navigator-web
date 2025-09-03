@@ -327,7 +327,6 @@ export function useCloudSync(): UseCloudSync {
         setIsSyncing(true);
         
         const now = new Date().toISOString();
-        const checksum = generateChecksum(state);
         
         // First, get current server state for conflict resolution
         const { data: currentData, error: fetchError } = await supabase
