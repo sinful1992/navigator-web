@@ -12,7 +12,7 @@ import { Arrangements } from "./Arrangements";
 import { readJsonFile } from "./backup";
 import type { AddressRow, Outcome } from "./types";
 import { supabase } from "./lib/supabaseClient";
-import ManualAddressFAB from "./ManualAddressFAB"; // NEW
+import ManualAddressFAB from "./ManualAddressFAB";
 
 type Tab = "list" | "completed" | "arrangements";
 
@@ -732,7 +732,7 @@ function AuthedApp() {
 
     const viewportWidth = swipe.current.w;
     const maxDrag = viewportWidth * 0.5;
-    the const clampedDx = Math.max(-maxDrag, Math.min(maxDrag, dx));
+    const clampedDx = Math.max(-maxDrag, Math.min(maxDrag, dx)); // <-- FIXED (no stray "the")
 
     const atFirst = tabIndex === 0 && clampedDx > 0;
     const atLast = tabIndex === tabsOrder.length - 1 && clampedDx < 0;
@@ -946,7 +946,8 @@ function AuthedApp() {
               background: "var(--surface)",
               padding: "1.0rem",
               borderRadius: "var(--radius-lg)",
-              border: "1px solid var(--border-light)",
+              border: "1px solid " +
+                "var(--border-light)",
               boxShadow: "var(--shadow-sm)",
             }}
           >
@@ -1047,7 +1048,7 @@ function AuthedApp() {
               startDay={startDay}
               endDay={endDayWithBackup}
               onEditStart={handleEditStart}
-              onEditEnd={handleEditEnd} // NEW
+              onEditEnd={handleEditEnd}
             />
 
             {/* SEARCH BAR UNDER THE DAY PANEL */}
