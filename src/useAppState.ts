@@ -587,8 +587,8 @@ export function useAppState() {
           // Merge arrangements, preferring newer versions
           arrangements: Array.from(
             new Map([
-              ...currentState.arrangements.map(arr => [arr.id, arr]),
-              ...restoredState.arrangements.map(arr => [arr.id, arr])
+              ...currentState.arrangements.map(arr => [arr.id, arr] as [string, Arrangement]),
+              ...restoredState.arrangements.map(arr => [arr.id, arr] as [string, Arrangement])
             ].sort(([,a], [,b]) => 
               new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
             )).values()
@@ -597,8 +597,8 @@ export function useAppState() {
           // Merge day sessions, keeping unique dates
           daySessions: Array.from(
             new Map([
-              ...currentState.daySessions.map(session => [session.date, session]),
-              ...restoredState.daySessions.map(session => [session.date, session])
+              ...currentState.daySessions.map(session => [session.date, session] as [string, DaySession]),
+              ...restoredState.daySessions.map(session => [session.date, session] as [string, DaySession])
             ]).values()
           ),
           
@@ -688,7 +688,7 @@ export function useAppState() {
     
     // Conflicts
     conflicts,
-    resolveConflict: (conflictId: string, resolution: 'prefer_incoming' | 'prefer_existing') => {
+    resolveConflict: (conflictId: string, _resolution: 'prefer_incoming' | 'prefer_existing') => {
       setConflicts(prev => {
         const updated = new Map(prev);
         updated.delete(conflictId);
