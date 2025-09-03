@@ -68,7 +68,8 @@ function stampCompletionsWithVersion(
 function generateOperationId(type: string, entity: string, data: any): string {
   const payload = JSON.stringify(data);
   const key = `${type}_${entity}_${payload.slice(0, 50)}_${Date.now()}`;
-  const b64 = typeof btoa === "function" ? btoa(key) : Buffer.from(key).toString("base64");
+  const b64 =
+    typeof btoa === "function" ? btoa(key) : Buffer.from(key).toString("base64");
   return b64.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
 }
 
@@ -280,105 +281,7 @@ export function useAppState() {
     return next;
   }, [opSeq]);
 
-  /** -------- Enqueue helper -------- */
-  const enqueueOp = React.useCallback(
-    (entity: OpEntity, action: OpAction, payload: any, optimisticId?: string) => {
-      const seq = nextOpSeqSync();
-      const opId = `${deviceId}:${seq}`;
-      const op: SyncOp = {
-        id: opId,
-        deviceId,
-        opSeq: seq,
-        entity,
-        action,
-        payload,
-        createdAt: new Date().toISOString(),
-        optimisticId,
-      };
-      setOpQueue((q) => [...q, op]);
-    },
-    [deviceId, nextOpSeqSync]
-  );
-
-  /** -------- Drain loop -------- */
-  const tryDrain = React.useCallback(async () => {
-    if (drainingRef.current) return;
-    if (!opQueue.length) return;
-    if (typeof navigator !== "undefined" && navigator && "onLine" in navigator) {
-      if (!navigator.onLine) return;
-    }
-
-    drainingRef.current = true;
-    try {
-      let queue = opQueue;
-      let localBackoff = backoffMs;
-
-      while (queue.length) {
-        const batch = queue.slice(0, 25);
-        const res = await applyOps(batch);
-
-        if (res.ok) {
-          // Success: confirm any still-pending optimistic updates
-          for (const op of batch) {
-            if (op.optimisticId) {
-              // It’s safe to call even if already confirmed or missing
-              confirmOptimisticUpdate(op.optimisticId);
-            }
-          }
-          // Drop sent items
-          queue = queue.slice(batch.length);
-          setOpQueue(queue);
-          // Reset backoff after any success
-          localBackoff = 0;
-          setBackoffMs(0);
-        } else {
-          // Failure: set backoff and exit loop
-          const next = Math.min(localBackoff ? localBackoff * 2 : 500, 8000);
-          const wait = res.retryAfterMs && res.retryAfterMs > 0 ? res.retryAfterMs : next;
-          setBackoffMs(wait);
-          // Optionally surface conflicts (server-provided). For now, keep queue intact.
-          if (res.conflicts && res.conflicts.length) {
-            console.warn("Server conflicts reported:", res.conflicts.length);
-          }
-          break;
-        }
-      }
-
-      // If anything remains, schedule another attempt after backoff
-      if (queue.length) {
-        const delay = backoffMs || 1000;
-        setTimeout(() => {
-          drainingRef.current = false;
-          tryDrain();
-        }, delay);
-      } else {
-        drainingRef.current = false;
-      }
-    } catch (e) {
-      console.warn("Drain failed:", e);
-      const next = Math.min(backoffMs ? backoffMs * 2 : 500, 8000);
-      setBackoffMs(next);
-      setTimeout(() => {
-        drainingRef.current = false;
-        tryDrain();
-      }, next);
-    }
-  }, [opQueue, backoffMs, confirmOptimisticUpdate]);
-
-  // Drain when online or queue updates
-  React.useEffect(() => {
-    if (!loading && opQueue.length) {
-      tryDrain();
-    }
-  }, [opQueue, loading, tryDrain]);
-
-  React.useEffect(() => {
-    const onOnline = () => tryDrain();
-    window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
-  }, [tryDrain]);
-
-  /** -------- Optimistic update helpers -------- */
+  /** -------- Optimistic update helpers (DECLARED BEFORE tryDrain) -------- */
   const addOptimisticUpdate = React.useCallback(
     (
       operation: "create" | "update" | "delete",
@@ -482,6 +385,98 @@ export function useAppState() {
     });
   }, []);
 
+  /** -------- Enqueue helper -------- */
+  const enqueueOp = React.useCallback(
+    (entity: OpEntity, action: OpAction, payload: any, optimisticId?: string) => {
+      const seq = nextOpSeqSync();
+      const opId = `${deviceId}:${seq}`;
+      const op: SyncOp = {
+        id: opId,
+        deviceId,
+        opSeq: seq,
+        entity,
+        action,
+        payload,
+        createdAt: new Date().toISOString(),
+        optimisticId,
+      };
+      setOpQueue((q) => [...q, op]);
+    },
+    [deviceId, nextOpSeqSync]
+  );
+
+  /** -------- Drain loop (uses confirmOptimisticUpdate already declared) -------- */
+  const tryDrain = React.useCallback(async () => {
+    if (drainingRef.current) return;
+    if (!opQueue.length) return;
+    if (typeof navigator !== "undefined" && "onLine" in navigator) {
+      if (!navigator.onLine) return;
+    }
+
+    drainingRef.current = true;
+    try {
+      let queue = opQueue;
+      let localBackoff = backoffMs;
+
+      while (queue.length) {
+        const batch = queue.slice(0, 25);
+        const res = await applyOps(batch);
+
+        if (res.ok) {
+          for (const op of batch) {
+            if (op.optimisticId) {
+              confirmOptimisticUpdate(op.optimisticId);
+            }
+          }
+          queue = queue.slice(batch.length);
+          setOpQueue(queue);
+          localBackoff = 0;
+          setBackoffMs(0);
+        } else {
+          const next = Math.min(localBackoff ? localBackoff * 2 : 500, 8000);
+          const wait = res.retryAfterMs && res.retryAfterMs > 0 ? res.retryAfterMs : next;
+          setBackoffMs(wait);
+          if (res.conflicts && res.conflicts.length) {
+            console.warn("Server conflicts reported:", res.conflicts.length);
+          }
+          break;
+        }
+      }
+
+      if (queue.length) {
+        const delay = backoffMs || 1000;
+        setTimeout(() => {
+          drainingRef.current = false;
+          tryDrain();
+        }, delay);
+      } else {
+        drainingRef.current = false;
+      }
+    } catch (e) {
+      console.warn("Drain failed:", e);
+      const next = Math.min(backoffMs ? backoffMs * 2 : 500, 8000);
+      setBackoffMs(next);
+      setTimeout(() => {
+        drainingRef.current = false;
+        tryDrain();
+      }, next);
+    }
+  }, [opQueue, backoffMs, confirmOptimisticUpdate]);
+
+  // Drain when online or queue updates
+  React.useEffect(() => {
+    if (!loading && opQueue.length) {
+      tryDrain();
+    }
+  }, [opQueue, loading, tryDrain]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onOnline = () => tryDrain();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [tryDrain]);
+
   /** ================================
    *  Enhanced actions (addresses)
    *  ================================ */
@@ -501,7 +496,6 @@ export function useAppState() {
         currentListVersion: (s.currentListVersion || 1) + 1,
       }));
 
-      // Enqueue sync op (we keep local confirm immediate in Step 2)
       enqueueOp("address", "update", { addresses: rows }, operationId);
       confirmOptimisticUpdate(operationId);
     },
@@ -567,7 +561,6 @@ export function useAppState() {
           const operationId = generateOperationId("create", "completion", completion);
           addOptimisticUpdate("create", "completion", completion, operationId);
 
-          // Enqueue
           enqueueOp("completion", "create", completion, operationId);
 
           const next: AppState = {
