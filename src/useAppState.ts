@@ -160,7 +160,7 @@ export function useAppState() {
   const [deviceId, setDeviceId] = React.useState<string>("");
   const [opSeq, setOpSeq] = React.useState<number>(0);
 
-  // Conflicts (we’ll expand structure later)
+  // Conflicts
   type Conflict =
     | {
         type: "completion";
@@ -799,7 +799,7 @@ export function useAppState() {
         const localConflicts = new Map<string, Conflict>();
 
         // Completions: simple “same index + outcome within 5s” heuristic
-        nextState.completions.forEach((incoming) => {
+        nextState.completions.forEach((incoming: Completion) => {
           const existing = currentState.completions.find(
             (c) =>
               c.index === incoming.index &&
@@ -820,7 +820,7 @@ export function useAppState() {
         });
 
         // Arrangements: prefer newer updatedAt
-        nextState.arrangements.forEach((incoming) => {
+        nextState.arrangements.forEach((incoming: Arrangement) => {
           const existing = currentState.arrangements.find((a) => a.id === incoming.id);
           if (existing && existing.updatedAt !== incoming.updatedAt) {
             const incomingTime = new Date(incoming.updatedAt).getTime();
