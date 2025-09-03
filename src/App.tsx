@@ -18,8 +18,10 @@ import ManualAddressFAB from "./ManualAddressFAB";
 type Tab = "list" | "completed" | "arrangements";
 
 export default function App() {
-  // Keep cloud sync listeners alive; do not assign to avoid "unused" TS errors.
-  try { useCloudSync(); } catch {}
+  // keep realtime listeners alive (ignore return)
+  try {
+    useCloudSync();
+  } catch {}
 
   const {
     state,
@@ -51,11 +53,9 @@ export default function App() {
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
 
-  // Convenience alias (your other files sometimes expect `safeState`)
-  const safeState = state;
   const { daySessions, completions } = state;
 
-  // Ensure a session exists today when the app opens
+  // Ensure a session exists for today on load
   React.useEffect(() => {
     const today = new Date().toISOString().slice(0, 10);
     const hasToday = daySessions.some((d) => d.date === today);
@@ -63,7 +63,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- Edit start time ---
+  // --- Edit START time ---
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
       const parsed =
@@ -88,7 +88,7 @@ export default function App() {
           arr[idx] = sess;
           return { ...s, daySessions: arr };
         }
-        // If no active session, create one
+        // create session if missing
         return {
           ...s,
           daySessions: [...s.daySessions, { date: dayKey, start: iso }],
@@ -98,7 +98,7 @@ export default function App() {
     [setState]
   );
 
-  // --- Edit finish time (same UX as start) ---
+  // --- Edit FINISH time (same UX as start) ---
   const handleEditEnd = React.useCallback(
     (newEndISO: string | Date) => {
       const parsed =
@@ -123,7 +123,7 @@ export default function App() {
           arr[idx] = sess;
           return { ...s, daySessions: arr };
         }
-        // If there's no session yet for that day, create one with only end
+        // create session if missing
         return {
           ...s,
           daySessions: [...s.daySessions, { date: dayKey, end: iso }],
@@ -133,7 +133,7 @@ export default function App() {
     [setState]
   );
 
-  // Finish day + quick local JSON backup (optional)
+  // End day + quick local JSON backup (optional)
   const endDayWithBackup = React.useCallback(() => {
     try {
       const snap = backupState();
@@ -185,7 +185,7 @@ export default function App() {
     [setState]
   );
 
-  // Backup / Restore UI
+  // Backup / Restore controls
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const onClickRestore = () => fileRef.current?.click();
   const onFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -287,7 +287,7 @@ export default function App() {
               onEditEnd={handleEditEnd}
             />
 
-            {/* SEARCH BAR UNDER DAY PANEL */}
+            {/* SEARCH BAR UNDER THE DAY PANEL */}
             <div className="search-container">
               <input
                 type="search"
@@ -300,7 +300,7 @@ export default function App() {
 
             {/* Address list */}
             <AddressList
-              state={safeState}
+              state={state}
               setActive={setActive}
               cancelActive={cancelActive}
               onComplete={handleComplete}
@@ -329,7 +329,7 @@ export default function App() {
         {tab === "arrangements" && (
           <section className="tab-panel">
             <Arrangements
-              state={safeState}
+              state={state}
               onAddArrangement={addArrangement}
               onUpdateArrangement={updateArrangement}
               onDeleteArrangement={deleteArrangement}
@@ -342,109 +342,3 @@ export default function App() {
     </div>
   );
 }
-    <div className="tabs">
-      {/* Panel 1: Addresses */}
-      <section
-        className="tab-panel"
-        style={{
-          flex: "0 0 33.333333%",
-          minWidth: "33.333333%",
-          maxWidth: "33.333333%",
-          boxSizing: "border-box",
-          overflowX: "hidden",
-          padding: "0",
-        }}
-      >
-        {/* Day panel first */}
-        <DayPanel
-          sessions={daySessions}
-          completions={completions}
-          startDay={startDay}
-          endDay={endDayWithBackup}
-          onEditStart={handleEditStart}
-          onEditEnd={handleEditEnd} {/* <-- NEW */}
-        />
-
-        {/* Search bar moved UNDER the Day panel */}
-        <div className="search-container">
-          <input
-            type="search"
-            value={search}
-            placeholder="Search addresses..."
-            onChange={(e) => setSearch(e.target.value)}
-            className="input search-input"
-          />
-        </div>
-
-        {/* Address list (unchanged) */}
-        <AddressList
-          state={safeState}
-          setActive={setActive}
-          cancelActive={cancelActive}
-          onComplete={handleComplete}
-          onUndo={undo}
-          filterText={search}
-          ensureDayStarted={ensureDayStarted}
-        />
-
-        {/* Actions + stats footer (unchanged) */}
-        <div
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            margin: "1.25rem 0 3rem",
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          {/* … your existing buttons and stats … */}
-        </div>
-      </section>
-
-      {/* Panel 2: Completed */}
-      <section
-        className="tab-panel"
-        style={{
-          flex: "0 0 33.333333%",
-          minWidth: "33.333333%",
-          maxWidth: "33.333333%",
-          boxSizing: "border-box",
-          overflowX: "hidden",
-          padding: "0",
-        }}
-      >
-        <Completed
-          completions={completions}
-          removeCompletion={removeCompletion}
-          restoreCompletion={restoreCompletion}
-        />
-      </section>
-
-      {/* Panel 3: Arrangements */}
-      <section
-        className="tab-panel"
-        style={{
-          flex: "0 0 33.333333%",
-          minWidth: "33.333333%",
-          maxWidth: "33.333333%",
-          boxSizing: "border-box",
-          overflowX: "hidden",
-          padding: "0",
-        }}
-      >
-        <Arrangements
-          arrangements={arrangements}
-          addArrangement={addArrangement}
-          updateArrangement={updateArrangement}
-          deleteArrangement={deleteArrangement}
-        />
-      </section>
-
-      {/* Floating +Address button across the app */}
-      <ManualAddressFAB /> {/* <-- NEW */}
-    </div>
-  </div>
-);
-}
-
-// (…helpers below unchanged…)
