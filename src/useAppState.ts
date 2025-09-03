@@ -11,6 +11,7 @@ import type {
 } from "./types";
 import { applyOps } from "./syncApi";
 import type { SyncOp, OpEntity, OpAction } from "./syncTypes";
+import { supabase } from "./supabaseClient";
 
 /** ================================
  *  Persistent storage keys
@@ -59,7 +60,6 @@ function stampCompletionsWithVersion(
   const src = Array.isArray(completions) ? completions : [];
   return src.map((c: any) => ({
     ...c,
-    // if missing, tag with the snapshot's version
     listVersion: typeof c?.listVersion === "number" ? c.listVersion : version,
   }));
 }
@@ -104,7 +104,6 @@ function applyOptimisticUpdates(
 
       case "arrangement":
         if (update.operation === "create") {
-          // Dedupe by id, then sort by updatedAt desc
           const map = new Map<string, Arrangement>([
             ...result.arrangements.map<[string, Arrangement]>((a) => [a.id, a]),
             [update.data.id, update.data as Arrangement],
@@ -114,7 +113,6 @@ function applyOptimisticUpdates(
               new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
           );
         } else if (update.operation === "update") {
-          // Keep sorted after update as well
           result.arrangements = result.arrangements
             .map((a) => (a.id === update.data.id ? { ...a, ...update.data } : a))
             .sort(
@@ -281,7 +279,7 @@ export function useAppState() {
     return next;
   }, [opSeq]);
 
-  /** -------- Optimistic update helpers (DECLARED BEFORE tryDrain) -------- */
+  /** -------- Optimistic update helpers -------- */
   const addOptimisticUpdate = React.useCallback(
     (
       operation: "create" | "update" | "delete",
@@ -405,7 +403,7 @@ export function useAppState() {
     [deviceId, nextOpSeqSync]
   );
 
-  /** -------- Drain loop (uses confirmOptimisticUpdate already declared) -------- */
+  /** -------- Drain loop -------- */
   const tryDrain = React.useCallback(async () => {
     if (drainingRef.current) return;
     if (!opQueue.length) return;
@@ -424,9 +422,7 @@ export function useAppState() {
 
         if (res.ok) {
           for (const op of batch) {
-            if (op.optimisticId) {
-              confirmOptimisticUpdate(op.optimisticId);
-            }
+            if (op.optimisticId) confirmOptimisticUpdate(op.optimisticId);
           }
           queue = queue.slice(batch.length);
           setOpQueue(queue);
@@ -465,9 +461,7 @@ export function useAppState() {
 
   // Drain when online or queue updates
   React.useEffect(() => {
-    if (!loading && opQueue.length) {
-      tryDrain();
-    }
+    if (!loading && opQueue.length) tryDrain();
   }, [opQueue, loading, tryDrain]);
 
   React.useEffect(() => {
@@ -496,6 +490,7 @@ export function useAppState() {
         currentListVersion: (s.currentListVersion || 1) + 1,
       }));
 
+      // NOTE: server currently ignores address-bulk ops (no id). We'll support later.
       enqueueOp("address", "update", { addresses: rows }, operationId);
       confirmOptimisticUpdate(operationId);
     },
@@ -512,6 +507,7 @@ export function useAppState() {
           const newAddresses = [...s.addresses, addressRow];
           const newIndex = newAddresses.length - 1;
 
+          // (not persisted to server yet)
           enqueueOp("address", "create", addressRow, operationId);
           setTimeout(() => {
             confirmOptimisticUpdate(operationId);
@@ -534,7 +530,7 @@ export function useAppState() {
   }, []);
 
   /** ================================
-   *  Completions
+   *  Completions (now with server IDs)
    *  ================================ */
   const complete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string): Promise<string> => {
@@ -558,10 +554,19 @@ export function useAppState() {
             listVersion: s.currentListVersion,
           };
 
+          // For server persistence, include an id in the op payload (state type stays the same)
+          const completionId = `c_${nowISO}`; // deterministic
+          const forServer = {
+            ...completion,
+            id: completionId,
+            updatedAt: nowISO,
+            updatedBy: deviceId,
+          };
+
           const operationId = generateOperationId("create", "completion", completion);
           addOptimisticUpdate("create", "completion", completion, operationId);
 
-          enqueueOp("completion", "create", completion, operationId);
+          enqueueOp("completion", "create", forServer, operationId);
 
           const next: AppState = {
             ...s,
@@ -577,7 +582,7 @@ export function useAppState() {
         });
       });
     },
-    [addOptimisticUpdate, enqueueOp, confirmOptimisticUpdate]
+    [addOptimisticUpdate, enqueueOp, confirmOptimisticUpdate, deviceId]
   );
 
   const undo = React.useCallback(
@@ -594,7 +599,11 @@ export function useAppState() {
           const completion = arr[pos];
           const operationId = generateOperationId("delete", "completion", completion);
           addOptimisticUpdate("delete", "completion", completion, operationId);
-          enqueueOp("completion", "delete", completion, operationId);
+
+          // derive completion id the same way we created it
+          const completionId = `c_${completion.timestamp}`;
+          enqueueOp("completion", "delete", { id: completionId, timestamp: completion.timestamp }, operationId);
+
           arr.splice(pos, 1);
           setTimeout(() => confirmOptimisticUpdate(operationId), 0);
         }
@@ -606,12 +615,11 @@ export function useAppState() {
   );
 
   /** ================================
-   *  Day sessions (stamp sync meta)
+   *  Day sessions (add ids; server persists)
    *  ================================ */
   const startDay = React.useCallback(() => {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
-    const seq = nextOpSeqSync();
 
     setBaseState((s) => {
       if (s.daySessions.some((d) => !d.end)) return s; // already active
@@ -620,22 +628,30 @@ export function useAppState() {
         date: today,
         start: now.toISOString(),
       };
+      // local meta (not in type)
       (sess as any).updatedAt = now.toISOString();
       (sess as any).updatedBy = deviceId;
-      (sess as any).opSeq = seq;
 
       const operationId = generateOperationId("create", "session", sess);
       addOptimisticUpdate("create", "session", sess, operationId);
-      enqueueOp("session", "create", sess, operationId);
+
+      // server payload MUST include an id; we use date as the natural key
+      const forServer = {
+        ...sess,
+        id: today,
+        updatedAt: now.toISOString(),
+        updatedBy: deviceId,
+      };
+      enqueueOp("session", "create", forServer, operationId);
+
       setTimeout(() => confirmOptimisticUpdate(operationId), 0);
 
       return { ...s, daySessions: [...s.daySessions, sess] };
     });
-  }, [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]);
+  }, [deviceId, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]);
 
   const endDay = React.useCallback(() => {
     const now = new Date();
-    const seq = nextOpSeqSync();
 
     setBaseState((s) => {
       const i = s.daySessions.findIndex((d) => !d.end);
@@ -653,20 +669,27 @@ export function useAppState() {
 
       (act as any).updatedAt = now.toISOString();
       (act as any).updatedBy = deviceId;
-      (act as any).opSeq = seq;
 
       const operationId = generateOperationId("update", "session", act);
       addOptimisticUpdate("update", "session", act, operationId);
-      enqueueOp("session", "update", act, operationId);
+
+      const forServer = {
+        ...act,
+        id: act.date,           // natural key
+        updatedAt: now.toISOString(),
+        updatedBy: deviceId,
+      };
+      enqueueOp("session", "update", forServer, operationId);
+
       setTimeout(() => confirmOptimisticUpdate(operationId), 0);
 
       arr[i] = act;
       return { ...s, daySessions: arr };
     });
-  }, [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]);
+  }, [deviceId, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]);
 
   /** ================================
-   *  Arrangements (stamp sync meta)
+   *  Arrangements (unchanged client shape; already have ids)
    *  ================================ */
   const addArrangement = React.useCallback(
     (
@@ -674,7 +697,6 @@ export function useAppState() {
     ): Promise<string> => {
       return new Promise((resolve) => {
         const now = new Date().toISOString();
-        const seq = nextOpSeqSync();
         const id = `arr_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
         const newArrangement: Arrangement = {
@@ -684,11 +706,14 @@ export function useAppState() {
           updatedAt: now,
         };
         (newArrangement as any).updatedBy = deviceId;
-        (newArrangement as any).opSeq = seq;
 
         const operationId = generateOperationId("create", "arrangement", newArrangement);
         addOptimisticUpdate("create", "arrangement", newArrangement, operationId);
-        enqueueOp("arrangement", "create", newArrangement, operationId);
+
+        enqueueOp("arrangement", "create", {
+          ...newArrangement,
+          updatedBy: deviceId,
+        }, operationId);
 
         setBaseState((s) => {
           setTimeout(() => {
@@ -710,24 +735,23 @@ export function useAppState() {
         });
       });
     },
-    [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]
+    [deviceId, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]
   );
 
   const updateArrangement = React.useCallback(
     (id: string, updates: Partial<Arrangement>): Promise<void> => {
       return new Promise((resolve) => {
         const now = new Date().toISOString();
-        const seq = nextOpSeqSync();
 
         const stamped = { ...updates, id, updatedAt: now } as Partial<Arrangement> & {
           id: string;
           updatedAt: string;
         };
         (stamped as any).updatedBy = deviceId;
-        (stamped as any).opSeq = seq;
 
         const operationId = generateOperationId("update", "arrangement", stamped);
         addOptimisticUpdate("update", "arrangement", stamped, operationId);
+
         enqueueOp("arrangement", "update", stamped, operationId);
 
         setBaseState((s) => {
@@ -749,7 +773,7 @@ export function useAppState() {
         });
       });
     },
-    [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]
+    [deviceId, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]
   );
 
   const deleteArrangement = React.useCallback(
@@ -951,6 +975,113 @@ export function useAppState() {
   );
 
   /** ================================
+   *  REALTIME: subscribe to server changes
+   *  ================================ */
+  const applyServerRow = React.useCallback((row: any) => {
+    const entity = row?.entity as string | undefined;
+    const payload = row?.payload as any;
+    const deleted = !!row?.deleted_at;
+    const updatedAt = String(row?.updated_at ?? "");
+    const updatedBy = String(row?.updated_by ?? "");
+
+    if (!entity || !payload) return;
+    // Ignore our own echoes
+    if (updatedBy && deviceId && updatedBy === deviceId) return;
+
+    setBaseState((s) => {
+      switch (entity) {
+        case "arrangement": {
+          const id = String(payload.id);
+          if (!id) return s;
+
+          if (deleted) {
+            return { ...s, arrangements: s.arrangements.filter(a => a.id !== id) };
+          }
+
+          // Merge by id, prefer newer updatedAt
+          const existing = s.arrangements.find(a => a.id === id);
+          if (!existing) {
+            const arr = [
+              ...s.arrangements,
+              { ...(payload as Arrangement) },
+            ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+            return { ...s, arrangements: arr };
+          } else {
+            const winner =
+              new Date(updatedAt).getTime() >= new Date(existing.updatedAt).getTime()
+                ? { ...existing, ...(payload as Arrangement) }
+                : existing;
+            const arr = s.arrangements
+              .map(a => (a.id === id ? winner : a))
+              .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+            return { ...s, arrangements: arr };
+          }
+        }
+
+        case "completion": {
+          // We store completions without id; reconcile by timestamp
+          const ts = payload?.timestamp as string | undefined;
+          if (!ts) return s;
+
+          if (deleted) {
+            return { ...s, completions: s.completions.filter(c => c.timestamp !== ts) };
+          }
+
+          // Avoid duplicate
+          if (s.completions.some(c => c.timestamp === ts)) return s;
+
+          const list = [payload as Completion, ...s.completions].sort(
+            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+          return { ...s, completions: list };
+        }
+
+        case "session": {
+          const dateKey = (payload?.date as string) || (payload?.id as string);
+          if (!dateKey) return s;
+
+          if (deleted) {
+            // If you ever hard-delete, you'd remove here; we soft-delete, so ignore.
+            return s;
+          }
+
+          const exists = s.daySessions.some(d => d.date === dateKey);
+          if (!exists) {
+            return { ...s, daySessions: [...s.daySessions, payload as DaySession] };
+          } else {
+            const merged = s.daySessions.map(d =>
+              d.date === dateKey ? { ...d, ...(payload as DaySession) } : d
+            );
+            return { ...s, daySessions: merged };
+          }
+        }
+
+        default:
+          return s;
+      }
+    });
+  }, [deviceId]);
+
+  React.useEffect(() => {
+    // Subscribe to all changes on public.entity_store
+    const ch = supabase
+      .channel("entity_store_changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "entity_store" },
+        (payload: any) => {
+          const row = payload?.new ?? payload?.record ?? payload?.old;
+          if (row) applyServerRow(row);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(ch); } catch {}
+    };
+  }, [applyServerRow]);
+
+  /** ================================
    *  Return API
    *  ================================ */
   return {
@@ -959,7 +1090,7 @@ export function useAppState() {
     baseState, // raw base
     loading,
 
-    // Device + opSeq (read-only for now)
+    // Device + opSeq (read-only)
     deviceId,
     opSeq,
 
