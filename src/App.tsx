@@ -169,37 +169,6 @@ function AuthedApp() {
     return true;
   });
 
-  // Swipe-to-change-tabs (mobile only)
-  const tabsOrder: Tab[] = ["list", "completed", "arrangements"];
-  const goToNextTab = React.useCallback(() => {
-    const i = tabsOrder.indexOf(tab);
-    setTab(tabsOrder[(i + 1) % tabsOrder.length]);
-  }, [tab]);
-  const goToPrevTab = React.useCallback(() => {
-    const i = tabsOrder.indexOf(tab);
-    setTab(tabsOrder[(i - 1 + tabsOrder.length) % tabsOrder.length]);
-  }, [tab]);
-  const swipe = React.useRef({ x: 0, y: 0, t: 0, active: false });
-  const handleTouchStart: React.TouchEventHandler<HTMLDivElement> = (e) => {
-    const t = e.changedTouches[0];
-    swipe.current = { x: t.clientX, y: t.clientY, t: Date.now(), active: true };
-  };
-  const handleTouchEnd: React.TouchEventHandler<HTMLDivElement> = (e) => {
-    if (!swipe.current.active) return;
-    swipe.current.active = false;
-    if (typeof window !== "undefined" && window.innerWidth >= 768) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - swipe.current.x;
-    const dy = t.clientY - swipe.current.y;
-    const dt = Date.now() - swipe.current.t;
-    const quick = dt <= 600;
-    const far = Math.abs(dx) >= 60;
-    const horizontal = Math.abs(dx) > Math.abs(dy) * 1.5;
-    if (!(quick && far && horizontal)) return;
-    if (dx < 0) goToNextTab();
-    else goToPrevTab();
-  };
-
   const addresses = Array.isArray(state.addresses) ? state.addresses : [];
   const completions = Array.isArray(state.completions) ? state.completions : [];
   const arrangements = Array.isArray(state.arrangements) ? state.arrangements : [];
@@ -494,6 +463,92 @@ function AuthedApp() {
     return () => document.removeEventListener("click", onDocClick);
   }, [cloudMenuOpen]);
 
+  // ---------------- Swipe with live drag ----------------
+  const tabsOrder: Tab[] = ["list", "completed", "arrangements"];
+  const tabIndex = tabsOrder.indexOf(tab);
+  const goToNextTab = React.useCallback(() => {
+    const i = tabsOrder.indexOf(tab);
+    setTab(tabsOrder[(i + 1) % tabsOrder.length]);
+  }, [tab]);
+  const goToPrevTab = React.useCallback(() => {
+    const i = tabsOrder.indexOf(tab);
+    setTab(tabsOrder[(i - 1 + tabsOrder.length) % tabsOrder.length]);
+  }, [tab]);
+
+  const viewportRef = React.useRef<HTMLDivElement | null>(null);
+  const [dragX, setDragX] = React.useState(0); // pixels
+  const [dragging, setDragging] = React.useState(false);
+
+  const swipe = React.useRef({
+    x: 0,
+    y: 0,
+    t: 0,
+    w: 1,
+    active: false,
+  });
+
+  const handleTouchStart: React.TouchEventHandler<HTMLDivElement> = (e) => {
+    const t = e.changedTouches[0];
+    const w = viewportRef.current
+      ? viewportRef.current.clientWidth
+      : typeof window !== "undefined"
+      ? window.innerWidth
+      : 1;
+    swipe.current = { x: t.clientX, y: t.clientY, t: Date.now(), w, active: true };
+    setDragX(0);
+    setDragging(true);
+  };
+
+  const handleTouchMove: React.TouchEventHandler<HTMLDivElement> = (e) => {
+    if (!swipe.current.active) return;
+    if (typeof window !== "undefined" && window.innerWidth >= 768) return; // mobile only
+
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipe.current.x;
+    const dy = t.clientY - swipe.current.y;
+
+    // Only react to mostly-horizontal moves
+    if (Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+
+    // Rubber-band at edges
+    const atFirst = tabIndex === 0 && dx > 0;
+    const atLast = tabIndex === tabsOrder.length - 1 && dx < 0;
+    const damp = atFirst || atLast ? 0.35 : 1;
+
+    setDragX(dx * damp);
+  };
+
+  const handleTouchEnd: React.TouchEventHandler<HTMLDivElement> = (e) => {
+    if (!swipe.current.active) return;
+    swipe.current.active = false;
+
+    if (typeof window !== "undefined" && window.innerWidth >= 768) {
+      setDragX(0);
+      setDragging(false);
+      return;
+    }
+
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipe.current.x;
+    const dy = t.clientY - swipe.current.y;
+    const dt = Date.now() - swipe.current.t;
+    const w = swipe.current.w;
+
+    const quick = dt <= 600;
+    const farPx = Math.abs(dx) >= 60;
+    const farFrac = Math.abs(dx) / Math.max(1, w) >= 0.18; // ~18% of width
+    const horizontal = Math.abs(dx) > Math.abs(dy) * 1.2;
+
+    if (horizontal && (farPx || farFrac || quick)) {
+      if (dx < 0 && tabIndex < tabsOrder.length - 1) goToNextTab();
+      else if (dx > 0 && tabIndex > 0) goToPrevTab();
+    }
+
+    // Snap back / finish transition
+    setDragX(0);
+    setDragging(false);
+  };
+
   if (loading) {
     return (
       <div className="container">
@@ -521,13 +576,9 @@ function AuthedApp() {
             }}
           >
             {cloudSync.isOnline ? (
-              <>
-                <span style={{ color: "var(--success)" }}>ONLINE</span>
-              </>
+              <span style={{ color: "var(--success)" }}>ONLINE</span>
             ) : (
-              <>
-                <span style={{ color: "var(--warning)" }}>OFFLINE</span>
-              </>
+              <span style={{ color: "var(--warning)" }}>OFFLINE</span>
             )}
           </div>
         </div>
@@ -604,93 +655,44 @@ function AuthedApp() {
               <label htmlFor="restore-input" className="file-input-label">Restore (file)</label>
 
               {/* Restore from Cloud (last 7 days) */}
-              <div style={{ position: "relative", display: "inline-block" }}>
-                <button
-                  className="btn btn-ghost"
-                  onClick={async () => {
-                    setCloudMenuOpen((o) => !o);
-                    if (!cloudMenuOpen) await loadRecentCloudBackups();
-                  }}
-                  title="List recent cloud backups"
-                >
-                  Restore from Cloud
-                </button>
-
-                {cloudMenuOpen && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      zIndex: 100,
-                      top: "110%",
-                      left: 0,
-                      minWidth: 280,
-                      background: "var(--surface)",
-                      border: "1px solid var(--border-light)",
-                      borderRadius: 12,
-                      padding: "0.5rem",
-                      boxShadow: "var(--shadow-lg)",
-                    }}
-                  >
-                    <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>
-                      Recent backups (7 days)
-                    </div>
-
-                    {cloudBusy && (
-                      <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
-                        Loading...
-                      </div>
-                    )}
-
-                    {!cloudBusy && cloudErr && (
-                      <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--error)" }}>
-                        {cloudErr}
-                      </div>
-                    )}
-
-                    {!cloudBusy && !cloudErr && cloudBackups.length === 0 && (
-                      <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
-                        No backups found.
-                      </div>
-                    )}
-
-                    {!cloudBusy &&
-                      !cloudErr &&
-                      cloudBackups.map((row) => {
-                        const parts = row.object_path.split("/");
-                        const fname = parts.length > 0 ? parts[parts.length - 1] : row.object_path;
-                        const day = row.day_key || "";
-                        const sizeText = row.size_bytes ? Math.round(row.size_bytes / 1024) + " KB" : "";
-                        return (
-                          <button
-                            key={row.object_path}
-                            className="btn btn-ghost"
-                            style={{ width: "100%", justifyContent: "space-between" }}
-                            onClick={() => restoreFromCloud(row.object_path)}
-                          >
-                            <span
-                              style={{ maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                              title={fname}
-                            >
-                              {fname}
-                            </span>
-                            <span style={{ opacity: 0.7, fontSize: 12 }}>
-                              {(day ? day + " · " : "") + sizeText}
-                            </span>
-                          </button>
-                        );
-                      })}
-                  </div>
-                )}
-              </div>
+              <CloudRestore
+                cloudBusy={cloudBusy}
+                cloudErr={cloudErr}
+                cloudBackups={cloudBackups}
+                cloudMenuOpen={cloudMenuOpen}
+                setCloudMenuOpen={setCloudMenuOpen}
+                loadRecentCloudBackups={loadRecentCloudBackups}
+                restoreFromCloud={restoreFromCloud}
+              />
             </div>
           </div>
         </div>
       )}
 
-      {/* Tabs content with swipe navigation on mobile */}
-      <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-        {tab === "list" ? (
-          <>
+      {/* Tabs content with swipe + live drag + slide animation */}
+      <div
+        ref={viewportRef}
+        className="tabs-viewport"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div
+          className="tabs-track"
+          style={{
+            width: String(["list", "completed", "arrangements"].length * 100) + "%",
+            transform: (function () {
+              const count = 3;
+              const basePct = (-tabIndex / count) * 100;
+              const viewportW = viewportRef.current ? viewportRef.current.clientWidth : 1;
+              const dragPct = dragging ? (dragX / Math.max(1, viewportW) / count) * 100 : 0;
+              return "translateX(" + String(basePct + dragPct) + "%)";
+            })(),
+            transition: dragging ? "none" : undefined,
+          }}
+        >
+          {/* Panel 1: List */}
+          <section className="tab-panel">
             <div className="search-container">
               <input
                 type="search"
@@ -743,22 +745,129 @@ function AuthedApp() {
               <span className="pill pill-da">DA {stats.daCount}</span>
               {lastSyncTime && <span>- Last sync {lastSyncTime.toLocaleTimeString()}</span>}
             </div>
-          </>
-        ) : tab === "completed" ? (
-          <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
-        ) : (
-          <Arrangements
-            state={safeState}
-            onAddArrangement={addArrangement}
-            onUpdateArrangement={updateArrangement}
-            onDeleteArrangement={deleteArrangement}
-            onAddAddress={async (addr: AddressRow) => addAddress(addr)}
-            onComplete={complete}
-            autoCreateForAddress={autoCreateArrangementFor}
-            onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
-          />
-        )}
+          </section>
+
+          {/* Panel 2: Completed */}
+          <section className="tab-panel">
+            <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
+          </section>
+
+          {/* Panel 3: Arrangements */}
+          <section className="tab-panel">
+            <Arrangements
+              state={safeState}
+              onAddArrangement={addArrangement}
+              onUpdateArrangement={updateArrangement}
+              onDeleteArrangement={deleteArrangement}
+              onAddAddress={async (addr: AddressRow) => addAddress(addr)}
+              onComplete={complete}
+              autoCreateForAddress={autoCreateArrangementFor}
+              onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
+            />
+          </section>
+        </div>
       </div>
     </div>
   );
 }
+
+/** Small helper component to keep the App body clean */
+function CloudRestore(props: {
+  cloudBusy: boolean;
+  cloudErr: string | null;
+  cloudBackups: { object_path: string; size_bytes?: number; created_at?: string; day_key?: string }[];
+  cloudMenuOpen: boolean;
+  setCloudMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  loadRecentCloudBackups: () => Promise<void>;
+  restoreFromCloud: (path: string) => Promise<void>;
+}) {
+  const {
+    cloudBusy,
+    cloudErr,
+    cloudBackups,
+    cloudMenuOpen,
+    setCloudMenuOpen,
+    loadRecentCloudBackups,
+    restoreFromCloud,
+  } = props;
+
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <button
+        className="btn btn-ghost"
+        onClick={async () => {
+          props.setCloudMenuOpen((o) => !o);
+          if (!cloudMenuOpen) await loadRecentCloudBackups();
+        }}
+        title="List recent cloud backups"
+      >
+        Restore from Cloud
+      </button>
+
+      {cloudMenuOpen && (
+        <div
+          style={{
+            position: "absolute",
+            zIndex: 100,
+            top: "110%",
+            left: 0,
+            minWidth: 280,
+            background: "var(--surface)",
+            border: "1px solid var(--border-light)",
+            borderRadius: 12,
+            padding: "0.5rem",
+            boxShadow: "var(--shadow-lg)",
+          }}
+        >
+          <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>Recent backups (7 days)</div>
+
+          {cloudBusy && (
+            <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
+              Loading...
+            </div>
+          )}
+
+          {!cloudBusy && cloudErr && (
+            <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--error)" }}>
+              {cloudErr}
+            </div>
+          )}
+
+          {!cloudBusy && !cloudErr && cloudBackups.length === 0 && (
+            <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
+              No backups found.
+            </div>
+          )}
+
+          {!cloudBusy &&
+            !cloudErr &&
+            cloudBackups.map((row) => {
+              const parts = row.object_path.split("/");
+              const fname = parts.length > 0 ? parts[parts.length - 1] : row.object_path;
+              const day = row.day_key || "";
+              const sizeText = row.size_bytes ? Math.round(row.size_bytes / 1024) + " KB" : "";
+              return (
+                <button
+                  key={row.object_path}
+                  className="btn btn-ghost"
+                  style={{ width: "100%", justifyContent: "space-between" }}
+                  onClick={() => restoreFromCloud(row.object_path)}
+                >
+                  <span
+                    style={{ maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    title={fname}
+                  >
+                    {fname}
+                  </span>
+                  <span style={{ opacity: 0.7, fontSize: 12 }}>
+                    {(day ? day + " · " : "") + sizeText}
+                  </span>
+                </button>
+              );
+            })}
+        </div>
+      )}
+    </div>
+  );
+}
+```0
