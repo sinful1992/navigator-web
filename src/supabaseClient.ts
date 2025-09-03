@@ -22,9 +22,8 @@ export const supabase =
   globalThis.__NAVIGATOR_WEB_SUPABASE__ ??
   (globalThis.__NAVIGATOR_WEB_SUPABASE__ = createClient(url ?? "", anon ?? "", {
     auth: {
-      // We don't use auth sessions in this app, but the client still initializes GoTrue.
-      persistSession: false,           // avoid writing to localStorage
-      detectSessionInUrl: false,       // no OAuth callbacks to parse
-      storageKey: "navigator-web",     // namespaced to avoid collisions
+      persistSession: false,
+      detectSessionInUrl: false,
+      storageKey: "navigator-web",
     },
   }));
