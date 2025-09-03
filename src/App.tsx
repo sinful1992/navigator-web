@@ -542,35 +542,44 @@ function AuthedApp() {
     [setState]
   );
 
-  // ----- Edit FINISH time (NEW) -----
+  // ----- Edit FINISH time (FIXED: always produce a valid DaySession) -----
   const handleEditEnd = React.useCallback(
     (newEndISO: string | Date) => {
       const parsed =
         typeof newEndISO === "string" ? new Date(newEndISO) : newEndISO;
       if (Number.isNaN(parsed.getTime())) return;
 
-      const newISO = parsed.toISOString();
+      const endISO = parsed.toISOString();
+
       setState((s) => {
-        const dayKey = newISO.slice(0, 10);
+        const dayKey = endISO.slice(0, 10);
         const idx = s.daySessions.findIndex((d) => d.date === dayKey);
+        const arr = s.daySessions.slice();
+
         if (idx >= 0) {
-          const arr = s.daySessions.slice();
-          const sess: any = { ...arr[idx], end: newISO };
+          // Update existing session's end
+          const sess = { ...arr[idx], end: endISO };
           if (sess.start) {
             try {
               const start = new Date(sess.start).getTime();
-              const end = new Date(sess.end).getTime();
-              if (end > start)
-                sess.durationSeconds = Math.floor((end - start) / 1000);
+              const end = new Date(endISO).getTime();
+              if (end > start) {
+                (sess as any).durationSeconds = Math.floor((end - start) / 1000);
+              }
             } catch {}
           }
           arr[idx] = sess;
-          return { ...s, daySessions: arr };
+        } else {
+          // Create a valid session with BOTH start and end for that day
+          arr.push({
+            date: dayKey,
+            start: endISO,
+            end: endISO,
+            durationSeconds: 0,
+          });
         }
-        return {
-          ...s,
-          daySessions: [...s.daySessions, { date: dayKey, end: newISO }],
-        };
+
+        return { ...s, daySessions: arr };
       });
     },
     [setState]
@@ -723,7 +732,7 @@ function AuthedApp() {
 
     const viewportWidth = swipe.current.w;
     const maxDrag = viewportWidth * 0.5;
-    const clampedDx = Math.max(-maxDrag, Math.min(maxDrag, dx));
+    the const clampedDx = Math.max(-maxDrag, Math.min(maxDrag, dx));
 
     const atFirst = tabIndex === 0 && clampedDx > 0;
     const atLast = tabIndex === tabsOrder.length - 1 && clampedDx < 0;
