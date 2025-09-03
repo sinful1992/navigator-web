@@ -178,26 +178,45 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // Bootstrap: push local -> cloud once (if local has data), then subscribe cloud -> local
+  // ==== Cloud-first bootstrap (prevents stale device overwriting cloud) ====
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
-    let cleanup: undefined | (() => void);
     let cancelled = false;
+    let cleanup: undefined | (() => void);
 
     (async () => {
       try {
+        const sel = await supabase
+          .from("navigator_state")
+          .select("data, updated_at")
+          .eq("user_id", cloudSync.user!.id)
+          .maybeSingle();
+
+        const row: any = (sel as any)?.data ?? null;
+
         const localHasData =
           addresses.length > 0 ||
           completions.length > 0 ||
           arrangements.length > 0 ||
           daySessions.length > 0;
 
-        if (localHasData) {
+        if (row && row.data) {
+          const normalized = normalizeState(row.data);
+          if (!cancelled) {
+            setState(normalized);
+            lastFromCloudRef.current = JSON.stringify(normalized);
+            setHydrated(true);
+            setLastSyncTime(new Date(row.updated_at ?? Date.now()));
+          }
+        } else if (localHasData) {
           await cloudSync.syncData(safeState);
           if (!cancelled) {
             lastFromCloudRef.current = JSON.stringify(safeState);
             setHydrated(true);
+            setLastSyncTime(new Date());
           }
+        } else {
+          if (!cancelled) setHydrated(true);
         }
 
         cleanup = cloudSync.subscribeToData((newState) => {
@@ -209,7 +228,7 @@ function AuthedApp() {
           setHydrated(true);
         });
       } catch (err) {
-        console.error("Bootstrap sync failed:", err);
+        console.error("Bootstrap sync (cloud-first) failed:", err);
       }
     })();
 
@@ -220,7 +239,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // Debounced local -> cloud sync on changes
+  // ==== Debounced local -> cloud sync on changes ====
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
     const currentStr = JSON.stringify(safeState);
@@ -233,9 +252,40 @@ function AuthedApp() {
           lastFromCloudRef.current = currentStr;
         })
         .catch((err) => console.error("Sync failed:", err));
-    }, 400);
+    }, 300); // slightly tighter debounce
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
+
+  // ==== Flush pending changes on exit/background ====
+  React.useEffect(() => {
+    if (!cloudSync.user) return;
+
+    function flush() {
+      try {
+        cloudSync
+          .syncData(safeState)
+          .then(() => {
+            setLastSyncTime(new Date());
+            lastFromCloudRef.current = JSON.stringify(safeState);
+          })
+          .catch(() => {});
+      } catch {}
+    }
+
+    function onVisibility() {
+      if (document.visibilityState === "hidden") flush();
+    }
+
+    window.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+
+    return () => {
+      window.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, [safeState, cloudSync, cloudSync.user]);
 
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
     setAutoCreateArrangementFor(addressIndex);
@@ -248,7 +298,7 @@ function AuthedApp() {
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
-  // DayPanel - edit start time
+  // DayPanel - edit start time (safe update)
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
       const parsed = typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
@@ -297,6 +347,7 @@ function AuthedApp() {
       await cloudSync.syncData(data);
       lastFromCloudRef.current = JSON.stringify(data);
       setHydrated(true);
+      setLastSyncTime(new Date());
       alert("Restore completed successfully!");
     } catch (err: any) {
       console.error(err);
@@ -346,123 +397,7 @@ function AuthedApp() {
     [setState]
   );
 
-  // -------- Restore from Cloud (last 7 days) --------
-  type CloudBackupRow = {
-    object_path: string;
-    size_bytes?: number;
-    created_at?: string;
-    day_key?: string;
-  };
-
-  const [cloudMenuOpen, setCloudMenuOpen] = React.useState(false);
-  const [cloudBackups, setCloudBackups] = React.useState<CloudBackupRow[]>([]);
-  const [cloudBusy, setCloudBusy] = React.useState(false);
-  const [cloudErr, setCloudErr] = React.useState<string | null>(null);
-
-  function formatKey(d: Date, tz = "Europe/London") {
-    const y = d.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
-    const m = d.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
-    const dd = d.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
-    return y + "-" + m + "-" + dd;
-  }
-
-  const loadRecentCloudBackups = React.useCallback(async () => {
-    if (!supabase) return;
-    setCloudBusy(true);
-    setCloudErr(null);
-    try {
-      const authResp = await supabase.auth.getUser();
-      const userId = authResp && authResp.data && authResp.data.user ? authResp.data.user.id : undefined;
-      if (!userId) throw new Error("Not authenticated");
-
-      const end = new Date();
-      const start = new Date();
-      start.setDate(start.getDate() - 6);
-
-      const fromKey = formatKey(start);
-      const toKey = formatKey(end);
-
-      const q = await supabase
-        .from("backups")
-        .select("object_path,size_bytes,created_at,day_key")
-        .eq("user_id", userId)
-        .gte("day_key", fromKey)
-        .lte("day_key", toKey)
-        .order("day_key", { ascending: false })
-        .order("created_at", { ascending: false });
-
-      if ((q as any).error) throw (q as any).error;
-
-      const data = ((q as any).data ?? []) as CloudBackupRow[];
-
-      const list = data.slice().sort((a, b) => {
-        const aParts = a.object_path.split("_");
-        const bParts = b.object_path.split("_");
-        const ta = (aParts[1] || "") + (aParts[2] || "");
-        const tb = (bParts[1] || "") + (bParts[2] || "");
-        return tb.localeCompare(ta);
-      });
-
-      setCloudBackups(list);
-    } catch (e: any) {
-      setCloudErr(e?.message || String(e));
-    } finally {
-      setCloudBusy(false);
-    }
-  }, []);
-
-  const restoreFromCloud = React.useCallback(
-    async (objectPath: string) => {
-      if (!supabase) return;
-
-      const fileName = objectPath.split("/").pop() || objectPath;
-      const ok = window.confirm(
-        "Restore \"" +
-          fileName +
-          "\" from cloud?\n\n" +
-          "This will overwrite your current addresses, completions, arrangements and sessions on this device."
-      );
-      if (!ok) return;
-
-      setCloudBusy(true);
-      setCloudErr(null);
-      try {
-        const bucket =
-          (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
-            ? (import.meta as any).env.VITE_SUPABASE_BUCKET
-            : "navigator-backups";
-        const dl = await supabase.storage.from(bucket).download(objectPath);
-        if ((dl as any).error) throw (dl as any).error;
-        const blob: Blob = (dl as any).data as Blob;
-        const text = await blob.text();
-        const raw = JSON.parse(text);
-        const data = normalizeState(raw);
-        restoreState(data);
-        await cloudSync.syncData(data);
-        lastFromCloudRef.current = JSON.stringify(data);
-        setHydrated(true);
-        alert("Restored from cloud");
-        setCloudMenuOpen(false);
-      } catch (e: any) {
-        setCloudErr(e?.message || String(e));
-      } finally {
-        setCloudBusy(false);
-      }
-    },
-    [cloudSync, restoreState]
-  );
-
-  React.useEffect(() => {
-    if (!cloudMenuOpen) return;
-    function onDocClick(e: MouseEvent) {
-      const target = e.target as HTMLElement;
-      if (!target.closest || !target.closest(".btn-row")) setCloudMenuOpen(false);
-    }
-    document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
-  }, [cloudMenuOpen]);
-
-  // --------------- Swipe with live drag and snap ---------------
+  // --------------- Swipe with live drag & snap (bounded, rubber-band) ---------------
   const tabsOrder: Tab[] = ["list", "completed", "arrangements"];
   const tabIndex = tabsOrder.indexOf(tab);
   const goToNextTab = React.useCallback(() => {
@@ -478,13 +413,7 @@ function AuthedApp() {
   const [dragX, setDragX] = React.useState(0); // pixels
   const [dragging, setDragging] = React.useState(false);
 
-  const swipe = React.useRef({
-    x: 0,
-    y: 0,
-    t: 0,
-    w: 1,
-    active: false,
-  });
+  const swipe = React.useRef({ x: 0, y: 0, t: 0, w: 1, active: false });
 
   const handleTouchStart: React.TouchEventHandler<HTMLDivElement> = (e) => {
     const t = e.changedTouches[0];
@@ -498,7 +427,7 @@ function AuthedApp() {
     setDragging(true);
   };
 
-  // === Fixed transform calculation (no template strings) ===
+  // Fixed transform calculation (no template literals)
   const getTransform = React.useCallback(() => {
     const tabCount = 3; // number of tabs
     const basePercent = (-tabIndex / tabCount) * 100;
@@ -514,20 +443,22 @@ function AuthedApp() {
 
     const dragPercent = (dragX / viewportWidth) * 100;
 
+    // Rubber band effect at edges
     const atFirstTab = tabIndex === 0 && dragX > 0;
     const atLastTab = tabIndex === tabCount - 1 && dragX < 0;
     const dampening = atFirstTab || atLastTab ? 0.3 : 1;
 
     const finalPercent = basePercent + dragPercent * dampening;
 
+    // Clamp to prevent extreme values that could cause overflow
     const minPercent = -100 * (tabCount - 1);
-    const maxPercent = 10;
+    const maxPercent = 10; // small positive buffer
     const clampedPercent = Math.max(minPercent - 10, Math.min(maxPercent, finalPercent));
 
     return "translateX(" + String(clampedPercent) + "%)";
   }, [tabIndex, dragging, dragX]);
 
-  // === Updated touch handlers with better bounds checking ===
+  // Updated touch handlers with better bounds checking
   const handleTouchMove: React.TouchEventHandler<HTMLDivElement> = (e) => {
     if (!swipe.current.active) return;
     if (typeof window !== "undefined" && window.innerWidth >= 768) return;
@@ -536,13 +467,15 @@ function AuthedApp() {
     const dx = touch.clientX - swipe.current.x;
     const dy = touch.clientY - swipe.current.y;
 
+    // Only process horizontal swipes
     if (Math.abs(dx) <= Math.abs(dy) * 1.2) return;
 
-    // Prevent page scroll while swiping horizontally
+    // Prevent default to stop page scrolling while swiping horizontally
     e.preventDefault();
 
+    // Apply bounds and rubber band effect
     const viewportWidth = swipe.current.w;
-    const maxDrag = viewportWidth * 0.5;
+    const maxDrag = viewportWidth * 0.5; // Maximum drag distance
     const clampedDx = Math.max(-maxDrag, Math.min(maxDrag, dx));
 
     const atFirst = tabIndex === 0 && clampedDx > 0;
@@ -599,6 +532,26 @@ function AuthedApp() {
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">Address Navigator</h1>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+            }}
+          >
+            {cloudSync.isOnline ? (
+              <span style={{ color: "var(--success)" }}>ONLINE</span>
+            ) : (
+              <span style={{ color: "var(--warning)" }}>OFFLINE</span>
+            )}
+            {lastSyncTime && (
+              <span title="Last sync time">
+                · Last sync {lastSyncTime.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="right">
@@ -621,6 +574,21 @@ function AuthedApp() {
             </button>
             <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
               Arrangements ({arrangements.length})
+            </button>
+            <button
+              className="tab-btn"
+              onClick={async () => {
+                try {
+                  await cloudSync.syncData(safeState);
+                  setLastSyncTime(new Date());
+                  lastFromCloudRef.current = JSON.stringify(safeState);
+                } catch (e) {
+                  console.warn("Manual sync failed");
+                }
+              }}
+              title="Push current changes to cloud"
+            >
+              Sync now
             </button>
           </div>
         </div>
@@ -695,7 +663,7 @@ function AuthedApp() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         style={{
-          overflow: "hidden",
+          overflowX: "hidden", // allow vertical scroll; hide horizontal
           position: "relative",
           width: "100%",
           maxWidth: "100%",
