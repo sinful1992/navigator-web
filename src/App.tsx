@@ -76,7 +76,6 @@ async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" =
   const objectPath = userId + "/" + dayKey + "/" + name;
 
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-
   const uploadRes = await supabase.storage
     .from(bucket)
     .upload(objectPath, blob, { upsert: false, contentType: "application/json" });
@@ -499,23 +498,58 @@ function AuthedApp() {
     setDragging(true);
   };
 
+  // === Fixed transform calculation (no template strings) ===
+  const getTransform = React.useCallback(() => {
+    const tabCount = 3; // number of tabs
+    const basePercent = (-tabIndex / tabCount) * 100;
+
+    if (!dragging || !viewportRef.current) {
+      return "translateX(" + String(basePercent) + "%)";
+    }
+
+    const viewportWidth = viewportRef.current.clientWidth;
+    if (viewportWidth <= 0) {
+      return "translateX(" + String(basePercent) + "%)";
+    }
+
+    const dragPercent = (dragX / viewportWidth) * 100;
+
+    const atFirstTab = tabIndex === 0 && dragX > 0;
+    const atLastTab = tabIndex === tabCount - 1 && dragX < 0;
+    const dampening = atFirstTab || atLastTab ? 0.3 : 1;
+
+    const finalPercent = basePercent + dragPercent * dampening;
+
+    const minPercent = -100 * (tabCount - 1);
+    const maxPercent = 10;
+    const clampedPercent = Math.max(minPercent - 10, Math.min(maxPercent, finalPercent));
+
+    return "translateX(" + String(clampedPercent) + "%)";
+  }, [tabIndex, dragging, dragX]);
+
+  // === Updated touch handlers with better bounds checking ===
   const handleTouchMove: React.TouchEventHandler<HTMLDivElement> = (e) => {
     if (!swipe.current.active) return;
-    if (typeof window !== "undefined" && window.innerWidth >= 768) return; // mobile only
+    if (typeof window !== "undefined" && window.innerWidth >= 768) return;
 
-    const t = e.changedTouches[0];
-    const dx = t.clientX - swipe.current.x;
-    const dy = t.clientY - swipe.current.y;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - swipe.current.x;
+    const dy = touch.clientY - swipe.current.y;
 
-    // Only react to mostly-horizontal moves
     if (Math.abs(dx) <= Math.abs(dy) * 1.2) return;
 
-    // Rubber-band at edges
-    const atFirst = tabIndex === 0 && dx > 0;
-    const atLast = tabIndex === tabsOrder.length - 1 && dx < 0;
-    const damp = atFirst || atLast ? 0.35 : 1;
+    // Prevent page scroll while swiping horizontally
+    e.preventDefault();
 
-    setDragX(dx * damp);
+    const viewportWidth = swipe.current.w;
+    const maxDrag = viewportWidth * 0.5;
+    const clampedDx = Math.max(-maxDrag, Math.min(maxDrag, dx));
+
+    const atFirst = tabIndex === 0 && clampedDx > 0;
+    const atLast = tabIndex === tabsOrder.length - 1 && clampedDx < 0;
+    const dampening = atFirst || atLast ? 0.35 : 1;
+
+    setDragX(clampedDx * dampening);
   };
 
   const handleTouchEnd: React.TouchEventHandler<HTMLDivElement> = (e) => {
@@ -565,21 +599,6 @@ function AuthedApp() {
       <header className="app-header">
         <div className="left">
           <h1 className="app-title">Address Navigator</h1>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              fontSize: "0.75rem",
-              color: "var(--text-muted)",
-            }}
-          >
-            {cloudSync.isOnline ? (
-              <span style={{ color: "var(--success)" }}>ONLINE</span>
-            ) : (
-              <span style={{ color: "var(--warning)" }}>OFFLINE</span>
-            )}
-          </div>
         </div>
 
         <div className="right">
@@ -668,31 +687,46 @@ function AuthedApp() {
         </div>
       )}
 
-      {/* Tabs content with swipe + live drag + slide animation (inline styles to guarantee clipping) */}
+      {/* Tabs content with fixed swipe (bounded, rubber-band, no overflow) */}
       <div
         ref={viewportRef}
-        style={{ overflow: "hidden", position: "relative", width: "100%" }}
+        className="tabs-viewport"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        style={{
+          overflow: "hidden",
+          position: "relative",
+          width: "100%",
+          maxWidth: "100%",
+          touchAction: "pan-y",
+        }}
       >
         <div
+          className="tabs-track"
           style={{
             display: "flex",
-            width: String(["list", "completed", "arrangements"].length * 100) + "%",
+            width: "300%",
+            maxWidth: "300%",
             willChange: "transform",
             transition: dragging ? "none" : "transform 280ms ease",
-            transform: (function () {
-              const count = 3;
-              const basePct = (-tabIndex / count) * 100;
-              const viewportW = viewportRef.current ? viewportRef.current.clientWidth : 1;
-              const dragPct = dragging ? (dragX / Math.max(1, viewportW) / count) * 100 : 0;
-              return "translateX(" + String(basePct + dragPct) + "%)";
-            })(),
+            transform: getTransform(),
+            backfaceVisibility: "hidden",
+            perspective: "1000px",
           }}
         >
           {/* Panel 1: List */}
-          <section style={{ flex: "0 0 100%", minWidth: "100%", maxWidth: "100%" }}>
+          <section
+            className="tab-panel"
+            style={{
+              flex: "0 0 33.333333%",
+              minWidth: "33.333333%",
+              maxWidth: "33.333333%",
+              boxSizing: "border-box",
+              overflowX: "hidden",
+              padding: "0",
+            }}
+          >
             <div className="search-container">
               <input
                 type="search"
@@ -748,12 +782,32 @@ function AuthedApp() {
           </section>
 
           {/* Panel 2: Completed */}
-          <section style={{ flex: "0 0 100%", minWidth: "100%", maxWidth: "100%" }}>
+          <section
+            className="tab-panel"
+            style={{
+              flex: "0 0 33.333333%",
+              minWidth: "33.333333%",
+              maxWidth: "33.333333%",
+              boxSizing: "border-box",
+              overflowX: "hidden",
+              padding: "0",
+            }}
+          >
             <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
           </section>
 
           {/* Panel 3: Arrangements */}
-          <section style={{ flex: "0 0 100%", minWidth: "100%", maxWidth: "100%" }}>
+          <section
+            className="tab-panel"
+            style={{
+              flex: "0 0 33.333333%",
+              minWidth: "33.333333%",
+              maxWidth: "33.333333%",
+              boxSizing: "border-box",
+              overflowX: "hidden",
+              padding: "0",
+            }}
+          >
             <Arrangements
               state={safeState}
               onAddArrangement={addArrangement}
