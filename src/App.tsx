@@ -178,9 +178,135 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ==== Cloud-first bootstrap (prevents stale device overwriting cloud) ====
+  // ---------- Cloud Restore state & helpers (were missing; caused TS2304) ----------
+  type CloudBackupRow = {
+    object_path: string;
+    size_bytes?: number;
+    created_at?: string;
+    day_key?: string;
+  };
+
+  const [cloudMenuOpen, setCloudMenuOpen] = React.useState(false);
+  const [cloudBackups, setCloudBackups] = React.useState<CloudBackupRow[]>([]);
+  const [cloudBusy, setCloudBusy] = React.useState(false);
+  const [cloudErr, setCloudErr] = React.useState<string | null>(null);
+
+  function formatKey(d: Date, tz = "Europe/London") {
+    const y = d.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
+    const m = d.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
+    const dd = d.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
+    return y + "-" + m + "-" + dd;
+  }
+
+  const loadRecentCloudBackups = React.useCallback(async () => {
+    if (!supabase) {
+      setCloudErr("Supabase not configured");
+      return;
+    }
+    setCloudBusy(true);
+    setCloudErr(null);
+    try {
+      const authResp = await supabase.auth.getUser();
+      const userId = authResp && authResp.data && authResp.data.user ? authResp.data.user.id : undefined;
+      if (!userId) throw new Error("Not authenticated");
+
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 6);
+
+      const fromKey = formatKey(start);
+      const toKey = formatKey(end);
+
+      const q = await supabase
+        .from("backups")
+        .select("object_path,size_bytes,created_at,day_key")
+        .eq("user_id", userId)
+        .gte("day_key", fromKey)
+        .lte("day_key", toKey)
+        .order("day_key", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if ((q as any).error) throw (q as any).error;
+
+      const data = ((q as any).data ?? []) as CloudBackupRow[];
+      const list = data.slice().sort((a, b) => {
+        const aParts = a.object_path.split("_");
+        const bParts = b.object_path.split("_");
+        const ta = (aParts[1] || "") + (aParts[2] || "");
+        const tb = (bParts[1] || "") + (bParts[2] || "");
+        return tb.localeCompare(ta);
+      });
+
+      setCloudBackups(list);
+    } catch (e: any) {
+      setCloudErr(e?.message || String(e));
+    } finally {
+      setCloudBusy(false);
+    }
+  }, []);
+
+  const restoreFromCloud = React.useCallback(
+    async (objectPath: string) => {
+      if (!supabase) {
+        alert("Supabase not configured");
+        return;
+      }
+      const fileName = objectPath.split("/").pop() || objectPath;
+      const ok = window.confirm(
+        'Restore "' +
+          fileName +
+          "\" from cloud?\n\nThis will overwrite your current addresses, completions, arrangements and sessions on this device."
+      );
+      if (!ok) return;
+
+      setCloudBusy(true);
+      setCloudErr(null);
+      try {
+        const bucket =
+          (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
+            ? (import.meta as any).env.VITE_SUPABASE_BUCKET
+            : "navigator-backups";
+        const dl = await supabase.storage.from(bucket).download(objectPath);
+        if ((dl as any).error) throw (dl as any).error;
+        const blob: Blob = (dl as any).data as Blob;
+        const text = await blob.text();
+        const raw = JSON.parse(text);
+        const data = normalizeState(raw);
+        restoreState(data);
+        await cloudSync.syncData(data);
+        lastFromCloudRef.current = JSON.stringify(data);
+        setHydrated(true);
+        setLastSyncTime(new Date());
+        alert("Restored from cloud");
+        setCloudMenuOpen(false);
+      } catch (e: any) {
+        setCloudErr(e?.message || String(e));
+      } finally {
+        setCloudBusy(false);
+      }
+    },
+    [cloudSync, restoreState]
+  );
+
+  React.useEffect(() => {
+    if (!cloudMenuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest || !target.closest(".btn-row")) setCloudMenuOpen(false);
+    }
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [cloudMenuOpen]);
+
+  // ===================== Cloud-first bootstrap (guard supabase) =====================
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
+    if (!supabase) {
+      // No client configured; continue locally
+      setHydrated(true);
+      return;
+    }
+
     let cancelled = false;
     let cleanup: undefined | (() => void);
 
@@ -252,7 +378,7 @@ function AuthedApp() {
           lastFromCloudRef.current = currentStr;
         })
         .catch((err) => console.error("Sync failed:", err));
-    }, 300); // slightly tighter debounce
+    }, 300);
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
 
@@ -298,7 +424,7 @@ function AuthedApp() {
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
-  // DayPanel - edit start time (safe update)
+  // DayPanel - edit start time
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
       const parsed = typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
@@ -397,7 +523,7 @@ function AuthedApp() {
     [setState]
   );
 
-  // --------------- Swipe with live drag & snap (bounded, rubber-band) ---------------
+  // --------------- Swipe with live drag & snap ---------------
   const tabsOrder: Tab[] = ["list", "completed", "arrangements"];
   const tabIndex = tabsOrder.indexOf(tab);
   const goToNextTab = React.useCallback(() => {
@@ -410,7 +536,7 @@ function AuthedApp() {
   }, [tab]);
 
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
-  const [dragX, setDragX] = React.useState(0); // pixels
+  const [dragX, setDragX] = React.useState(0);
   const [dragging, setDragging] = React.useState(false);
 
   const swipe = React.useRef({ x: 0, y: 0, t: 0, w: 1, active: false });
@@ -427,9 +553,8 @@ function AuthedApp() {
     setDragging(true);
   };
 
-  // Fixed transform calculation (no template literals)
   const getTransform = React.useCallback(() => {
-    const tabCount = 3; // number of tabs
+    const tabCount = 3;
     const basePercent = (-tabIndex / tabCount) * 100;
 
     if (!dragging || !viewportRef.current) {
@@ -443,22 +568,19 @@ function AuthedApp() {
 
     const dragPercent = (dragX / viewportWidth) * 100;
 
-    // Rubber band effect at edges
     const atFirstTab = tabIndex === 0 && dragX > 0;
     const atLastTab = tabIndex === tabCount - 1 && dragX < 0;
     const dampening = atFirstTab || atLastTab ? 0.3 : 1;
 
     const finalPercent = basePercent + dragPercent * dampening;
 
-    // Clamp to prevent extreme values that could cause overflow
     const minPercent = -100 * (tabCount - 1);
-    const maxPercent = 10; // small positive buffer
+    const maxPercent = 10;
     const clampedPercent = Math.max(minPercent - 10, Math.min(maxPercent, finalPercent));
 
     return "translateX(" + String(clampedPercent) + "%)";
   }, [tabIndex, dragging, dragX]);
 
-  // Updated touch handlers with better bounds checking
   const handleTouchMove: React.TouchEventHandler<HTMLDivElement> = (e) => {
     if (!swipe.current.active) return;
     if (typeof window !== "undefined" && window.innerWidth >= 768) return;
@@ -467,18 +589,18 @@ function AuthedApp() {
     const dx = touch.clientX - swipe.current.x;
     const dy = touch.clientY - swipe.current.y;
 
-    // Only process horizontal swipes
     if (Math.abs(dx) <= Math.abs(dy) * 1.2) return;
 
-    // Prevent default to stop page scrolling while swiping horizontally
     e.preventDefault();
 
-    // Apply bounds and rubber band effect
     const viewportWidth = swipe.current.w;
-    const maxDrag = viewportWidth * 0.5; // Maximum drag distance
+    const maxDrag = viewportWidth * 0.5;
     const clampedDx = Math.max(-maxDrag, Math.min(maxDrag, dx));
 
     const atFirst = tabIndex === 0 && clampedDx > 0;
+    theLastCheck: {
+      /* label to keep lints calm */
+    }
     const atLast = tabIndex === tabsOrder.length - 1 && clampedDx < 0;
     const dampening = atFirst || atLast ? 0.35 : 1;
 
@@ -547,16 +669,16 @@ function AuthedApp() {
               <span style={{ color: "var(--warning)" }}>OFFLINE</span>
             )}
             {lastSyncTime && (
-              <span title="Last sync time">
-                · Last sync {lastSyncTime.toLocaleTimeString()}
-              </span>
+              <span title="Last sync time">· Last sync {lastSyncTime.toLocaleTimeString()}</span>
             )}
           </div>
         </div>
 
         <div className="right">
           <div className="user-chip" role="group" aria-label="Account">
-            <span className="avatar" aria-hidden>USER</span>
+            <span className="avatar" aria-hidden>
+              USER
+            </span>
             <span className="email" title={cloudSync.user?.email ?? ""}>
               {cloudSync.user?.email ?? "Signed in"}
             </span>
@@ -569,10 +691,18 @@ function AuthedApp() {
             <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
               List ({stats.pending})
             </button>
-            <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "completed"}
+              onClick={() => setTab("completed")}
+            >
               Completed ({stats.completed})
             </button>
-            <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "arrangements"}
+              onClick={() => setTab("arrangements")}
+            >
               Arrangements ({arrangements.length})
             </button>
             <button
@@ -582,7 +712,7 @@ function AuthedApp() {
                   await cloudSync.syncData(safeState);
                   setLastSyncTime(new Date());
                   lastFromCloudRef.current = JSON.stringify(safeState);
-                } catch (e) {
+                } catch {
                   console.warn("Manual sync failed");
                 }
               }}
@@ -638,7 +768,9 @@ function AuthedApp() {
                 className="file-input"
                 id="restore-input"
               />
-              <label htmlFor="restore-input" className="file-input-label">Restore (file)</label>
+              <label htmlFor="restore-input" className="file-input-label">
+                Restore (file)
+              </label>
 
               {/* Restore from Cloud (last 7 days) */}
               <CloudRestore
@@ -655,7 +787,7 @@ function AuthedApp() {
         </div>
       )}
 
-      {/* Tabs content with fixed swipe (bounded, rubber-band, no overflow) */}
+      {/* Tabs content with fixed swipe */}
       <div
         ref={viewportRef}
         className="tabs-viewport"
@@ -663,7 +795,7 @@ function AuthedApp() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         style={{
-          overflowX: "hidden", // allow vertical scroll; hide horizontal
+          overflowX: "hidden",
           position: "relative",
           width: "100%",
           maxWidth: "100%",
@@ -876,7 +1008,12 @@ function CloudRestore(props: {
                   onClick={() => restoreFromCloud(row.object_path)}
                 >
                   <span
-                    style={{ maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    style={{
+                      maxWidth: 170,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
                     title={fname}
                   >
                     {fname}
