@@ -1,19 +1,8 @@
 // src/useCloudSync.ts
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "./lib/supabaseClient";
 import type { User } from "@supabase/supabase-js";
+import { supabase } from "./lib/supabaseClient";
 
-/**
- * Shape returned by this hook.
- *
- * - user: current Supabase user or null
- * - isLoading: auth bootstrap in progress
- * - isOnline: navigator.onLine plus event listeners
- * - error/clearError: last sync/auth error
- * - signIn/signUp/signOut: auth helpers
- * - syncData: upsert the whole app state to cloud
- * - subscribeToData: listen for realtime changes to cloud state; returns unsubscribe() cleanup
- */
 type UseCloudSync = {
   user: User | null;
   isLoading: boolean;
@@ -37,10 +26,9 @@ export function useCloudSync(): UseCloudSync {
   );
   const [error, setError] = useState<string | null>(null);
 
-  // Track last server timestamps and last payload we pushed
-  const lastPulledAt = useRef<string>("");   // server updated_at for last accepted pull
-  const lastPushedAt = useRef<string>("");   // server updated_at returned after our push
-  const lastPushedHash = useRef<string>(""); // JSON string of the last state we successfully pushed
+  const lastPulledAt = useRef<string>("");
+  const lastPushedAt = useRef<string>("");
+  const lastPushedHash = useRef<string>("");
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -50,6 +38,13 @@ export function useCloudSync(): UseCloudSync {
 
     (async () => {
       try {
+        if (!supabase) {
+          if (mounted) {
+            setError("Supabase not configured");
+            setIsLoading(false);
+          }
+          return;
+        }
         const { data, error: authErr } = await supabase.auth.getUser();
         if (authErr) throw authErr;
         if (mounted) setUser(data.user ?? null);
@@ -60,13 +55,13 @@ export function useCloudSync(): UseCloudSync {
       }
     })();
 
-    // Keep user up-to-date with auth state changes
+    if (!supabase) return () => {};
+
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
 
     return () => {
-      mounted = false;
       sub.subscription.unsubscribe();
     };
   }, []);
@@ -85,31 +80,39 @@ export function useCloudSync(): UseCloudSync {
   }, []);
 
   // ---- Auth helpers ----
-  const signIn = useCallback(async (email: string, password: string) => {
-    clearError();
-    const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
-    if (err) {
-      setError(err.message);
-      throw err;
-    }
-    setUser(data.user);
-    return { user: data.user! };
-  }, [clearError]);
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      clearError();
+      if (!supabase) throw new Error("Supabase not configured");
+      const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
+      if (err) {
+        setError(err.message);
+        throw err;
+      }
+      setUser(data.user);
+      return { user: data.user! };
+    },
+    [clearError]
+  );
 
-  const signUp = useCallback(async (email: string, password: string) => {
-    clearError();
-    const { data, error: err } = await supabase.auth.signUp({ email, password });
-    if (err) {
-      setError(err.message);
-      throw err;
-    }
-    // Depending on project settings, user may be null until email confirmed
-    if (data.user) setUser(data.user);
-    return { user: data.user! };
-  }, [clearError]);
+  const signUp = useCallback(
+    async (email: string, password: string) => {
+      clearError();
+      if (!supabase) throw new Error("Supabase not configured");
+      const { data, error: err } = await supabase.auth.signUp({ email, password });
+      if (err) {
+        setError(err.message);
+        throw err;
+      }
+      if (data.user) setUser(data.user);
+      return { user: data.user! };
+    },
+    [clearError]
+  );
 
   const signOut = useCallback(async () => {
     clearError();
+    if (!supabase) return;
     const { error: err } = await supabase.auth.signOut();
     if (err) {
       setError(err.message);
@@ -119,120 +122,101 @@ export function useCloudSync(): UseCloudSync {
   }, [clearError]);
 
   // ---- Cloud upsert (push) ----
-  const syncData = useCallback(async (state: any) => {
-    if (!user) return;
+  const syncData = useCallback(
+    async (state: any) => {
+      if (!user) return;
+      if (!supabase) {
+        setError("Supabase not configured");
+        return;
+      }
 
-    try {
-      clearError();
-      const now = new Date().toISOString();
+      try {
+        clearError();
+        const now = new Date().toISOString();
 
-      // Ask server to return the row so we can capture authoritative updated_at
-      const { data, error: err } = await supabase
-        .from("navigator_state")
-        .upsert(
-          { user_id: user.id, data: state, updated_at: now },
-          { onConflict: "user_id" }
-        )
-        .select("updated_at")
-        .single();
+        const { data, error: err } = await supabase
+          .from("navigator_state")
+          .upsert({ user_id: user.id, data: state, updated_at: now }, { onConflict: "user_id" })
+          .select("updated_at")
+          .single();
 
-      if (err) throw err;
+        if (err) throw err;
 
-      lastPushedHash.current = JSON.stringify(state);
-      lastPushedAt.current = (data?.updated_at as string | undefined) ?? now;
-
-    } catch (e: any) {
-      setError(e?.message || String(e));
-      // Do not rethrow; caller paths may be fire-and-forget
-    }
-  }, [user, clearError]);
+        lastPushedHash.current = JSON.stringify(state);
+        lastPushedAt.current = (data?.updated_at as string | undefined) ?? now;
+      } catch (e: any) {
+        setError(e?.message || String(e));
+      }
+    },
+    [user, clearError]
+  );
 
   // ---- Cloud subscribe (pull) ----
-  const subscribeToData = useCallback((onChange: (s: any) => void) => {
-    if (!user) return () => {};
+  const subscribeToData = useCallback(
+    (onChange: (s: any) => void) => {
+      if (!user || !supabase) return () => {};
 
-    clearError();
+      clearError();
 
-    // Create a dedicated channel per user
-    const channel = supabase.channel("navigator_state_" + user.id);
+      const channel = supabase.channel("navigator_state_" + user.id);
 
-    channel.on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "navigator_state", filter: `user_id=eq.${user.id}` },
-      (payload: any) => {
-        try {
-          const row = payload?.new ?? payload?.old ?? null;
-          if (!row) return;
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "navigator_state", filter: `user_id=eq.${user.id}` },
+        (payload: any) => {
+          try {
+            const row = payload?.new ?? payload?.old ?? null;
+            if (!row) return;
 
-          const updatedAt: string | undefined = row.updated_at;
-          const dataObj: any = row.data;
+            const updatedAt: string | undefined = row.updated_at;
+            const dataObj: any = row.data;
 
-          // If payload is identical to what we just pushed, ignore echo
-          if (dataObj) {
-            const json = JSON.stringify(dataObj);
-            if (json === lastPushedHash.current) return;
-          }
-
-          // If we have server updated_at for last pull, ignore strictly older events
-          if (updatedAt && lastPulledAt.current) {
-            // NOTE: we still accept differing content even if timestamps look older
-            // because clocks can drift; only ignore when clearly older AND content equal.
-            if (updatedAt <= lastPulledAt.current && dataObj) {
+            if (dataObj) {
               const json = JSON.stringify(dataObj);
               if (json === lastPushedHash.current) return;
-              // If content differs, accept despite timestamp.
             }
+
+            if (updatedAt && lastPulledAt.current) {
+              if (updatedAt <= lastPulledAt.current && dataObj) {
+                const json = JSON.stringify(dataObj);
+                if (json === lastPushedHash.current) return;
+              }
+            }
+
+            if (updatedAt) lastPulledAt.current = updatedAt;
+            if (typeof onChange === "function") onChange(dataObj);
+          } catch (e: any) {
+            console.warn("subscribeToData handler error:", e?.message || e);
           }
-
-          // Accept update
-          if (updatedAt) lastPulledAt.current = updatedAt;
-          if (typeof onChange === "function") onChange(dataObj);
-        } catch (e: any) {
-          // Swallow to avoid breaking the subscription
-          console.warn("subscribeToData handler error:", e?.message || e);
         }
-      }
-    );
+      );
 
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        // no-op; channel is live
-      }
-    });
+      channel.subscribe();
 
-    // Cleanup
-    return () => {
-      try {
-        supabase.removeChannel(channel);
-      } catch {}
-    };
-  }, [user, clearError]);
+      return () => {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      };
+    },
+    [user, clearError]
+  );
 
-  return useMemo<UseCloudSync>(() => ({
-    user,
-    isLoading,
-    isOnline,
-    error,
-    clearError,
-
-    signIn,
-    signUp,
-    signOut,
-
-    syncData,
-    subscribeToData,
-  }), [
-    user,
-    isLoading,
-    isOnline,
-    error,
-    clearError,
-    signIn,
-    signUp,
-    signOut,
-    syncData,
-    subscribeToData,
-  ]);
+  return useMemo<UseCloudSync>(
+    () => ({
+      user,
+      isLoading,
+      isOnline,
+      error,
+      clearError,
+      signIn,
+      signUp,
+      signOut,
+      syncData,
+      subscribeToData,
+    }),
+    [user, isLoading, isOnline, error, clearError, signIn, signUp, signOut, syncData, subscribeToData]
+  );
 }
 
 export default useCloudSync;
