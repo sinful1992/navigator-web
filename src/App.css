@@ -474,6 +474,33 @@ p, h1, h2, h3, h4, h5, h6 {
 /* ==== Completed Wrap ==== */
 .completed-wrap { display: flex; flex-direction: column; gap: 1.5rem; }
 
+/* ==== Sliding tabs (required for swipe) ==== */
+.tabs-viewport {
+  overflow: hidden;      /* hides off-screen panels */
+  position: relative;
+  width: 100%;
+  touch-action: pan-y;   /* allow vertical scroll; we handle horizontal */
+}
+
+.tabs-track {
+  display: flex;         /* lay panels in a row */
+  transition: transform 280ms ease;
+  will-change: transform;
+}
+
+.tab-panel {
+  flex: 0 0 100%;        /* each panel takes full viewport width */
+  min-width: 100%;
+  max-width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabs-track { transition: none; }
+}
+
+/* Optional global guard against accidental horizontal scroll */
+html, body { overflow-x: hidden; }
+
 /* ==== Responsive Design ==== */
 @media (max-width: 768px) {
   .container { padding: 0.75rem; overflow-x: hidden; }
@@ -530,4 +557,3 @@ p, h1, h2, h3, h4, h5, h6 {
   .arrangement-actions { justify-content: center; }
   .user-chip .email { max-width: 50vw; }
 }
-```0
