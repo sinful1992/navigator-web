@@ -418,9 +418,9 @@ function AuthedApp() {
 
       const fileName = objectPath.split("/").pop() || objectPath;
       const ok = window.confirm(
-        'Restore "' +
+        "Restore \"" +
           fileName +
-          '" from cloud?\n\n' +
+          "\" from cloud?\n\n" +
           "This will overwrite your current addresses, completions, arrangements and sessions on this device."
       );
       if (!ok) return;
@@ -463,7 +463,7 @@ function AuthedApp() {
     return () => document.removeEventListener("click", onDocClick);
   }, [cloudMenuOpen]);
 
-  // ---------------- Swipe with live drag ----------------
+  // --------------- Swipe with live drag and snap ---------------
   const tabsOrder: Tab[] = ["list", "completed", "arrangements"];
   const tabIndex = tabsOrder.indexOf(tab);
   const goToNextTab = React.useCallback(() => {
@@ -536,7 +536,7 @@ function AuthedApp() {
 
     const quick = dt <= 600;
     const farPx = Math.abs(dx) >= 60;
-    const farFrac = Math.abs(dx) / Math.max(1, w) >= 0.18; // ~18% of width
+    const farFrac = Math.abs(dx) / Math.max(1, w) >= 0.18; // about 18 percent of width
     const horizontal = Math.abs(dx) > Math.abs(dy) * 1.2;
 
     if (horizontal && (farPx || farFrac || quick)) {
@@ -544,7 +544,7 @@ function AuthedApp() {
       else if (dx > 0 && tabIndex > 0) goToPrevTab();
     }
 
-    // Snap back / finish transition
+    // Snap back or finish transition
     setDragX(0);
     setDragging(false);
   };
@@ -796,7 +796,7 @@ function CloudRestore(props: {
       <button
         className="btn btn-ghost"
         onClick={async () => {
-          props.setCloudMenuOpen((o) => !o);
+          setCloudMenuOpen((o) => !o);
           if (!cloudMenuOpen) await loadRecentCloudBackups();
         }}
         title="List recent cloud backups"
