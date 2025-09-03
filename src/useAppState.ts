@@ -9,13 +9,16 @@ import type {
   DaySession,
   Arrangement,
 } from "./types";
+import { applyOps } from "./syncApi";
+import type { SyncOp, OpEntity, OpAction } from "./syncTypes";
 
 /** ================================
  *  Persistent storage keys
  *  ================================ */
-const STORAGE_KEY = "navigator_state_v4"; // App state
+const STORAGE_KEY = "navigator_state_v4";       // App state
 const DEVICE_ID_KEY = "navigator_device_id_v1";
 const OPSEQ_KEY = "navigator_opseq_v1";
+const OPQUEUE_KEY = "navigator_opqueue_v1";
 
 /** ================================
  *  Optimistic update types
@@ -61,11 +64,10 @@ function stampCompletionsWithVersion(
   }));
 }
 
-// Deterministic ID for optimistic operations
+// Deterministic ID for optimistic operations (UI-level)
 function generateOperationId(type: string, entity: string, data: any): string {
   const payload = JSON.stringify(data);
   const key = `${type}_${entity}_${payload.slice(0, 50)}_${Date.now()}`;
-  // base64 + sanitize + trim
   const b64 = typeof btoa === "function" ? btoa(key) : Buffer.from(key).toString("base64");
   return b64.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
 }
@@ -128,6 +130,8 @@ function applyOptimisticUpdates(
       case "address":
         if (update.operation === "create") {
           result.addresses = [...result.addresses, update.data];
+        } else if (update.operation === "update" && update.data?.addresses) {
+          result.addresses = update.data.addresses;
         }
         break;
 
@@ -160,6 +164,11 @@ export function useAppState() {
   const [deviceId, setDeviceId] = React.useState<string>("");
   const [opSeq, setOpSeq] = React.useState<number>(0);
 
+  // Op queue
+  const [opQueue, setOpQueue] = React.useState<SyncOp[]>([]);
+  const drainingRef = React.useRef(false);
+  const [backoffMs, setBackoffMs] = React.useState(0);
+
   // Conflicts
   type Conflict =
     | {
@@ -183,7 +192,7 @@ export function useAppState() {
     return applyOptimisticUpdates(baseState, optimisticState.updates);
   }, [baseState, optimisticState.updates]);
 
-  /** -------- Boot: load device ID + opSeq + state -------- */
+  /** -------- Boot: load device ID + opSeq + state + queue -------- */
   React.useEffect(() => {
     let alive = true;
 
@@ -232,9 +241,13 @@ export function useAppState() {
 
           setBaseState(next);
         }
+
+        // Queue
+        const savedQueue = (await get(OPQUEUE_KEY)) as SyncOp[] | undefined;
+        if (!alive) return;
+        setOpQueue(Array.isArray(savedQueue) ? savedQueue : []);
       } catch (error) {
-        console.warn("Failed to init device/state:", error);
-        // Continue with initial
+        console.warn("Failed to init device/state/queue:", error);
       } finally {
         if (alive) setLoading(false);
       }
@@ -252,6 +265,12 @@ export function useAppState() {
     return () => clearTimeout(t);
   }, [baseState, loading]);
 
+  /** -------- Persist queue whenever it changes -------- */
+  React.useEffect(() => {
+    if (loading) return;
+    set(OPQUEUE_KEY, opQueue).catch(() => {});
+  }, [opQueue, loading]);
+
   /** -------- opSeq increment (synchronous, persisted) -------- */
   const nextOpSeqSync = React.useCallback((): number => {
     const current = typeof opSeq === "number" ? opSeq : 0;
@@ -260,6 +279,104 @@ export function useAppState() {
     set(OPSEQ_KEY, next).catch(() => {});
     return next;
   }, [opSeq]);
+
+  /** -------- Enqueue helper -------- */
+  const enqueueOp = React.useCallback(
+    (entity: OpEntity, action: OpAction, payload: any, optimisticId?: string) => {
+      const seq = nextOpSeqSync();
+      const opId = `${deviceId}:${seq}`;
+      const op: SyncOp = {
+        id: opId,
+        deviceId,
+        opSeq: seq,
+        entity,
+        action,
+        payload,
+        createdAt: new Date().toISOString(),
+        optimisticId,
+      };
+      setOpQueue((q) => [...q, op]);
+    },
+    [deviceId, nextOpSeqSync]
+  );
+
+  /** -------- Drain loop -------- */
+  const tryDrain = React.useCallback(async () => {
+    if (drainingRef.current) return;
+    if (!opQueue.length) return;
+    if (typeof navigator !== "undefined" && navigator && "onLine" in navigator) {
+      if (!navigator.onLine) return;
+    }
+
+    drainingRef.current = true;
+    try {
+      let queue = opQueue;
+      let localBackoff = backoffMs;
+
+      while (queue.length) {
+        const batch = queue.slice(0, 25);
+        const res = await applyOps(batch);
+
+        if (res.ok) {
+          // Success: confirm any still-pending optimistic updates
+          for (const op of batch) {
+            if (op.optimisticId) {
+              // It’s safe to call even if already confirmed or missing
+              confirmOptimisticUpdate(op.optimisticId);
+            }
+          }
+          // Drop sent items
+          queue = queue.slice(batch.length);
+          setOpQueue(queue);
+          // Reset backoff after any success
+          localBackoff = 0;
+          setBackoffMs(0);
+        } else {
+          // Failure: set backoff and exit loop
+          const next = Math.min(localBackoff ? localBackoff * 2 : 500, 8000);
+          const wait = res.retryAfterMs && res.retryAfterMs > 0 ? res.retryAfterMs : next;
+          setBackoffMs(wait);
+          // Optionally surface conflicts (server-provided). For now, keep queue intact.
+          if (res.conflicts && res.conflicts.length) {
+            console.warn("Server conflicts reported:", res.conflicts.length);
+          }
+          break;
+        }
+      }
+
+      // If anything remains, schedule another attempt after backoff
+      if (queue.length) {
+        const delay = backoffMs || 1000;
+        setTimeout(() => {
+          drainingRef.current = false;
+          tryDrain();
+        }, delay);
+      } else {
+        drainingRef.current = false;
+      }
+    } catch (e) {
+      console.warn("Drain failed:", e);
+      const next = Math.min(backoffMs ? backoffMs * 2 : 500, 8000);
+      setBackoffMs(next);
+      setTimeout(() => {
+        drainingRef.current = false;
+        tryDrain();
+      }, next);
+    }
+  }, [opQueue, backoffMs, confirmOptimisticUpdate]);
+
+  // Drain when online or queue updates
+  React.useEffect(() => {
+    if (!loading && opQueue.length) {
+      tryDrain();
+    }
+  }, [opQueue, loading, tryDrain]);
+
+  React.useEffect(() => {
+    const onOnline = () => tryDrain();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [tryDrain]);
 
   /** -------- Optimistic update helpers -------- */
   const addOptimisticUpdate = React.useCallback(
@@ -384,9 +501,11 @@ export function useAppState() {
         currentListVersion: (s.currentListVersion || 1) + 1,
       }));
 
+      // Enqueue sync op (we keep local confirm immediate in Step 2)
+      enqueueOp("address", "update", { addresses: rows }, operationId);
       confirmOptimisticUpdate(operationId);
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate]
+    [addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]
   );
 
   const addAddress = React.useCallback(
@@ -399,6 +518,7 @@ export function useAppState() {
           const newAddresses = [...s.addresses, addressRow];
           const newIndex = newAddresses.length - 1;
 
+          enqueueOp("address", "create", addressRow, operationId);
           setTimeout(() => {
             confirmOptimisticUpdate(operationId);
             resolve(newIndex);
@@ -408,7 +528,7 @@ export function useAppState() {
         });
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate]
+    [addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]
   );
 
   const setActive = React.useCallback((idx: number) => {
@@ -447,18 +567,24 @@ export function useAppState() {
           const operationId = generateOperationId("create", "completion", completion);
           addOptimisticUpdate("create", "completion", completion, operationId);
 
+          // Enqueue
+          enqueueOp("completion", "create", completion, operationId);
+
           const next: AppState = {
             ...s,
             completions: [completion, ...s.completions],
           };
           if (s.activeIndex === index) next.activeIndex = null;
 
-          setTimeout(() => resolve(operationId), 0);
+          setTimeout(() => {
+            confirmOptimisticUpdate(operationId);
+            resolve(operationId);
+          }, 0);
           return next;
         });
       });
     },
-    [addOptimisticUpdate]
+    [addOptimisticUpdate, enqueueOp, confirmOptimisticUpdate]
   );
 
   const undo = React.useCallback(
@@ -475,6 +601,7 @@ export function useAppState() {
           const completion = arr[pos];
           const operationId = generateOperationId("delete", "completion", completion);
           addOptimisticUpdate("delete", "completion", completion, operationId);
+          enqueueOp("completion", "delete", completion, operationId);
           arr.splice(pos, 1);
           setTimeout(() => confirmOptimisticUpdate(operationId), 0);
         }
@@ -482,7 +609,7 @@ export function useAppState() {
         return { ...s, completions: arr };
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate]
+    [addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]
   );
 
   /** ================================
@@ -500,18 +627,18 @@ export function useAppState() {
         date: today,
         start: now.toISOString(),
       };
-      // Attach sync metadata without changing the DaySession type
       (sess as any).updatedAt = now.toISOString();
       (sess as any).updatedBy = deviceId;
       (sess as any).opSeq = seq;
 
       const operationId = generateOperationId("create", "session", sess);
       addOptimisticUpdate("create", "session", sess, operationId);
+      enqueueOp("session", "create", sess, operationId);
       setTimeout(() => confirmOptimisticUpdate(operationId), 0);
 
       return { ...s, daySessions: [...s.daySessions, sess] };
     });
-  }, [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate]);
+  }, [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]);
 
   const endDay = React.useCallback(() => {
     const now = new Date();
@@ -531,19 +658,19 @@ export function useAppState() {
         if (end > start) (act as any).durationSeconds = Math.floor((end - start) / 1000);
       } catch {}
 
-      // Stamp sync meta
       (act as any).updatedAt = now.toISOString();
       (act as any).updatedBy = deviceId;
       (act as any).opSeq = seq;
 
       const operationId = generateOperationId("update", "session", act);
       addOptimisticUpdate("update", "session", act, operationId);
+      enqueueOp("session", "update", act, operationId);
       setTimeout(() => confirmOptimisticUpdate(operationId), 0);
 
       arr[i] = act;
       return { ...s, daySessions: arr };
     });
-  }, [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate]);
+  }, [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]);
 
   /** ================================
    *  Arrangements (stamp sync meta)
@@ -557,7 +684,6 @@ export function useAppState() {
         const seq = nextOpSeqSync();
         const id = `arr_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
-        // Create as Arrangement, then attach sync meta (to avoid extra-prop checks)
         const newArrangement: Arrangement = {
           ...arrangementData,
           id,
@@ -569,6 +695,7 @@ export function useAppState() {
 
         const operationId = generateOperationId("create", "arrangement", newArrangement);
         addOptimisticUpdate("create", "arrangement", newArrangement, operationId);
+        enqueueOp("arrangement", "create", newArrangement, operationId);
 
         setBaseState((s) => {
           setTimeout(() => {
@@ -576,7 +703,6 @@ export function useAppState() {
             resolve(id);
           }, 0);
 
-          // Dedup & sort
           const map = new Map<string, Arrangement>([
             ...s.arrangements.map<[string, Arrangement]>((a) => [a.id, a]),
             [newArrangement.id, newArrangement],
@@ -591,7 +717,7 @@ export function useAppState() {
         });
       });
     },
-    [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate]
+    [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]
   );
 
   const updateArrangement = React.useCallback(
@@ -600,7 +726,6 @@ export function useAppState() {
         const now = new Date().toISOString();
         const seq = nextOpSeqSync();
 
-        // Payload we will broadcast/optimistically apply
         const stamped = { ...updates, id, updatedAt: now } as Partial<Arrangement> & {
           id: string;
           updatedAt: string;
@@ -610,6 +735,7 @@ export function useAppState() {
 
         const operationId = generateOperationId("update", "arrangement", stamped);
         addOptimisticUpdate("update", "arrangement", stamped, operationId);
+        enqueueOp("arrangement", "update", stamped, operationId);
 
         setBaseState((s) => {
           const arrangements = s.arrangements
@@ -630,7 +756,7 @@ export function useAppState() {
         });
       });
     },
-    [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate]
+    [deviceId, nextOpSeqSync, addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]
   );
 
   const deleteArrangement = React.useCallback(
@@ -643,9 +769,9 @@ export function useAppState() {
             return s;
           }
 
-          // Note: We hard-delete for now; tombstones will arrive in a later step.
           const operationId = generateOperationId("delete", "arrangement", { id });
           addOptimisticUpdate("delete", "arrangement", { id }, operationId);
+          enqueueOp("arrangement", "delete", { id }, operationId);
 
           const arrangements = s.arrangements.filter((arr) => arr.id !== id);
 
@@ -658,7 +784,7 @@ export function useAppState() {
         });
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate]
+    [addOptimisticUpdate, confirmOptimisticUpdate, enqueueOp]
   );
 
   /** ================================
@@ -678,7 +804,6 @@ export function useAppState() {
   }
 
   const backupState = React.useCallback(() => {
-    // Use base state for backups (no optimistic updates)
     const snap: AppState = {
       addresses: baseState.addresses,
       completions: baseState.completions,
@@ -714,7 +839,6 @@ export function useAppState() {
       if (mergeStrategy === "merge") {
         setBaseState((currentState) => {
           const merged: AppState = {
-            // Prefer restored addresses if more recent list version
             addresses:
               restoredState.currentListVersion >= currentState.currentListVersion
                 ? restoredState.addresses
@@ -723,8 +847,6 @@ export function useAppState() {
               restoredState.currentListVersion,
               currentState.currentListVersion
             ),
-
-            // Merge completions (avoid duplicates)
             completions: [
               ...currentState.completions,
               ...restoredState.completions.filter(
@@ -740,8 +862,6 @@ export function useAppState() {
               (a, b) =>
                 new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
             ),
-
-            // Merge arrangements, prefer most recent updatedAt
             arrangements: Array.from(
               new Map<string, Arrangement>(
                 [
@@ -758,8 +878,6 @@ export function useAppState() {
                 )
               ).values()
             ),
-
-            // Merge day sessions by date key
             daySessions: Array.from(
               new Map<string, DaySession>([
                 ...currentState.daySessions.map<[string, DaySession]>(
@@ -770,14 +888,11 @@ export function useAppState() {
                 ),
               ]).values()
             ),
-
             activeIndex: restoredState.activeIndex ?? currentState.activeIndex,
           };
-
           return merged;
         });
       } else {
-        // replace
         setBaseState(restoredState);
       }
 
@@ -798,7 +913,6 @@ export function useAppState() {
 
         const localConflicts = new Map<string, Conflict>();
 
-        // Completions: simple “same index + outcome within 5s” heuristic
         nextState.completions.forEach((incoming: Completion) => {
           const existing = currentState.completions.find(
             (c) =>
@@ -819,7 +933,6 @@ export function useAppState() {
           }
         });
 
-        // Arrangements: prefer newer updatedAt
         nextState.arrangements.forEach((incoming: Arrangement) => {
           const existing = currentState.arrangements.find((a) => a.id === incoming.id);
           if (existing && existing.updatedAt !== incoming.updatedAt) {
@@ -839,7 +952,6 @@ export function useAppState() {
         return nextState;
       });
 
-      // If an external state is applied, clear optimistic noise
       clearOptimisticUpdates();
     },
     [clearOptimisticUpdates]
@@ -854,7 +966,7 @@ export function useAppState() {
     baseState, // raw base
     loading,
 
-    // Device + opSeq (read-only for now; used internally)
+    // Device + opSeq (read-only for now)
     deviceId,
     opSeq,
 
