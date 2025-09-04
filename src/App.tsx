@@ -1054,13 +1054,19 @@ function AuthedApp() {
             {/* SEARCH BAR UNDER THE DAY PANEL */}
             <div className="search-container">
               <input
-                type="search"
-                value={search}
-                placeholder="Search addresses..."
-                onChange={(e) => setSearch(e.target.value)}
-                className="input search-input"
+               type="search"
+               value={search}
+               placeholder="Search addresses..."
+               onChange={(e) => setSearch(e.target.value)}
+               className="input search-input"
               />
             </div>
+
+            {/* Add Address (inline button, always visible) */}
+            <div style={{ display: "flex", justifyContent: "flex-end", margin: "0.5rem 0 0.75rem" }}>
+              <ManualAddressFAB onAdd={addAddress} inline />
+            </div>
+
 
             <AddressList
               state={safeState}
