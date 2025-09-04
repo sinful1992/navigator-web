@@ -1,11 +1,14 @@
+// src/ManualAddressFAB.tsx
 import * as React from "react";
 import type { AddressRow } from "./types";
 
 type Props = {
   onAdd: (row: AddressRow) => Promise<number>;
+  /** If true, renders a normal button (not floating). */
+  inline?: boolean;
 };
 
-export default function ManualAddressFAB({ onAdd }: Props) {
+export default function ManualAddressFAB({ onAdd, inline }: Props) {
   const [open, setOpen] = React.useState(false);
   const [address, setAddress] = React.useState("");
   const [lat, setLat] = React.useState<string>("");
@@ -25,13 +28,10 @@ export default function ManualAddressFAB({ onAdd }: Props) {
     setErr(null);
 
     const trimmed = address.trim();
-    if (!trimmed) {
-      setErr("Address is required.");
-      return;
-    }
+    if (!trimmed) return setErr("Address is required.");
 
-    let latNum: number | undefined;
-    let lngNum: number | undefined;
+    let latNum: number | null = null;
+    let lngNum: number | null = null;
 
     if (lat.trim()) {
       const v = Number(lat);
@@ -46,11 +46,7 @@ export default function ManualAddressFAB({ onAdd }: Props) {
 
     setBusy(true);
     try {
-      await onAdd({
-        address: trimmed,
-        lat: latNum ?? null,
-        lng: lngNum ?? null,
-      } as AddressRow);
+      await onAdd({ address: trimmed, lat: latNum, lng: lngNum } as AddressRow);
       reset();
       setOpen(false);
     } catch (e: any) {
@@ -60,20 +56,33 @@ export default function ManualAddressFAB({ onAdd }: Props) {
     }
   };
 
+  const FloatingButton = (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-label="Add address"
+      style={fabStyle}
+      className="fab-add-address"
+    >
+      +
+    </button>
+  );
+
+  const InlineButton = (
+    <button
+      type="button"
+      className="btn"
+      onClick={() => setOpen(true)}
+      aria-label="Add address"
+    >
+      + Add address
+    </button>
+  );
+
   return (
     <>
-      {/* Floating action button */}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Add address"
-        style={fabStyle}
-        className="fab-add-address"
-      >
-        +
-      </button>
+      {inline ? InlineButton : FloatingButton}
 
-      {/* Very small modal */}
       {open && (
         <div style={overlayStyle} role="dialog" aria-modal="true">
           <div style={modalStyle}>
@@ -100,7 +109,7 @@ export default function ManualAddressFAB({ onAdd }: Props) {
                 onChange={(e) => setAddress(e.target.value)}
                 className="input"
                 rows={3}
-                placeholder="e.g. 10 Downing Street, London, SW1A 2AA"
+                placeholder="e.g. 10 Example St, City, POSTCODE"
                 required
               />
 
@@ -132,13 +141,7 @@ export default function ManualAddressFAB({ onAdd }: Props) {
               </div>
 
               {err && (
-                <div
-                  style={{
-                    color: "var(--danger)",
-                    fontSize: "0.875rem",
-                    marginTop: "0.5rem",
-                  }}
-                >
+                <div style={{ color: "var(--danger)", fontSize: "0.875rem", marginTop: "0.5rem" }}>
                   {err}
                 </div>
               )}
@@ -167,11 +170,11 @@ export default function ManualAddressFAB({ onAdd }: Props) {
   );
 }
 
-/* Inline styles to avoid CSS churn */
+/* Styles */
 const fabStyle: React.CSSProperties = {
   position: "fixed",
   right: 16,
-  bottom: 16,
+  bottom: `calc(16px + env(safe-area-inset-bottom, 0))`,
   width: 56,
   height: 56,
   borderRadius: "50%",
@@ -181,9 +184,10 @@ const fabStyle: React.CSSProperties = {
   fontSize: 28,
   lineHeight: "56px",
   textAlign: "center",
-  boxShadow: "0 6px 18px rgba(0,0,0,0.15)",
+  boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
   cursor: "pointer",
-  zIndex: 50,
+  zIndex: 2000,              // higher than any card/header
+  pointerEvents: "auto",
 };
 
 const overlayStyle: React.CSSProperties = {
@@ -194,7 +198,7 @@ const overlayStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   padding: 12,
-  zIndex: 60,
+  zIndex: 2100,
 };
 
 const modalStyle: React.CSSProperties = {
