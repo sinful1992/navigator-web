@@ -1,40 +1,62 @@
 import * as React from "react";
-import { useAppState } from "./useAppState";
+import type { AddressRow } from "./types";
 
-type Form = {
-  address: string;
-  lat?: string;
-  lng?: string;
-  notes?: string;
+type Props = {
+  onAdd: (row: AddressRow) => Promise<number>;
 };
 
-export default function ManualAddressFAB() {
-  const { addAddress } = useAppState();
+export default function ManualAddressFAB({ onAdd }: Props) {
   const [open, setOpen] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
-  const [form, setForm] = React.useState<Form>({ address: "" });
+  const [address, setAddress] = React.useState("");
+  const [lat, setLat] = React.useState<string>("");
+  const [lng, setLng] = React.useState<string>("");
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
 
-  const canSave = form.address.trim().length > 0 && !saving;
+  const reset = () => {
+    setAddress("");
+    setLat("");
+    setLng("");
+    setErr(null);
+  };
 
-  const onSave = async (e?: React.FormEvent) => {
+  const submit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!canSave) return;
-    setSaving(true);
+    setErr(null);
+
+    const trimmed = address.trim();
+    if (!trimmed) {
+      setErr("Address is required.");
+      return;
+    }
+
+    let latNum: number | undefined;
+    let lngNum: number | undefined;
+
+    if (lat.trim()) {
+      const v = Number(lat);
+      if (Number.isNaN(v)) return setErr("Latitude must be a number.");
+      latNum = v;
+    }
+    if (lng.trim()) {
+      const v = Number(lng);
+      if (Number.isNaN(v)) return setErr("Longitude must be a number.");
+      lngNum = v;
+    }
+
+    setBusy(true);
     try {
-      const lat = form.lat?.trim() ? Number(form.lat) : undefined;
-      const lng = form.lng?.trim() ? Number(form.lng) : undefined;
-
-      await addAddress({
-        address: form.address.trim(),
-        lat: Number.isFinite(lat!) ? lat : undefined,
-        lng: Number.isFinite(lng!) ? lng : undefined,
-        notes: form.notes?.trim() || undefined,
-      } as any);
-
+      await onAdd({
+        address: trimmed,
+        lat: latNum ?? null,
+        lng: lngNum ?? null,
+      } as AddressRow);
+      reset();
       setOpen(false);
-      setForm({ address: "" });
+    } catch (e: any) {
+      setErr(e?.message || String(e));
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   };
 
@@ -42,103 +64,99 @@ export default function ManualAddressFAB() {
     <>
       {/* Floating action button */}
       <button
+        type="button"
         onClick={() => setOpen(true)}
-        title="Add manual address"
-        style={{
-          position: "fixed",
-          right: 16,
-          bottom: 80,
-          zIndex: 1000,
-          borderRadius: 999,
-          padding: "12px 16px",
-          border: "none",
-          background: "#0ea5e9",
-          color: "white",
-          boxShadow: "0 10px 24px rgba(2,6,23,.2)",
-          cursor: "pointer",
-          fontWeight: 600,
-        }}
+        aria-label="Add address"
+        style={fabStyle}
+        className="fab-add-address"
       >
-        + Address
+        +
       </button>
 
-      {/* Modal */}
+      {/* Very small modal */}
       {open && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, .45)",
-            zIndex: 1001,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "min(520px, 92vw)",
-              borderRadius: 12,
-              background: "white",
-              padding: 16,
-              boxShadow: "0 14px 40px rgba(2,6,23,.25)",
-              fontFamily: "system-ui, sans-serif",
-            }}
-          >
-            <h3 style={{ margin: 0, marginBottom: 10 }}>Add address</h3>
-            <form onSubmit={onSave}>
-              <label style={labelStyle}>Address</label>
-              <input
-                autoFocus
+        <div style={overlayStyle} role="dialog" aria-modal="true">
+          <div style={modalStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0 }}>Add Address</h3>
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  reset();
+                  setOpen(false);
+                }}
+                disabled={busy}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={submit} style={{ marginTop: "0.5rem" }}>
+              <label className="label" htmlFor="manual-address">Address *</label>
+              <textarea
+                id="manual-address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="input"
+                rows={3}
+                placeholder="e.g. 10 Downing Street, London, SW1A 2AA"
                 required
-                value={form.address}
-                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                placeholder="e.g. 10 Downing St, London SW1A 2AA"
-                style={inputStyle}
               />
 
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
                 <div style={{ flex: 1 }}>
-                  <label style={labelStyle}>Latitude (optional)</label>
+                  <label className="label" htmlFor="manual-lat">Lat (optional)</label>
                   <input
-                    value={form.lat ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))}
-                    placeholder="51.5034"
+                    id="manual-lat"
+                    type="text"
                     inputMode="decimal"
-                    style={inputStyle}
+                    value={lat}
+                    onChange={(e) => setLat(e.target.value)}
+                    className="input"
+                    placeholder="51.5034"
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={labelStyle}>Longitude (optional)</label>
+                  <label className="label" htmlFor="manual-lng">Lng (optional)</label>
                   <input
-                    value={form.lng ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))}
-                    placeholder="-0.1276"
+                    id="manual-lng"
+                    type="text"
                     inputMode="decimal"
-                    style={inputStyle}
+                    value={lng}
+                    onChange={(e) => setLng(e.target.value)}
+                    className="input"
+                    placeholder="-0.1276"
                   />
                 </div>
               </div>
 
-              <label style={labelStyle}>Notes (optional)</label>
-              <textarea
-                value={form.notes ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                rows={3}
-                style={{ ...inputStyle, resize: "vertical" }}
-              />
+              {err && (
+                <div
+                  style={{
+                    color: "var(--danger)",
+                    fontSize: "0.875rem",
+                    marginTop: "0.5rem",
+                  }}
+                >
+                  {err}
+                </div>
+              )}
 
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button type="button" onClick={() => setOpen(false)} style={btnSecondary}>
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    reset();
+                    setOpen(false);
+                  }}
+                  disabled={busy}
+                >
                   Cancel
                 </button>
-                <button type="submit" disabled={!canSave} style={{ ...btnPrimary, opacity: canSave ? 1 : 0.6 }}>
-                  {saving ? "Saving…" : "Save"}
+                <button type="submit" className="btn" disabled={busy}>
+                  {busy ? "Adding..." : "Add"}
                 </button>
               </div>
             </form>
@@ -149,38 +167,42 @@ export default function ManualAddressFAB() {
   );
 }
 
-const labelStyle: React.CSSProperties = {
-  display: "block",
-  fontSize: 12,
-  color: "#334155",
-  marginTop: 10,
+/* Inline styles to avoid CSS churn */
+const fabStyle: React.CSSProperties = {
+  position: "fixed",
+  right: 16,
+  bottom: 16,
+  width: 56,
+  height: 56,
+  borderRadius: "50%",
+  border: "none",
+  background: "var(--primary)",
+  color: "#fff",
+  fontSize: 28,
+  lineHeight: "56px",
+  textAlign: "center",
+  boxShadow: "0 6px 18px rgba(0,0,0,0.15)",
+  cursor: "pointer",
+  zIndex: 50,
 };
 
-const inputStyle: React.CSSProperties = {
+const overlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.35)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 12,
+  zIndex: 60,
+};
+
+const modalStyle: React.CSSProperties = {
   width: "100%",
-  marginTop: 4,
-  marginBottom: 4,
-  borderRadius: 8,
-  border: "1px solid #cbd5e1",
-  padding: "10px 12px",
-  fontSize: 14,
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: 8,
-  border: "1px solid #0284c7",
-  background: "#0ea5e9",
-  color: "white",
-  fontWeight: 600,
-  cursor: "pointer",
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: 8,
-  border: "1px solid #cbd5e1",
-  background: "white",
-  color: "#0f172a",
-  cursor: "pointer",
+  maxWidth: 520,
+  background: "var(--surface)",
+  borderRadius: 14,
+  padding: 14,
+  border: "1px solid var(--border-light)",
+  boxShadow: "var(--shadow-lg)",
 };
