@@ -1,10 +1,11 @@
 // src/ManualAddressFAB.tsx
 import * as React from "react";
+import { createPortal } from "react-dom";
 import type { AddressRow } from "./types";
 
 type Props = {
   onAdd: (row: AddressRow) => Promise<number>;
-  /** If true, renders a normal button (not floating). */
+  /** If true, shows a normal inline button instead of floating FAB. */
   inline?: boolean;
 };
 
@@ -56,7 +57,11 @@ export default function ManualAddressFAB({ onAdd, inline }: Props) {
     }
   };
 
-  const FloatingButton = (
+  const trigger = inline ? (
+    <button type="button" className="btn" onClick={() => setOpen(true)}>
+      + Add address
+    </button>
+  ) : (
     <button
       type="button"
       onClick={() => setOpen(true)}
@@ -68,104 +73,95 @@ export default function ManualAddressFAB({ onAdd, inline }: Props) {
     </button>
   );
 
-  const InlineButton = (
-    <button
-      type="button"
-      className="btn"
-      onClick={() => setOpen(true)}
-      aria-label="Add address"
-    >
-      + Add address
-    </button>
-  );
-
   return (
     <>
-      {inline ? InlineButton : FloatingButton}
+      {trigger}
 
-      {open && (
-        <div style={overlayStyle} role="dialog" aria-modal="true">
-          <div style={modalStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0 }}>Add Address</h3>
-              <button
-                className="btn btn-ghost"
-                onClick={() => {
-                  reset();
-                  setOpen(false);
-                }}
-                disabled={busy}
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={submit} style={{ marginTop: "0.5rem" }}>
-              <label className="label" htmlFor="manual-address">Address *</label>
-              <textarea
-                id="manual-address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="input"
-                rows={3}
-                placeholder="e.g. 10 Example St, City, POSTCODE"
-                required
-              />
-
-              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                <div style={{ flex: 1 }}>
-                  <label className="label" htmlFor="manual-lat">Lat (optional)</label>
-                  <input
-                    id="manual-lat"
-                    type="text"
-                    inputMode="decimal"
-                    value={lat}
-                    onChange={(e) => setLat(e.target.value)}
-                    className="input"
-                    placeholder="51.5034"
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label className="label" htmlFor="manual-lng">Lng (optional)</label>
-                  <input
-                    id="manual-lng"
-                    type="text"
-                    inputMode="decimal"
-                    value={lng}
-                    onChange={(e) => setLng(e.target.value)}
-                    className="input"
-                    placeholder="-0.1276"
-                  />
-                </div>
-              </div>
-
-              {err && (
-                <div style={{ color: "var(--danger)", fontSize: "0.875rem", marginTop: "0.5rem" }}>
-                  {err}
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", justifyContent: "flex-end" }}>
+      {open &&
+        createPortal(
+          <div style={overlayStyle} role="dialog" aria-modal="true">
+            <div style={modalStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0 }}>Add Address</h3>
                 <button
-                  type="button"
                   className="btn btn-ghost"
                   onClick={() => {
                     reset();
                     setOpen(false);
                   }}
                   disabled={busy}
+                  aria-label="Close"
                 >
-                  Cancel
-                </button>
-                <button type="submit" className="btn" disabled={busy}>
-                  {busy ? "Adding..." : "Add"}
+                  ✕
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+
+              <form onSubmit={submit} style={{ marginTop: "0.5rem" }}>
+                <label className="label" htmlFor="manual-address">Address *</label>
+                <textarea
+                  id="manual-address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="input"
+                  rows={3}
+                  placeholder="e.g. 10 Example St, City, POSTCODE"
+                  required
+                />
+
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="label" htmlFor="manual-lat">Lat (optional)</label>
+                    <input
+                      id="manual-lat"
+                      type="text"
+                      inputMode="decimal"
+                      value={lat}
+                      onChange={(e) => setLat(e.target.value)}
+                      className="input"
+                      placeholder="51.5034"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="label" htmlFor="manual-lng">Lng (optional)</label>
+                    <input
+                      id="manual-lng"
+                      type="text"
+                      inputMode="decimal"
+                      value={lng}
+                      onChange={(e) => setLng(e.target.value)}
+                      className="input"
+                      placeholder="-0.1276"
+                    />
+                  </div>
+                </div>
+
+                {err && (
+                  <div style={{ color: "var(--danger)", fontSize: "0.875rem", marginTop: "0.5rem" }}>
+                    {err}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", justifyContent: "flex-end" }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      reset();
+                      setOpen(false);
+                    }}
+                    disabled={busy}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn" disabled={busy}>
+                    {busy ? "Adding..." : "Add"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
     </>
   );
 }
@@ -186,8 +182,7 @@ const fabStyle: React.CSSProperties = {
   textAlign: "center",
   boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
   cursor: "pointer",
-  zIndex: 2000,              // higher than any card/header
-  pointerEvents: "auto",
+  zIndex: 4000, // well above any transformed/stacking contexts
 };
 
 const overlayStyle: React.CSSProperties = {
@@ -198,7 +193,7 @@ const overlayStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   padding: 12,
-  zIndex: 2100,
+  zIndex: 4100,
 };
 
 const modalStyle: React.CSSProperties = {
