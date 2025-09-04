@@ -1102,7 +1102,7 @@ function AuthedApp() {
             </div>
 
             {/* Floating + Address button */}
-            <ManualAddressFAB />
+            <ManualAddressFAB onAdd={addAddress} />
           </section>
 
           {/* Panel 2: Completed */}
