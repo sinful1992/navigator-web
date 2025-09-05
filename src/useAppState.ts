@@ -42,7 +42,6 @@ function stampCompletionsWithVersion(
   const src = Array.isArray(completions) ? completions : [];
   return src.map((c: any) => ({
     ...c,
-    // if missing, tag with the snapshot's version
     listVersion: typeof c?.listVersion === "number" ? c.listVersion : version,
   }));
 }
@@ -57,7 +56,6 @@ function generateOperationId(type: string, entity: string, data: any): string {
 function applyOptimisticUpdates(baseState: AppState, updates: Map<string, StateUpdate>): AppState {
   let result = { ...baseState };
   
-  // Sort updates by timestamp to apply in order
   const sortedUpdates = Array.from(updates.values()).sort((a, b) => 
     new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
@@ -159,7 +157,6 @@ export function useAppState() {
         }
       } catch (error) {
         console.warn('Failed to load state from IndexedDB:', error);
-        // Continue with initial state
       } finally {
         if (alive) setLoading(false);
       }
@@ -177,7 +174,6 @@ export function useAppState() {
   }, [baseState, loading]);
 
   // ---- optimistic update helpers ----
-
   const addOptimisticUpdate = React.useCallback((
     operation: 'create' | 'update' | 'delete',
     entity: 'completion' | 'arrangement' | 'address' | 'session',
@@ -227,7 +223,6 @@ export function useAppState() {
       return { updates, pendingOperations };
     });
 
-    // Clean up confirmed updates after a delay
     setTimeout(() => {
       setOptimisticState(prev => {
         const updates = new Map(prev.updates);
@@ -257,7 +252,6 @@ export function useAppState() {
       return { updates, pendingOperations };
     });
 
-    // Clean up reverted updates after a short delay
     setTimeout(() => {
       setOptimisticState(prev => {
         const updates = new Map(prev.updates);
@@ -276,38 +270,45 @@ export function useAppState() {
 
   // ---------------- enhanced actions ----------------
 
-  /** Import a new Excel list: bump list version and clear completions so the new list shows fully. */
-  const setAddresses = React.useCallback((rows: AddressRow[]) => {
-    // No optimistic queue for full-list replace; apply synchronously
-    setBaseState((s) => ({
-      ...s,
-      addresses: Array.isArray(rows) ? rows : [],
-      activeIndex: null,
-      // 🔑 bump version so existing completions no longer hide items
-      currentListVersion: (s.currentListVersion || 1) + 1,
-      // 🔑 clear completions so counters reset for the new list
-      completions: [],
-    }));
-  }, []);
+  /**
+   * Import a new Excel list: bump list version so previous completions
+   * don't hide new list items. Returns the *next* snapshot so callers
+   * can sync that exact state to the cloud (no stale reads).
+   */
+  const setAddresses = React.useCallback((rows: AddressRow[]): AppState => {
+    const operationId = generateOperationId('update', 'address', { type: 'bulk_import', count: rows.length });
+    addOptimisticUpdate('update', 'address', { addresses: rows, bumpVersion: true }, operationId);
 
-  /** Add a single address (manual add). Returns new index. */
+    let snapshot!: AppState;
+    setBaseState((s) => {
+      snapshot = {
+        ...s,
+        addresses: Array.isArray(rows) ? rows : [],
+        activeIndex: null,
+        // bump version; counters automatically reset because we read by currentListVersion
+        currentListVersion: (s.currentListVersion || 1) + 1,
+      };
+      return snapshot;
+    });
+
+    // confirm locally
+    confirmOptimisticUpdate(operationId);
+    return snapshot;
+  }, [addOptimisticUpdate, confirmOptimisticUpdate]);
+
+  /** Add a single address (used by Arrangements "manual address"). Returns new index. */
   const addAddress = React.useCallback((addressRow: AddressRow): Promise<number> => {
     return new Promise<number>((resolve) => {
       const operationId = generateOperationId('create', 'address', addressRow);
-      
-      // Apply optimistically
       addOptimisticUpdate('create', 'address', addressRow, operationId);
       
-      // Apply to base state
       setBaseState(s => {
         const newAddresses = [...s.addresses, addressRow];
         const newIndex = newAddresses.length - 1;
-        
         setTimeout(() => {
           confirmOptimisticUpdate(operationId);
           resolve(newIndex);
         }, 0);
-        
         return { ...s, addresses: newAddresses };
       });
     });
@@ -321,9 +322,6 @@ export function useAppState() {
     setBaseState((s) => ({ ...s, activeIndex: null }));
   }, []);
 
-  /**
-   * Enhanced completion with optimistic updates and conflict detection
-   */
   const complete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string): Promise<string> => {
       return new Promise((resolve, reject) => {
@@ -347,14 +345,9 @@ export function useAppState() {
           };
 
           const operationId = generateOperationId('create', 'completion', completion);
-          
-          // Add optimistic update
           addOptimisticUpdate('create', 'completion', completion, operationId);
 
-          const next: AppState = {
-            ...s,
-            completions: [completion, ...s.completions],
-          };
+          const next: AppState = { ...s, completions: [completion, ...s.completions] };
           if (s.activeIndex === index) next.activeIndex = null;
           
           setTimeout(() => resolve(operationId), 0);
@@ -365,27 +358,19 @@ export function useAppState() {
     [addOptimisticUpdate]
   );
 
-  /** Enhanced undo with optimistic updates */
   const undo = React.useCallback((index: number) => {
     setBaseState((s) => {
       const arr = s.completions.slice();
       const pos = arr.findIndex(
         (c) => Number(c.index) === Number(index) && c.listVersion === s.currentListVersion
       );
-      
       if (pos >= 0) {
         const completion = arr[pos];
         const operationId = generateOperationId('delete', 'completion', completion);
-        
-        // Add optimistic update for deletion
         addOptimisticUpdate('delete', 'completion', completion, operationId);
-        
         arr.splice(pos, 1);
-        
-        // Confirm immediately for local operations
         setTimeout(() => confirmOptimisticUpdate(operationId), 0);
       }
-      
       return { ...s, completions: arr };
     });
   }, [addOptimisticUpdate, confirmOptimisticUpdate]);
@@ -395,48 +380,33 @@ export function useAppState() {
   const startDay = React.useCallback(() => {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
-    
     setBaseState((s) => {
       if (s.daySessions.some((d) => !d.end)) return s; // already active
-      
-      const sess: DaySession = {
-        date: today,
-        start: now.toISOString(),
-      };
-      
+      const sess: DaySession = { date: today, start: now.toISOString() };
       const operationId = generateOperationId('create', 'session', sess);
       addOptimisticUpdate('create', 'session', sess, operationId);
-      
       setTimeout(() => confirmOptimisticUpdate(operationId), 0);
-      
       return { ...s, daySessions: [...s.daySessions, sess] };
     });
   }, [addOptimisticUpdate, confirmOptimisticUpdate]);
 
   const endDay = React.useCallback(() => {
     const now = new Date();
-    
     setBaseState((s) => {
       const i = s.daySessions.findIndex((d) => !d.end);
       if (i === -1) return s;
-      
       const arr = s.daySessions.slice();
       const act = { ...arr[i] };
       act.end = now.toISOString();
-      
       try {
         const start = new Date(act.start).getTime();
         const end = now.getTime();
         if (end > start) act.durationSeconds = Math.floor((end - start) / 1000);
       } catch {}
-      
       const operationId = generateOperationId('update', 'session', act);
       addOptimisticUpdate('update', 'session', act, operationId);
-      
       arr[i] = act;
-      
       setTimeout(() => confirmOptimisticUpdate(operationId), 0);
-      
       return { ...s, daySessions: arr };
     });
   }, [addOptimisticUpdate, confirmOptimisticUpdate]);
@@ -448,16 +418,9 @@ export function useAppState() {
       return new Promise((resolve) => {
         const now = new Date().toISOString();
         const id = `arr_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-        const newArrangement: Arrangement = {
-          ...arrangementData,
-          id,
-          createdAt: now,
-          updatedAt: now,
-        };
-        
+        const newArrangement: Arrangement = { ...arrangementData, id, createdAt: now, updatedAt: now };
         const operationId = generateOperationId('create', 'arrangement', newArrangement);
         addOptimisticUpdate('create', 'arrangement', newArrangement, operationId);
-        
         setBaseState(s => {
           setTimeout(() => {
             confirmOptimisticUpdate(operationId);
@@ -473,20 +436,16 @@ export function useAppState() {
   const updateArrangement = React.useCallback((id: string, updates: Partial<Arrangement>): Promise<void> => {
     return new Promise((resolve) => {
       const operationId = generateOperationId('update', 'arrangement', { id, ...updates });
-      
       setBaseState(s => {
         const updatedArrangement = { ...updates, id, updatedAt: new Date().toISOString() };
         addOptimisticUpdate('update', 'arrangement', updatedArrangement, operationId);
-        
         const arrangements = s.arrangements.map((arr) =>
           arr.id === id ? { ...arr, ...updates, updatedAt: new Date().toISOString() } : arr
         );
-        
         setTimeout(() => {
           confirmOptimisticUpdate(operationId);
           resolve();
         }, 0);
-        
         return { ...s, arrangements };
       });
     });
@@ -500,23 +459,17 @@ export function useAppState() {
           resolve();
           return s;
         }
-        
         const operationId = generateOperationId('delete', 'arrangement', arrangement);
         addOptimisticUpdate('delete', 'arrangement', { id }, operationId);
-        
         const arrangements = s.arrangements.filter((arr) => arr.id !== id);
-        
         setTimeout(() => {
           confirmOptimisticUpdate(operationId);
           resolve();
         }, 0);
-        
         return { ...s, arrangements };
       });
     });
   }, [addOptimisticUpdate, confirmOptimisticUpdate]);
-
-  // ---- enhanced backup / restore with conflict detection ----
 
   function isValidState(obj: any): obj is AppState {
     return (
@@ -530,7 +483,6 @@ export function useAppState() {
   }
 
   const backupState = React.useCallback(() => {
-    // Use base state for backups (no optimistic updates)
     const snap: AppState = {
       addresses: baseState.addresses,
       completions: baseState.completions,
@@ -558,16 +510,12 @@ export function useAppState() {
     };
 
     if (mergeStrategy === 'merge') {
-      // Merge with existing state
       setBaseState(currentState => {
         const merged: AppState = {
-          // Prefer restored addresses if more recent list version
           addresses: restoredState.currentListVersion >= currentState.currentListVersion 
             ? restoredState.addresses 
             : currentState.addresses,
           currentListVersion: Math.max(restoredState.currentListVersion, currentState.currentListVersion),
-          
-          // Merge completions, avoiding duplicates
           completions: [
             ...currentState.completions,
             ...restoredState.completions.filter(restored => 
@@ -577,9 +525,7 @@ export function useAppState() {
                 existing.outcome === restored.outcome
               )
             )
-          ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime() ),
-          
-          // Merge arrangements, preferring newer versions
+          ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
           arrangements: Array.from(
             new Map([
               ...currentState.arrangements.map(arr => [arr.id, arr] as [string, Arrangement]),
@@ -588,65 +534,50 @@ export function useAppState() {
               new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
             )).values()
           ),
-          
-          // Merge day sessions, keeping unique dates
           daySessions: Array.from(
             new Map([
               ...currentState.daySessions.map(session => [session.date, session] as [string, DaySession]),
               ...restoredState.daySessions.map(session => [session.date, session] as [string, DaySession])
             ]).values()
           ),
-          
           activeIndex: restoredState.activeIndex ?? currentState.activeIndex,
         };
-        
         return merged;
       });
     } else {
-      // Complete replacement
       setBaseState(restoredState);
     }
 
-    // Clear optimistic updates after restore
     clearOptimisticUpdates();
-    
-    // Persist immediately
     set(STORAGE_KEY, restoredState).catch(() => {});
   }, [clearOptimisticUpdates]);
 
-  // Enhanced setState for cloud sync with conflict detection
   const setState = React.useCallback((newState: AppState | ((prev: AppState) => AppState)) => {
     setBaseState(currentState => {
       const nextState = typeof newState === 'function' ? newState(currentState) : newState;
-      
-      // Detect potential conflicts by checking timestamps
       const conflicts = new Map();
-      
-      // Check for completion conflicts
+
       nextState.completions.forEach((incoming: Completion) => {
         const existing = currentState.completions.find(c => 
           c.index === incoming.index && 
           c.outcome === incoming.outcome &&
           Math.abs(new Date(c.timestamp).getTime() - new Date(incoming.timestamp).getTime()) < 5000
         );
-        
         if (existing && existing.timestamp !== incoming.timestamp) {
           conflicts.set(`completion_${incoming.timestamp}`, {
             type: 'completion',
             incoming,
             existing,
-            resolution: 'prefer_incoming' // Default strategy
+            resolution: 'prefer_incoming'
           });
         }
       });
       
-      // Check for arrangement conflicts
       nextState.arrangements.forEach((incoming: Arrangement) => {
         const existing = currentState.arrangements.find(a => a.id === incoming.id);
         if (existing && existing.updatedAt !== incoming.updatedAt) {
           const incomingTime = new Date(incoming.updatedAt).getTime();
           const existingTime = new Date(existing.updatedAt).getTime();
-          
           conflicts.set(`arrangement_${incoming.id}`, {
             type: 'arrangement',
             incoming,
@@ -663,25 +594,19 @@ export function useAppState() {
       
       return nextState;
     });
-    
-    // Clear optimistic updates when state is set from external source
     clearOptimisticUpdates();
   }, [clearOptimisticUpdates]);
 
   return {
-    state, // computed state with optimistic updates
-    baseState, // raw state without optimistic updates
+    state,
+    baseState,
     loading,
     setState,
-    
-    // Optimistic update management
     optimisticUpdates: optimisticState.updates,
     pendingOperations: optimisticState.pendingOperations,
     confirmOptimisticUpdate,
     revertOptimisticUpdate,
     clearOptimisticUpdates,
-    
-    // Conflicts
     conflicts,
     resolveConflict: (conflictId: string, _resolution: 'prefer_incoming' | 'prefer_existing') => {
       setConflicts(prev => {
@@ -690,9 +615,7 @@ export function useAppState() {
         return updated;
       });
     },
-    
-    // Enhanced actions
-    setAddresses,
+    setAddresses,     // <-- returns next snapshot
     addAddress,
     setActive,
     cancelActive,
