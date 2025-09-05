@@ -10,7 +10,14 @@ import Completed from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { readJsonFile } from "./backup";
-import type { AddressRow, Outcome } from "./types";
+import {
+  type AddressRow,
+  type Outcome,
+  type AppState,
+  type DaySession,
+  type Completion,
+  type Arrangement,
+} from "./types";
 import { supabase } from "./lib/supabaseClient";
 import ManualAddressFAB from "./ManualAddressFAB";
 
@@ -62,10 +69,7 @@ async function uploadBackupToStorage(
   if (!supabase) return;
 
   const authResp = await supabase.auth.getUser();
-  const userId =
-    authResp && authResp.data && authResp.data.user
-      ? authResp.data.user.id
-      : undefined;
+  const userId = authResp?.data?.user?.id;
   if (!userId) return;
 
   const tz = "Europe/London";
@@ -79,9 +83,7 @@ async function uploadBackupToStorage(
     .replace(/:/g, "");
 
   const bucket =
-    (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
-      ? (import.meta as any).env.VITE_SUPABASE_BUCKET
-      : "navigator-backups";
+    (import.meta as any).env?.VITE_SUPABASE_BUCKET ?? "navigator-backups";
   const name = `backup_${dayKey}_${time}_${label}.json`;
   const objectPath = `${userId}/${dayKey}/${name}`;
 
@@ -149,7 +151,7 @@ function AuthedApp() {
   const {
     state,
     loading,
-    setAddresses,
+    setAddresses,         // we won't use it in import (to avoid double bump), but keep for FAB/manual adds
     addAddress,
     setActive,
     cancelActive,
@@ -175,15 +177,7 @@ function AuthedApp() {
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
-  // Ignore cloud updates briefly after a local list import,
-  // and also ignore older list versions forever.
-  const ignoreCloudUntilRef = React.useRef<number>(0);
-  const currentVersionRef = React.useRef<number>(state.currentListVersion);
-  React.useEffect(() => {
-    currentVersionRef.current = state.currentListVersion;
-  }, [state.currentListVersion]);
-
-  // Optimistic update tracking
+  // Optimistic update tracking (UI only)
   const [optimisticUpdates, setOptimisticUpdates] = React.useState<
     Map<string, any>
   >(new Map());
@@ -206,7 +200,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ===================== Cloud-first bootstrap =====================
+  // ---------- Cloud bootstrap + subscription ----------
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     if (!supabase) {
@@ -253,16 +247,13 @@ function AuthedApp() {
         }
 
         cleanup = cloudSync.subscribeToData((incomingState) => {
-          const now = Date.now();
-          if (now < ignoreCloudUntilRef.current) return;
           if (!incomingState) return;
-
           const normalized = normalizeState(incomingState);
 
-          // HARD GUARD: never apply older list versions
+          // Reject older list versions
           if (
             typeof normalized.currentListVersion === "number" &&
-            normalized.currentListVersion < currentVersionRef.current
+            normalized.currentListVersion < state.currentListVersion
           ) {
             return;
           }
@@ -288,7 +279,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // ==== Debounced local -> cloud sync ====
+  // ---- Debounced local -> cloud sync ----
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
@@ -307,7 +298,7 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
 
-  // ==== Flush pending changes on exit/background ====
+  // ---- Flush pending on exit/background ----
   React.useEffect(() => {
     if (!cloudSync.user || !hydrated) return;
 
@@ -349,6 +340,36 @@ function AuthedApp() {
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
   }, [safeState, cloudSync, hydrated]);
+
+  // ===== KEY FIX: Import handler that updates locally first, then syncs EXACT object =====
+  const handleImportExcel = React.useCallback(
+    async (rows: AddressRow[]) => {
+      const next: AppState = {
+        ...state,
+        addresses: Array.isArray(rows) ? rows : [],
+        activeIndex: null,
+        // Reset counters by clearing completions for the new list version
+        completions: [] as Completion[],
+        arrangements: state.arrangements as Arrangement[],
+        daySessions: state.daySessions as DaySession[],
+        currentListVersion: (state.currentListVersion || 1) + 1,
+      };
+
+      // 1) Apply locally immediately
+      setState(next);
+
+      // 2) Push same object to cloud (avoid race with React state)
+      try {
+        await cloudSync.syncData(next);
+        lastFromCloudRef.current = JSON.stringify(next); // ignore echo
+      } catch (e) {
+        console.warn("Import sync failed; debounce will retry.", e);
+      }
+
+      setSearch("");
+    },
+    [state, setState, cloudSync]
+  );
 
   // Enhanced completion with optimistic updates
   const handleComplete = React.useCallback(
@@ -421,13 +442,13 @@ function AuthedApp() {
         const idx = s.daySessions.findIndex((d) => d.date === today && !d.end);
         if (idx >= 0) {
           const arr = s.daySessions.slice();
-          const sess: any = { ...arr[idx], start: newISO };
+          const sess: DaySession = { ...arr[idx], start: newISO };
           if (sess.end) {
             try {
               const start = new Date(sess.start).getTime();
               const end = new Date(sess.end).getTime();
               if (end > start)
-                sess.durationSeconds = Math.floor((end - start) / 1000);
+                (sess as any).durationSeconds = Math.floor((end - start) / 1000);
             } catch {}
           }
           arr[idx] = sess;
@@ -457,24 +478,17 @@ function AuthedApp() {
         const arr = s.daySessions.slice();
 
         if (idx >= 0) {
-          const sess = { ...arr[idx], end: endISO };
+          const sess: DaySession = { ...arr[idx], end: endISO };
           if (sess.start) {
             try {
               const start = new Date(sess.start).getTime();
               const end = new Date(endISO).getTime();
-              if (end > start) {
-                (sess as any).durationSeconds = Math.floor((end - start) / 1000);
-              }
+              if (end > start) (sess as any).durationSeconds = Math.floor((end - start) / 1000);
             } catch {}
           }
           arr[idx] = sess;
         } else {
-          arr.push({
-            date: dayKey,
-            start: endISO,
-            end: endISO,
-            durationSeconds: 0,
-          });
+          arr.push({ date: dayKey, start: endISO, end: endISO, durationSeconds: 0 });
         }
 
         return { ...s, daySessions: arr };
@@ -512,7 +526,7 @@ function AuthedApp() {
     }
   };
 
-  // Stats for header pills
+  // Stats for header pills (per current listVersion)
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
     const completedIdx = new Set(
@@ -558,7 +572,7 @@ function AuthedApp() {
     [setState]
   );
 
-  // --------------- Swipe with live drag & snap ---------------
+  // ----- Swipe handling -----
   const tabsOrder: Tab[] = ["list", "completed", "arrangements"];
   const tabIndex = tabsOrder.indexOf(tab);
   const goToNextTab = React.useCallback(() => {
@@ -827,37 +841,8 @@ function AuthedApp() {
             </div>
 
             <div className="btn-row" style={{ position: "relative" }}>
-              {/* Import: write local next snapshot, then sync that exact snapshot; guard server echo */}
-              <ImportExcel
-                onImported={async (rows) => {
-                  // Build the exact snapshot we intend to have after setAddresses
-                  const nextSnapshot = {
-                    ...state,
-                    addresses: rows,
-                    activeIndex: null,
-                    // Keep completions (but counters reset because version bumps)
-                    completions: state.completions,
-                    arrangements: state.arrangements,
-                    daySessions: state.daySessions,
-                    currentListVersion: (state.currentListVersion || 1) + 1,
-                  };
-
-                  // 1) Update local state
-                  setAddresses(rows);
-
-                  // 2) Prevent cloud echo (and clear search for visibility)
-                  ignoreCloudUntilRef.current = Date.now() + 5000; // allow for slow networks
-                  setSearch("");
-
-                  // 3) Push *that* exact snapshot
-                  try {
-                    await cloudSync.syncData(nextSnapshot);
-                    lastFromCloudRef.current = JSON.stringify(nextSnapshot);
-                  } catch (e) {
-                    console.warn("Immediate import sync failed; debounce will retry.", e);
-                  }
-                }}
-              />
+              {/* Import with the fixed handler */}
+              <ImportExcel onImported={handleImportExcel} />
 
               {/* Local file restore */}
               <input
@@ -875,7 +860,7 @@ function AuthedApp() {
         </div>
       )}
 
-      {/* Tabs content with fixed swipe */}
+      {/* Tabs content with swipe */}
       <div
         ref={viewportRef}
         className="tabs-viewport"
@@ -915,6 +900,7 @@ function AuthedApp() {
               padding: "0",
             }}
           >
+            {/* Day panel FIRST */}
             <DayPanel
               sessions={daySessions}
               completions={completions}
@@ -924,7 +910,7 @@ function AuthedApp() {
               onEditEnd={handleEditEnd}
             />
 
-            {/* Search under the day panel */}
+            {/* SEARCH BAR UNDER THE DAY PANEL */}
             <div className="search-container">
               <input
                 type="search"
@@ -964,15 +950,9 @@ function AuthedApp() {
               >
                 Undo Last
               </button>
-              <span className="pill pill-pif">PIF {
-                completions.filter(c => c.listVersion === state.currentListVersion && c.outcome === "PIF").length
-              }</span>
-              <span className="pill pill-done">Done {
-                completions.filter(c => c.listVersion === state.currentListVersion && c.outcome === "Done").length
-              }</span>
-              <span className="pill pill-da">DA {
-                completions.filter(c => c.listVersion === state.currentListVersion && c.outcome === "DA").length
-              }</span>
+              <span className="pill pill-pif">PIF {stats.pifCount}</span>
+              <span className="pill pill-done">Done {stats.doneCount}</span>
+              <span className="pill pill-da">DA {stats.daCount}</span>
               {cloudSync.lastSyncTime && (
                 <span className="muted">
                   Last sync {cloudSync.lastSyncTime.toLocaleTimeString()}
@@ -980,6 +960,7 @@ function AuthedApp() {
               )}
             </div>
 
+            {/* Floating + Address button */}
             <ManualAddressFAB onAdd={addAddress} />
           </section>
 
