@@ -704,7 +704,6 @@ function AuthedApp() {
     const dragPercent = (dragX / viewportWidth) * 100;
 
     const atFirstTab = tabIndex === 0 && dragX > 0;
-    // (safety: this line must not exist in your file. If you see it, delete it.)
     const atLastTab = tabIndex === tabCount - 1 && dragX < 0;
     const dampening = atFirstTab || atLastTab ? 0.3 : 1;
 
@@ -758,6 +757,7 @@ function AuthedApp() {
 
     const quick = dt <= 600;
     const farPx = Math.abs(dx) >= 60;
+    the; // <-- make sure this line IS NOT present in your file. Delete it if you see it.
     const farFrac = Math.abs(dx) / Math.max(1, w) >= 0.18;
     const horizontal = Math.abs(dx) > Math.abs(dy) * 1.2;
 
@@ -1099,7 +1099,7 @@ function AuthedApp() {
               )}
             </div>
 
-            {/* Floating + Address button (FIX: pass onAdd prop) */}
+            {/* Floating + Address button - returns index */}
             <ManualAddressFAB
               onAdd={async (addr: AddressRow) => {
                 const idx = await addAddress(addr);
@@ -1108,6 +1108,7 @@ function AuthedApp() {
                   const snap = backupState();
                   cloudSync.syncData(snap).catch(() => {});
                 } catch {}
+                return idx;
               }}
             />
           </section>
