@@ -151,7 +151,6 @@ function AuthedApp() {
   const {
     state,
     loading,
-    // setAddresses,    // <- removed (unused after import fix)
     addAddress,
     setActive,
     cancelActive,
@@ -175,7 +174,15 @@ function AuthedApp() {
     React.useState<number | null>(null);
 
   const [hydrated, setHydrated] = React.useState(false);
+
+  // === Refs used to avoid stale closures & to suppress outdated cloud echoes ===
   const lastFromCloudRef = React.useRef<string | null>(null);
+  const currentListVersionRef = React.useRef<number>(state.currentListVersion);
+  const suppressCloudUntilRef = React.useRef<number>(0);
+
+  React.useEffect(() => {
+    currentListVersionRef.current = state.currentListVersion;
+  }, [state.currentListVersion]);
 
   // Optimistic update tracking (UI only)
   const [optimisticUpdates, setOptimisticUpdates] = React.useState<
@@ -232,6 +239,7 @@ function AuthedApp() {
           if (!cancelled) {
             setState(normalized);
             lastFromCloudRef.current = JSON.stringify(normalized);
+            currentListVersionRef.current = normalized.currentListVersion ?? 1;
             setHydrated(true);
             console.log("Restored from cloud, version:", row?.version);
           }
@@ -240,30 +248,43 @@ function AuthedApp() {
           await cloudSync.syncData(safeState);
           if (!cancelled) {
             lastFromCloudRef.current = JSON.stringify(safeState);
+            currentListVersionRef.current = safeState.currentListVersion ?? 1;
             setHydrated(true);
           }
         } else {
           if (!cancelled) setHydrated(true);
         }
 
+        // SUBSCRIPTION with guards
         cleanup = cloudSync.subscribeToData((incomingState) => {
           if (!incomingState) return;
           const normalized = normalizeState(incomingState);
+          const incomingVer =
+            typeof normalized.currentListVersion === "number"
+              ? normalized.currentListVersion
+              : 1;
 
-          // Reject older list versions
-          if (
-            typeof normalized.currentListVersion === "number" &&
-            normalized.currentListVersion < state.currentListVersion
-          ) {
+          // 1) Reject any cloud payload older than our current local version
+          if (incomingVer < (currentListVersionRef.current ?? 1)) {
             return;
           }
 
           const fromCloudStr = JSON.stringify(normalized);
+
+          // 2) During "quarantine" after a local import, only accept exact echo
+          if (Date.now() < suppressCloudUntilRef.current) {
+            if (fromCloudStr !== lastFromCloudRef.current) {
+              return; // ignore outdated/non-matching cloud frames
+            }
+          }
+
+          // 3) Ignore exact duplicates
           if (fromCloudStr === lastFromCloudRef.current) return;
 
           console.log("Received cloud update");
           setState(normalized);
           lastFromCloudRef.current = fromCloudStr;
+          currentListVersionRef.current = incomingVer;
           setHydrated(true);
         });
       } catch (err) {
@@ -290,6 +311,7 @@ function AuthedApp() {
       try {
         await cloudSync.syncData(safeState);
         lastFromCloudRef.current = currentStr;
+        currentListVersionRef.current = safeState.currentListVersion ?? 1;
       } catch (err) {
         console.error("Sync failed:", err);
       }
@@ -308,6 +330,7 @@ function AuthedApp() {
         if (currentStr !== lastFromCloudRef.current) {
           await cloudSync.syncData(safeState);
           lastFromCloudRef.current = currentStr;
+          currentListVersionRef.current = safeState.currentListVersion ?? 1;
         }
       } catch (err) {
         console.warn("Failed to flush changes:", err);
@@ -341,27 +364,35 @@ function AuthedApp() {
     };
   }, [safeState, cloudSync, hydrated]);
 
-  // ===== KEY FIX: Import handler that updates locally first, then syncs EXACT object =====
+  // ===== KEY FIX: Import handler — update locally first, suppress cloud, then sync EXACT object =====
   const handleImportExcel = React.useCallback(
     async (rows: AddressRow[]) => {
       const next: AppState = {
         ...state,
         addresses: Array.isArray(rows) ? rows : [],
         activeIndex: null,
-        // Reset counters by clearing completions for the new list version
+        // Reset counters for the new list version
         completions: [] as Completion[],
         arrangements: state.arrangements as Arrangement[],
         daySessions: state.daySessions as DaySession[],
         currentListVersion: (state.currentListVersion || 1) + 1,
       };
 
-      // 1) Apply locally immediately
+      // 0) Enter a short "quarantine" window to ignore stale cloud snapshots
+      suppressCloudUntilRef.current = Date.now() + 5000;
+
+      // 1) Apply locally immediately (UI updates now)
       setState(next);
 
-      // 2) Push same object to cloud (avoid race with React state)
+      // 2) Pre-seed refs so we ignore cloud echoes that don't match this snapshot
+      const nextStr = JSON.stringify(next);
+      lastFromCloudRef.current = nextStr;
+      currentListVersionRef.current = next.currentListVersion ?? 1;
+
+      // 3) Push same object to cloud (avoid race with React state)
       try {
         await cloudSync.syncData(next);
-        lastFromCloudRef.current = JSON.stringify(next); // ignore echo
+        // keep lastFromCloudRef as nextStr so the incoming echo is ignored as duplicate
       } catch (e) {
         console.warn("Import sync failed; debounce will retry.", e);
       }
@@ -516,6 +547,7 @@ function AuthedApp() {
       restoreState(data);
       await cloudSync.syncData(data);
       lastFromCloudRef.current = JSON.stringify(data);
+      currentListVersionRef.current = data.currentListVersion ?? 1;
       setHydrated(true);
       alert("Restore completed successfully!");
     } catch (err: any) {
@@ -604,7 +636,7 @@ function AuthedApp() {
 
   const getTransform = React.useCallback(() => {
     const tabCount = 3;
-    const basePercent = (-tabIndex / tabCount) * 100;
+    aconst basePercent = (-tabIndex / tabCount) * 100;
 
     if (!dragging || !viewportRef.current) {
       return `translateX(${basePercent}%)`;
@@ -688,6 +720,7 @@ function AuthedApp() {
     try {
       await cloudSync.syncData(safeState);
       lastFromCloudRef.current = JSON.stringify(safeState);
+      currentListVersionRef.current = safeState.currentListVersion ?? 1;
     } catch (err) {
       console.error("Manual sync failed:", err);
     }
@@ -763,7 +796,7 @@ function AuthedApp() {
             <span className="avatar" aria-hidden>
               USER
             </span>
-            <span className="email" title={cloudSync.user?.email ?? ""}>
+              <span className="email" title={cloudSync.user?.email ?? ""}>
               {cloudSync.user?.email ?? "Signed in"}
             </span>
             <button className="signout-btn" onClick={cloudSync.signOut} title="Sign out">
@@ -841,7 +874,7 @@ function AuthedApp() {
             </div>
 
             <div className="btn-row" style={{ position: "relative" }}>
-              {/* Import with the fixed handler */}
+              {/* Import with the fixed & guarded handler */}
               <ImportExcel onImported={handleImportExcel} />
 
               {/* Local file restore */}
