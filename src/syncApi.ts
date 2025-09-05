@@ -1,6 +1,7 @@
-// src/syncApi.ts
+// src/syncApi.ts - FIXED VERSION
 import type { SyncOp, ApplyOpsResult, ApplyOpsConflict } from "./syncTypes";
-import { supabase } from "./supabaseClient";
+// 🔧 FIXED: Changed import to use the correct supabase client
+import { supabase } from "./lib/supabaseClient";
 
 type RpcResponse = {
   ok?: boolean;
