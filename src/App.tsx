@@ -151,7 +151,7 @@ function AuthedApp() {
   const {
     state,
     loading,
-    setAddresses,         // we won't use it in import (to avoid double bump), but keep for FAB/manual adds
+    // setAddresses,    // <- removed (unused after import fix)
     addAddress,
     setActive,
     cancelActive,
