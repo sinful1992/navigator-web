@@ -612,7 +612,7 @@ function AuthedApp() {
     }
   };
 
-  // Stats for header pills
+  // Stats for header pills (reset per current list version)
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
     const completedIdx = new Set(
@@ -757,7 +757,6 @@ function AuthedApp() {
 
     const quick = dt <= 600;
     const farPx = Math.abs(dx) >= 60;
-    the; // <-- make sure this line IS NOT present in your file. Delete it if you see it.
     const farFrac = Math.abs(dx) / Math.max(1, w) >= 0.18;
     const horizontal = Math.abs(dx) > Math.abs(dy) * 1.2;
 
