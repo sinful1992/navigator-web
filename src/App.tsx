@@ -163,6 +163,10 @@ function AuthedApp() {
     updateArrangement,
     deleteArrangement,
     setState,
+    // FIXED: Make sure to destructure these for the edit functionality
+    setBaseState,
+    deviceId,
+    enqueueOp,
   } = useAppState();
 
   const cloudSync = useCloudSync();
@@ -547,79 +551,171 @@ function AuthedApp() {
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
-  // ----- Edit START time -----
+  // FIXED: Edit START time with proper sync integration
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
       const parsed =
         typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
-      if (Number.isNaN(parsed.getTime())) return;
+      if (Number.isNaN(parsed.getTime())) {
+        console.error('Invalid start date provided:', newStartISO);
+        return;
+      }
 
       const newISO = parsed.toISOString();
-      setState((s) => {
-        const today = newISO.slice(0, 10);
-        const idx = s.daySessions.findIndex((d) => d.date === today && !d.end);
-        if (idx >= 0) {
-          const arr = s.daySessions.slice();
-          const sess: any = { ...arr[idx], start: newISO };
-          if (sess.end) {
-            try {
-              const start = new Date(sess.start).getTime();
-              const end = new Date(sess.end).getTime();
-              if (end > start)
-                sess.durationSeconds = Math.floor((end - start) / 1000);
-            } catch {}
-          }
-          arr[idx] = sess;
-          return { ...s, daySessions: arr };
-        }
-        return {
-          ...s,
-          daySessions: [...s.daySessions, { date: today, start: newISO }],
-        };
-      });
-    },
-    [setState]
-  );
+      const dayKey = newISO.slice(0, 10);
 
-  // ----- Edit FINISH time (always produce a valid DaySession) -----
-  const handleEditEnd = React.useCallback(
-    (newEndISO: string | Date) => {
-      const parsed =
-        typeof newEndISO === "string" ? new Date(newEndISO) : newEndISO;
-      if (Number.isNaN(parsed.getTime())) return;
+      console.log('🔧 Editing start time:', { newISO, dayKey });
 
-      const endISO = parsed.toISOString();
-
-      setState((s) => {
-        const dayKey = endISO.slice(0, 10);
-        const idx = s.daySessions.findIndex((d) => d.date === dayKey);
+      setBaseState((s) => {
         const arr = s.daySessions.slice();
+        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
+        let targetSession: any;
 
-        if (idx >= 0) {
-          const sess = { ...arr[idx], end: endISO };
-          if (sess.start) {
-            try {
-              const start = new Date(sess.start).getTime();
-              const end = new Date(endISO).getTime();
-              if (end > start) {
-                (sess as any).durationSeconds = Math.floor((end - start) / 1000);
-              }
-            } catch {}
-          }
-          arr[idx] = sess;
+        if (sessionIndex >= 0) {
+          // Update existing session
+          targetSession = { ...arr[sessionIndex], start: newISO };
         } else {
-          arr.push({
+          // Create new session
+          targetSession = {
             date: dayKey,
-            start: endISO,
-            end: endISO,
-            durationSeconds: 0,
-          });
+            start: newISO,
+          };
+        }
+
+        // Recalculate duration if we have both start and end
+        if (targetSession.end) {
+          try {
+            const start = new Date(newISO).getTime();
+            const end = new Date(targetSession.end).getTime();
+            if (end >= start) {
+              targetSession.durationSeconds = Math.floor((end - start) / 1000);
+            } else {
+              // If new start is after end, clear end time
+              delete targetSession.end;
+              delete targetSession.durationSeconds;
+            }
+          } catch (error) {
+            console.error('Error calculating duration:', error);
+          }
+        }
+
+        // Add sync metadata
+        const now = new Date().toISOString();
+        targetSession.updatedAt = now;
+        targetSession.updatedBy = deviceId;
+
+        // Create operation for sync queue
+        const operationId = `edit_start_${dayKey}_${Date.now()}`;
+        const forServer = {
+          ...targetSession,
+          id: dayKey,
+          updatedAt: now,
+          updatedBy: deviceId,
+        };
+
+        // Enqueue the operation
+        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
+
+        // Update the sessions array
+        if (sessionIndex >= 0) {
+          arr[sessionIndex] = targetSession;
+        } else {
+          arr.push(targetSession);
         }
 
         return { ...s, daySessions: arr };
       });
     },
-    [setState]
+    [setBaseState, deviceId, enqueueOp]
+  );
+
+  // FIXED: Edit FINISH time with proper sync integration
+  const handleEditEnd = React.useCallback(
+    (newEndISO: string | Date) => {
+      const parsed = typeof newEndISO === "string" ? new Date(newEndISO) : newEndISO;
+      if (Number.isNaN(parsed.getTime())) {
+        console.error('Invalid end date provided:', newEndISO);
+        return;
+      }
+
+      const endISO = parsed.toISOString();
+      const dayKey = endISO.slice(0, 10);
+
+      console.log('🔧 Editing end time:', { endISO, dayKey });
+
+      setBaseState((s) => {
+        const arr = s.daySessions.slice();
+        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
+        let targetSession: any;
+
+        console.log('Current sessions for day:', arr.filter(d => d.date === dayKey));
+
+        if (sessionIndex >= 0) {
+          // Update existing session
+          targetSession = { ...arr[sessionIndex] };
+          console.log('Updating existing session:', targetSession);
+        } else {
+          // Create new session for this day
+          targetSession = {
+            date: dayKey,
+            start: endISO, // Default start to end time if no session exists
+          };
+          console.log('Creating new session:', targetSession);
+        }
+
+        // Set the end time
+        targetSession.end = endISO;
+
+        // Calculate duration if we have both start and end
+        if (targetSession.start) {
+          try {
+            const startTime = new Date(targetSession.start).getTime();
+            const endTime = new Date(endISO).getTime();
+            
+            if (endTime >= startTime) {
+              targetSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
+            } else {
+              // If end is before start, set start to end and duration to 0
+              console.warn('End time is before start time, adjusting start time');
+              targetSession.start = endISO;
+              targetSession.durationSeconds = 0;
+            }
+          } catch (error) {
+            console.error('Error calculating session duration:', error);
+            targetSession.durationSeconds = 0;
+          }
+        }
+
+        // Add sync metadata for cloud sync
+        const now = new Date().toISOString();
+        targetSession.updatedAt = now;
+        targetSession.updatedBy = deviceId;
+
+        // Create operation for sync queue
+        const operationId = `edit_end_${dayKey}_${Date.now()}`;
+        const forServer = {
+          ...targetSession,
+          id: dayKey,
+          updatedAt: now,
+          updatedBy: deviceId,
+        };
+
+        // Enqueue the operation
+        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
+
+        // Update the sessions array
+        if (sessionIndex >= 0) {
+          arr[sessionIndex] = targetSession;
+        } else {
+          arr.push(targetSession);
+        }
+
+        console.log('Updated sessions array:', arr);
+
+        return { ...s, daySessions: arr };
+      });
+    },
+    [setBaseState, deviceId, enqueueOp]
   );
 
   // Finish Day with cloud snapshot
