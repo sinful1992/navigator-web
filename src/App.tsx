@@ -175,8 +175,13 @@ function AuthedApp() {
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
-  // Ignore window for server pushes after local import
+  // Ignore cloud updates briefly after a local list import,
+  // and also ignore older list versions forever.
   const ignoreCloudUntilRef = React.useRef<number>(0);
+  const currentVersionRef = React.useRef<number>(state.currentListVersion);
+  React.useEffect(() => {
+    currentVersionRef.current = state.currentListVersion;
+  }, [state.currentListVersion]);
 
   // Optimistic update tracking
   const [optimisticUpdates, setOptimisticUpdates] = React.useState<
@@ -201,7 +206,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ===================== Improved Cloud-first bootstrap =====================
+  // ===================== Cloud-first bootstrap =====================
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     if (!supabase) {
@@ -247,18 +252,24 @@ function AuthedApp() {
           if (!cancelled) setHydrated(true);
         }
 
-        cleanup = cloudSync.subscribeToData((newState) => {
+        cleanup = cloudSync.subscribeToData((incomingState) => {
           const now = Date.now();
-          if (now < ignoreCloudUntilRef.current) {
-            // ignore server echo during the short guard window
+          if (now < ignoreCloudUntilRef.current) return;
+          if (!incomingState) return;
+
+          const normalized = normalizeState(incomingState);
+
+          // HARD GUARD: never apply older list versions
+          if (
+            typeof normalized.currentListVersion === "number" &&
+            normalized.currentListVersion < currentVersionRef.current
+          ) {
             return;
           }
-          if (!newState) return;
 
-          const fromCloudStr = JSON.stringify(newState);
+          const fromCloudStr = JSON.stringify(normalized);
           if (fromCloudStr === lastFromCloudRef.current) return;
 
-          const normalized = normalizeState(newState);
           console.log("Received cloud update");
           setState(normalized);
           lastFromCloudRef.current = fromCloudStr;
@@ -277,7 +288,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // ==== Improved debounced local -> cloud sync with optimistic updates ====
+  // ==== Debounced local -> cloud sync ====
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
@@ -286,7 +297,6 @@ function AuthedApp() {
 
     const t = setTimeout(async () => {
       try {
-        console.log("Syncing changes to cloud...");
         await cloudSync.syncData(safeState);
         lastFromCloudRef.current = currentStr;
       } catch (err) {
@@ -297,7 +307,7 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
 
-  // ==== Enhanced flush pending changes on exit/background ====
+  // ==== Flush pending changes on exit/background ====
   React.useEffect(() => {
     if (!cloudSync.user || !hydrated) return;
 
@@ -305,7 +315,6 @@ function AuthedApp() {
       try {
         const currentStr = JSON.stringify(safeState);
         if (currentStr !== lastFromCloudRef.current) {
-          console.log("Flushing changes before exit...");
           await cloudSync.syncData(safeState);
           lastFromCloudRef.current = currentStr;
         }
@@ -660,10 +669,9 @@ function AuthedApp() {
     setDragging(false);
   };
 
-  // Enhanced manual sync with feedback
+  // Manual sync
   const handleManualSync = React.useCallback(async () => {
     try {
-      console.log("Manual sync initiated...");
       await cloudSync.syncData(safeState);
       lastFromCloudRef.current = JSON.stringify(safeState);
     } catch (err) {
@@ -822,16 +830,32 @@ function AuthedApp() {
               {/* Import: write local next snapshot, then sync that exact snapshot; guard server echo */}
               <ImportExcel
                 onImported={async (rows) => {
-                  const next = setAddresses(rows);
-                  // ignore server pushes briefly (race windows, eventual echo)
-                  ignoreCloudUntilRef.current = Date.now() + 2000;
+                  // Build the exact snapshot we intend to have after setAddresses
+                  const nextSnapshot = {
+                    ...state,
+                    addresses: rows,
+                    activeIndex: null,
+                    // Keep completions (but counters reset because version bumps)
+                    completions: state.completions,
+                    arrangements: state.arrangements,
+                    daySessions: state.daySessions,
+                    currentListVersion: (state.currentListVersion || 1) + 1,
+                  };
+
+                  // 1) Update local state
+                  setAddresses(rows);
+
+                  // 2) Prevent cloud echo (and clear search for visibility)
+                  ignoreCloudUntilRef.current = Date.now() + 5000; // allow for slow networks
+                  setSearch("");
+
+                  // 3) Push *that* exact snapshot
                   try {
-                    await cloudSync.syncData(next);
-                    lastFromCloudRef.current = JSON.stringify(next);
+                    await cloudSync.syncData(nextSnapshot);
+                    lastFromCloudRef.current = JSON.stringify(nextSnapshot);
                   } catch (e) {
                     console.warn("Immediate import sync failed; debounce will retry.", e);
                   }
-                  setSearch(""); // optional: clear search after a new list
                 }}
               />
 
@@ -900,6 +924,7 @@ function AuthedApp() {
               onEditEnd={handleEditEnd}
             />
 
+            {/* Search under the day panel */}
             <div className="search-container">
               <input
                 type="search"
