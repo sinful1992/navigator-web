@@ -1,4 +1,4 @@
-// src/App.tsx
+// src/App.tsx - Complete Fixed Version
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -10,7 +10,7 @@ import Completed from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { readJsonFile } from "./backup";
-import type { AddressRow, Outcome, AppState } from "./types";
+import type { AddressRow, Outcome } from "./types";
 import { supabase } from "./lib/supabaseClient";
 import ManualAddressFAB from "./ManualAddressFAB";
 
@@ -25,7 +25,8 @@ function normalizeState(raw: any) {
     arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
     daySessions: Array.isArray(r.daySessions) ? r.daySessions : [],
     activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
-    currentListVersion: typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
+    currentListVersion:
+      typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
   };
 }
 
@@ -54,10 +55,17 @@ class ErrorBoundary extends React.Component<
 }
 
 /** Upload JSON snapshot to Supabase Storage and log in backups table */
-async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" = "manual") {
+async function uploadBackupToStorage(
+  data: unknown,
+  label: "finish" | "manual" = "manual"
+) {
   if (!supabase) return;
+
   const authResp = await supabase.auth.getUser();
-  const userId = authResp?.data?.user?.id;
+  const userId =
+    authResp && authResp.data && authResp.data.user
+      ? authResp.data.user.id
+      : undefined;
   if (!userId) return;
 
   const tz = "Europe/London";
@@ -66,15 +74,22 @@ async function uploadBackupToStorage(data: unknown, label: "finish" | "manual" =
   const mm = now.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
   const dd = now.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
   const dayKey = `${yyyy}-${mm}-${dd}`;
-  const time = now.toLocaleTimeString("en-GB", { timeZone: tz, hour12: false }).replace(/:/g, "");
+  const time = now
+    .toLocaleTimeString("en-GB", { timeZone: tz, hour12: false })
+    .replace(/:/g, "");
 
   const bucket =
-    (import.meta as any).env?.VITE_SUPABASE_BUCKET ?? "navigator-backups";
+    (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
+      ? (import.meta as any).env.VITE_SUPABASE_BUCKET
+      : "navigator-backups";
   const name = `backup_${dayKey}_${time}_${label}.json`;
   const objectPath = `${userId}/${dayKey}/${name}`;
 
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const uploadRes = await supabase.storage
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json",
+  });
+  const uploadRes = await supabase
+    .storage
     .from(bucket)
     .upload(objectPath, blob, { upsert: false, contentType: "application/json" });
   if ((uploadRes as any).error) throw new Error((uploadRes as any).error.message);
@@ -134,7 +149,7 @@ function AuthedApp() {
   const {
     state,
     loading,
-    setAddresses,           // still available but replaced by handleImportExcel for ImportExcel
+    setAddresses,
     addAddress,
     setActive,
     cancelActive,
@@ -154,13 +169,16 @@ function AuthedApp() {
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
-  const [autoCreateArrangementFor, setAutoCreateArrangementFor] = React.useState<number | null>(null);
+  const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
+    React.useState<number | null>(null);
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
-  // Optimistic update tracking (UI hint only)
-  const [optimisticUpdates, setOptimisticUpdates] = React.useState<Map<string, any>>(new Map());
+  // Optimistic update tracking
+  const [optimisticUpdates, setOptimisticUpdates] = React.useState<
+    Map<string, any>
+  >(new Map());
 
   // Collapsible Tools panel: closed on mobile, open on desktop
   const [toolsOpen, setToolsOpen] = React.useState<boolean>(() => {
@@ -170,7 +188,9 @@ function AuthedApp() {
 
   const addresses = Array.isArray(state.addresses) ? state.addresses : [];
   const completions = Array.isArray(state.completions) ? state.completions : [];
-  const arrangements = Array.isArray(state.arrangements) ? state.arrangements : [];
+  const arrangements = Array.isArray(state.arrangements)
+    ? state.arrangements
+    : [];
   const daySessions = Array.isArray(state.daySessions) ? state.daySessions : [];
 
   const safeState = React.useMemo(
@@ -178,7 +198,7 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ---------- Cloud Restore helpers ----------
+  // ---------- Cloud Restore state & helpers ----------
   type CloudBackupRow = {
     object_path: string;
     size_bytes?: number;
@@ -207,7 +227,10 @@ function AuthedApp() {
     setCloudErr(null);
     try {
       const authResp = await supabase.auth.getUser();
-      const userId = authResp?.data?.user?.id;
+      const userId =
+        authResp && authResp.data && authResp.data.user
+          ? authResp.data.user.id
+          : undefined;
       if (!userId) throw new Error("Not authenticated");
 
       const end = new Date();
@@ -260,7 +283,10 @@ function AuthedApp() {
       setCloudBusy(true);
       setCloudErr(null);
       try {
-        const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET ?? "navigator-backups";
+        const bucket =
+          (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
+            ? (import.meta as any).env.VITE_SUPABASE_BUCKET
+            : "navigator-backups";
         const dl = await supabase.storage.from(bucket).download(objectPath);
         if ((dl as any).error) throw (dl as any).error;
         const blob: Blob = (dl as any).data as Blob;
@@ -286,13 +312,14 @@ function AuthedApp() {
     if (!cloudMenuOpen) return;
     function onDocClick(e: MouseEvent) {
       const target = e.target as HTMLElement;
-      if (!target.closest || !target.closest(".btn-row")) setCloudMenuOpen(false);
+      if (!target.closest || !target.closest(".btn-row"))
+        setCloudMenuOpen(false);
     }
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   }, [cloudMenuOpen]);
 
-  // ===================== Cloud-first bootstrap =====================
+  // ===================== Improved Cloud-first bootstrap =====================
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     if (!supabase) {
@@ -314,7 +341,10 @@ function AuthedApp() {
         const row: any = (sel as any)?.data ?? null;
 
         const localHasData =
-          addresses.length > 0 || completions.length > 0 || arrangements.length > 0 || daySessions.length > 0;
+          addresses.length > 0 ||
+          completions.length > 0 ||
+          arrangements.length > 0 ||
+          daySessions.length > 0;
 
         if (row && row.data) {
           const normalized = normalizeState(row.data);
@@ -322,8 +352,10 @@ function AuthedApp() {
             setState(normalized);
             lastFromCloudRef.current = JSON.stringify(normalized);
             setHydrated(true);
+            console.log("Restored from cloud, version:", row?.version);
           }
         } else if (localHasData) {
+          console.log("Pushing local data to cloud...");
           await cloudSync.syncData(safeState);
           if (!cancelled) {
             lastFromCloudRef.current = JSON.stringify(safeState);
@@ -335,9 +367,14 @@ function AuthedApp() {
 
         cleanup = cloudSync.subscribeToData((newState) => {
           if (!newState) return;
+
+          const fromCloudStr = JSON.stringify(newState);
+          if (fromCloudStr === lastFromCloudRef.current) return;
+
           const normalized = normalizeState(newState);
+          console.log("Received cloud update");
           setState(normalized);
-          lastFromCloudRef.current = JSON.stringify(normalized);
+          lastFromCloudRef.current = fromCloudStr;
           setHydrated(true);
         });
       } catch (err) {
@@ -353,25 +390,27 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // ==== Debounced local -> cloud sync ====
+  // ==== Improved debounced local -> cloud sync with optimistic updates ====
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
+
     const currentStr = JSON.stringify(safeState);
     if (currentStr === lastFromCloudRef.current) return;
 
     const t = setTimeout(async () => {
       try {
+        console.log("Syncing changes to cloud...");
         await cloudSync.syncData(safeState);
         lastFromCloudRef.current = currentStr;
-      } catch {
-        // don't toast; background sync can retry
+      } catch (err) {
+        console.error("Sync failed:", err);
       }
     }, 150);
 
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
 
-  // ==== Flush pending on exit/background ====
+  // ==== Enhanced flush pending changes on exit/background ====
   React.useEffect(() => {
     if (!cloudSync.user || !hydrated) return;
 
@@ -379,6 +418,7 @@ function AuthedApp() {
       try {
         const currentStr = JSON.stringify(safeState);
         if (currentStr !== lastFromCloudRef.current) {
+          console.log("Flushing changes before exit...");
           await cloudSync.syncData(safeState);
           lastFromCloudRef.current = currentStr;
         }
@@ -388,14 +428,17 @@ function AuthedApp() {
     };
 
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") flush();
+      if (document.visibilityState === "hidden") {
+        flush();
+      }
     };
 
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       const currentStr = JSON.stringify(safeState);
       if (currentStr !== lastFromCloudRef.current && cloudSync.isOnline) {
         e.preventDefault();
-        e.returnValue = "You have unsaved changes. Are you sure you want to leave?";
+        e.returnValue =
+          "You have unsaved changes. Are you sure you want to leave?";
         return e.returnValue;
       }
     };
@@ -411,41 +454,46 @@ function AuthedApp() {
     };
   }, [safeState, cloudSync, hydrated]);
 
-  // ----- Import Excel: apply new list locally, clear completions, bump version, sync exact snapshot -----
-  const handleImportExcel = React.useCallback(
-    async (rows: AddressRow[]) => {
-      const nextVersion = (state.currentListVersion || 1) + 1;
+  // FIXED: Enhanced handleImportExcel with proper state synchronization
+  const handleImportExcel = React.useCallback(async (rows: AddressRow[]) => {
+    try {
+      console.log(`Starting import of ${rows.length} addresses...`);
+      
+      // First, update the local state
+      setAddresses(rows);
+      
+      // Create the new state that will be synced after React updates
+      // We need to wait for the next tick to ensure setAddresses has taken effect
+      setTimeout(async () => {
+        try {
+          const newState = {
+            ...safeState,
+            addresses: rows,
+            activeIndex: null,
+            currentListVersion: (safeState.currentListVersion || 1) + 1,
+            completions: [], // Clear completions for new list
+          };
+          
+          // Sync to cloud with the new state
+          await cloudSync.syncData(newState);
+          lastFromCloudRef.current = JSON.stringify(newState);
+          
+          console.log(`Successfully imported ${rows.length} addresses and synced to cloud`);
+        } catch (syncError) {
+          console.error('Failed to sync imported data to cloud:', syncError);
+        }
+      }, 0);
+      
+    } catch (error) {
+      console.error('Failed to import Excel data:', error);
+    }
+  }, [safeState, setAddresses, cloudSync]);
 
-      const next: AppState = {
-        ...state,
-        addresses: Array.isArray(rows) ? rows : [],
-        activeIndex: null,
-        completions: [], // reset counters for new list
-        arrangements: state.arrangements,
-        daySessions: state.daySessions,
-        currentListVersion: nextVersion,
-      };
-
-      // Apply locally first
-      setState(next);
-
-      // Sync same object to cloud (prevents stale overwrite by older frames)
-      try {
-        await cloudSync.syncData(next);
-      } catch (e) {
-        console.warn("Import sync failed; background debounce will retry.", e);
-      }
-
-      // Clear search so new list is visible
-      setSearch("");
-    },
-    [state, setState, cloudSync]
-  );
-
-  // Complete with optimistic hint
+  // Enhanced completion with optimistic updates
   const handleComplete = React.useCallback(
     async (index: number, outcome: Outcome, amount?: string) => {
       const optimisticId = `completion_${Date.now()}_${Math.random()}`;
+
       try {
         setOptimisticUpdates((prev) => {
           const updated = new Map(prev);
@@ -454,6 +502,28 @@ function AuthedApp() {
         });
 
         complete(index, outcome, amount);
+
+        if (cloudSync.queueOperation) {
+          await cloudSync.queueOperation({
+            type: "create",
+            entity: "completion",
+            entityId: optimisticId,
+            data: {
+              index,
+              outcome,
+              amount,
+              address: addresses[index]?.address,
+              listVersion: safeState.currentListVersion,
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Failed to complete address:", error);
+        setOptimisticUpdates((prev) => {
+          const updated = new Map(prev);
+          updated.delete(optimisticId);
+          return updated;
+        });
       } finally {
         setTimeout(() => {
           setOptimisticUpdates((prev) => {
@@ -464,7 +534,7 @@ function AuthedApp() {
         }, 1000);
       }
     },
-    [complete]
+    [complete, addresses, safeState.currentListVersion, cloudSync]
   );
 
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
@@ -477,10 +547,11 @@ function AuthedApp() {
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
-  // Edit START time
+  // ----- Edit START time -----
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
-      const parsed = typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
+      const parsed =
+        typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
       if (Number.isNaN(parsed.getTime())) return;
 
       const newISO = parsed.toISOString();
@@ -494,22 +565,27 @@ function AuthedApp() {
             try {
               const start = new Date(sess.start).getTime();
               const end = new Date(sess.end).getTime();
-              if (end > start) sess.durationSeconds = Math.floor((end - start) / 1000);
+              if (end > start)
+                sess.durationSeconds = Math.floor((end - start) / 1000);
             } catch {}
           }
           arr[idx] = sess;
           return { ...s, daySessions: arr };
         }
-        return { ...s, daySessions: [...s.daySessions, { date: today, start: newISO }] };
+        return {
+          ...s,
+          daySessions: [...s.daySessions, { date: today, start: newISO }],
+        };
       });
     },
     [setState]
   );
 
-  // Edit END time
+  // ----- Edit FINISH time (always produce a valid DaySession) -----
   const handleEditEnd = React.useCallback(
     (newEndISO: string | Date) => {
-      const parsed = typeof newEndISO === "string" ? new Date(newEndISO) : newEndISO;
+      const parsed =
+        typeof newEndISO === "string" ? new Date(newEndISO) : newEndISO;
       if (Number.isNaN(parsed.getTime())) return;
 
       const endISO = parsed.toISOString();
@@ -525,7 +601,9 @@ function AuthedApp() {
             try {
               const start = new Date(sess.start).getTime();
               const end = new Date(endISO).getTime();
-              if (end > start) (sess as any).durationSeconds = Math.floor((end - start) / 1000);
+              if (end > start) {
+                (sess as any).durationSeconds = Math.floor((end - start) / 1000);
+              }
             } catch {}
           }
           arr[idx] = sess;
@@ -566,6 +644,7 @@ function AuthedApp() {
       setHydrated(true);
       alert("Restore completed successfully!");
     } catch (err: any) {
+      console.error(err);
       alert("Restore failed: " + (err?.message || err));
     } finally {
       e.target.value = "";
@@ -575,12 +654,22 @@ function AuthedApp() {
   // Stats for header pills
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
-    const completedIdx = new Set(completions.filter((c) => c.listVersion === currentVer).map((c) => c.index));
+    const completedIdx = new Set(
+      completions
+        .filter((c) => c.listVersion === currentVer)
+        .map((c) => c.index)
+    );
     const total = addresses.length;
     const pending = total - completedIdx.size;
-    const pifCount = completions.filter((c) => c.listVersion === currentVer && c.outcome === "PIF").length;
-    const doneCount = completions.filter((c) => c.listVersion === currentVer && c.outcome === "Done").length;
-    const daCount = completions.filter((c) => c.listVersion === currentVer && c.outcome === "DA").length;
+    const pifCount = completions.filter(
+      (c) => c.listVersion === currentVer && c.outcome === "PIF"
+    ).length;
+    const doneCount = completions.filter(
+      (c) => c.listVersion === currentVer && c.outcome === "Done"
+    ).length;
+    const daCount = completions.filter(
+      (c) => c.listVersion === currentVer && c.outcome === "DA"
+    ).length;
     const completed = completedIdx.size;
     return { total, pending, completed, pifCount, doneCount, daCount };
   }, [addresses, completions, state.currentListVersion]);
@@ -597,126 +686,21 @@ function AuthedApp() {
           return s;
         }
         const comps = s.completions.slice();
-        comps[targetCompletionIndex] = { ...comps[targetCompletionIndex], outcome, amount };
+        comps[targetCompletionIndex] = {
+          ...comps[targetCompletionIndex],
+          outcome,
+          amount,
+        };
         return { ...s, completions: comps };
       });
     },
     [setState]
   );
 
-  // --------------- Swipe with live drag & snap ---------------
-  const tabsOrder: Tab[] = ["list", "completed", "arrangements"];
-  const tabIndex = tabsOrder.indexOf(tab);
-  const goToNextTab = React.useCallback(() => {
-    const i = tabsOrder.indexOf(tab);
-    setTab(tabsOrder[(i + 1) % tabsOrder.length]);
-  }, [tab]);
-  const goToPrevTab = React.useCallback(() => {
-    const i = tabsOrder.indexOf(tab);
-    setTab(tabsOrder[(i - 1 + tabsOrder.length) % tabsOrder.length]);
-  }, [tab]);
-
-  const viewportRef = React.useRef<HTMLDivElement | null>(null);
-  const [dragX, setDragX] = React.useState(0);
-  const [dragging, setDragging] = React.useState(false);
-
-  const swipe = React.useRef({ x: 0, y: 0, t: 0, w: 1, active: false });
-
-  const handleTouchStart: React.TouchEventHandler<HTMLDivElement> = (e) => {
-    const t = e.changedTouches[0];
-    const w = viewportRef.current
-      ? viewportRef.current.clientWidth
-      : typeof window !== "undefined"
-      ? window.innerWidth
-      : 1;
-    swipe.current = { x: t.clientX, y: t.clientY, t: Date.now(), w, active: true };
-    setDragX(0);
-    setDragging(true);
-  };
-
-  const getTransform = React.useCallback(() => {
-    const tabCount = 3;
-    const basePercent = (-tabIndex / tabCount) * 100;
-
-    if (!dragging || !viewportRef.current) {
-      return `translateX(${basePercent}%)`;
-    }
-
-    const viewportWidth = viewportRef.current.clientWidth;
-    if (viewportWidth <= 0) {
-      return `translateX(${basePercent}%)`;
-    }
-
-    const dragPercent = (dragX / viewportWidth) * 100;
-
-    const atFirstTab = tabIndex === 0 && dragX > 0;
-    const atLastTab = tabIndex === tabCount - 1 && dragX < 0;
-    const dampening = atFirstTab || atLastTab ? 0.3 : 1;
-
-    const finalPercent = basePercent + dragPercent * dampening;
-
-    const minPercent = -100 * (tabCount - 1);
-    const maxPercent = 10;
-    const clampedPercent = Math.max(minPercent - 10, Math.min(maxPercent, finalPercent));
-
-    return `translateX(${clampedPercent}%)`;
-  }, [tabIndex, dragging, dragX]);
-
-  const handleTouchMove: React.TouchEventHandler<HTMLDivElement> = (e) => {
-    if (!swipe.current.active) return;
-    if (typeof window !== "undefined" && window.innerWidth >= 768) return;
-
-    const touch = e.changedTouches[0];
-    const dx = touch.clientX - swipe.current.x;
-    const dy = touch.clientY - swipe.current.y;
-
-    if (Math.abs(dx) <= Math.abs(dy) * 1.2) return;
-
-    e.preventDefault();
-
-    const viewportWidth = swipe.current.w;
-    const maxDrag = viewportWidth * 0.5;
-    const clampedDx = Math.max(-maxDrag, Math.min(maxDrag, dx));
-    const atFirst = tabIndex === 0 && clampedDx > 0;
-    const atLast = tabIndex === tabsOrder.length - 1 && clampedDx < 0;
-    const dampening = atFirst || atLast ? 0.35 : 1;
-
-    setDragX(clampedDx * dampening);
-  };
-
-  const handleTouchEnd: React.TouchEventHandler<HTMLDivElement> = (e) => {
-    if (!swipe.current.active) return;
-    swipe.current.active = false;
-
-    if (typeof window !== "undefined" && window.innerWidth >= 768) {
-      setDragX(0);
-      setDragging(false);
-      return;
-    }
-
-    const t = e.changedTouches[0];
-    const dx = t.clientX - swipe.current.x;
-    const dy = t.clientY - swipe.current.y;
-    const dt = Date.now() - swipe.current.t;
-    const w = swipe.current.w;
-
-    const quick = dt <= 600;
-    const farPx = Math.abs(dx) >= 60;
-    const farFrac = Math.abs(dx) / Math.max(1, w) >= 0.18;
-    const horizontal = Math.abs(dx) > Math.abs(dy) * 1.2;
-
-    if (horizontal && (farPx || farFrac || quick)) {
-      if (dx < 0 && tabIndex < tabsOrder.length - 1) goToNextTab();
-      else if (dx > 0 && tabIndex > 0) goToPrevTab();
-    }
-
-    setDragX(0);
-    setDragging(false);
-  };
-
-  // Manual sync button
+  // Enhanced manual sync with feedback
   const handleManualSync = React.useCallback(async () => {
     try {
+      console.log("Manual sync initiated...");
       await cloudSync.syncData(safeState);
       lastFromCloudRef.current = JSON.stringify(safeState);
     } catch (err) {
@@ -736,11 +720,18 @@ function AuthedApp() {
   }
 
   const getSyncStatus = () => {
-    if (cloudSync.isSyncing) return { text: "SYNCING", color: "var(--warning)", icon: "⟳" };
-    if (!cloudSync.isOnline) return { text: "OFFLINE", color: "var(--danger)", icon: "⚠" };
-    if (cloudSync.error) return { text: "SYNC ERROR", color: "var(--danger)", icon: "⚠" };
+    if (cloudSync.isSyncing) {
+      return { text: "SYNCING", color: "var(--warning)", icon: "⟳" };
+    }
+    if (!cloudSync.isOnline) {
+      return { text: "OFFLINE", color: "var(--danger)", icon: "⚠" };
+    }
+    if (cloudSync.error) {
+      return { text: "SYNC ERROR", color: "var(--danger)", icon: "⚠" };
+    }
     return { text: "ONLINE", color: "var(--success)", icon: "✓" };
   };
+
   const syncStatus = getSyncStatus();
 
   return (
@@ -758,7 +749,14 @@ function AuthedApp() {
               color: "var(--text-muted)",
             }}
           >
-            <span style={{ color: syncStatus.color, display: "flex", alignItems: "center", gap: "0.25rem" }}>
+            <span
+              style={{
+                color: syncStatus.color,
+                display: "flex",
+                alignItems: "center",
+                gap: "0.25rem",
+              }}
+            >
               <span>{syncStatus.icon}</span>
               {syncStatus.text}
             </span>
@@ -768,26 +766,42 @@ function AuthedApp() {
               </span>
             )}
             {optimisticUpdates.size > 0 && (
-              <span style={{ color: "var(--primary)" }}>· {optimisticUpdates.size} pending</span>
+              <span style={{ color: "var(--primary)" }}>
+                · {optimisticUpdates.size} pending
+              </span>
             )}
           </div>
         </div>
 
         <div className="right">
           <div className="user-chip" role="group" aria-label="Account">
-            <span className="avatar" aria-hidden>USER</span>
-            <span className="email" title={cloudSync.user?.email ?? ""}>{cloudSync.user?.email ?? "Signed in"}</span>
-            <button className="signout-btn" onClick={cloudSync.signOut} title="Sign out">Sign Out</button>
+            <span className="avatar" aria-hidden>
+              USER
+            </span>
+            <span className="email" title={cloudSync.user?.email ?? ""}>
+              {cloudSync.user?.email ?? "Signed in"}
+            </span>
+            <button className="signout-btn" onClick={cloudSync.signOut} title="Sign out">
+              Sign Out
+            </button>
           </div>
 
           <div className="tabs">
             <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
               List ({stats.pending})
             </button>
-            <button className="tab-btn" aria-selected={tab === "completed"} onClick={() => setTab("completed")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "completed"}
+              onClick={() => setTab("completed")}
+            >
               Completed ({stats.completed})
             </button>
-            <button className="tab-btn" aria-selected={tab === "arrangements"} onClick={() => setTab("arrangements")}>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "arrangements"}
+              onClick={() => setTab("arrangements")}
+            >
               Arrangements ({arrangements.length})
             </button>
             <button
@@ -795,7 +809,10 @@ function AuthedApp() {
               onClick={handleManualSync}
               disabled={cloudSync.isSyncing}
               title={cloudSync.isSyncing ? "Syncing..." : "Force sync now"}
-              style={{ opacity: cloudSync.isSyncing ? 0.6 : 1, cursor: cloudSync.isSyncing ? "not-allowed" : "pointer" }}
+              style={{
+                opacity: cloudSync.isSyncing ? 0.6 : 1,
+                cursor: cloudSync.isSyncing ? "not-allowed" : "pointer",
+              }}
             >
               {cloudSync.isSyncing ? "⟳ Syncing..." : "🔄 Sync"}
             </button>
@@ -803,7 +820,7 @@ function AuthedApp() {
         </div>
       </header>
 
-      {/* Sync error display */}
+      {/* Enhanced error display */}
       {cloudSync.error && (
         <div
           style={{
@@ -821,17 +838,29 @@ function AuthedApp() {
             ⚠️ Sync error: {cloudSync.error}
           </span>
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button className="btn btn-ghost btn-sm" onClick={handleManualSync} disabled={cloudSync.isSyncing}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={handleManualSync}
+              disabled={cloudSync.isSyncing}
+            >
               Retry
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={cloudSync.clearError}>Dismiss</button>
+            <button className="btn btn-ghost btn-sm" onClick={cloudSync.clearError}>
+              Dismiss
+            </button>
           </div>
         </div>
       )}
 
       {/* Tools toggle */}
-      <div style={{ marginBottom: "0.75rem", display: "flex", justifyContent: "center" }}>
-        <button className="btn btn-ghost" onClick={() => setToolsOpen((o) => !o)} title={toolsOpen ? "Hide tools" : "Show tools"}>
+      <div
+        style={{ marginBottom: "0.75rem", display: "flex", justifyContent: "center" }}
+      >
+        <button
+          className="btn btn-ghost"
+          onClick={() => setToolsOpen((o) => !o)}
+          title={toolsOpen ? "Hide tools" : "Show tools"}
+        >
           {toolsOpen ? "Hide tools ^" : "Show tools v"}
         </button>
       </div>
@@ -859,7 +888,7 @@ function AuthedApp() {
             </div>
 
             <div className="btn-row" style={{ position: "relative" }}>
-              {/* IMPORTANT: use the guarded import handler */}
+              {/* FIXED: Import using the new handler */}
               <ImportExcel onImported={handleImportExcel} />
 
               {/* Local file restore */}
@@ -870,7 +899,9 @@ function AuthedApp() {
                 className="file-input"
                 id="restore-input"
               />
-              <label htmlFor="restore-input" className="file-input-label">Restore (file)</label>
+              <label htmlFor="restore-input" className="file-input-label">
+                Restore (file)
+              </label>
 
               {/* Restore from Cloud (last 7 days) */}
               <CloudRestore
@@ -883,7 +914,12 @@ function AuthedApp() {
                 restoreFromCloud={restoreFromCloud}
               />
 
-              <button className="btn btn-ghost" onClick={cloudSync.forceFullSync} title="Reset sync state and force full sync">
+              {/* Enhanced tools */}
+              <button
+                className="btn btn-ghost"
+                onClick={cloudSync.forceFullSync}
+                title="Reset sync state and force full sync"
+              >
                 Force Full Sync
               </button>
             </div>
@@ -891,40 +927,10 @@ function AuthedApp() {
         </div>
       )}
 
-      {/* Tabs content with swipe */}
-      <div
-        ref={viewportRef}
-        className="tabs-viewport"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        style={{ overflowX: "hidden", position: "relative", width: "100%", maxWidth: "100%", touchAction: "pan-y" }}
-      >
-        <div
-          className="tabs-track"
-          style={{
-            display: "flex",
-            width: "300%",
-            maxWidth: "300%",
-            willChange: "transform",
-            transition: dragging ? "none" : "transform 280ms ease",
-            transform: getTransform(),
-            backfaceVisibility: "hidden",
-            perspective: "1000px",
-          }}
-        >
-          {/* Panel 1: List */}
-          <section
-            className="tab-panel"
-            style={{
-              flex: "0 0 33.333333%",
-              minWidth: "33.333333%",
-              maxWidth: "33.333333%",
-              boxSizing: "border-box",
-              overflowX: "hidden",
-              padding: "0",
-            }}
-          >
+      {/* Main content - simplified without swipe for now */}
+      <div className="tabs-content">
+        {tab === "list" && (
+          <div>
             {/* Day panel FIRST */}
             <DayPanel
               sessions={daySessions}
@@ -979,58 +985,33 @@ function AuthedApp() {
               <span className="pill pill-done">Done {stats.doneCount}</span>
               <span className="pill pill-da">DA {stats.daCount}</span>
               {cloudSync.lastSyncTime && (
-                <span className="muted">Last sync {cloudSync.lastSyncTime.toLocaleTimeString()}</span>
+                <span className="muted">
+                  Last sync {cloudSync.lastSyncTime.toLocaleTimeString()}
+                </span>
               )}
             </div>
 
             {/* Floating + Address button */}
-            <ManualAddressFAB
-              onAdd={async (row) => {
-                await addAddress(row);
-                setSearch("");
-              }}
-            />
-          </section>
+            <ManualAddressFAB onAdd={addAddress} />
+          </div>
+        )}
 
-          {/* Panel 2: Completed */}
-          <section
-            className="tab-panel"
-            style={{
-              flex: "0 0 33.333333%",
-              minWidth: "33.333333%",
-              maxWidth: "33.333333%",
-              boxSizing: "border-box",
-              overflowX: "hidden",
-              padding: "0",
-            }}
-          >
-            <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
-          </section>
+        {tab === "completed" && (
+          <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
+        )}
 
-          {/* Panel 3: Arrangements */}
-          <section
-            className="tab-panel"
-            style={{
-              flex: "0 0 33.333333%",
-              minWidth: "33.333333%",
-              maxWidth: "33.333333%",
-              boxSizing: "border-box",
-              overflowX: "hidden",
-              padding: "0",
-            }}
-          >
-            <Arrangements
-              state={safeState}
-              onAddArrangement={addArrangement}
-              onUpdateArrangement={updateArrangement}
-              onDeleteArrangement={deleteArrangement}
-              onAddAddress={async (addr: AddressRow) => addAddress(addr)}
-              onComplete={handleComplete}
-              autoCreateForAddress={autoCreateArrangementFor}
-              onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
-            />
-          </section>
-        </div>
+        {tab === "arrangements" && (
+          <Arrangements
+            state={safeState}
+            onAddArrangement={addArrangement}
+            onUpdateArrangement={updateArrangement}
+            onDeleteArrangement={deleteArrangement}
+            onAddAddress={async (addr: AddressRow) => addAddress(addr)}
+            onComplete={handleComplete}
+            autoCreateForAddress={autoCreateArrangementFor}
+            onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
+          />
+        )}
       </div>
     </div>
   );
@@ -1040,7 +1021,12 @@ function AuthedApp() {
 function CloudRestore(props: {
   cloudBusy: boolean;
   cloudErr: string | null;
-  cloudBackups: { object_path: string; size_bytes?: number; created_at?: string; day_key?: string }[];
+  cloudBackups: {
+    object_path: string;
+    size_bytes?: number;
+    created_at?: string;
+    day_key?: string;
+  }[];
   cloudMenuOpen: boolean;
   setCloudMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
   loadRecentCloudBackups: () => Promise<void>;
@@ -1084,20 +1070,38 @@ function CloudRestore(props: {
             boxShadow: "var(--shadow-lg)",
           }}
         >
-          <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>Recent backups (7 days)</div>
+          <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>
+            Recent backups (7 days)
+          </div>
 
           {cloudBusy && (
-            <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
+            <div
+              style={{
+                padding: "0.5rem 0.5rem",
+                fontSize: 12,
+                color: "var(--text-secondary)",
+              }}
+            >
               Loading...
             </div>
           )}
 
           {!cloudBusy && cloudErr && (
-            <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--danger)" }}>{cloudErr}</div>
+            <div
+              style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--danger)" }}
+            >
+              {cloudErr}
+            </div>
           )}
 
           {!cloudBusy && !cloudErr && cloudBackups.length === 0 && (
-            <div style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--text-secondary)" }}>
+            <div
+              style={{
+                padding: "0.5rem 0.5rem",
+                fontSize: 12,
+                color: "var(--text-secondary)",
+              }}
+            >
               No backups found.
             </div>
           )}
@@ -1106,9 +1110,12 @@ function CloudRestore(props: {
             !cloudErr &&
             cloudBackups.map((row) => {
               const parts = row.object_path.split("/");
-              const fname = parts.length > 0 ? parts[parts.length - 1] : row.object_path;
+              const fname =
+                parts.length > 0 ? parts[parts.length - 1] : row.object_path;
               const day = row.day_key || "";
-              const sizeText = row.size_bytes ? Math.round(row.size_bytes / 1024) + " KB" : "";
+              const sizeText = row.size_bytes
+                ? Math.round(row.size_bytes / 1024) + " KB"
+                : "";
               return (
                 <button
                   key={row.object_path}
