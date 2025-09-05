@@ -636,7 +636,7 @@ function AuthedApp() {
 
   const getTransform = React.useCallback(() => {
     const tabCount = 3;
-    aconst basePercent = (-tabIndex / tabCount) * 100;
+    const basePercent = (-tabIndex / tabCount) * 100;
 
     if (!dragging || !viewportRef.current) {
       return `translateX(${basePercent}%)`;
