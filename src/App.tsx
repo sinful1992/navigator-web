@@ -1,4 +1,4 @@
-// src/App.tsx - Fixed version
+// src/App.tsx
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -810,31 +810,6 @@ function AuthedApp() {
 
   const syncStatus = getSyncStatus();
 
-  // FIXED: Enhanced handleImportExcel with proper state synchronization
-  const handleImportExcel = React.useCallback(async (rows: AddressRow[]) => {
-    try {
-      // First, update the local state
-      setAddresses(rows);
-      
-      // Create the new state that will be synced
-      const newState = {
-        ...safeState,
-        addresses: rows,
-        activeIndex: null,
-        currentListVersion: (safeState.currentListVersion || 1) + 1,
-        completions: [], // Clear completions for new list
-      };
-      
-      // Sync to cloud with the new state
-      await cloudSync.syncData(newState);
-      lastFromCloudRef.current = JSON.stringify(newState);
-      
-      console.log(`Imported ${rows.length} addresses and synced to cloud`);
-    } catch (error) {
-      console.error('Failed to import and sync Excel data:', error);
-    }
-  }, [safeState, setAddresses, cloudSync]);
-
   return (
     <div className="container">
       {/* Header */}
@@ -989,8 +964,10 @@ function AuthedApp() {
             </div>
 
             <div className="btn-row" style={{ position: "relative" }}>
-              {/* FIXED: Import using the new handler */}
-              <ImportExcel onImported={handleImportExcel} />
+              {/* Import that bumps version + clears completions via setAddresses.
+                  No immediate cloud sync here; the debounced effect will sync
+                  the UPDATED state to cloud, avoiding stale writes. */}
+              <ImportExcel onImported={(rows) => setAddresses(rows)} />
 
               {/* Local file restore */}
               <input
@@ -1128,7 +1105,7 @@ function AuthedApp() {
               )}
             </div>
 
-            {/* Floating + Address button — now WITH required prop */}
+            {/* Floating + Address button */}
             <ManualAddressFAB onAdd={addAddress} />
           </section>
 
