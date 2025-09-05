@@ -352,7 +352,7 @@ function AuthedApp() {
             setState(normalized);
             lastFromCloudRef.current = JSON.stringify(normalized);
             setHydrated(true);
-            console.log("Restored from cloud, version:", row.version);
+            console.log("Restored from cloud, version:", row?.version);
           }
         } else if (localHasData) {
           console.log("Pushing local data to cloud...");
@@ -367,10 +367,15 @@ function AuthedApp() {
 
         cleanup = cloudSync.subscribeToData((newState) => {
           if (!newState) return;
+
+          const fromCloudStr = JSON.stringify(newState);
+          // Ignore if this equals the last snapshot we accepted from cloud
+          if (fromCloudStr === lastFromCloudRef.current) return;
+
           const normalized = normalizeState(newState);
           console.log("Received cloud update");
           setState(normalized);
-          lastFromCloudRef.current = JSON.stringify(normalized);
+          lastFromCloudRef.current = fromCloudStr;
           setHydrated(true);
         });
       } catch (err) {
@@ -542,7 +547,7 @@ function AuthedApp() {
     [setState]
   );
 
-  // ----- Edit FINISH time (valid DaySession always) -----
+  // ----- Edit FINISH time (always produce a valid DaySession) -----
   const handleEditEnd = React.useCallback(
     (newEndISO: string | Date) => {
       const parsed =
@@ -612,7 +617,7 @@ function AuthedApp() {
     }
   };
 
-  // Stats for header pills (reset per current list version)
+  // Stats for header pills
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
     const completedIdx = new Set(
@@ -757,6 +762,7 @@ function AuthedApp() {
 
     const quick = dt <= 600;
     const farPx = Math.abs(dx) >= 60;
+    the // <-- make sure this line DOES NOT exist in your file
     const farFrac = Math.abs(dx) / Math.max(1, w) >= 0.18;
     const horizontal = Math.abs(dx) > Math.abs(dy) * 1.2;
 
@@ -960,7 +966,28 @@ function AuthedApp() {
             </div>
 
             <div className="btn-row" style={{ position: "relative" }}>
-              <ImportExcel onImported={setAddresses} />
+              {/* Import that bumps version + clears completions, then pushes to cloud */}
+              <ImportExcel
+                onImported={(rows) => {
+                  // 1) apply locally (resets counters + bumps version)
+                  setAddresses(rows);
+
+                  // 2) push to cloud on next tick with the same shape
+                  setTimeout(() => {
+                    const next = {
+                      ...state,
+                      addresses: rows.slice(),
+                      activeIndex: null,
+                      currentListVersion: (state.currentListVersion ?? 0) + 1,
+                      completions: [],
+                    };
+                    cloudSync
+                      .syncData(next)
+                      .then(() => (lastFromCloudRef.current = JSON.stringify(next)))
+                      .catch(() => {});
+                  }, 0);
+                }}
+              />
 
               {/* Local file restore */}
               <input
@@ -1098,18 +1125,8 @@ function AuthedApp() {
               )}
             </div>
 
-            {/* Floating + Address button - returns index */}
-            <ManualAddressFAB
-              onAdd={async (addr: AddressRow) => {
-                const idx = await addAddress(addr);
-                setActive(idx);
-                try {
-                  const snap = backupState();
-                  cloudSync.syncData(snap).catch(() => {});
-                } catch {}
-                return idx;
-              }}
-            />
+            {/* Floating + Address button */}
+            <ManualAddressFAB />
           </section>
 
           {/* Panel 2: Completed */}
