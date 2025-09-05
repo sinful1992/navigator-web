@@ -1,24 +1,30 @@
 // src/AddressList.tsx
 import * as React from "react";
-import type { AppState, AddressRow, Outcome } from "./types";
+import type { AppState, Outcome, AddressRow } from "./types";
 
 type Props = {
   state: AppState;
-  setActive: (idx: number) => void;
+  setActive: (index: number) => void;
   cancelActive: () => void;
   onComplete: (index: number, outcome: Outcome, amount?: string) => void;
-  onCreateArrangement: (index: number) => void;
-  filterText?: string;
-  ensureDayStarted?: () => void;
+  onCreateArrangement: (addressIndex: number) => void;
+  filterText: string;
+  ensureDayStarted: () => void; // auto-start day on first Navigate
 };
 
-function matchesQuery(text: string, query: string) {
-  if (!query) return true;
-  try {
-    return (text || "").toLowerCase().includes(query.toLowerCase());
-  } catch {
-    return true;
+function makeMapsHref(row: AddressRow) {
+  if (
+    typeof row.lat === "number" &&
+    typeof row.lng === "number" &&
+    !Number.isNaN(row.lat) &&
+    !Number.isNaN(row.lng)
+  ) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+      `${row.lat},${row.lng}`
+    )}`;
   }
+  const q = encodeURIComponent(row?.address ?? "");
+  return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
 
 export function AddressList({
@@ -27,109 +33,196 @@ export function AddressList({
   cancelActive,
   onComplete,
   onCreateArrangement,
-  filterText = "",
+  filterText,
   ensureDayStarted,
 }: Props) {
-  const addresses: AddressRow[] = Array.isArray(state.addresses) ? state.addresses : [];
+  const addresses = Array.isArray(state.addresses) ? state.addresses : [];
   const completions = Array.isArray(state.completions) ? state.completions : [];
-  const currentVersion = typeof state.currentListVersion === "number" ? state.currentListVersion : 1;
+  const activeIndex = state.activeIndex;
 
-  // Only treat addresses as completed if they have a completion *for the current list version*
+  // Hide only items completed for the CURRENT list version.
+  // If a completion has no listVersion (older backups), treat it as the current one.
   const completedIdx = React.useMemo(() => {
-    const s = new Set<number>();
+    const set = new Set<number>();
     for (const c of completions) {
-      const ver = typeof (c as any)?.listVersion === "number" ? (c as any).listVersion : 1;
-      if (ver === currentVersion) s.add(Number(c.index));
+      const lv =
+        typeof c?.listVersion === "number"
+          ? c.listVersion
+          : state.currentListVersion;
+      if (lv === state.currentListVersion) set.add(Number(c.index));
     }
-    return s;
-  }, [completions, currentVersion]);
+    return set;
+  }, [completions, state.currentListVersion]);
 
-  // Apply search first
-  const filtered = addresses
-    .map((row, i) => ({ i, row }))
-    .filter(({ row }) => matchesQuery(row.address ?? "", filterText));
+  const lowerQ = (filterText ?? "").trim().toLowerCase();
+  const visible = React.useMemo(
+    () =>
+      addresses
+        .map((a, i) => ({ a, i }))
+        .filter(
+          ({ a }) =>
+            !lowerQ || (a.address ?? "").toLowerCase().includes(lowerQ)
+        )
+        .filter(({ i }) => !completedIdx.has(i)),
+    [addresses, lowerQ, completedIdx]
+  );
 
-  // Show **pending only** in the List tab
-  const pending = filtered.filter(({ i }) => !completedIdx.has(i));
+  // local UI for outcome panel & PIF
+  const [outcomeOpenFor, setOutcomeOpenFor] = React.useState<number | null>(
+    null
+  );
+  const [pifAmount, setPifAmount] = React.useState<string>("");
 
-  if (pending.length === 0) {
+  // closing outcomes when active changes
+  React.useEffect(() => {
+    if (activeIndex === null) {
+      setOutcomeOpenFor(null);
+      setPifAmount("");
+    }
+  }, [activeIndex]);
+
+  if (visible.length === 0) {
     return (
-      <div className="muted" style={{ padding: "0.75rem 0.75rem 0" }}>
-        {addresses.length === 0
-          ? "No addresses loaded. Import a file to get started."
-          : filterText
-          ? "No pending addresses match your search."
-          : "No pending addresses for the current list."}
+      <div className="empty-box">
+        <div>No pending addresses</div>
+        <p>Import a list or clear filters to see items.</p>
       </div>
     );
   }
 
   return (
-    <ul style={{ listStyle: "none", margin: 0, padding: "0.25rem 0.5rem" }}>
-      {pending.map(({ i, row }) => (
-        <li
-          key={i}
-          style={{
-            border: "1px solid var(--border-light)",
-            borderRadius: 10,
-            padding: "0.5rem 0.75rem",
-            marginBottom: "0.5rem",
-            background: "var(--surface)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, wordBreak: "break-word" }}>{row.address}</div>
-              {row.lat != null && row.lng != null && (
-                <div className="muted" style={{ fontSize: 12 }}>
-                  ({row.lat}, {row.lng})
-                </div>
+    <div className="list">
+      {visible.map(({ a, i }) => {
+        const isActive = activeIndex === i;
+        const mapHref = makeMapsHref(a);
+
+        return (
+          <div key={i} className={`row-card ${isActive ? "card-active" : ""}`}>
+            {/* Row header */}
+            <div className="row-head">
+              <div className="row-index">{i + 1}</div>
+              <div className="row-title" title={a.address}>
+                {a.address}
+              </div>
+              {isActive && <span className="active-badge">Active</span>}
+            </div>
+
+            {/* Actions row */}
+            <div className="row-actions">
+              <a
+                className="btn btn-outline btn-sm"
+                href={mapHref}
+                target="_blank"
+                rel="noreferrer"
+                title="Open in Google Maps"
+                onClick={() => ensureDayStarted()}
+              >
+                🧭 Navigate
+              </a>
+
+              {!isActive ? (
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setActive(i)}
+                >
+                  ▶️ Set Active
+                </button>
+              ) : (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={cancelActive}
+                >
+                  ❎ Cancel
+                </button>
+              )}
+
+              {isActive && (
+                <button
+                  className="btn btn-success btn-sm"
+                  onClick={() => {
+                    const willOpen = outcomeOpenFor !== i;
+                    setOutcomeOpenFor(willOpen ? i : null);
+                    setPifAmount("");
+                  }}
+                >
+                  ✅ Complete
+                </button>
               )}
             </div>
 
-            <div style={{ display: "flex", gap: "0.25rem", flexShrink: 0 }}>
-              <button
-                className="btn btn-ghost btn-sm"
-                title="Mark Done"
-                onClick={() => {
-                  ensureDayStarted?.();
-                  onComplete(i, "Done");
-                }}
-              >
-                Done
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                title="Mark DA"
-                onClick={() => {
-                  ensureDayStarted?.();
-                  onComplete(i, "DA");
-                }}
-              >
-                DA
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                title="Mark PIF"
-                onClick={() => {
-                  ensureDayStarted?.();
-                  const val = window.prompt("Amount received (£):");
-                  if (val != null) onComplete(i, "PIF", val || undefined);
-                }}
-              >
-                PIF
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                title="Create arrangement"
-                onClick={() => onCreateArrangement(i)}
-              >
-                Arrange
-              </button>
-            </div>
+            {/* Outcome bar (only when active + Complete pressed) */}
+            {isActive && outcomeOpenFor === i && (
+              <div className="card-body">
+                <div className="complete-bar">
+                  <div className="complete-btns">
+                    <button
+                      className="btn btn-success"
+                      onClick={() => {
+                        onComplete(i, "Done");
+                        setOutcomeOpenFor(null);
+                      }}
+                      title="Mark as Done"
+                    >
+                      ✅ Done
+                    </button>
+
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => {
+                        onComplete(i, "DA");
+                        setOutcomeOpenFor(null);
+                      }}
+                      title="Mark as DA"
+                    >
+                      🚫 DA
+                    </button>
+
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => {
+                        onComplete(i, "ARR");
+                        setOutcomeOpenFor(null);
+                        onCreateArrangement(i);
+                      }}
+                      title="Create arrangement and mark completed"
+                    >
+                      📅 Arrangement
+                    </button>
+                  </div>
+
+                  <div className="pif-group">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      inputMode="decimal"
+                      className="input amount-input"
+                      placeholder="PIF £"
+                      value={pifAmount}
+                      onChange={(e) => setPifAmount(e.target.value)}
+                    />
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => {
+                        const n = Number(pifAmount);
+                        if (!Number.isFinite(n) || n <= 0) {
+                          alert("Enter a valid PIF amount (e.g. 50)");
+                          return;
+                        }
+                        onComplete(i, "PIF", n.toFixed(2));
+                        setOutcomeOpenFor(null);
+                      }}
+                      title="Save PIF amount"
+                    >
+                      💷 Save PIF
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </li>
-      ))}
-    </ul>
+        );
+      })}
+    </div>
   );
 }
