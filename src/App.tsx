@@ -1,4 +1,4 @@
-// src/App.tsx
+// src/App.tsx - Fixed version
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -810,6 +810,31 @@ function AuthedApp() {
 
   const syncStatus = getSyncStatus();
 
+  // FIXED: Enhanced handleImportExcel with proper state synchronization
+  const handleImportExcel = React.useCallback(async (rows: AddressRow[]) => {
+    try {
+      // First, update the local state
+      setAddresses(rows);
+      
+      // Create the new state that will be synced
+      const newState = {
+        ...safeState,
+        addresses: rows,
+        activeIndex: null,
+        currentListVersion: (safeState.currentListVersion || 1) + 1,
+        completions: [], // Clear completions for new list
+      };
+      
+      // Sync to cloud with the new state
+      await cloudSync.syncData(newState);
+      lastFromCloudRef.current = JSON.stringify(newState);
+      
+      console.log(`Imported ${rows.length} addresses and synced to cloud`);
+    } catch (error) {
+      console.error('Failed to import and sync Excel data:', error);
+    }
+  }, [safeState, setAddresses, cloudSync]);
+
   return (
     <div className="container">
       {/* Header */}
@@ -964,25 +989,8 @@ function AuthedApp() {
             </div>
 
             <div className="btn-row" style={{ position: "relative" }}>
-              {/* Import that bumps version + clears completions, then pushes to cloud */}
-              <ImportExcel
-                onImported={(rows) => {
-                  setAddresses(rows);
-                  setTimeout(() => {
-                    const next = {
-                      ...state,
-                      addresses: rows.slice(),
-                      activeIndex: null,
-                      currentListVersion: (state.currentListVersion ?? 0) + 1,
-                      completions: [],
-                    };
-                    cloudSync
-                      .syncData(next)
-                      .then(() => (lastFromCloudRef.current = JSON.stringify(next)))
-                      .catch(() => {});
-                  }, 0);
-                }}
-              />
+              {/* FIXED: Import using the new handler */}
+              <ImportExcel onImported={handleImportExcel} />
 
               {/* Local file restore */}
               <input
