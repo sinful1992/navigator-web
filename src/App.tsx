@@ -1,4 +1,3 @@
-// src/App.tsx
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -174,6 +173,9 @@ function AuthedApp() {
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
+
+  // NEW: guard window to suppress cloud while pushing local import
+  const suppressCloudUntilRef = React.useRef<number>(0);
 
   // Optimistic update tracking
   const [optimisticUpdates, setOptimisticUpdates] = React.useState<
@@ -365,12 +367,25 @@ function AuthedApp() {
           if (!cancelled) setHydrated(true);
         }
 
+        // SUBSCRIPTION (gated during local import push)
         cleanup = cloudSync.subscribeToData((newState) => {
           if (!newState) return;
           const normalized = normalizeState(newState);
+
+          // Gate: if we're pushing a local import, ignore incoming snapshot
+          if (Date.now() < suppressCloudUntilRef.current) {
+            console.log("Ignoring cloud update during local import push");
+            return;
+          }
+
+          const incomingStr = JSON.stringify(normalized);
+          if (incomingStr === lastFromCloudRef.current) {
+            return; // no-op (we already have this snapshot)
+          }
+
           console.log("Received cloud update");
           setState(normalized);
-          lastFromCloudRef.current = JSON.stringify(normalized);
+          lastFromCloudRef.current = incomingStr;
           setHydrated(true);
         });
       } catch (err) {
@@ -542,7 +557,7 @@ function AuthedApp() {
     [setState]
   );
 
-  // ----- Edit FINISH time (FIXED: always produce a valid DaySession) -----
+  // ----- Edit FINISH time -----
   const handleEditEnd = React.useCallback(
     (newEndISO: string | Date) => {
       const parsed =
@@ -613,6 +628,31 @@ function AuthedApp() {
       e.target.value = "";
     }
   };
+
+  // ===== NEW: wrapped import handler to avoid cloud overwriting fresh list =====
+  const handleImportAddresses = React.useCallback(
+    async (rows: AddressRow[]) => {
+      // 1) apply locally (this bumps currentListVersion & replaces addresses)
+      setAddresses(rows);
+
+      // 2) suppress incoming cloud while we push
+      suppressCloudUntilRef.current = Date.now() + 5000; // 5s guard
+
+      // 3) push the fresh snapshot to cloud shortly after state commits
+      setTimeout(async () => {
+        try {
+          const snap = backupState(); // baseState snapshot
+          await cloudSync.syncData(snap);
+          lastFromCloudRef.current = JSON.stringify(snap);
+        } catch (e) {
+          console.error("Import sync failed:", e);
+        } finally {
+          suppressCloudUntilRef.current = 0;
+        }
+      }, 50);
+    },
+    [setAddresses, backupState, cloudSync]
+  );
 
   // Stats for header pills
   const stats = React.useMemo(() => {
@@ -732,7 +772,7 @@ function AuthedApp() {
 
     const viewportWidth = swipe.current.w;
     const maxDrag = viewportWidth * 0.5;
-    const clampedDx = Math.max(-maxDrag, Math.min(maxDrag, dx)); // <-- FIXED (no stray "the")
+    const clampedDx = Math.max(-maxDrag, Math.min(maxDrag, dx));
 
     const atFirst = tabIndex === 0 && clampedDx > 0;
     const atLast = tabIndex === tabsOrder.length - 1 && clampedDx < 0;
@@ -946,8 +986,7 @@ function AuthedApp() {
               background: "var(--surface)",
               padding: "1.0rem",
               borderRadius: "var(--radius-lg)",
-              border: "1px solid " +
-                "var(--border-light)",
+              border: "1px solid var(--border-light)",
               boxShadow: "var(--shadow-sm)",
             }}
           >
@@ -963,7 +1002,8 @@ function AuthedApp() {
             </div>
 
             <div className="btn-row" style={{ position: "relative" }}>
-              <ImportExcel onImported={setAddresses} />
+              {/* IMPORTANT: wrap import so cloud cannot overwrite fresh state */}
+              <ImportExcel onImported={handleImportAddresses} />
 
               {/* Local file restore */}
               <input
@@ -1054,19 +1094,13 @@ function AuthedApp() {
             {/* SEARCH BAR UNDER THE DAY PANEL */}
             <div className="search-container">
               <input
-               type="search"
-               value={search}
-               placeholder="Search addresses..."
-               onChange={(e) => setSearch(e.target.value)}
-               className="input search-input"
+                type="search"
+                value={search}
+                placeholder="Search addresses..."
+                onChange={(e) => setSearch(e.target.value)}
+                className="input search-input"
               />
             </div>
-
-            {/* Add Address (inline button, always visible) */}
-            <div style={{ display: "flex", justifyContent: "flex-end", margin: "0.5rem 0 0.75rem" }}>
-              <ManualAddressFAB onAdd={addAddress} inline />
-            </div>
-
 
             <AddressList
               state={safeState}
