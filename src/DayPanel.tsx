@@ -1,4 +1,4 @@
-// src/DayPanel.tsx
+// src/DayPanel.tsx - FIXED VERSION
 import * as React from "react";
 import type { DaySession, Completion, Outcome } from "./types";
 
@@ -13,13 +13,58 @@ type Props = {
   onEditEnd: (newEnd: string | Date) => void;
 };
 
+// 🔧 FIXED: Create local time instead of UTC
 function toISO(dateStr: string, timeStr: string) {
   // dateStr "YYYY-MM-DD"; timeStr "HH:MM"
   const [y, m, d] = dateStr.split("-").map(Number);
   const [hh, mm] = timeStr.split(":").map(Number);
   try {
-    const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1, hh || 0, mm || 0));
+    // ✅ Use local time constructor instead of Date.UTC()
+    const dt = new Date(y, (m || 1) - 1, d || 1, hh || 0, mm || 0);
     return dt.toISOString();
+  } catch {
+    return "";
+  }
+}
+
+// 🔧 FIXED: Extract time in local timezone
+function fmtTime(iso?: string) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    // ✅ Use toLocaleTimeString to respect local timezone
+    return d.toLocaleTimeString("en-GB", { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'Europe/London' // Or use Intl.DateTimeFormat().resolvedOptions().timeZone for auto-detect
+    });
+  } catch {
+    return "—";
+  }
+}
+
+// 🔧 FIXED: Convert ISO to local time for form inputs
+function isoToLocalTime(iso?: string): string {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+  } catch {
+    return "";
+  }
+}
+
+function isoToLocalDate(iso?: string): string {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   } catch {
     return "";
   }
@@ -48,19 +93,7 @@ export function DayPanel({
 
   const isActive = !!active;
 
-  function fmtTime(iso?: string) {
-    if (!iso) return "—";
-    try {
-      const d = new Date(iso);
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      return `${hh}:${mm}`;
-    } catch {
-      return "—";
-    }
-  }
-
-  // Today’s completions summary
+  // Today's completions summary
   const todays = completions.filter((c) => (c.timestamp || "").slice(0, 10) === todayStr);
   const outcomeCounts = todays.reduce<Record<Outcome, number>>(
     (acc, c) => {
@@ -77,8 +110,7 @@ export function DayPanel({
   const [startDate, setStartDate] = React.useState<string>(todayStr);
   const [startTime, setStartTime] = React.useState<string>(() => {
     if (latestToday?.start) {
-      const d = new Date(latestToday.start);
-      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      return isoToLocalTime(latestToday.start);
     }
     const now = new Date();
     return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -86,9 +118,8 @@ export function DayPanel({
 
   React.useEffect(() => {
     if (latestToday?.start) {
-      const d = new Date(latestToday.start);
-      setStartDate(latestToday.date);
-      setStartTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+      setStartDate(isoToLocalDate(latestToday.start) || latestToday.date);
+      setStartTime(isoToLocalTime(latestToday.start));
     } else {
       setStartDate(todayStr);
       const now = new Date();
@@ -107,8 +138,7 @@ export function DayPanel({
   const [endDate, setEndDate] = React.useState<string>(todayStr);
   const [endTime, setEndTime] = React.useState<string>(() => {
     if (latestToday?.end) {
-      const d = new Date(latestToday.end);
-      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      return isoToLocalTime(latestToday.end);
     }
     const now = new Date();
     return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -116,9 +146,8 @@ export function DayPanel({
 
   React.useEffect(() => {
     if (latestToday?.end) {
-      const d = new Date(latestToday.end);
-      setEndDate(latestToday.date);
-      setEndTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+      setEndDate(isoToLocalDate(latestToday.end) || latestToday.date);
+      setEndTime(isoToLocalTime(latestToday.end));
     } else {
       setEndDate(todayStr);
       const now = new Date();
@@ -157,7 +186,7 @@ export function DayPanel({
             </div>
           </div>
 
-          {/* Today’s quick stats */}
+          {/* Today's quick stats */}
           <div className="day-stats" style={{ display: "flex", gap: "0.5rem" }}>
             <span className="pill pill-pif">PIF {outcomeCounts.PIF}</span>
             <span className="pill pill-done">Done {outcomeCounts.Done}</span>
