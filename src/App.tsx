@@ -1,3 +1,4 @@
+// src/App.tsx
 import * as React from "react";
 import "./App.css";
 import { ImportExcel } from "./ImportExcel";
@@ -148,7 +149,7 @@ function AuthedApp() {
   const {
     state,
     loading,
-    setAddresses,
+    setAddresses,       // IMPORTANT: using the versioned import again
     addAddress,
     setActive,
     cancelActive,
@@ -173,9 +174,6 @@ function AuthedApp() {
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
-
-  // NEW: guard window to suppress cloud while pushing local import
-  const suppressCloudUntilRef = React.useRef<number>(0);
 
   // Optimistic update tracking
   const [optimisticUpdates, setOptimisticUpdates] = React.useState<
@@ -321,7 +319,7 @@ function AuthedApp() {
     return () => document.removeEventListener("click", onDocClick);
   }, [cloudMenuOpen]);
 
-  // ===================== Improved Cloud-first bootstrap =====================
+  // ===================== Cloud-first bootstrap =====================
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     if (!supabase) {
@@ -354,7 +352,7 @@ function AuthedApp() {
             setState(normalized);
             lastFromCloudRef.current = JSON.stringify(normalized);
             setHydrated(true);
-            console.log("Restored from cloud, version:", row.version);
+            console.log("Restored from cloud, version:", (sel as any)?.data?.version);
           }
         } else if (localHasData) {
           console.log("Pushing local data to cloud...");
@@ -367,21 +365,11 @@ function AuthedApp() {
           if (!cancelled) setHydrated(true);
         }
 
-        // SUBSCRIPTION (gated during local import push)
         cleanup = cloudSync.subscribeToData((newState) => {
           if (!newState) return;
           const normalized = normalizeState(newState);
-
-          // Gate: if we're pushing a local import, ignore incoming snapshot
-          if (Date.now() < suppressCloudUntilRef.current) {
-            console.log("Ignoring cloud update during local import push");
-            return;
-          }
-
           const incomingStr = JSON.stringify(normalized);
-          if (incomingStr === lastFromCloudRef.current) {
-            return; // no-op (we already have this snapshot)
-          }
+          if (incomingStr === lastFromCloudRef.current) return;
 
           console.log("Received cloud update");
           setState(normalized);
@@ -401,7 +389,7 @@ function AuthedApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // ==== Improved debounced local -> cloud sync with optimistic updates ====
+  // ==== Debounced local -> cloud sync ====
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
 
@@ -410,7 +398,6 @@ function AuthedApp() {
 
     const t = setTimeout(async () => {
       try {
-        console.log("Syncing changes to cloud...");
         await cloudSync.syncData(safeState);
         lastFromCloudRef.current = currentStr;
       } catch (err) {
@@ -421,7 +408,7 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
 
-  // ==== Enhanced flush pending changes on exit/background ====
+  // ==== Flush pending changes on exit/background ====
   React.useEffect(() => {
     if (!cloudSync.user || !hydrated) return;
 
@@ -429,7 +416,6 @@ function AuthedApp() {
       try {
         const currentStr = JSON.stringify(safeState);
         if (currentStr !== lastFromCloudRef.current) {
-          console.log("Flushing changes before exit...");
           await cloudSync.syncData(safeState);
           lastFromCloudRef.current = currentStr;
         }
@@ -465,7 +451,7 @@ function AuthedApp() {
     };
   }, [safeState, cloudSync, hydrated]);
 
-  // Enhanced completion with optimistic updates
+  // Complete with optimistic updates
   const handleComplete = React.useCallback(
     async (index: number, outcome: Outcome, amount?: string) => {
       const optimisticId = `completion_${Date.now()}_${Math.random()}`;
@@ -489,7 +475,7 @@ function AuthedApp() {
               outcome,
               amount,
               address: addresses[index]?.address,
-              listVersion: safeState.currentListVersion,
+              listVersion: state.currentListVersion,
             },
           });
         }
@@ -510,7 +496,7 @@ function AuthedApp() {
         }, 1000);
       }
     },
-    [complete, addresses, safeState.currentListVersion, cloudSync]
+    [complete, addresses, state.currentListVersion, cloudSync]
   );
 
   const handleCreateArrangement = React.useCallback((addressIndex: number) => {
@@ -572,7 +558,6 @@ function AuthedApp() {
         const arr = s.daySessions.slice();
 
         if (idx >= 0) {
-          // Update existing session's end
           const sess = { ...arr[idx], end: endISO };
           if (sess.start) {
             try {
@@ -585,7 +570,6 @@ function AuthedApp() {
           }
           arr[idx] = sess;
         } else {
-          // Create a valid session with BOTH start and end for that day
           arr.push({
             date: dayKey,
             start: endISO,
@@ -598,6 +582,27 @@ function AuthedApp() {
       });
     },
     [setState]
+  );
+
+  // ===== Import Excel WITH version bump (counters reset as before) =====
+  const handleImportWithVersionBump = React.useCallback(
+    (rows: AddressRow[]) => {
+      // 1) Apply locally via useAppState helper (this bumps currentListVersion)
+      setAddresses(rows);
+
+      // 2) Nudge a quick cloud sync using the latest snapshot shortly after the state commit
+      setTimeout(() => {
+        try {
+          // backupState() returns the base state snapshot (without optimistic overlays)
+          const snap = backupState();
+          // push to cloud (errors are surfaced in the sync banner)
+          cloudSync.syncData(snap).catch(() => {});
+        } catch {
+          /* no-op */
+        }
+      }, 0);
+    },
+    [setAddresses, backupState, cloudSync]
   );
 
   // Finish Day with cloud snapshot
@@ -629,32 +634,7 @@ function AuthedApp() {
     }
   };
 
-  // ===== NEW: wrapped import handler to avoid cloud overwriting fresh list =====
-  const handleImportAddresses = React.useCallback(
-    async (rows: AddressRow[]) => {
-      // 1) apply locally (this bumps currentListVersion & replaces addresses)
-      setAddresses(rows);
-
-      // 2) suppress incoming cloud while we push
-      suppressCloudUntilRef.current = Date.now() + 5000; // 5s guard
-
-      // 3) push the fresh snapshot to cloud shortly after state commits
-      setTimeout(async () => {
-        try {
-          const snap = backupState(); // baseState snapshot
-          await cloudSync.syncData(snap);
-          lastFromCloudRef.current = JSON.stringify(snap);
-        } catch (e) {
-          console.error("Import sync failed:", e);
-        } finally {
-          suppressCloudUntilRef.current = 0;
-        }
-      }, 50);
-    },
-    [setAddresses, backupState, cloudSync]
-  );
-
-  // Stats for header pills
+  // Stats for header pills (use currentListVersion)
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
     const completedIdx = new Set(
@@ -811,10 +791,9 @@ function AuthedApp() {
     setDragging(false);
   };
 
-  // Enhanced manual sync with feedback
+  // Manual sync button
   const handleManualSync = React.useCallback(async () => {
     try {
-      console.log("Manual sync initiated...");
       await cloudSync.syncData(safeState);
       lastFromCloudRef.current = JSON.stringify(safeState);
     } catch (err) {
@@ -934,7 +913,7 @@ function AuthedApp() {
         </div>
       </header>
 
-      {/* Enhanced error display */}
+      {/* Sync error banner */}
       {cloudSync.error && (
         <div
           style={{
@@ -1002,8 +981,8 @@ function AuthedApp() {
             </div>
 
             <div className="btn-row" style={{ position: "relative" }}>
-              {/* IMPORTANT: wrap import so cloud cannot overwrite fresh state */}
-              <ImportExcel onImported={handleImportAddresses} />
+              {/* Versioned import (resets counters) */}
+              <ImportExcel onImported={handleImportWithVersionBump} />
 
               {/* Local file restore */}
               <input
@@ -1028,7 +1007,7 @@ function AuthedApp() {
                 restoreFromCloud={restoreFromCloud}
               />
 
-              {/* Enhanced tools */}
+              {/* Extra tool */}
               <button
                 className="btn btn-ghost"
                 onClick={cloudSync.forceFullSync}
@@ -1041,7 +1020,7 @@ function AuthedApp() {
         </div>
       )}
 
-      {/* Tabs content with fixed swipe */}
+      {/* Tabs content with swipe */}
       <div
         ref={viewportRef}
         className="tabs-viewport"
@@ -1142,7 +1121,7 @@ function AuthedApp() {
             </div>
 
             {/* Floating + Address button */}
-            <ManualAddressFAB onAdd={addAddress} />
+            <ManualAddressFAB />
           </section>
 
           {/* Panel 2: Completed */}
