@@ -201,127 +201,6 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
-  // ---------- Cloud Restore state & helpers ----------
-  type CloudBackupRow = {
-    object_path: string;
-    size_bytes?: number;
-    created_at?: string;
-    day_key?: string;
-  };
-
-  const [cloudMenuOpen, setCloudMenuOpen] = React.useState(false);
-  const [cloudBackups, setCloudBackups] = React.useState<CloudBackupRow[]>([]);
-  const [cloudBusy, setCloudBusy] = React.useState(false);
-  const [cloudErr, setCloudErr] = React.useState<string | null>(null);
-
-  function formatKey(d: Date, tz = "Europe/London") {
-    const y = d.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
-    const m = d.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
-    const dd = d.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
-    return `${y}-${m}-${dd}`;
-  }
-
-  const loadRecentCloudBackups = React.useCallback(async () => {
-    if (!supabase) {
-      setCloudErr("Supabase not configured");
-      return;
-    }
-    setCloudBusy(true);
-    setCloudErr(null);
-    try {
-      const authResp = await supabase.auth.getUser();
-      const userId =
-        authResp && authResp.data && authResp.data.user
-          ? authResp.data.user.id
-          : undefined;
-      if (!userId) throw new Error("Not authenticated");
-
-      const end = new Date();
-      const start = new Date();
-      start.setDate(start.getDate() - 6);
-
-      const fromKey = formatKey(start);
-      const toKey = formatKey(end);
-
-      const q = await supabase
-        .from("backups")
-        .select("object_path,size_bytes,created_at,day_key")
-        .eq("user_id", userId)
-        .gte("day_key", fromKey)
-        .lte("day_key", toKey)
-        .order("day_key", { ascending: false })
-        .order("created_at", { ascending: false });
-
-      if ((q as any).error) throw (q as any).error;
-
-      const data = ((q as any).data ?? []) as CloudBackupRow[];
-      const list = data.slice().sort((a, b) => {
-        const aParts = a.object_path.split("_");
-        const bParts = b.object_path.split("_");
-        const ta = (aParts[1] || "") + (aParts[2] || "");
-        const tb = (bParts[1] || "") + (bParts[2] || "");
-        return tb.localeCompare(ta);
-      });
-
-      setCloudBackups(list);
-    } catch (e: any) {
-      setCloudErr(e?.message || String(e));
-    } finally {
-      setCloudBusy(false);
-    }
-  }, []);
-
-  const restoreFromCloud = React.useCallback(
-    async (objectPath: string) => {
-      if (!supabase) {
-        alert("Supabase not configured");
-        return;
-      }
-      const fileName = objectPath.split("/").pop() || objectPath;
-      const ok = window.confirm(
-        `Restore "${fileName}" from cloud?\n\nThis will overwrite your current addresses, completions, arrangements and sessions on this device.`
-      );
-      if (!ok) return;
-
-      setCloudBusy(true);
-      setCloudErr(null);
-      try {
-        const bucket =
-          (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
-            ? (import.meta as any).env.VITE_SUPABASE_BUCKET
-            : "navigator-backups";
-        const dl = await supabase.storage.from(bucket).download(objectPath);
-        if ((dl as any).error) throw (dl as any).error;
-        const blob: Blob = (dl as any).data as Blob;
-        const text = await blob.text();
-        const raw = JSON.parse(text);
-        const data = normalizeState(raw);
-        restoreState(data);
-        await cloudSync.syncData(data);
-        lastFromCloudRef.current = JSON.stringify(data);
-        setHydrated(true);
-        alert("Restored from cloud");
-        setCloudMenuOpen(false);
-      } catch (e: any) {
-        setCloudErr(e?.message || String(e));
-      } finally {
-        setCloudBusy(false);
-      }
-    },
-    [cloudSync, restoreState]
-  );
-
-  React.useEffect(() => {
-    if (!cloudMenuOpen) return;
-    function onDocClick(e: MouseEvent) {
-      const target = e.target as HTMLElement;
-      if (!target.closest || !target.closest(".btn-row"))
-        setCloudMenuOpen(false);
-    }
-    document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
-  }, [cloudMenuOpen]);
-
   // ===================== Improved Cloud-first bootstrap =====================
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
@@ -368,7 +247,7 @@ function AuthedApp() {
           if (!cancelled) setHydrated(true);
         }
 
-        cleanup = cloudSync.subscribeToData((newState, meta?: { updated_at?: string | number }) => {
+        cleanup = cloudSync.subscribeToData((newState) => {
           const now = Date.now();
           if (now < ignoreCloudUntilRef.current) {
             // ignore server echo during the short guard window
@@ -769,7 +648,6 @@ function AuthedApp() {
 
     const quick = dt <= 600;
     const farPx = Math.abs(dx) >= 60;
-    the // <-- make sure this line does NOT exist in your file
     const farFrac = Math.abs(dx) / Math.max(1, w) >= 0.18;
     const horizontal = Math.abs(dx) > Math.abs(dy) * 1.2;
 
@@ -968,9 +846,6 @@ function AuthedApp() {
               <label htmlFor="restore-input" className="file-input-label">
                 Restore (file)
               </label>
-
-              {/* Restore from Cloud (last 7 days) */}
-              {/* ... CloudRestore component remains unchanged (omitted for brevity) */}
             </div>
           </div>
         </div>
@@ -1084,12 +959,32 @@ function AuthedApp() {
           </section>
 
           {/* Panel 2: Completed */}
-          <section className="tab-panel" style={{ flex: "0 0 33.333333%", minWidth: "33.333333%", maxWidth: "33.333333%", boxSizing: "border-box", overflowX: "hidden", padding: "0" }}>
+          <section
+            className="tab-panel"
+            style={{
+              flex: "0 0 33.333333%",
+              minWidth: "33.333333%",
+              maxWidth: "33.333333%",
+              boxSizing: "border-box",
+              overflowX: "hidden",
+              padding: "0",
+            }}
+          >
             <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
           </section>
 
           {/* Panel 3: Arrangements */}
-          <section className="tab-panel" style={{ flex: "0 0 33.333333%", minWidth: "33.333333%", maxWidth: "33.333333%", boxSizing: "border-box", overflowX: "hidden", padding: "0" }}>
+          <section
+            className="tab-panel"
+            style={{
+              flex: "0 0 33.333333%",
+              minWidth: "33.333333%",
+              maxWidth: "33.333333%",
+              boxSizing: "border-box",
+              overflowX: "hidden",
+              padding: "0",
+            }}
+          >
             <Arrangements
               state={safeState}
               onAddArrangement={addArrangement}
