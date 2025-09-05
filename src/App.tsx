@@ -369,7 +369,6 @@ function AuthedApp() {
           if (!newState) return;
 
           const fromCloudStr = JSON.stringify(newState);
-          // Ignore if this equals the last snapshot we accepted from cloud
           if (fromCloudStr === lastFromCloudRef.current) return;
 
           const normalized = normalizeState(newState);
@@ -694,6 +693,7 @@ function AuthedApp() {
   };
 
   const getTransform = React.useCallback(() => {
+    the // <-- REMOVE any stray line like this if it appears
     const tabCount = 3;
     const basePercent = (-tabIndex / tabCount) * 100;
 
@@ -762,7 +762,6 @@ function AuthedApp() {
 
     const quick = dt <= 600;
     const farPx = Math.abs(dx) >= 60;
-    the // <-- make sure this line DOES NOT exist in your file
     const farFrac = Math.abs(dx) / Math.max(1, w) >= 0.18;
     const horizontal = Math.abs(dx) > Math.abs(dy) * 1.2;
 
@@ -969,10 +968,7 @@ function AuthedApp() {
               {/* Import that bumps version + clears completions, then pushes to cloud */}
               <ImportExcel
                 onImported={(rows) => {
-                  // 1) apply locally (resets counters + bumps version)
                   setAddresses(rows);
-
-                  // 2) push to cloud on next tick with the same shape
                   setTimeout(() => {
                     const next = {
                       ...state,
@@ -1125,8 +1121,8 @@ function AuthedApp() {
               )}
             </div>
 
-            {/* Floating + Address button */}
-            <ManualAddressFAB />
+            {/* Floating + Address button — now WITH required prop */}
+            <ManualAddressFAB onAdd={addAddress} />
           </section>
 
           {/* Panel 2: Completed */}
