@@ -693,7 +693,6 @@ function AuthedApp() {
   };
 
   const getTransform = React.useCallback(() => {
-    the // <-- REMOVE any stray line like this if it appears
     const tabCount = 3;
     const basePercent = (-tabIndex / tabCount) * 100;
 
