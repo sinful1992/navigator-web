@@ -2,6 +2,7 @@
 import * as React from "react";
 import { supabase } from "./lib/supabaseClient";
 
+// ---- Types for the external API your App already uses ----
 type CloudState = {
   user: { id: string; email?: string | null } | null;
   isLoading: boolean;
@@ -46,12 +47,7 @@ type NavRow = {
 
 const TABLE = "navigator_state";
 
-/**
- * Guard clocks kept in one place so we can reject stale frames reliably.
- * - lastPushedUpdatedAt: ISO timestamp returned by Postgres from our most recent write
- * - lastPushedVersion: the currentListVersion number we last wrote
- * - lastPushedJSON: exact JSON string we last wrote (to ignore exact echoes)
- */
+// ---- Newer-wins guards shared across hook instances ----
 const lastPushedUpdatedAtRef: { current: string | null } = { current: null };
 const lastPushedVersionRef: { current: number } = { current: 1 };
 const lastPushedJSONRef: { current: string | null } = { current: null };
@@ -66,13 +62,19 @@ export function useCloudSync(): UseCloudSyncApi {
     lastSyncTime: null,
   });
 
-  // ---- auth bootstrap
+  // ---- auth bootstrap (null-safe) ----
   React.useEffect(() => {
     let cancelled = false;
 
     (async () => {
+      const sb = supabase;
+      if (!sb) {
+        // No Supabase configured; mark as loaded, keep user null.
+        if (!cancelled) setState((s) => ({ ...s, isLoading: false }));
+        return;
+      }
       try {
-        const { data } = await supabase.auth.getUser();
+        const { data } = await sb.auth.getUser();
         if (!cancelled) {
           const u = data?.user ? { id: data.user.id, email: data.user.email } : null;
           setState((s) => ({ ...s, user: u, isLoading: false }));
@@ -84,18 +86,20 @@ export function useCloudSync(): UseCloudSyncApi {
       }
     })();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_ev, sess) => {
+    // realtime auth changes
+    const sb = supabase;
+    if (!sb) return () => {}; // nothing to unsubscribe
+    const { data: sub } = sb.auth.onAuthStateChange((_ev, sess) => {
       const u = sess?.user ? { id: sess.user.id, email: sess.user.email } : null;
       setState((s) => ({ ...s, user: u }));
     });
 
     return () => {
-      cancelled = true;
       sub?.subscription?.unsubscribe();
     };
   }, []);
 
-  // ---- online/offline
+  // ---- online/offline ----
   React.useEffect(() => {
     const onUp = () => setState((s) => ({ ...s, isOnline: true }));
     const onDown = () => setState((s) => ({ ...s, isOnline: false }));
@@ -112,42 +116,59 @@ export function useCloudSync(): UseCloudSyncApi {
   }, []);
 
   const signIn = React.useCallback(async (email: string, password: string) => {
+    const sb = supabase;
+    if (!sb) {
+      setState((s) => ({ ...s, error: "Supabase not configured" }));
+      return;
+    }
     setState((s) => ({ ...s, isLoading: true, error: null }));
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
       setState((s) => ({ ...s, isLoading: false, error: error.message }));
       return;
     }
-    const { data } = await supabase.auth.getUser();
+    const { data } = await sb.auth.getUser();
     const u = data?.user ? { id: data.user.id, email: data.user.email } : null;
     setState((s) => ({ ...s, user: u, isLoading: false, error: null }));
   }, []);
 
   const signUp = React.useCallback(async (email: string, password: string) => {
+    const sb = supabase;
+    if (!sb) {
+      setState((s) => ({ ...s, error: "Supabase not configured" }));
+      return;
+    }
     setState((s) => ({ ...s, isLoading: true, error: null }));
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await sb.auth.signUp({ email, password });
     if (error) {
       setState((s) => ({ ...s, isLoading: false, error: error.message }));
       return;
     }
-    const { data } = await supabase.auth.getUser();
+    const { data } = await sb.auth.getUser();
     const u = data?.user ? { id: data.user.id, email: data.user.email } : null;
     setState((s) => ({ ...s, user: u, isLoading: false, error: null }));
   }, []);
 
   const signOut = React.useCallback(async () => {
-    await supabase.auth.signOut();
+    const sb = supabase;
+    if (!sb) return;
+    await sb.auth.signOut();
     setState((s) => ({ ...s, user: null }));
   }, []);
 
-  // ---- core sync: REPLACE remote with full local snapshot
+  // ---- core sync: REPLACE remote with full local snapshot (null-safe) ----
   const syncData = React.useCallback(
     async (data: unknown) => {
       if (!state.user) return;
+      const sb = supabase;
+      if (!sb) {
+        setState((s) => ({ ...s, error: "Supabase not configured" }));
+        return;
+      }
       try {
         setState((s) => ({ ...s, isSyncing: true, error: null }));
 
-        // Pull version number out if present
+        // Extract version if present
         let version = 1;
         try {
           const sv: any = data;
@@ -158,15 +179,13 @@ export function useCloudSync(): UseCloudSyncApi {
           // ignore
         }
 
-        // Upsert the whole snapshot (no merge)
-        const { data: up, error } = await supabase
+        const { data: up, error } = await sb
           .from(TABLE)
           .upsert(
             {
               user_id: state.user.id,
               data,
               version,
-              // updated_at handled by DEFAULT now() in DB, but returning it here is OK
             } as NavRow,
             { onConflict: "user_id" }
           )
@@ -175,12 +194,12 @@ export function useCloudSync(): UseCloudSyncApi {
 
         if (error) throw error;
 
-        // Record guard clocks so we can ignore stale frames
         const updatedAt = (up as any)?.updated_at ?? null;
         if (updatedAt) {
           lastPushedUpdatedAtRef.current = updatedAt;
         }
-        lastPushedVersionRef.current = typeof up?.version === "number" ? (up!.version as number) : version;
+        lastPushedVersionRef.current =
+          typeof up?.version === "number" ? (up!.version as number) : version;
         lastPushedJSONRef.current = JSON.stringify(up?.data ?? data);
 
         setState((s) => ({ ...s, isSyncing: false, lastSyncTime: new Date() }));
@@ -191,16 +210,17 @@ export function useCloudSync(): UseCloudSyncApi {
     [state.user]
   );
 
-  // ---- subscribe with newer-wins guards
+  // ---- subscribe with newer-wins guards (null-safe) ----
   const subscribeToData = React.useCallback(
     (fn: SubscribeFn) => {
       if (!state.user) return () => {};
+      const sb = supabase;
+      if (!sb) return () => {};
 
       let disposed = false;
 
-      // helper to fetch current row (used on INSERT/UPDATE notification)
       const fetchRow = async (): Promise<NavRow | null> => {
-        const { data, error } = await supabase
+        const { data, error } = await sb
           .from(TABLE)
           .select("data,version,updated_at")
           .eq("user_id", state.user!.id)
@@ -212,11 +232,7 @@ export function useCloudSync(): UseCloudSyncApi {
         return (data as any) || null;
       };
 
-      // initial fetch (optional – App usually does this on bootstrap)
-      // We won’t call fn here to avoid racing App’s bootstrap. Realtime will fire shortly.
-
-      // Setup realtime channel
-      const channel = supabase
+      const channel = sb
         .channel(`realtime:${TABLE}:${state.user.id}`)
         .on(
           "postgres_changes",
@@ -244,7 +260,8 @@ export function useCloudSync(): UseCloudSyncApi {
             if (
               lastPushedUpdatedAtRef.current &&
               incomingUpdatedAt &&
-              new Date(incomingUpdatedAt).getTime() < new Date(lastPushedUpdatedAtRef.current).getTime()
+              new Date(incomingUpdatedAt).getTime() <
+                new Date(lastPushedUpdatedAtRef.current).getTime()
             ) {
               return;
             }
@@ -257,8 +274,8 @@ export function useCloudSync(): UseCloudSyncApi {
             fn(row.data ?? null);
           }
         )
-        .subscribe((status) => {
-          // optional: console.log('realtime status', status)
+        .subscribe(() => {
+          // no-op; avoid unused var warning
         });
 
       return () => {
@@ -270,12 +287,11 @@ export function useCloudSync(): UseCloudSyncApi {
   );
 
   const forceFullSync = React.useCallback(async () => {
-    // no special semantics; UI passes current snapshot to syncData
+    // UI calls syncData with current snapshot; nothing extra needed here.
   }, []);
 
-  // Optional op queue (no-op if not used)
   const queueOperation = React.useCallback(async (_op: any) => {
-    // If you later implement row-level ops in the DB, wire it here.
+    // No-op placeholder; keeps API stable if you enable granular ops later.
   }, []);
 
   return {
