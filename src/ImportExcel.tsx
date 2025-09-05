@@ -4,98 +4,201 @@ import * as XLSX from "xlsx";
 import type { AddressRow } from "./types";
 
 type Props = {
-  /** Called with normalized rows: { address: string, lat?: number, lng?: number }[] */
-  onImported: (rows: AddressRow[]) => void | Promise<void>;
+  onImported: (rows: AddressRow[]) => void;
 };
 
 export function ImportExcel({ onImported }: Props) {
-  const inputRef = React.useRef<HTMLInputElement | null>(null);
-  const [busy, setBusy] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [dragActive, setDragActive] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const handlePick = () => inputRef.current?.click();
-
-  const handleFile: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
+  const processFile = async (file: File) => {
     if (!file) return;
-
-    setBusy(true);
+    
+    setLoading(true);
     try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      // First sheet
-      const sheetName = wb.SheetNames[0];
-      const sheet = wb.Sheets[sheetName];
+      if (!rows.length) {
+        alert("📄 File appears to be empty. Please check your Excel file.");
+        return;
+      }
 
-      // Parse to JSON, keep headers
-      const raw = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, {
-        defval: "",
-        raw: true,
-      });
+      const header = (rows[0] || []).map((x) =>
+        String(x ?? "").trim().toLowerCase()
+      );
 
-      // Normalize column names case-insensitively
-      const normKey = (k: string) => k.trim().toLowerCase();
+      // address column: best effort
+      let addrIdx = header.findIndex((h) => h.includes("address"));
+      if (addrIdx === -1) addrIdx = 0; // fallback to first column
 
-      const rows: AddressRow[] = raw
-        .map((r) => {
-          const keys = Object.keys(r).reduce<Record<string, any>>((acc, k) => {
-            acc[normKey(k)] = r[k];
-            return acc;
-          }, {});
+      // detect lat/lng columns
+      const latRaw = header.findIndex(
+        (h) => h === "lat" || h.includes("latitude")
+      );
+      const lngRaw = header.findIndex(
+        (h) => h === "lng" || h === "lon" || h.includes("longitude")
+      );
 
-          // Accept header variants like "address", "Address", "ADDRESS"
-          const addrRaw = String(keys["address"] ?? "").trim();
+      // Convert to union types once (number | undefined)
+      const latCol: number | undefined = latRaw === -1 ? undefined : latRaw;
+      const lngCol: number | undefined = lngRaw === -1 ? undefined : lngRaw;
 
-          if (!addrRaw) return null;
+      const out: AddressRow[] = [];
 
-          // lat/lng parse (if present)
-          const latVal = keys["lat"];
-          const lngVal = keys["lng"];
+      // data rows
+      for (let r = 1; r < rows.length; r++) {
+        const row = rows[r] || [];
+        const address = String(row[addrIdx] ?? "").trim();
+        if (!address) continue;
 
-          const lat =
-            latVal === undefined || latVal === ""
-              ? undefined
-              : Number.isFinite(Number(latVal))
-              ? Number(latVal)
-              : undefined;
+        const lat =
+          latCol !== undefined && row[latCol] != null && row[latCol] !== ""
+            ? toNumber(row[latCol])
+            : undefined;
 
-          const lng =
-            lngVal === undefined || lngVal === ""
-              ? undefined
-              : Number.isFinite(Number(lngVal))
-              ? Number(lngVal)
-              : undefined;
+        const lng =
+          lngCol !== undefined && row[lngCol] != null && row[lngCol] !== ""
+            ? toNumber(row[lngCol])
+            : undefined;
 
-          const row: AddressRow = { address: addrRaw };
-          if (typeof lat === "number") row.lat = lat;
-          if (typeof lng === "number") row.lng = lng;
+        out.push({ address, lat, lng });
+      }
 
-          return row;
-        })
-        .filter((r): r is AddressRow => !!r);
+      if (out.length === 0) {
+        alert("🚫 No valid addresses found in the file. Please check the format.");
+        return;
+      }
 
-      await onImported(rows);
+      onImported(out);
+      
+      // Success feedback
+      const hasCoords = out.some(row => row.lat != null && row.lng != null);
+      const message = `✅ Successfully imported ${out.length} address${out.length === 1 ? '' : 'es'}${
+        hasCoords ? ' with GPS coordinates' : ''
+      }!`;
+      
+      // Use a subtle notification instead of alert
+      console.log(message);
+      
+      // You could implement a toast notification here instead
     } catch (err) {
-      console.error("Import failed:", err);
-      alert("Import failed. Please check your file format.");
+      console.error(err);
+      alert("❌ Failed to read Excel file. Please ensure it's a valid .xlsx or .xls file.");
     } finally {
-      setBusy(false);
+      setLoading(false);
+      // Clear file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const onFile: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await processFile(file);
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    const excelFile = files.find(file => 
+      file.name.endsWith('.xlsx') || 
+      file.name.endsWith('.xls') ||
+      file.type.includes('spreadsheet')
+    );
+
+    if (excelFile) {
+      await processFile(excelFile);
+    } else {
+      alert("📋 Please drop an Excel file (.xlsx or .xls)");
     }
   };
 
   return (
-    <>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".xlsx,.xls"
-        onChange={handleFile}
-        style={{ display: "none" }}
-      />
-      <button className="btn btn-primary" onClick={handlePick} disabled={busy}>
-        {busy ? "Importing..." : "Import Excel"}
-      </button>
-    </>
+    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+      {/* File Input Button */}
+      <div className="file-input-wrapper">
+        <input 
+          ref={fileInputRef}
+          type="file" 
+          accept=".xlsx,.xls" 
+          onChange={onFile}
+          className="file-input"
+          id="excel-input"
+          disabled={loading}
+        />
+        <label 
+          htmlFor="excel-input" 
+          className={`file-input-label ${loading ? 'pulse' : ''}`}
+          style={{
+            ...(loading ? { opacity: 0.7, cursor: 'not-allowed' } : {}),
+          }}
+        >
+          {loading ? (
+            <>
+              <div className="spinner" />
+              Loading...
+            </>
+          ) : (
+            <>
+              📊 Load Excel
+            </>
+          )}
+        </label>
+      </div>
+
+      {/* Drag & Drop Zone */}
+      <div
+        onDragEnter={handleDrag}
+        onDragLeave={handleDrag}
+        onDragOver={handleDrag}
+        onDrop={handleDrop}
+        style={{
+          padding: "0.75rem 1rem",
+          border: `2px dashed ${dragActive ? 'var(--primary)' : 'var(--border-light)'}`,
+          borderRadius: "var(--radius)",
+          background: dragActive ? 'var(--primary-light)' : 'var(--bg-tertiary)',
+          color: dragActive ? 'var(--primary-dark)' : 'var(--text-muted)',
+          fontSize: "0.8125rem",
+          textAlign: "center",
+          cursor: "pointer",
+          transition: "all var(--transition-fast)",
+          userSelect: "none",
+          minWidth: "140px",
+        }}
+        onClick={() => fileInputRef.current?.click()}
+      >
+        {dragActive ? (
+          <div>📥 Drop Excel file here</div>
+        ) : (
+          <div>🖱️ Or drag & drop</div>
+        )}
+      </div>
+    </div>
   );
+}
+
+function toNumber(v: unknown): number | undefined {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
 }
