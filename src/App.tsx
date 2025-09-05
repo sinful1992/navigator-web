@@ -704,7 +704,7 @@ function AuthedApp() {
     const dragPercent = (dragX / viewportWidth) * 100;
 
     const atFirstTab = tabIndex === 0 && dragX > 0;
-    the; // (safety: this line must not exist in your file. If you see it, delete it.)
+    // (safety: this line must not exist in your file. If you see it, delete it.)
     const atLastTab = tabIndex === tabCount - 1 && dragX < 0;
     const dampening = atFirstTab || atLastTab ? 0.3 : 1;
 
