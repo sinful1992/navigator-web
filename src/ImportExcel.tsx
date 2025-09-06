@@ -2,6 +2,7 @@
 import * as React from "react";
 import * as XLSX from "xlsx";
 import type { AddressRow } from "./types";
+import { LoadingButton } from "./components/LoadingButton";
 
 type Props = {
   onImported: (rows: AddressRow[]) => void;
@@ -146,25 +147,17 @@ export function ImportExcel({ onImported }: Props) {
           className="file-input"
           id="excel-input"
           disabled={loading}
+          style={{ display: 'none' }}
         />
-        <label 
-          htmlFor="excel-input" 
-          className={`file-input-label ${loading ? 'pulse' : ''}`}
-          style={{
-            ...(loading ? { opacity: 0.7, cursor: 'not-allowed' } : {}),
-          }}
+        <LoadingButton
+          className="file-input-label btn btn-ghost"
+          onClick={() => fileInputRef.current?.click()}
+          isLoading={loading}
+          loadingText="Processing..."
+          disabled={loading}
         >
-          {loading ? (
-            <>
-              <div className="spinner" />
-              Loading...
-            </>
-          ) : (
-            <>
-              📊 Load Excel
-            </>
-          )}
-        </label>
+          📊 Load Excel
+        </LoadingButton>
       </div>
 
       {/* Drag & Drop Zone */}

@@ -1,5 +1,6 @@
-/* ==== Import Modal Styles ====*/
+/* ==== Import Component Styles ====*/
 @import url('./components/modal.css');
+@import url('./components/loading.css');
 
 /* ==== CSS Reset & Base ==== */
 *, *::before, *::after {

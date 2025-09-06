@@ -1,6 +1,7 @@
 import * as React from "react";
 import { format, parseISO, isWithinInterval, startOfWeek, endOfWeek, isSameDay, isPast, addDays } from "date-fns";
 import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome } from "./types";
+import { LoadingButton } from "./components/LoadingButton";
 
 type Props = {
   state: AppState;
@@ -28,6 +29,17 @@ export function Arrangements({
   const [viewMode, setViewMode] = React.useState<ViewMode>("thisWeek");
   const [showAddForm, setShowAddForm] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [loadingStates, setLoadingStates] = React.useState<{
+    saving: boolean;
+    updating: boolean;
+    deleting: Set<string>;
+    markingPaid: Set<string>;
+  }>({
+    saving: false,
+    updating: false,
+    deleting: new Set(),
+    markingPaid: new Set()
+  });
 
   // Handle auto-create from address list
   React.useEffect(() => {
@@ -139,6 +151,7 @@ export function Arrangements({
 
   // Handle arrangement creation (also mark as ARR completion)
   const handleArrangementSave = async (arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => {
+    setLoadingStates(prev => ({ ...prev, saving: true }));
     try {
       // Validate address index is still valid
       if (arrangementData.addressIndex < 0 || arrangementData.addressIndex >= state.addresses.length) {
@@ -153,16 +166,21 @@ export function Arrangements({
     } catch (error) {
       console.error('Error saving arrangement:', error);
       alert(`Failed to save arrangement: ${error instanceof Error ? error.message : 'Please try again.'}`);
+    } finally {
+      setLoadingStates(prev => ({ ...prev, saving: false }));
     }
   };
 
   const handleArrangementUpdate = async (id: string, arrangementData: Partial<Arrangement>) => {
+    setLoadingStates(prev => ({ ...prev, updating: true }));
     try {
       await onUpdateArrangement(id, arrangementData);
       setEditingId(null);
     } catch (error) {
       console.error('Error updating arrangement:', error);
       alert('Failed to update arrangement. Please try again.');
+    } finally {
+      setLoadingStates(prev => ({ ...prev, updating: false }));
     }
   };
 
@@ -234,6 +252,7 @@ export function Arrangements({
             setShowAddForm(false);
             setEditingId(null);
           }}
+          isLoading={loadingStates.saving || loadingStates.updating}
         />
       )}
 
@@ -325,51 +344,80 @@ export function Arrangements({
 
                     <div className="arrangement-actions">
                       {arrangement.status === "Scheduled" && (
-                        <button
+                        <LoadingButton
                           className="btn btn-sm btn-success"
+                          isLoading={loadingStates.updating}
+                          loadingText="Confirming..."
                           onClick={() => onUpdateArrangement(arrangement.id, { 
                             status: "Confirmed",
                             updatedAt: new Date().toISOString()
                           })}
                         >
                           ✅ Confirm
-                        </button>
+                        </LoadingButton>
                       )}
                       
                       {(arrangement.status === "Scheduled" || arrangement.status === "Confirmed") && (
-                        <button
+                        <LoadingButton
                           className="btn btn-sm btn-primary"
-                          onClick={() => {
+                          isLoading={loadingStates.markingPaid.has(arrangement.id)}
+                          loadingText="Processing..."
+                          onClick={async () => {
                             const actualAmount = window.prompt(
                               `Mark as paid:\n\nExpected: £${arrangement.amount || '0.00'}\nEnter actual amount received:`,
                               arrangement.amount || ''
                             );
                             if (actualAmount !== null && actualAmount.trim()) {
-                              markAsPaid(arrangement.id, actualAmount.trim());
+                              setLoadingStates(prev => ({
+                                ...prev,
+                                markingPaid: new Set([...prev.markingPaid, arrangement.id])
+                              }));
+                              try {
+                                await markAsPaid(arrangement.id, actualAmount.trim());
+                              } finally {
+                                setLoadingStates(prev => ({
+                                  ...prev,
+                                  markingPaid: new Set([...prev.markingPaid].filter(id => id !== arrangement.id))
+                                }));
+                              }
                             }
                           }}
                         >
                           💰 Mark Paid
-                        </button>
+                        </LoadingButton>
                       )}
                       
                       <button
                         className="btn btn-sm btn-ghost"
                         onClick={() => setEditingId(arrangement.id)}
+                        disabled={loadingStates.updating || loadingStates.saving}
                       >
                         ✏️ Edit
                       </button>
                       
-                      <button
+                      <LoadingButton
                         className="btn btn-sm btn-danger"
-                        onClick={() => {
+                        isLoading={loadingStates.deleting.has(arrangement.id)}
+                        loadingText="Deleting..."
+                        onClick={async () => {
                           if (confirm("Are you sure you want to delete this arrangement?")) {
-                            onDeleteArrangement(arrangement.id);
+                            setLoadingStates(prev => ({
+                              ...prev,
+                              deleting: new Set([...prev.deleting, arrangement.id])
+                            }));
+                            try {
+                              await onDeleteArrangement(arrangement.id);
+                            } finally {
+                              setLoadingStates(prev => ({
+                                ...prev,
+                                deleting: new Set([...prev.deleting].filter(id => id !== arrangement.id))
+                              }));
+                            }
                           }
                         }}
                       >
                         🗑️ Delete
-                      </button>
+                      </LoadingButton>
                     </div>
                   </div>
                 ))}
@@ -390,9 +438,10 @@ type FormProps = {
   onAddAddress?: (address: AddressRow) => Promise<number>;
   onSave: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void> | void;
   onCancel: () => void;
+  isLoading?: boolean;
 };
 
-function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAddress, onSave, onCancel }: FormProps) {
+function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAddress, onSave, onCancel, isLoading = false }: FormProps) {
   const [addressMode, setAddressMode] = React.useState<"existing" | "manual">(
     preSelectedAddressIndex !== null && preSelectedAddressIndex !== undefined ? "existing" : "existing"
   );
@@ -637,14 +686,16 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           <button type="button" className="btn btn-ghost" onClick={onCancel}>
             Cancel
           </button>
-          <button 
+          <LoadingButton
             type="submit" 
             className="btn btn-primary" 
+            isLoading={isLoading}
+            loadingText={arrangement ? "Updating..." : "Creating..."}
             onClick={handleSubmit}
             disabled={addressMode === "existing" && state.addresses.length === 0}
           >
             {arrangement ? "💾 Update" : "📅 Create"} Arrangement
-          </button>
+          </LoadingButton>
         </div>
       </div>
     </div>
