@@ -91,7 +91,8 @@ export function Arrangements({
     }).length;
     const totalAmountDue = filteredArrangements.reduce((sum, arr) => {
       if (arr.amount && arr.status !== "Completed") {
-        return sum + parseFloat(arr.amount);
+        const amount = parseFloat(arr.amount);
+        return sum + (isNaN(amount) ? 0 : amount);
       }
       return sum;
     }, 0);
@@ -139,6 +140,11 @@ export function Arrangements({
   // Handle arrangement creation (also mark as ARR completion)
   const handleArrangementSave = async (arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
+      // Validate address index is still valid
+      if (arrangementData.addressIndex < 0 || arrangementData.addressIndex >= state.addresses.length) {
+        throw new Error('Selected address is no longer valid. Please refresh and try again.');
+      }
+      
       await onAddArrangement(arrangementData);
       // record completion (ARR) today for the chosen index
       onComplete(arrangementData.addressIndex, "ARR");
@@ -146,7 +152,7 @@ export function Arrangements({
       setEditingId(null);
     } catch (error) {
       console.error('Error saving arrangement:', error);
-      alert('Failed to save arrangement. Please try again.');
+      alert(`Failed to save arrangement: ${error instanceof Error ? error.message : 'Please try again.'}`);
     }
   };
 
@@ -256,7 +262,10 @@ export function Arrangements({
                   <div className="muted">
                     {arrangements.length} payment{arrangements.length === 1 ? '' : 's'} due
                     {arrangements.some(arr => arr.amount) && (
-                      <> • £{arrangements.reduce((sum, arr) => sum + (parseFloat(arr.amount || '0')), 0).toFixed(2)} total</>
+                      <> • £{arrangements.reduce((sum, arr) => {
+                        const amount = parseFloat(arr.amount || '0');
+                        return sum + (isNaN(amount) ? 0 : amount);
+                      }, 0).toFixed(2)} total</>
                     )}
                   </div>
                 </div>
@@ -405,8 +414,9 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     
-    if (!formData.amount || parseFloat(formData.amount) <= 0) {
-      alert("Please enter a valid payment amount");
+    const amount = parseFloat(formData.amount || '0');
+    if (!formData.amount || isNaN(amount) || amount <= 0) {
+      alert("Please enter a valid payment amount (numbers only, greater than 0)");
       return;
     }
 
