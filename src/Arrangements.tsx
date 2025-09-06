@@ -16,7 +16,7 @@ type Props = {
 
 type ViewMode = "thisWeek" | "all";
 
-export function Arrangements({ 
+const ArrangementsComponent = function Arrangements({ 
   state, 
   onAddArrangement, 
   onUpdateArrangement, 
@@ -428,7 +428,10 @@ export function Arrangements({
       </div>
     </div>
   );
-}
+};
+
+// Memoize component to prevent unnecessary re-renders
+export const Arrangements = React.memo(ArrangementsComponent);
 
 // Arrangement Form Component
 type FormProps = {

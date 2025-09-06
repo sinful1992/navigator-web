@@ -1,6 +1,7 @@
 // src/useAppState.ts
 import * as React from "react";
 import { get, set } from "idb-keyval";
+import { logger } from "./utils/logger";
 import type {
   AddressRow,
   AppState,
@@ -209,7 +210,7 @@ export function useAppState() {
           setBaseState(next);
         }
       } catch (error) {
-        console.warn("Failed to load state from IndexedDB:", error);
+        logger.warn("Failed to load state from IndexedDB:", error);
       } finally {
         if (alive) setLoading(false);
       }
@@ -294,7 +295,7 @@ export function useAppState() {
 
   const revertOptimisticUpdate = React.useCallback(
     (operationId: string, reason?: string) => {
-      console.warn(`Reverting optimistic update ${operationId}:`, reason);
+      logger.debug(`Reverting optimistic update ${operationId}:`, reason);
 
       setOptimisticState((prev) => {
         const updates = new Map(prev.updates);
@@ -824,7 +825,7 @@ export function useAppState() {
         });
 
         if (conflicts.size > 0) {
-          console.log("Detected state conflicts:", conflicts.size);
+          logger.debug("Detected state conflicts:", conflicts.size);
           setConflicts(conflicts);
         }
 

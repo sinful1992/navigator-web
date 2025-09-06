@@ -6,6 +6,7 @@ import { useAppState } from "./useAppState";
 import { useCloudSync } from "./useCloudSync";
 import { useSwipeNavigation } from "./hooks/useSwipeNavigation";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
+import { logger } from "./utils/logger";
 import { Auth } from "./Auth";
 import { AddressList } from "./AddressList";
 import Completed from "./Completed";
@@ -104,7 +105,7 @@ async function uploadBackupToStorage(
       size_bytes: blob.size,
     });
   } catch (e) {
-    console.warn("Backups table insert failed:", (e as any)?.message || e);
+    logger.warn("Backups table insert failed:", (e as any)?.message || e);
   }
 }
 
@@ -389,10 +390,10 @@ function AuthedApp() {
             setState(normalized);
             lastFromCloudRef.current = JSON.stringify(normalized);
             setHydrated(true);
-            console.log("Restored from cloud, version:", row?.version);
+            logger.sync("Restored from cloud, version:", row?.version);
           }
         } else if (localHasData) {
-          console.log("Pushing local data to cloud...");
+          logger.sync("Pushing local data to cloud...");
           await cloudSync.syncData(safeState);
           if (!cancelled) {
             lastFromCloudRef.current = JSON.stringify(safeState);
@@ -409,13 +410,13 @@ function AuthedApp() {
           if (fromCloudStr === lastFromCloudRef.current) return;
 
           const normalized = normalizeState(newState);
-          console.log("Received cloud update");
+          logger.sync("Received cloud update");
           setState(normalized);
           lastFromCloudRef.current = fromCloudStr;
           setHydrated(true);
         });
       } catch (err) {
-        console.error("Bootstrap sync (cloud-first) failed:", err);
+        logger.error("Bootstrap sync (cloud-first) failed:", err);
         if (!cancelled) setHydrated(true);
       }
     })();
@@ -436,11 +437,11 @@ function AuthedApp() {
 
     const t = setTimeout(async () => {
       try {
-        console.log("Syncing changes to cloud...");
+        logger.sync("Syncing changes to cloud...");
         await cloudSync.syncData(safeState);
         lastFromCloudRef.current = currentStr;
       } catch (err) {
-        console.error("Sync failed:", err);
+        logger.error("Sync failed:", err);
       }
     }, 150);
 
@@ -455,12 +456,12 @@ function AuthedApp() {
       try {
         const currentStr = JSON.stringify(safeState);
         if (currentStr !== lastFromCloudRef.current) {
-          console.log("Flushing changes before exit...");
+          logger.sync("Flushing changes before exit...");
           await cloudSync.syncData(safeState);
           lastFromCloudRef.current = currentStr;
         }
       } catch (err) {
-        console.warn("Failed to flush changes:", err);
+        logger.warn("Failed to flush changes:", err);
       }
     };
 
@@ -494,7 +495,7 @@ function AuthedApp() {
   // FIXED: Enhanced handleImportExcel with proper state synchronization
   const handleImportExcel = React.useCallback(async (rows: AddressRow[]) => {
     try {
-      console.log(`Starting import of ${rows.length} addresses...`);
+      logger.info(`Starting import of ${rows.length} addresses...`);
       
       // First, update the local state
       setAddresses(rows);
@@ -515,14 +516,14 @@ function AuthedApp() {
           await cloudSync.syncData(newState);
           lastFromCloudRef.current = JSON.stringify(newState);
           
-          console.log(`Successfully imported ${rows.length} addresses and synced to cloud`);
+          logger.success(`Successfully imported ${rows.length} addresses and synced to cloud`);
         } catch (syncError) {
-          console.error('Failed to sync imported data to cloud:', syncError);
+          logger.error('Failed to sync imported data to cloud:', syncError);
         }
       }, 0);
       
     } catch (error) {
-      console.error('Failed to import Excel data:', error);
+      logger.error('Failed to import Excel data:', error);
     }
   }, [safeState, setAddresses, cloudSync]);
 
@@ -555,7 +556,7 @@ function AuthedApp() {
           });
         }
       } catch (error) {
-        console.error("Failed to complete address:", error);
+        logger.error("Failed to complete address:", error);
         setOptimisticUpdates((prev) => {
           const updated = new Map(prev);
           updated.delete(optimisticId);
@@ -590,14 +591,14 @@ function AuthedApp() {
       const parsed =
         typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
       if (Number.isNaN(parsed.getTime())) {
-        console.error('Invalid start date provided:', newStartISO);
+        logger.error('Invalid start date provided:', newStartISO);
         return;
       }
 
       const newISO = parsed.toISOString();
       const dayKey = newISO.slice(0, 10);
 
-      console.log('🔧 Editing start time:', { newISO, dayKey });
+      logger.debug('Editing start time:', { newISO, dayKey });
 
       setBaseState((s) => {
         const arr = s.daySessions.slice();
@@ -628,7 +629,7 @@ function AuthedApp() {
               delete targetSession.durationSeconds;
             }
           } catch (error) {
-            console.error('Error calculating duration:', error);
+            logger.error('Error calculating duration:', error);
           }
         }
 
@@ -667,33 +668,33 @@ function AuthedApp() {
     (newEndISO: string | Date) => {
       const parsed = typeof newEndISO === "string" ? new Date(newEndISO) : newEndISO;
       if (Number.isNaN(parsed.getTime())) {
-        console.error('Invalid end date provided:', newEndISO);
+        logger.error('Invalid end date provided:', newEndISO);
         return;
       }
 
       const endISO = parsed.toISOString();
       const dayKey = endISO.slice(0, 10);
 
-      console.log('🔧 Editing end time:', { endISO, dayKey });
+      logger.debug('Editing end time:', { endISO, dayKey });
 
       setBaseState((s) => {
         const arr = s.daySessions.slice();
         let sessionIndex = arr.findIndex((d) => d.date === dayKey);
         let targetSession: any;
 
-        console.log('Current sessions for day:', arr.filter(d => d.date === dayKey));
+        logger.debug('Current sessions for day:', arr.filter(d => d.date === dayKey));
 
         if (sessionIndex >= 0) {
           // Update existing session
           targetSession = { ...arr[sessionIndex] };
-          console.log('Updating existing session:', targetSession);
+          logger.debug('Updating existing session:', targetSession);
         } else {
           // Create new session for this day
           targetSession = {
             date: dayKey,
             start: endISO, // Default start to end time if no session exists
           };
-          console.log('Creating new session:', targetSession);
+          logger.debug('Creating new session:', targetSession);
         }
 
         // Set the end time
@@ -709,12 +710,12 @@ function AuthedApp() {
               targetSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
             } else {
               // If end is before start, set start to end and duration to 0
-              console.warn('End time is before start time, adjusting start time');
+              logger.warn('End time is before start time, adjusting start time');
               targetSession.start = endISO;
               targetSession.durationSeconds = 0;
             }
           } catch (error) {
-            console.error('Error calculating session duration:', error);
+            logger.error('Error calculating session duration:', error);
             targetSession.durationSeconds = 0;
           }
         }
@@ -743,7 +744,7 @@ function AuthedApp() {
           arr.push(targetSession);
         }
 
-        console.log('Updated sessions array:', arr);
+        logger.debug('Updated sessions array:', arr);
 
         return { ...s, daySessions: arr };
       });
@@ -755,7 +756,7 @@ function AuthedApp() {
   const endDayWithBackup = React.useCallback(() => {
     const snap = backupState();
     uploadBackupToStorage(snap, "finish").catch((e: any) => {
-      console.warn("Supabase storage backup (finish) failed:", e?.message || e);
+      logger.warn("Supabase storage backup (finish) failed:", e?.message || e);
     });
     endDay();
   }, [backupState, endDay]);
@@ -777,7 +778,7 @@ function AuthedApp() {
         type: "success"
       });
     } catch (err: any) {
-      console.error(err);
+      logger.error('Restore operation failed:', err);
       await alert({
         title: "Error",
         message: "Restore failed: " + (err?.message || err),
@@ -837,11 +838,11 @@ function AuthedApp() {
   // Enhanced manual sync with feedback
   const handleManualSync = React.useCallback(async () => {
     try {
-      console.log("Manual sync initiated...");
+      logger.sync("Manual sync initiated...");
       await cloudSync.syncData(safeState);
       lastFromCloudRef.current = JSON.stringify(safeState);
     } catch (err) {
-      console.error("Manual sync failed:", err);
+      logger.error("Manual sync failed:", err);
     }
   }, [cloudSync, safeState]);
 

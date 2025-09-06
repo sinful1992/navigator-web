@@ -27,7 +27,7 @@ function makeMapsHref(row: AddressRow) {
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
 
-export function AddressList({
+const AddressListComponent = function AddressList({
   state,
   setActive,
   cancelActive,
@@ -225,4 +225,7 @@ export function AddressList({
       })}
     </div>
   );
-}
+};
+
+// Memoize component to prevent unnecessary re-renders
+export const AddressList = React.memo(AddressListComponent);
