@@ -4,6 +4,7 @@ import "./App.css";
 import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
 import { useCloudSync } from "./useCloudSync";
+import { useSwipeNavigation } from "./hooks/useSwipeNavigation";
 import { Auth } from "./Auth";
 import { AddressList } from "./AddressList";
 import Completed from "./Completed";
@@ -175,6 +176,22 @@ function AuthedApp() {
   const [search, setSearch] = React.useState("");
   const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
     React.useState<number | null>(null);
+
+  // Swipe navigation setup
+  const tabOrder: Tab[] = ["list", "completed", "arrangements"];
+  const currentTabIndex = tabOrder.indexOf(tab);
+
+  const { containerRef, isSwipeActive } = useSwipeNavigation(
+    tabOrder.length,
+    currentTabIndex,
+    (newIndex) => setTab(tabOrder[newIndex]),
+    {
+      threshold: 100,
+      velocity: 0.3,
+      resistance: 0.2,
+      preventScroll: true
+    }
+  );
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
@@ -1023,10 +1040,13 @@ function AuthedApp() {
         </div>
       )}
 
-      {/* Main content - simplified without swipe for now */}
-      <div className="tabs-content">
-        {tab === "list" && (
-          <div>
+      {/* Main content with swipe navigation */}
+      <div className="tabs-viewport">
+        <div 
+          ref={containerRef}
+          className={`tabs-track ${isSwipeActive ? 'swiping' : ''}`}
+        >
+          <div className="tab-panel" data-tab="list">
             {/* Day panel FIRST */}
             <DayPanel
               sessions={daySessions}
@@ -1090,24 +1110,24 @@ function AuthedApp() {
             {/* Floating + Address button */}
             <ManualAddressFAB onAdd={addAddress} />
           </div>
-        )}
 
-        {tab === "completed" && (
-          <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
-        )}
+          <div className="tab-panel" data-tab="completed">
+            <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
+          </div>
 
-        {tab === "arrangements" && (
-          <Arrangements
-            state={safeState}
-            onAddArrangement={addArrangement}
-            onUpdateArrangement={updateArrangement}
-            onDeleteArrangement={deleteArrangement}
-            onAddAddress={async (addr: AddressRow) => addAddress(addr)}
-            onComplete={handleComplete}
-            autoCreateForAddress={autoCreateArrangementFor}
-            onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
-          />
-        )}
+          <div className="tab-panel" data-tab="arrangements">
+            <Arrangements
+              state={safeState}
+              onAddArrangement={addArrangement}
+              onUpdateArrangement={updateArrangement}
+              onDeleteArrangement={deleteArrangement}
+              onAddAddress={async (addr: AddressRow) => addAddress(addr)}
+              onComplete={handleComplete}
+              autoCreateForAddress={autoCreateArrangementFor}
+              onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
