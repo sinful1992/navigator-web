@@ -5,6 +5,7 @@ import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
 import { useCloudSync } from "./useCloudSync";
 import { useSwipeNavigation } from "./hooks/useSwipeNavigation";
+import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { Auth } from "./Auth";
 import { AddressList } from "./AddressList";
 import Completed from "./Completed";
@@ -141,7 +142,9 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <AuthedApp />
+      <ModalProvider>
+        <AuthedApp />
+      </ModalProvider>
     </ErrorBoundary>
   );
 }
@@ -171,6 +174,7 @@ function AuthedApp() {
   } = useAppState();
 
   const cloudSync = useCloudSync();
+  const { confirm, alert } = useModalContext();
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
@@ -292,14 +296,22 @@ function AuthedApp() {
   const restoreFromCloud = React.useCallback(
     async (objectPath: string) => {
       if (!supabase) {
-        alert("Supabase not configured");
+        await alert({
+          title: "Configuration Error",
+          message: "Supabase is not configured. Please check your environment variables.",
+          type: "error"
+        });
         return;
       }
       const fileName = objectPath.split("/").pop() || objectPath;
-      const ok = window.confirm(
-        `Restore "${fileName}" from cloud?\n\nThis will overwrite your current addresses, completions, arrangements and sessions on this device.`
-      );
-      if (!ok) return;
+      const confirmed = await confirm({
+        title: "Restore from Cloud",
+        message: `Restore "${fileName}" from cloud?\n\nThis will overwrite your current addresses, completions, arrangements and sessions on this device.`,
+        confirmText: "Restore",
+        cancelText: "Cancel",
+        type: "warning"
+      });
+      if (!confirmed) return;
 
       setCloudBusy(true);
       setCloudErr(null);
@@ -318,7 +330,11 @@ function AuthedApp() {
         await cloudSync.syncData(data);
         lastFromCloudRef.current = JSON.stringify(data);
         setHydrated(true);
-        alert("Restored from cloud");
+        await alert({
+          title: "Success",
+          message: "Successfully restored from cloud",
+          type: "success"
+        });
         setCloudMenuOpen(false);
       } catch (e: any) {
         setCloudErr(e?.message || String(e));
@@ -755,10 +771,18 @@ function AuthedApp() {
       await cloudSync.syncData(data);
       lastFromCloudRef.current = JSON.stringify(data);
       setHydrated(true);
-      alert("Restore completed successfully!");
+      await alert({
+        title: "Success", 
+        message: "Restore completed successfully!",
+        type: "success"
+      });
     } catch (err: any) {
       console.error(err);
-      alert("Restore failed: " + (err?.message || err));
+      await alert({
+        title: "Error",
+        message: "Restore failed: " + (err?.message || err),
+        type: "error"
+      });
     } finally {
       e.target.value = "";
     }
