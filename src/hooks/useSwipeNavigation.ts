@@ -49,9 +49,6 @@ export function useSwipeNavigation(
 
   // Calculate transform with resistance at boundaries
   const calculateTransform = useCallback((deltaX: number, baseTransform: number) => {
-    const maxTransform = baseTransform;
-    const minTransform = baseTransform;
-    
     let transform = baseTransform + deltaX;
     
     // Apply resistance at boundaries
@@ -233,98 +230,3 @@ export function useSwipeNavigation(
   };
 }
 
-// Enhanced App Component with Smooth Swiping - src/App.tsx (relevant section)
-function AuthedApp() {
-  // ... existing code ...
-  
-  const [tab, setTab] = React.useState<Tab>("list");
-  
-  // Map tab strings to indices for swipe navigation
-  const tabOrder: Tab[] = ["list", "completed", "arrangements"];
-  const currentTabIndex = tabOrder.indexOf(tab);
-  
-  const { containerRef, isSwipeActive, swipeProgress } = useSwipeNavigation(
-    tabOrder.length,
-    currentTabIndex,
-    (newIndex) => setTab(tabOrder[newIndex]),
-    {
-      threshold: 100,     // Require 100px swipe
-      velocity: 0.3,      // Or fast swipe
-      resistance: 0.2,    // Low resistance at edges
-      preventScroll: true // Prevent scroll during swipe
-    }
-  );
-
-  // ... rest of existing code until render ...
-
-  return (
-    <div className="container">
-      {/* ... existing header code ... */}
-
-      {/* Enhanced main content with smooth swiping */}
-      <div className="tabs-viewport">
-        <div 
-          ref={containerRef}
-          className={`tabs-track ${isSwipeActive ? 'swiping' : ''}`}
-        >
-          {/* List Tab */}
-          <div className="tab-panel" data-tab="list">
-            <DayPanel
-              sessions={daySessions}
-              completions={completions}
-              startDay={startDay}
-              endDay={endDayWithBackup}
-              onEditStart={handleEditStart}
-              onEditEnd={handleEditEnd}
-            />
-            
-            <div className="search-container">
-              <input
-                type="search"
-                value={search}
-                placeholder="Search addresses..."
-                onChange={(e) => setSearch(e.target.value)}
-                className="input search-input"
-              />
-            </div>
-
-            <AddressList
-              state={safeState}
-              setActive={setActive}
-              cancelActive={cancelActive}
-              onComplete={handleComplete}
-              onCreateArrangement={handleCreateArrangement}
-              filterText={search}
-              ensureDayStarted={ensureDayStarted}
-            />
-
-            <div style={{ /* existing stats styling */ }}>
-              {/* existing stats content */}
-            </div>
-
-            <ManualAddressFAB onAdd={addAddress} />
-          </div>
-
-          {/* Completed Tab */}
-          <div className="tab-panel" data-tab="completed">
-            <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
-          </div>
-
-          {/* Arrangements Tab */}
-          <div className="tab-panel" data-tab="arrangements">
-            <Arrangements
-              state={safeState}
-              onAddArrangement={addArrangement}
-              onUpdateArrangement={updateArrangement}
-              onDeleteArrangement={deleteArrangement}
-              onAddAddress={async (addr: AddressRow) => addAddress(addr)}
-              onComplete={handleComplete}
-              autoCreateForAddress={autoCreateArrangementFor}
-              onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
