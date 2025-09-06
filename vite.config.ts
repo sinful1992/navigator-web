@@ -4,8 +4,7 @@ import react from "@vitejs/plugin-react";
 
 // No PWA plugin needed. We ship a static manifest + service worker in /public.
 export default defineConfig({
-  // For Vercel deployment (serves from root)
-  // GitHub Pages would need: base: "/navigator-web/",
-  base: "/",
+  // GitHub Pages serves the app at /navigator-web/
+  base: "/navigator-web/",
   plugins: [react()],
 });
