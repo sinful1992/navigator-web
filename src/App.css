@@ -474,34 +474,139 @@ p, h1, h2, h3, h4, h5, h6 {
 /* ==== Completed Wrap ==== */
 .completed-wrap { display: flex; flex-direction: column; gap: 1.5rem; }
 
-/* ==== Sliding tabs (required for swipe) ==== */
+/* ==================== ENHANCED SWIPE SYSTEM ==================== */
+
+/* ==== Enhanced Sliding tabs with momentum and physics ==== */
 .tabs-viewport {
-  overflow: hidden;      /* hides off-screen panels */
+  overflow: hidden;
   position: relative;
   width: 100%;
-  touch-action: pan-y;   /* allow vertical scroll; we handle horizontal */
+  touch-action: pan-y;
+  /* Hardware acceleration for smoother animation */
+  transform: translateZ(0);
+  will-change: transform;
+  /* Prevent text selection during swipe */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  /* Prevent rubber band effect during swipe */
+  overscroll-behavior-x: none;
 }
 
 .tabs-track {
-  display: flex;         /* lay panels in a row */
-  transition: transform 280ms ease;
+  display: flex;
+  /* Enhanced easing curve for natural feel */
+  transition: transform 280ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
   will-change: transform;
+  /* Hardware acceleration */
+  transform: translateZ(0);
+  /* Backface visibility for smoother rendering */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  /* Better text rendering during animation */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Proper width for 3 panels */
+  width: 300%;
+  max-width: 300%;
+}
+
+/* Disable transition during active swipe for real-time feedback */
+.tabs-track.swiping {
+  transition: none !important;
 }
 
 .tab-panel {
-  flex: 0 0 100%;        /* each panel takes full viewport width */
-  min-width: 100%;
-  max-width: 100%;
+  flex: 0 0 33.333333%;
+  min-width: 33.333333%;
+  max-width: 33.333333%;
+  /* Improve rendering performance */
+  contain: layout style paint;
+  /* Prevent content jumping */
+  overflow-x: hidden;
+  /* Better touch interaction */
+  touch-action: pan-y;
+  /* Ensure panels fill the viewport */
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .tabs-track { transition: none; }
+/* ==== Performance optimizations ==== */
+@supports (backdrop-filter: blur(10px)) {
+  .tabs-track {
+    /* Use modern CSS for capable browsers */
+    backdrop-filter: blur(0); /* Force layer creation */
+  }
 }
 
-/* Optional global guard against accidental horizontal scroll */
-html, body { overflow-x: hidden; }
+/* ==== Content optimization during swipe ==== */
+.tab-panel {
+  /* Optimize layout calculations */
+  contain: layout;
+}
 
-/* ==== Responsive Design ==== */
+/* Don't apply expensive effects during swipe */
+.tabs-track.swiping .tab-panel {
+  /* Temporarily disable shadows and filters during swipe */
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+/* Re-enable effects after swipe */
+.tabs-track:not(.swiping) .tab-panel {
+  /* Restore visual effects smoothly */
+  transition: filter 100ms ease, box-shadow 100ms ease;
+}
+
+/* ==== Additional performance hints ==== */
+.tabs-viewport,
+.tabs-track,
+.tab-panel {
+  /* Hint to browser about upcoming transforms */
+  will-change: auto;
+}
+
+/* Only apply will-change during animation */
+.tabs-track.swiping,
+.tabs-track.swiping .tab-panel {
+  will-change: transform;
+}
+
+/* ==== Swipe indicators (optional visual feedback) ==== */
+.tabs-viewport::before,
+.tabs-viewport::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.tabs-viewport::before {
+  left: 0;
+  background: linear-gradient(to right, rgba(0,0,0,0.05), transparent);
+}
+
+.tabs-viewport::after {
+  right: 0;
+  background: linear-gradient(to left, rgba(0,0,0,0.05), transparent);
+}
+
+/* Show indicators when swiping (subtle feedback) */
+.tabs-track.swiping ~ .tabs-viewport::before,
+.tabs-track.swiping ~ .tabs-viewport::after {
+  opacity: 1;
+}
+
+/* ==================== RESPONSIVE & MOBILE OPTIMIZATIONS ==================== */
+
+/* ==== Enhanced mobile experience ==== */
 @media (max-width: 768px) {
   .container { padding: 0.75rem; overflow-x: hidden; }
 
@@ -541,6 +646,25 @@ html, body { overflow-x: hidden; }
   .card-header { flex-direction: column; align-items: stretch; gap: 0.75rem; }
   .user-chip { max-width: 100%; justify-content: space-between; }
   .user-chip .email { max-width: 60vw; }
+
+  /* Enhanced swipe for mobile */
+  .tabs-viewport {
+    /* Improve touch responsiveness on mobile */
+    -webkit-overflow-scrolling: touch;
+    /* Reduce motion sensitivity for better UX */
+    scroll-behavior: smooth;
+  }
+  
+  .tabs-track {
+    /* Slightly faster transition on mobile */
+    transition: transform 240ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  
+  .tab-panel {
+    /* Optimize for mobile performance */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
 }
 
 @media (max-width: 480px) {
@@ -558,7 +682,55 @@ html, body { overflow-x: hidden; }
   .user-chip .email { max-width: 50vw; }
 }
 
-/* ==== Critical Overflow Fixes ==== */
+/* ==== Reduced motion support ==== */
+@media (prefers-reduced-motion: reduce) {
+  .tabs-track {
+    /* Respect user's motion preferences */
+    transition: transform 150ms ease-out;
+  }
+  
+  .tabs-track.swiping {
+    /* Still disable transition during swipe */
+    transition: none !important;
+  }
+}
+
+/* ==== High refresh rate display optimization ==== */
+@media (min-resolution: 120dpi) {
+  .tabs-track {
+    /* Smoother animation on high-DPI displays */
+    transition: transform 280ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+}
+
+/* ==== Focus and accessibility ==== */
+.tab-panel:focus-within {
+  /* Ensure focus is visible during swipe */
+  outline: none;
+}
+
+/* ==== Loading state optimization ==== */
+.tab-panel[data-loading="true"] {
+  /* Reduce rendering complexity during loading */
+  contain: strict;
+}
+
+/* ==== iOS Safari specific optimizations ==== */
+@supports (-webkit-overflow-scrolling: touch) {
+  .tabs-viewport {
+    /* Optimize for iOS */
+    -webkit-overflow-scrolling: touch;
+    /* Prevent rubber band effect during swipe */
+    overscroll-behavior-x: none;
+  }
+  
+  .tab-panel {
+    /* Improve scrolling performance on iOS */
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ==================== CRITICAL OVERFLOW FIXES ==================== */
 
 /* 1. Ensure no horizontal overflow at root level */
 html, body {
