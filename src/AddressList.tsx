@@ -234,7 +234,6 @@ const AddressListComponent = function AddressList({
               <ArrangementFormModal 
                 state={state}
                 addressIndex={showArrangementForm}
-                onAddAddress={onAddAddress}
                 onSave={async (arrangementData) => {
                   await onAddArrangement(arrangementData);
                   // Mark the address as ARR completed
@@ -251,16 +250,15 @@ const AddressListComponent = function AddressList({
   );
 };
 
-// Arrangement Form Modal Component
+// Arrangement Form Modal Component - Polished Design
 type FormModalProps = {
   state: AppState;
   addressIndex: number;
-  onAddAddress?: (address: AddressRow) => Promise<number>;
   onSave: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onCancel: () => void;
 };
 
-function ArrangementFormModal({ state, addressIndex, onAddAddress: _onAddAddress, onSave, onCancel }: FormModalProps) {
+function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormModalProps) {
   const [isLoading, setIsLoading] = React.useState(false);
   const [formData, setFormData] = React.useState({
     customerName: "",
@@ -316,44 +314,88 @@ function ArrangementFormModal({ state, addressIndex, onAddAddress: _onAddAddress
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        backdropFilter: 'blur(8px)',
         display: 'flex',
-        alignItems: 'flex-start',
+        alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1000,
-        padding: '2rem 1rem',
-        paddingTop: '10vh',
-        overflowY: 'auto',
+        padding: '1rem',
+        animation: 'fadeIn 0.2s ease-out',
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
     >
       <div 
-        className="card arrangement-form"
         style={{
-          maxWidth: '500px',
+          backgroundColor: 'var(--background)',
+          borderRadius: '16px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+          maxWidth: '480px',
           width: '100%',
-          maxHeight: '80vh',
+          maxHeight: '90vh',
           overflow: 'auto',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-          border: '1px solid var(--border-light)',
-          borderRadius: '12px',
+          transform: 'scale(1)',
+          animation: 'slideUp 0.3s ease-out',
         }}
       >
-        <div className="card-header">
-          <h3 style={{ margin: 0 }}>
-            📅 Create Payment Arrangement
-          </h3>
-          <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-            For: {selectedAddress.address}
+        {/* Header */}
+        <div style={{ 
+          padding: '1.5rem 1.5rem 1rem', 
+          borderBottom: '1px solid var(--border-light)',
+          backgroundColor: 'var(--surface)',
+          borderRadius: '16px 16px 0 0',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                📅 Create Payment Arrangement
+              </h3>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                {selectedAddress.address}
+              </div>
+            </div>
+            <button 
+              onClick={onCancel}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                padding: '0.25rem',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Close"
+            >
+              ✕
+            </button>
           </div>
         </div>
         
-        <div className="card-body">
-          <form onSubmit={handleSubmit} className="form-grid">
-            <div className="form-group">
-              <label>💰 Payment Amount *</label>
+        {/* Body */}
+        <div style={{ padding: '1.5rem' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1rem' }}>
+            {/* Amount - Featured */}
+            <div style={{ 
+              padding: '1rem', 
+              backgroundColor: 'var(--success-light)', 
+              borderRadius: '12px',
+              border: '1px solid var(--success-border)',
+            }}>
+              <label style={{ 
+                display: 'block', 
+                fontSize: '0.875rem', 
+                fontWeight: 600, 
+                marginBottom: '0.5rem',
+                color: 'var(--success-dark)',
+              }}>
+                💰 Payment Amount *
+              </label>
               <input
                 type="number"
                 step="0.01"
@@ -363,68 +405,108 @@ function ArrangementFormModal({ state, addressIndex, onAddAddress: _onAddAddress
                 className="input"
                 placeholder="0.00"
                 required
+                style={{ 
+                  width: '100%',
+                  fontSize: '1.125rem',
+                  fontWeight: 500,
+                  textAlign: 'center',
+                }}
+                autoFocus
               />
             </div>
 
-            <div className="form-group">
-              <label>👤 Customer Name</label>
-              <input
-                type="text"
-                value={formData.customerName}
-                onChange={(e) => setFormData(prev => ({ ...prev, customerName: e.target.value }))}
-                className="input"
-                placeholder="Customer name"
-              />
+            {/* Customer Details */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
+                  👤 Customer Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.customerName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, customerName: e.target.value }))}
+                  className="input"
+                  placeholder="Customer name"
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
+                  📞 Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phoneNumber}
+                  onChange={(e) => setFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                  className="input"
+                  placeholder="Phone number"
+                  style={{ width: '100%' }}
+                />
+              </div>
             </div>
 
-            <div className="form-group">
-              <label>📞 Phone Number</label>
-              <input
-                type="tel"
-                value={formData.phoneNumber}
-                onChange={(e) => setFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
-                className="input"
-                placeholder="Phone number"
-              />
+            {/* Date & Time */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
+                  📅 Payment Due Date *
+                </label>
+                <input
+                  type="date"
+                  value={formData.scheduledDate}
+                  onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                  className="input"
+                  required
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
+                  🕐 Time
+                </label>
+                <input
+                  type="time"
+                  value={formData.scheduledTime}
+                  onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
+                  className="input"
+                  style={{ width: '100%' }}
+                />
+              </div>
             </div>
 
-            <div className="form-group">
-              <label>📅 Payment Due Date *</label>
-              <input
-                type="date"
-                value={formData.scheduledDate}
-                onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
-                className="input"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label>🕐 Preferred Time</label>
-              <input
-                type="time"
-                value={formData.scheduledTime}
-                onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
-                className="input"
-              />
-            </div>
-
-            <div className="form-group form-group-full">
-              <label>📝 Notes</label>
+            {/* Notes */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
+                📝 Notes
+              </label>
               <textarea
                 value={formData.notes}
                 onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                 className="input"
                 rows={3}
                 placeholder="Payment terms, special instructions, etc..."
+                style={{ width: '100%', resize: 'vertical' }}
               />
             </div>
           </form>
         </div>
 
-        <div className="card-footer">
-          <div className="btn-row btn-row-end">
-            <button type="button" className="btn btn-ghost" onClick={onCancel}>
+        {/* Footer */}
+        <div style={{ 
+          padding: '1rem 1.5rem 1.5rem', 
+          borderTop: '1px solid var(--border-light)',
+          backgroundColor: 'var(--surface)',
+          borderRadius: '0 0 16px 16px',
+        }}>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <button 
+              type="button" 
+              className="btn btn-ghost" 
+              onClick={onCancel}
+              style={{ minWidth: '80px' }}
+            >
               Cancel
             </button>
             <LoadingButton
@@ -433,12 +515,30 @@ function ArrangementFormModal({ state, addressIndex, onAddAddress: _onAddAddress
               isLoading={isLoading}
               loadingText="Creating..."
               onClick={handleSubmit}
+              style={{ minWidth: '140px' }}
             >
               📅 Create Arrangement
             </LoadingButton>
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideUp {
+          from { 
+            transform: scale(0.95) translateY(20px);
+            opacity: 0;
+          }
+          to { 
+            transform: scale(1) translateY(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   );
 }
