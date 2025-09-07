@@ -316,12 +316,14 @@ function ArrangementFormModal({ state, addressIndex, onAddAddress: _onAddAddress
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         justifyContent: 'center',
         zIndex: 1000,
-        padding: '1rem',
+        padding: '2rem 1rem',
+        paddingTop: '10vh',
+        overflowY: 'auto',
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
@@ -332,8 +334,11 @@ function ArrangementFormModal({ state, addressIndex, onAddAddress: _onAddAddress
         style={{
           maxWidth: '500px',
           width: '100%',
-          maxHeight: '90vh',
+          maxHeight: '80vh',
           overflow: 'auto',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+          border: '1px solid var(--border-light)',
+          borderRadius: '12px',
         }}
       >
         <div className="card-header">
