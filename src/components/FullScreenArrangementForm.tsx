@@ -17,6 +17,7 @@ export default function FullScreenArrangementForm({
   onSave,
   onCancel,
 }: Props) {
+  const overlayRef = React.useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [formData, setFormData] = React.useState({
     customerName: '',
@@ -35,6 +36,8 @@ export default function FullScreenArrangementForm({
       if (e.key === 'Escape') onCancel();
     };
     document.addEventListener('keydown', onKeyDown);
+    // Force layout to avoid occasional blank initial paint on some browsers
+    try { overlayRef.current?.getBoundingClientRect(); } catch {}
     // Avoid auto-focus on touch devices to prevent mobile keyboard layout glitches
     const isCoarsePointer = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
     if (!isCoarsePointer && amountInputRef.current) {
@@ -97,7 +100,7 @@ export default function FullScreenArrangementForm({
   };
 
   return (
-    <div className="fsaf-overlay" role="dialog" aria-modal="true">
+    <div ref={overlayRef} className="fsaf-overlay" role="dialog" aria-modal="true">
       <div className="fsaf-container">
         <header className="fsaf-header">
           <button
@@ -226,12 +229,13 @@ export default function FullScreenArrangementForm({
           display: flex;
           flex-direction: column;
           color: var(--text-primary, #1e293b);
-          height: 100vh; /* fallback */
-          height: 100svh; /* better on mobile */
           min-height: 100vh;
           overscroll-behavior-y: contain;
           touch-action: manipulation;
-          overflow: hidden;
+          overflow-y: auto;
+          overflow-x: hidden;
+          will-change: transform, opacity;
+          transform: translateZ(0);
         }
         .fsaf-container {
           display: flex;
@@ -248,8 +252,7 @@ export default function FullScreenArrangementForm({
           padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 0.75rem max(1rem, env(safe-area-inset-left));
           border-bottom: 1px solid var(--border-light, #e2e8f0);
           background: var(--surface, #ffffff);
-          backdrop-filter: saturate(1.1) blur(4px);
-          -webkit-backdrop-filter: saturate(1.1) blur(4px);
+          /* Removed backdrop-filter to avoid paint glitches on some platforms */
         }
         .fsaf-close {
           background: none;
@@ -270,13 +273,11 @@ export default function FullScreenArrangementForm({
           gap: 1rem;
           padding: 1rem;
           padding-bottom: max(1rem, env(safe-area-inset-bottom));
-          overflow-y: auto;
           -webkit-overflow-scrolling: touch;
           flex: 1 1 auto;
           max-width: 720px;
           width: 100%;
           margin: 0 auto;
-          min-height: 0; /* allow proper scroll within flex container */
         }
         .fsaf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
         .fsaf-field { display: flex; flex-direction: column; gap: 0.5rem; }
