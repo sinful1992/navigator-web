@@ -120,7 +120,7 @@ export default function FullScreenArrangementForm({
 
         <form className="fsaf-body" onSubmit={handleSubmit}>
           <div className="fsaf-form-section">
-            <div className={`fsaf-amount ${formErrors.amount ? 'fsaf-amount-error' : ''}`}>
+            <div className="fsaf-field">
               <label className="fsaf-label">Payment Amount *</label>
               <input
                 ref={amountInputRef}
@@ -136,7 +136,7 @@ export default function FullScreenArrangementForm({
                     }
                   } catch {}
                 }}
-                className={`fsaf-input fsaf-input-amount ${formErrors.amount ? 'fsaf-input-error' : ''}`}
+                className={`fsaf-input ${formErrors.amount ? 'fsaf-input-error' : ''}`}
                 placeholder="0.00"
                 required
                 aria-describedby={formErrors.amount ? 'amount-error' : undefined}
