@@ -100,153 +100,155 @@ const AddressListComponent = function AddressList({
   }
 
   return (
-    <div className="list">
-      {visible.map(({ a, i }) => {
-        const isActive = activeIndex === i;
-        const mapHref = makeMapsHref(a);
+    <>
+      <div className="list">
+        {visible.map(({ a, i }) => {
+          const isActive = activeIndex === i;
+          const mapHref = makeMapsHref(a);
 
-        return (
-          <div key={i} className={`row-card ${isActive ? "card-active" : ""}`}>
-            {/* Row header */}
-            <div className="row-head">
-              <div className="row-index">{i + 1}</div>
-              <div className="row-title" title={a.address}>
-                {a.address}
+          return (
+            <div key={i} className={`row-card ${isActive ? "card-active" : ""}`}>
+              {/* Row header */}
+              <div className="row-head">
+                <div className="row-index">{i + 1}</div>
+                <div className="row-title" title={a.address}>
+                  {a.address}
+                </div>
+                {isActive && <span className="active-badge">Active</span>}
               </div>
-              {isActive && <span className="active-badge">Active</span>}
-            </div>
 
-            {/* Actions row */}
-            <div className="row-actions">
-              <a
-                className="btn btn-outline btn-sm"
-                href={mapHref}
-                target="_blank"
-                rel="noreferrer"
-                title="Open in Google Maps"
-                onClick={() => ensureDayStarted()}
-              >
-                🧭 Navigate
-              </a>
-
-              {!isActive ? (
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setActive(i)}
+              {/* Actions row */}
+              <div className="row-actions">
+                <a
+                  className="btn btn-outline btn-sm"
+                  href={mapHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open in Google Maps"
+                  onClick={() => ensureDayStarted()}
                 >
-                  ▶️ Set Active
-                </button>
-              ) : (
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={cancelActive}
-                >
-                  ❎ Cancel
-                </button>
-              )}
+                  🧭 Navigate
+                </a>
 
-              {isActive && (
-                <button
-                  className="btn btn-success btn-sm"
-                  onClick={() => {
-                    const willOpen = outcomeOpenFor !== i;
-                    setOutcomeOpenFor(willOpen ? i : null);
-                    setPifAmount("");
-                  }}
-                >
-                  ✅ Complete
-                </button>
-              )}
-            </div>
+                {!isActive ? (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => setActive(i)}
+                  >
+                    ▶️ Set Active
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={cancelActive}
+                  >
+                    ❎ Cancel
+                  </button>
+                )}
 
-            {/* Outcome bar (only when active + Complete pressed) */}
-            {isActive && outcomeOpenFor === i && (
-              <div className="card-body">
-                <div className="complete-bar">
-                  <div className="complete-btns">
-                    <button
-                      className="btn btn-success"
-                      onClick={() => {
-                        onComplete(i, "Done");
-                        setOutcomeOpenFor(null);
-                      }}
-                      title="Mark as Done"
-                    >
-                      ✅ Done
-                    </button>
+                {isActive && (
+                  <button
+                    className="btn btn-success btn-sm"
+                    onClick={() => {
+                      const willOpen = outcomeOpenFor !== i;
+                      setOutcomeOpenFor(willOpen ? i : null);
+                      setPifAmount("");
+                    }}
+                  >
+                    ✅ Complete
+                  </button>
+                )}
+              </div>
 
-                    <button
-                      className="btn btn-danger"
-                      onClick={() => {
-                        onComplete(i, "DA");
-                        setOutcomeOpenFor(null);
-                      }}
-                      title="Mark as DA"
-                    >
-                      🚫 DA
-                    </button>
+              {/* Outcome bar (only when active + Complete pressed) */}
+              {isActive && outcomeOpenFor === i && (
+                <div className="card-body">
+                  <div className="complete-bar">
+                    <div className="complete-btns">
+                      <button
+                        className="btn btn-success"
+                        onClick={() => {
+                          onComplete(i, "Done");
+                          setOutcomeOpenFor(null);
+                        }}
+                        title="Mark as Done"
+                      >
+                        ✅ Done
+                      </button>
 
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => {
-                        setOutcomeOpenFor(null);
-                        setShowArrangementForm(i);
-                      }}
-                      title="Create arrangement and mark completed"
-                    >
-                      📅 Arrangement
-                    </button>
-                  </div>
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => {
+                          onComplete(i, "DA");
+                          setOutcomeOpenFor(null);
+                        }}
+                        title="Mark as DA"
+                      >
+                        🚫 DA
+                      </button>
 
-                  <div className="pif-group">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      inputMode="decimal"
-                      className="input amount-input"
-                      placeholder="PIF £"
-                      value={pifAmount}
-                      onChange={(e) => setPifAmount(e.target.value)}
-                    />
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => {
-                        const n = Number(pifAmount);
-                        if (!Number.isFinite(n) || n <= 0) {
-                          alert("Enter a valid PIF amount (e.g. 50)");
-                          return;
-                        }
-                        onComplete(i, "PIF", n.toFixed(2));
-                        setOutcomeOpenFor(null);
-                      }}
-                      title="Save PIF amount"
-                    >
-                      💷 Save PIF
-                    </button>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => {
+                          setOutcomeOpenFor(null);
+                          setShowArrangementForm(i);
+                        }}
+                        title="Create arrangement and mark completed"
+                      >
+                        📅 Arrangement
+                      </button>
+                    </div>
+
+                    <div className="pif-group">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        inputMode="decimal"
+                        className="input amount-input"
+                        placeholder="PIF £"
+                        value={pifAmount}
+                        onChange={(e) => setPifAmount(e.target.value)}
+                      />
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => {
+                          const n = Number(pifAmount);
+                          if (!Number.isFinite(n) || n <= 0) {
+                            alert("Enter a valid PIF amount (e.g. 50)");
+                            return;
+                          }
+                          onComplete(i, "PIF", n.toFixed(2));
+                          setOutcomeOpenFor(null);
+                        }}
+                        title="Save PIF amount"
+                      >
+                        💷 Save PIF
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-            
-            {/* Full-Screen Arrangement Form - only show if showArrangementForm is set */}
-            {showArrangementForm !== null && onAddArrangement && (
-              <FullScreenArrangementForm
-                address={addresses[showArrangementForm].address}
-                addressIndex={showArrangementForm}
-                onSave={async (arrangementData) => {
-                  await onAddArrangement(arrangementData);
-                  // Mark the address as ARR completed
-                  onComplete(showArrangementForm, "ARR");
-                  setShowArrangementForm(null);
-                }}
-                onCancel={() => setShowArrangementForm(null)}
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      
+      {/* Full-Screen Arrangement Form - Rendered at root level for proper overlay */}
+      {showArrangementForm !== null && onAddArrangement && addresses[showArrangementForm] && (
+        <FullScreenArrangementForm
+          address={addresses[showArrangementForm].address}
+          addressIndex={showArrangementForm}
+          onSave={async (arrangementData) => {
+            await onAddArrangement(arrangementData);
+            // Mark the address as ARR completed
+            onComplete(showArrangementForm, "ARR");
+            setShowArrangementForm(null);
+          }}
+          onCancel={() => setShowArrangementForm(null)}
+        />
+      )}
+    </>
   );
 };
 
