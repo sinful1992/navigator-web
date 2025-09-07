@@ -268,18 +268,52 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
     amount: "",
     notes: "",
   });
+  const [formErrors, setFormErrors] = React.useState<{ amount?: string }>({});
+
+  // Refs for accessibility and performance
+  const modalRef = React.useRef<HTMLDivElement>(null);
+  const amountInputRef = React.useRef<HTMLInputElement>(null);
 
   const selectedAddress = state.addresses[addressIndex];
   if (!selectedAddress) {
     return null;
   }
 
+  // Real-time amount validation
+  const validateAmount = (value: string) => {
+    const amount = parseFloat(value || '0');
+    if (!value || isNaN(amount) || amount <= 0) {
+      setFormErrors(prev => ({ ...prev, amount: "Please enter a valid payment amount" }));
+      return false;
+    }
+    setFormErrors(prev => ({ ...prev, amount: undefined }));
+    return true;
+  };
+
+  // Handle keyboard navigation
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCancel();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    
+    // Focus management
+    if (amountInputRef.current) {
+      setTimeout(() => amountInputRef.current?.focus(), 100);
+    }
+
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onCancel]);
+
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     
-    const amount = parseFloat(formData.amount || '0');
-    if (!formData.amount || isNaN(amount) || amount <= 0) {
-      alert("Please enter a valid payment amount (numbers only, greater than 0)");
+    // Validate amount first
+    if (!validateAmount(formData.amount)) {
+      amountInputRef.current?.focus();
       return;
     }
 
@@ -306,71 +340,46 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
     }
   };
 
+  // Handle amount input changes with validation
+  const handleAmountChange = (value: string) => {
+    setFormData(prev => ({ ...prev, amount: value }));
+    if (value) {
+      validateAmount(value);
+    } else {
+      setFormErrors(prev => ({ ...prev, amount: undefined }));
+    }
+  };
+
   return (
     <div 
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(8px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: '1rem',
-        animation: 'fadeIn 0.2s ease-out',
-      }}
+      className="arrangement-modal-overlay"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
     >
       <div 
-        style={{
-          backgroundColor: 'var(--background)',
-          borderRadius: '16px',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05)',
-          maxWidth: '480px',
-          width: '100%',
-          maxHeight: '90vh',
-          overflow: 'auto',
-          transform: 'scale(1)',
-          animation: 'slideUp 0.3s ease-out',
-        }}
+        ref={modalRef}
+        className="arrangement-modal-content"
+        role="dialog"
+        aria-labelledby="arrangement-modal-title"
+        aria-modal="true"
       >
         {/* Header */}
-        <div style={{ 
-          padding: '1.5rem 1.5rem 1rem', 
-          borderBottom: '1px solid var(--border-light)',
-          backgroundColor: 'var(--surface)',
-          borderRadius: '16px 16px 0 0',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="arrangement-modal-header">
+          <div className="arrangement-modal-header-content">
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              <h3 id="arrangement-modal-title" className="arrangement-modal-title">
                 📅 Create Payment Arrangement
               </h3>
-              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              <div className="arrangement-modal-subtitle">
                 {selectedAddress.address}
               </div>
             </div>
             <button 
               onClick={onCancel}
-              style={{
-                background: 'none',
-                border: 'none',
-                fontSize: '1.5rem',
-                cursor: 'pointer',
-                color: 'var(--text-muted)',
-                padding: '0.25rem',
-                borderRadius: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              title="Close"
+              className="arrangement-modal-close"
+              title="Close (Esc)"
+              aria-label="Close modal"
             >
               ✕
             </button>
@@ -378,47 +387,37 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
         </div>
         
         {/* Body */}
-        <div style={{ padding: '1.5rem' }}>
-          <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1rem' }}>
+        <div className="arrangement-modal-body">
+          <form onSubmit={handleSubmit} className="arrangement-form">
             {/* Amount - Featured */}
-            <div style={{ 
-              padding: '1rem', 
-              backgroundColor: 'var(--success-light)', 
-              borderRadius: '12px',
-              border: '1px solid var(--success-border)',
-            }}>
-              <label style={{ 
-                display: 'block', 
-                fontSize: '0.875rem', 
-                fontWeight: 600, 
-                marginBottom: '0.5rem',
-                color: 'var(--success-dark)',
-              }}>
+            <div className="amount-field">
+              <label className="amount-label">
                 💰 Payment Amount *
               </label>
               <input
+                ref={amountInputRef}
                 type="number"
                 step="0.01"
                 min="0"
+                inputMode="decimal"
                 value={formData.amount}
-                onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                className="input"
+                onChange={(e) => handleAmountChange(e.target.value)}
+                className={`input amount-input ${formErrors.amount ? 'input-error' : ''}`}
                 placeholder="0.00"
                 required
-                style={{ 
-                  width: '100%',
-                  fontSize: '1.125rem',
-                  fontWeight: 500,
-                  textAlign: 'center',
-                }}
-                autoFocus
+                aria-describedby={formErrors.amount ? "amount-error" : undefined}
               />
+              {formErrors.amount && (
+                <div id="amount-error" className="field-error" role="alert">
+                  {formErrors.amount}
+                </div>
+              )}
             </div>
 
             {/* Customer Details */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
+            <div className="customer-details-row">
+              <div className="field-group">
+                <label className="field-label">
                   👤 Customer Name
                 </label>
                 <input
@@ -427,12 +426,11 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
                   onChange={(e) => setFormData(prev => ({ ...prev, customerName: e.target.value }))}
                   className="input"
                   placeholder="Customer name"
-                  style={{ width: '100%' }}
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
+              <div className="field-group">
+                <label className="field-label">
                   📞 Phone Number
                 </label>
                 <input
@@ -441,15 +439,14 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
                   onChange={(e) => setFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
                   className="input"
                   placeholder="Phone number"
-                  style={{ width: '100%' }}
                 />
               </div>
             </div>
 
             {/* Date & Time */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
+            <div className="datetime-row">
+              <div className="field-group field-group-date">
+                <label className="field-label">
                   📅 Payment Due Date *
                 </label>
                 <input
@@ -458,12 +455,11 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
                   onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
                   className="input"
                   required
-                  style={{ width: '100%' }}
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
+              <div className="field-group field-group-time">
+                <label className="field-label">
                   🕐 Time
                 </label>
                 <input
@@ -471,51 +467,43 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
                   value={formData.scheduledTime}
                   onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
                   className="input"
-                  style={{ width: '100%' }}
                 />
               </div>
             </div>
 
             {/* Notes */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
+            <div className="field-group">
+              <label className="field-label">
                 📝 Notes
               </label>
               <textarea
                 value={formData.notes}
                 onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                className="input"
+                className="input textarea-field"
                 rows={3}
                 placeholder="Payment terms, special instructions, etc..."
-                style={{ width: '100%', resize: 'vertical' }}
               />
             </div>
           </form>
         </div>
 
         {/* Footer */}
-        <div style={{ 
-          padding: '1rem 1.5rem 1.5rem', 
-          borderTop: '1px solid var(--border-light)',
-          backgroundColor: 'var(--surface)',
-          borderRadius: '0 0 16px 16px',
-        }}>
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+        <div className="arrangement-modal-footer">
+          <div className="modal-actions">
             <button 
               type="button" 
-              className="btn btn-ghost" 
+              className="btn btn-ghost cancel-btn" 
               onClick={onCancel}
-              style={{ minWidth: '80px' }}
             >
               Cancel
             </button>
             <LoadingButton
               type="submit" 
-              className="btn btn-primary" 
+              className="btn btn-primary submit-btn" 
               isLoading={isLoading}
               loadingText="Creating..."
               onClick={handleSubmit}
-              style={{ minWidth: '140px' }}
+              disabled={!!formErrors.amount}
             >
               📅 Create Arrangement
             </LoadingButton>
@@ -524,11 +512,244 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
       </div>
 
       <style>{`
-        @keyframes fadeIn {
+        /* ==== Arrangement Modal Styles ==== */
+        .arrangement-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 1rem;
+          animation: arrangement-fadeIn 0.2s ease-out;
+          /* Performance optimizations */
+          will-change: opacity;
+          transform: translateZ(0);
+          /* Safe area support for modern mobile devices */
+          padding-top: max(1rem, env(safe-area-inset-top));
+          padding-bottom: max(1rem, env(safe-area-inset-bottom));
+          padding-left: max(1rem, env(safe-area-inset-left));
+          padding-right: max(1rem, env(safe-area-inset-right));
+        }
+
+        .arrangement-modal-content {
+          background: var(--surface, #ffffff);
+          border-radius: 16px;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+          max-width: 480px;
+          width: 100%;
+          max-height: calc(100vh - 2rem);
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          animation: arrangement-slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+          /* Performance optimizations */
+          will-change: transform, opacity;
+          transform: translateZ(0);
+          /* Ensure touch targets are accessible */
+          position: relative;
+        }
+
+        .arrangement-modal-header {
+          padding: 1.5rem 1.5rem 1rem;
+          border-bottom: 1px solid var(--border-light, #e2e8f0);
+          background: var(--surface, #ffffff);
+          border-radius: 16px 16px 0 0;
+          flex-shrink: 0;
+        }
+
+        .arrangement-modal-header-content {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 1rem;
+        }
+
+        .arrangement-modal-title {
+          margin: 0;
+          font-size: 1.25rem;
+          font-weight: 600;
+          color: var(--text-primary, #1e293b);
+          line-height: 1.3;
+        }
+
+        .arrangement-modal-subtitle {
+          font-size: 0.875rem;
+          color: var(--text-muted, #94a3b8);
+          margin-top: 0.25rem;
+          word-break: break-word;
+        }
+
+        .arrangement-modal-close {
+          background: none;
+          border: none;
+          font-size: 1.5rem;
+          cursor: pointer;
+          color: var(--text-muted, #94a3b8);
+          padding: 0.5rem;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.15s ease;
+          /* Ensure minimum touch target size */
+          min-width: 44px;
+          min-height: 44px;
+          flex-shrink: 0;
+        }
+
+        .arrangement-modal-close:hover {
+          background: var(--bg-secondary, #f1f5f9);
+          color: var(--text-primary, #1e293b);
+        }
+
+        .arrangement-modal-close:focus {
+          outline: 2px solid var(--primary, #0ea5e9);
+          outline-offset: 2px;
+        }
+
+        .arrangement-modal-body {
+          padding: 1.5rem;
+          flex: 1;
+          overflow-y: auto;
+          /* Better scrolling on mobile */
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .arrangement-form {
+          display: grid;
+          gap: 1.25rem;
+        }
+
+        .amount-field {
+          padding: 1rem;
+          background: var(--success-light, #dcfce7);
+          border-radius: 12px;
+          border: 2px solid var(--success, #16a34a);
+          transition: border-color 0.15s ease;
+        }
+
+        .amount-field:has(.input-error) {
+          border-color: var(--danger, #dc2626);
+          background: var(--danger-light, #fee2e2);
+        }
+
+        .amount-label {
+          display: block;
+          font-size: 0.875rem;
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+          color: var(--success-dark, #15803d);
+        }
+
+        .amount-input {
+          font-size: 1.25rem !important;
+          font-weight: 600;
+          text-align: center;
+          border: 2px solid transparent;
+          border-radius: 8px;
+          padding: 0.875rem;
+          background: var(--surface, #ffffff);
+          transition: all 0.15s ease;
+        }
+
+        .amount-input:focus {
+          border-color: var(--success, #16a34a);
+          box-shadow: 0 0 0 3px var(--success-light, #dcfce7);
+        }
+
+        .amount-input.input-error {
+          border-color: var(--danger, #dc2626);
+        }
+
+        .amount-input.input-error:focus {
+          border-color: var(--danger, #dc2626);
+          box-shadow: 0 0 0 3px var(--danger-light, #fee2e2);
+        }
+
+        .field-error {
+          color: var(--danger, #dc2626);
+          font-size: 0.8125rem;
+          font-weight: 500;
+          margin-top: 0.375rem;
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+        }
+
+        .field-error::before {
+          content: "⚠";
+          font-size: 0.875rem;
+        }
+
+        .customer-details-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
+        }
+
+        .datetime-row {
+          display: grid;
+          grid-template-columns: 2fr 1fr;
+          gap: 1rem;
+        }
+
+        .field-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .field-label {
+          font-size: 0.875rem;
+          font-weight: 500;
+          color: var(--text-secondary, #64748b);
+        }
+
+        .textarea-field {
+          resize: vertical;
+          min-height: 2.75rem;
+          font-family: inherit;
+        }
+
+        .arrangement-modal-footer {
+          padding: 1rem 1.5rem 1.5rem;
+          border-top: 1px solid var(--border-light, #e2e8f0);
+          background: var(--surface, #ffffff);
+          border-radius: 0 0 16px 16px;
+          flex-shrink: 0;
+        }
+
+        .modal-actions {
+          display: flex;
+          gap: 0.75rem;
+          justify-content: flex-end;
+          align-items: center;
+        }
+
+        .cancel-btn {
+          min-width: 80px;
+          min-height: 44px;
+        }
+
+        .submit-btn {
+          min-width: 160px;
+          min-height: 44px;
+        }
+
+        /* ==== Animations ==== */
+        @keyframes arrangement-fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
         }
-        @keyframes slideUp {
+
+        @keyframes arrangement-slideUp {
           from { 
             transform: scale(0.95) translateY(20px);
             opacity: 0;
@@ -536,6 +757,130 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
           to { 
             transform: scale(1) translateY(0);
             opacity: 1;
+          }
+        }
+
+        /* ==== Mobile Responsive Design ==== */
+        @media (max-width: 768px) {
+          .arrangement-modal-overlay {
+            padding: 0.5rem;
+            align-items: flex-end;
+          }
+
+          .arrangement-modal-content {
+            max-height: calc(100vh - 1rem);
+            margin-bottom: 0;
+            border-radius: 16px 16px 0 0;
+            animation: arrangement-slideUpMobile 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+          }
+
+          .arrangement-modal-header {
+            padding: 1rem 1rem 0.75rem;
+          }
+
+          .arrangement-modal-title {
+            font-size: 1.125rem;
+          }
+
+          .arrangement-modal-body {
+            padding: 1rem;
+          }
+
+          .arrangement-modal-footer {
+            padding: 0.75rem 1rem 1rem;
+          }
+
+          .customer-details-row {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+
+          .datetime-row {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+
+          .modal-actions {
+            flex-direction: column-reverse;
+            gap: 0.5rem;
+          }
+
+          .cancel-btn,
+          .submit-btn {
+            width: 100%;
+            justify-content: center;
+            min-width: auto;
+          }
+
+          .amount-input {
+            font-size: 1.125rem !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .arrangement-modal-overlay {
+            padding: 0;
+            align-items: stretch;
+          }
+
+          .arrangement-modal-content {
+            max-height: 100vh;
+            height: 100vh;
+            border-radius: 0;
+            animation: arrangement-slideUpFull 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+          }
+
+          .arrangement-modal-header {
+            border-radius: 0;
+          }
+
+          .arrangement-modal-footer {
+            border-radius: 0;
+          }
+        }
+
+        @keyframes arrangement-slideUpMobile {
+          from { 
+            transform: translateY(100%);
+            opacity: 0;
+          }
+          to { 
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+
+        @keyframes arrangement-slideUpFull {
+          from { 
+            transform: translateY(100%);
+          }
+          to { 
+            transform: translateY(0);
+          }
+        }
+
+        /* ==== Accessibility & Focus Management ==== */
+        @media (prefers-reduced-motion: reduce) {
+          .arrangement-modal-overlay {
+            animation: none;
+          }
+          
+          .arrangement-modal-content {
+            animation: none;
+          }
+        }
+
+        /* ==== High DPI Support ==== */
+        @media (min-resolution: 2dppx) {
+          .arrangement-modal-content {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.1);
+          }
+        }
+
+        /* ==== Dark Mode Support (if implemented) ==== */
+        @media (prefers-color-scheme: dark) {
+          .arrangement-modal-overlay {
+            background: rgba(0, 0, 0, 0.8);
           }
         }
       `}</style>
