@@ -101,8 +101,9 @@ export default function FullScreenArrangementForm({
 
   return (
     <div ref={overlayRef} className="fsaf-overlay" role="dialog" aria-modal="true">
-      <div className="fsaf-container">
+      <div className="fsaf-modal">
         <header className="fsaf-header">
+          <h2 className="fsaf-title">Create Payment Arrangement</h2>
           <button
             type="button"
             className="fsaf-close"
@@ -112,11 +113,9 @@ export default function FullScreenArrangementForm({
           >
             ✕
           </button>
-          <div className="fsaf-header-text">
-            <h2 className="fsaf-title">Create Payment Arrangement</h2>
-            <div className="fsaf-subtitle">{address}</div>
-          </div>
         </header>
+        
+        <div className="fsaf-subtitle">{address}</div>
 
         <form className="fsaf-body" onSubmit={handleSubmit}>
           <div className="fsaf-form-section">
@@ -221,102 +220,195 @@ export default function FullScreenArrangementForm({
           </div>
         </form>
       </div>
+    </div>
 
       <style>{`
         .fsaf-overlay {
           position: fixed;
           inset: 0;
-          background: var(--surface, #ffffff);
+          background: rgba(0, 0, 0, 0.5);
           z-index: 4000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 1rem;
+          backdrop-filter: blur(4px);
+        }
+        
+        .fsaf-modal {
+          background: var(--surface, #ffffff);
+          border-radius: 16px;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          width: 100%;
+          max-width: 500px;
+          max-height: 90vh;
           display: flex;
           flex-direction: column;
           color: var(--text-primary, #1e293b);
-          min-height: 100vh;
-          overscroll-behavior-y: contain;
-          touch-action: manipulation;
-          overflow-y: auto;
-          overflow-x: hidden;
-          will-change: transform, opacity;
-          transform: translateZ(0);
+          overflow: hidden;
         }
-        .fsaf-container {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          width: 100%;
-        }
+        
         .fsaf-header {
-          position: sticky;
-          top: 0;
           display: flex;
           align-items: center;
-          gap: 0.75rem;
-          padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 0.75rem max(1rem, env(safe-area-inset-left));
+          justify-content: space-between;
+          padding: 1.5rem 1.5rem 0.75rem;
           border-bottom: 1px solid var(--border-light, #e2e8f0);
-          background: var(--surface, #ffffff);
-          /* Removed backdrop-filter to avoid paint glitches on some platforms */
         }
+        
+        .fsaf-title {
+          margin: 0;
+          font-size: 1.25rem;
+          font-weight: 600;
+          color: var(--text-primary, #1e293b);
+        }
+        
         .fsaf-close {
           background: none;
           border: none;
-          font-size: 1.25rem;
+          font-size: 1.5rem;
           padding: 0.5rem;
           border-radius: 8px;
           cursor: pointer;
           color: var(--text-muted, #64748b);
+          line-height: 1;
         }
-        .fsaf-close:hover { background: var(--bg-secondary, #f1f5f9); }
-        .fsaf-header-text { display: flex; flex-direction: column; gap: 0.25rem; }
-        .fsaf-title { margin: 0; font-size: 1.25rem; font-weight: 600; letter-spacing: 0.2px; }
-        .fsaf-subtitle { font-size: 0.9rem; color: var(--text-secondary, #64748b); }
+        .fsaf-close:hover {
+          background: var(--bg-secondary, #f1f5f9);
+        }
+        
+        .fsaf-subtitle {
+          padding: 0 1.5rem 0.75rem;
+          font-size: 0.9rem;
+          color: var(--text-secondary, #64748b);
+          border-bottom: 1px solid var(--border-light, #e2e8f0);
+        }
 
         .fsaf-body {
-          display: flex;
-          flex-direction: column;
-          padding: 1rem;
-          padding-bottom: max(1rem, env(safe-area-inset-bottom));
-          -webkit-overflow-scrolling: touch;
+          padding: 1.5rem;
+          overflow-y: auto;
           flex: 1 1 auto;
-          max-width: 720px;
-          width: 100%;
-          margin: 0 auto;
         }
+        
         .fsaf-form-section {
           display: grid;
           gap: 1rem;
-          flex: 1;
         }
-        .fsaf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
-        .fsaf-field { display: flex; flex-direction: column; gap: 0.5rem; }
-        .fsaf-label { font-size: 0.9rem; font-weight: 500; color: var(--text-secondary, #64748b); }
-        .fsaf-input { border: 1px solid var(--border-light, #e2e8f0); border-radius: 10px; padding: 0.75rem 0.875rem; font: inherit; font-size: 16px; background: var(--surface, #fff); transition: box-shadow .15s ease, border-color .15s ease; }
-        .fsaf-input::placeholder { color: #94a3b8; }
-        .fsaf-input:focus { outline: none; border-color: var(--primary, #0ea5e9); box-shadow: 0 0 0 3px rgba(14,165,233,0.15); }
-        .fsaf-textarea { resize: vertical; }
-
-        .fsaf-amount { border: 1.5px solid var(--success, #16a34a); background: #f0fdf4; border-radius: 12px; padding: 1rem; box-shadow: 0 1px 0 rgba(0,0,0,0.02) inset; }
-        .fsaf-amount-error { border-color: var(--danger, #dc2626); background: #fee2e2; }
-        .fsaf-input-amount { font-size: 1.125rem; text-align: center; font-weight: 700; letter-spacing: 0.2px; }
-        .fsaf-input-error { border-color: var(--danger, #dc2626); }
-        .fsaf-error { color: var(--danger, #dc2626); font-size: 0.8125rem; margin-top: 0.375rem; }
-
-        .fsaf-actions { display: flex; gap: 0.75rem; justify-content: flex-end; padding-top: 1rem; margin-top: 0.5rem; background: var(--surface, #fff); padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); border-top: 1px solid var(--border-light, #e2e8f0); }
-        .fsaf-btn { border-radius: 10px; min-height: 44px; padding: 0.75rem 1rem; font-weight: 600; border: 1px solid transparent; transition: transform .06s ease, box-shadow .15s ease, filter .15s ease; }
-        .fsaf-btn-ghost { background: #ffffff; border-color: var(--border-light, #e2e8f0); }
-        .fsaf-btn-ghost:hover { background: var(--bg-secondary, #f1f5f9); }
-        .fsaf-btn-primary { background: var(--primary, #0ea5e9); color: white; box-shadow: 0 6px 14px -6px rgba(14,165,233,0.45); }
-        .fsaf-btn-primary:hover { filter: brightness(0.98); box-shadow: 0 8px 18px -8px rgba(14,165,233,0.55); }
-        .fsaf-btn:active { transform: translateY(1px); }
-        .fsaf-btn:focus-visible { outline: 2px solid var(--primary, #0ea5e9); outline-offset: 2px; }
-
-        @media (max-width: 768px) {
-          .fsaf-row { grid-template-columns: 1fr; }
-          .fsaf-title { font-size: 1.125rem; }
+        
+        .fsaf-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
+          align-items: start;
+        }
+        
+        .fsaf-field {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        
+        .fsaf-label {
+          font-size: 0.875rem;
+          font-weight: 500;
+          color: var(--text-secondary, #64748b);
+        }
+        
+        .fsaf-input {
+          border: 1px solid var(--border-light, #e2e8f0);
+          border-radius: 8px;
+          padding: 0.75rem;
+          font: inherit;
+          font-size: 14px;
+          background: var(--surface, #fff);
+          transition: box-shadow .15s ease, border-color .15s ease;
+        }
+        
+        .fsaf-input::placeholder {
+          color: #94a3b8;
+        }
+        
+        .fsaf-input:focus {
+          outline: none;
+          border-color: var(--primary, #0ea5e9);
+          box-shadow: 0 0 0 3px rgba(14,165,233,0.15);
+        }
+        
+        .fsaf-textarea {
+          resize: vertical;
+          min-height: 80px;
+        }
+        
+        .fsaf-input-error {
+          border-color: var(--danger, #dc2626);
+        }
+        
+        .fsaf-error {
+          color: var(--danger, #dc2626);
+          font-size: 0.8125rem;
+          margin-top: 0.25rem;
         }
 
-        @media (max-width: 480px) {
-          .fsaf-actions { flex-direction: column-reverse; }
-          .fsaf-btn { width: 100%; justify-content: center; }
+        .fsaf-actions {
+          display: flex;
+          gap: 0.75rem;
+          justify-content: flex-end;
+          padding-top: 1rem;
+          border-top: 1px solid var(--border-light, #e2e8f0);
+        }
+        
+        .fsaf-btn {
+          border-radius: 8px;
+          min-height: 40px;
+          padding: 0.75rem 1.5rem;
+          font-weight: 600;
+          border: 1px solid transparent;
+          cursor: pointer;
+          transition: all .15s ease;
+          font-size: 14px;
+        }
+        
+        .fsaf-btn-ghost {
+          background: #ffffff;
+          border-color: var(--border-light, #e2e8f0);
+          color: var(--text-primary, #1e293b);
+        }
+        .fsaf-btn-ghost:hover {
+          background: var(--bg-secondary, #f1f5f9);
+        }
+        
+        .fsaf-btn-primary {
+          background: var(--primary, #0ea5e9);
+          color: white;
+          box-shadow: 0 4px 12px -4px rgba(14,165,233,0.4);
+        }
+        .fsaf-btn-primary:hover {
+          background: #0284c7;
+          box-shadow: 0 6px 16px -4px rgba(14,165,233,0.5);
+        }
+        
+        .fsaf-btn:active {
+          transform: translateY(1px);
+        }
+
+        @media (max-width: 640px) {
+          .fsaf-modal {
+            margin: 0.5rem;
+            max-width: none;
+          }
+          
+          .fsaf-row {
+            grid-template-columns: 1fr;
+          }
+          
+          .fsaf-actions {
+            flex-direction: column-reverse;
+          }
+          
+          .fsaf-btn {
+            width: 100%;
+            justify-content: center;
+          }
         }
       `}</style>
     </div>
