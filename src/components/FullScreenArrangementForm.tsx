@@ -119,88 +119,90 @@ export default function FullScreenArrangementForm({
         </header>
 
         <form className="fsaf-body" onSubmit={handleSubmit}>
-          <div className={`fsaf-amount ${formErrors.amount ? 'fsaf-amount-error' : ''}`}>
-            <label className="fsaf-label">Payment Amount *</label>
-            <input
-              ref={amountInputRef}
-              type="text"
-              inputMode="decimal"
-              pattern="[0-9]*[.,]?[0-9]*"
-              value={formData.amount}
-              onChange={(e) => handleAmountChange(e.target.value)}
-              onFocus={(e) => {
-                try {
-                  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
-                    setTimeout(() => e.currentTarget.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
-                  }
-                } catch {}
-              }}
-              className={`fsaf-input fsaf-input-amount ${formErrors.amount ? 'fsaf-input-error' : ''}`}
-              placeholder="0.00"
-              required
-              aria-describedby={formErrors.amount ? 'amount-error' : undefined}
-            />
-            {formErrors.amount && (
-              <div id="amount-error" className="fsaf-error" role="alert">
-                {formErrors.amount}
-              </div>
-            )}
-          </div>
-
-          <div className="fsaf-row">
-            <div className="fsaf-field">
-              <label className="fsaf-label">Customer Name</label>
+          <div className="fsaf-form-section">
+            <div className={`fsaf-amount ${formErrors.amount ? 'fsaf-amount-error' : ''}`}>
+              <label className="fsaf-label">Payment Amount *</label>
               <input
+                ref={amountInputRef}
                 type="text"
-                value={formData.customerName}
-                onChange={(e) => setFormData((p) => ({ ...p, customerName: e.target.value }))}
-                className="fsaf-input"
-                placeholder="Customer name"
-              />
-            </div>
-            <div className="fsaf-field">
-              <label className="fsaf-label">Phone Number</label>
-              <input
-                type="tel"
-                value={formData.phoneNumber}
-                onChange={(e) => setFormData((p) => ({ ...p, phoneNumber: e.target.value }))}
-                className="fsaf-input"
-                placeholder="Phone number"
-              />
-            </div>
-          </div>
-
-          <div className="fsaf-row">
-            <div className="fsaf-field">
-              <label className="fsaf-label">Payment Due Date *</label>
-              <input
-                type="date"
-                value={formData.scheduledDate}
-                onChange={(e) => setFormData((p) => ({ ...p, scheduledDate: e.target.value }))}
-                className="fsaf-input"
+                inputMode="decimal"
+                pattern="[0-9]*[.,]?[0-9]*"
+                value={formData.amount}
+                onChange={(e) => handleAmountChange(e.target.value)}
+                onFocus={(e) => {
+                  try {
+                    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+                      setTimeout(() => e.currentTarget.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
+                    }
+                  } catch {}
+                }}
+                className={`fsaf-input fsaf-input-amount ${formErrors.amount ? 'fsaf-input-error' : ''}`}
+                placeholder="0.00"
                 required
+                aria-describedby={formErrors.amount ? 'amount-error' : undefined}
               />
+              {formErrors.amount && (
+                <div id="amount-error" className="fsaf-error" role="alert">
+                  {formErrors.amount}
+                </div>
+              )}
             </div>
-            <div className="fsaf-field">
-              <label className="fsaf-label">Time</label>
-              <input
-                type="time"
-                value={formData.scheduledTime}
-                onChange={(e) => setFormData((p) => ({ ...p, scheduledTime: e.target.value }))}
-                className="fsaf-input"
-              />
-            </div>
-          </div>
 
-          <div className="fsaf-field">
-            <label className="fsaf-label">Notes</label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData((p) => ({ ...p, notes: e.target.value }))}
-              className="fsaf-input fsaf-textarea"
-              rows={4}
-              placeholder="Payment terms, special instructions, etc..."
-            />
+            <div className="fsaf-row">
+              <div className="fsaf-field">
+                <label className="fsaf-label">Customer Name</label>
+                <input
+                  type="text"
+                  value={formData.customerName}
+                  onChange={(e) => setFormData((p) => ({ ...p, customerName: e.target.value }))}
+                  className="fsaf-input"
+                  placeholder="Customer name"
+                />
+              </div>
+              <div className="fsaf-field">
+                <label className="fsaf-label">Phone Number</label>
+                <input
+                  type="tel"
+                  value={formData.phoneNumber}
+                  onChange={(e) => setFormData((p) => ({ ...p, phoneNumber: e.target.value }))}
+                  className="fsaf-input"
+                  placeholder="Phone number"
+                />
+              </div>
+            </div>
+
+            <div className="fsaf-row">
+              <div className="fsaf-field">
+                <label className="fsaf-label">Payment Due Date *</label>
+                <input
+                  type="date"
+                  value={formData.scheduledDate}
+                  onChange={(e) => setFormData((p) => ({ ...p, scheduledDate: e.target.value }))}
+                  className="fsaf-input"
+                  required
+                />
+              </div>
+              <div className="fsaf-field">
+                <label className="fsaf-label">Time</label>
+                <input
+                  type="time"
+                  value={formData.scheduledTime}
+                  onChange={(e) => setFormData((p) => ({ ...p, scheduledTime: e.target.value }))}
+                  className="fsaf-input"
+                />
+              </div>
+            </div>
+
+            <div className="fsaf-field">
+              <label className="fsaf-label">Notes</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData((p) => ({ ...p, notes: e.target.value }))}
+                className="fsaf-input fsaf-textarea"
+                rows={4}
+                placeholder="Payment terms, special instructions, etc..."
+              />
+            </div>
           </div>
 
           <div className="fsaf-actions">
@@ -269,8 +271,8 @@ export default function FullScreenArrangementForm({
         .fsaf-subtitle { font-size: 0.9rem; color: var(--text-secondary, #64748b); }
 
         .fsaf-body {
-          display: grid;
-          gap: 1rem;
+          display: flex;
+          flex-direction: column;
           padding: 1rem;
           padding-bottom: max(1rem, env(safe-area-inset-bottom));
           -webkit-overflow-scrolling: touch;
@@ -278,6 +280,11 @@ export default function FullScreenArrangementForm({
           max-width: 720px;
           width: 100%;
           margin: 0 auto;
+        }
+        .fsaf-form-section {
+          display: grid;
+          gap: 1rem;
+          flex: 1;
         }
         .fsaf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
         .fsaf-field { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -293,7 +300,7 @@ export default function FullScreenArrangementForm({
         .fsaf-input-error { border-color: var(--danger, #dc2626); }
         .fsaf-error { color: var(--danger, #dc2626); font-size: 0.8125rem; margin-top: 0.375rem; }
 
-        .fsaf-actions { display: flex; gap: 0.75rem; justify-content: flex-end; padding-top: 0.75rem; margin-top: 0.25rem; position: sticky; bottom: 0; background: linear-gradient(to top, var(--surface, #fff) 70%, rgba(255,255,255,0)); padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); border-top: 1px solid var(--border-light, #e2e8f0); }
+        .fsaf-actions { display: flex; gap: 0.75rem; justify-content: flex-end; padding-top: 1rem; margin-top: 0.5rem; background: var(--surface, #fff); padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); border-top: 1px solid var(--border-light, #e2e8f0); }
         .fsaf-btn { border-radius: 10px; min-height: 44px; padding: 0.75rem 1rem; font-weight: 600; border: 1px solid transparent; transition: transform .06s ease, box-shadow .15s ease, filter .15s ease; }
         .fsaf-btn-ghost { background: #ffffff; border-color: var(--border-light, #e2e8f0); }
         .fsaf-btn-ghost:hover { background: var(--bg-secondary, #f1f5f9); }
