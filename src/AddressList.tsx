@@ -290,7 +290,7 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
     return true;
   };
 
-  // Handle keyboard navigation
+  // Handle keyboard navigation and virtual keyboard
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -298,14 +298,45 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
       }
     };
 
+    // Handle virtual keyboard on mobile
+    const handleResize = () => {
+      if (modalRef.current && window.visualViewport) {
+        const vh = window.visualViewport.height;
+        const fullHeight = window.innerHeight;
+        const keyboardHeight = fullHeight - vh;
+        
+        if (keyboardHeight > 150) {
+          // Keyboard is open
+          modalRef.current.style.transform = `translateY(-${Math.min(keyboardHeight / 3, 100)}px)`;
+        } else {
+          // Keyboard is closed
+          modalRef.current.style.transform = 'translateY(0)';
+        }
+      }
+    };
+
     document.addEventListener('keydown', handleKeyDown);
     
-    // Focus management
+    // Listen for virtual keyboard changes
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+    }
+    
+    // Focus management with delay to allow for keyboard detection
     if (amountInputRef.current) {
-      setTimeout(() => amountInputRef.current?.focus(), 100);
+      setTimeout(() => {
+        amountInputRef.current?.focus();
+        // Check keyboard after focusing
+        setTimeout(handleResize, 300);
+      }, 100);
     }
 
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+      }
+    };
   }, [onCancel]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -554,6 +585,8 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
           transform: translateZ(0);
           /* Ensure touch targets are accessible */
           position: relative;
+          /* Smooth keyboard transitions */
+          transition: transform 0.3s ease-out;
         }
 
         .arrangement-modal-header {
@@ -764,14 +797,18 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
         @media (max-width: 768px) {
           .arrangement-modal-overlay {
             padding: 0.5rem;
-            align-items: flex-end;
+            align-items: flex-start;
+            padding-top: 10vh;
           }
 
           .arrangement-modal-content {
-            max-height: calc(100vh - 1rem);
+            max-height: calc(100vh - 12vh);
             margin-bottom: 0;
-            border-radius: 16px 16px 0 0;
+            border-radius: 16px;
             animation: arrangement-slideUpMobile 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            /* Handle virtual keyboard */
+            max-height: calc(100dvh - 12vh);
+            position: relative;
           }
 
           .arrangement-modal-header {
@@ -819,14 +856,15 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
 
         @media (max-width: 480px) {
           .arrangement-modal-overlay {
-            padding: 0;
-            align-items: stretch;
+            padding: 0.5rem;
+            align-items: flex-start;
+            padding-top: 5vh;
           }
 
           .arrangement-modal-content {
-            max-height: 100vh;
-            height: 100vh;
-            border-radius: 0;
+            max-height: calc(100vh - 7vh);
+            max-height: calc(100dvh - 7vh);
+            border-radius: 12px;
             animation: arrangement-slideUpFull 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
           }
 
