@@ -220,8 +220,7 @@ export default function FullScreenArrangementForm({
           </div>
         </form>
       </div>
-    </div>
-
+      
       <style>{`
         .fsaf-overlay {
           position: fixed;
