@@ -260,7 +260,7 @@ export default function FullScreenArrangementForm({
           flex-direction: column;
           color: var(--text-primary, #1e293b);
           overflow: hidden;
-          margin: auto;
+          margin: 0 auto;
           position: relative;
         }
         
