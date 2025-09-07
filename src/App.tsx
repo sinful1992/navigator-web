@@ -174,6 +174,7 @@ function AuthedApp() {
     enqueueOp,
   } = useAppState();
 
+  const cloudSync = useCloudSync();
   const { confirm, alert } = useModalContext();
 
   const [tab, setTab] = React.useState<Tab>("list");
