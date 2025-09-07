@@ -100,7 +100,17 @@ export default function FullScreenArrangementForm({
   };
 
   return (
-    <div ref={overlayRef} className="fsaf-overlay" role="dialog" aria-modal="true">
+    <div 
+      ref={overlayRef} 
+      className="fsaf-overlay" 
+      role="dialog" 
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onCancel();
+        }
+      }}
+    >
       <div className="fsaf-modal">
         <header className="fsaf-header">
           <h2 className="fsaf-title">Create Payment Arrangement</h2>
@@ -224,7 +234,10 @@ export default function FullScreenArrangementForm({
       <style>{`
         .fsaf-overlay {
           position: fixed;
-          inset: 0;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
           background: rgba(0, 0, 0, 0.5);
           z-index: 4000;
           display: flex;
@@ -232,6 +245,7 @@ export default function FullScreenArrangementForm({
           justify-content: center;
           padding: 1rem;
           backdrop-filter: blur(4px);
+          overflow-y: auto;
         }
         
         .fsaf-modal {
@@ -245,6 +259,8 @@ export default function FullScreenArrangementForm({
           flex-direction: column;
           color: var(--text-primary, #1e293b);
           overflow: hidden;
+          margin: auto;
+          position: relative;
         }
         
         .fsaf-header {
