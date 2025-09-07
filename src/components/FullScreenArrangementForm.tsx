@@ -241,11 +241,12 @@ export default function FullScreenArrangementForm({
           background: rgba(0, 0, 0, 0.5);
           z-index: 4000;
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: center;
           padding: 1rem;
           backdrop-filter: blur(4px);
           overflow-y: auto;
+          padding-top: 2rem;
         }
         
         .fsaf-modal {
