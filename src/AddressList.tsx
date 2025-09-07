@@ -290,7 +290,7 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
     return true;
   };
 
-  // Handle keyboard navigation and virtual keyboard
+  // Handle keyboard navigation
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -298,44 +298,15 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
       }
     };
 
-    // Handle virtual keyboard on mobile
-    const handleResize = () => {
-      if (modalRef.current && window.visualViewport) {
-        const vh = window.visualViewport.height;
-        const fullHeight = window.innerHeight;
-        const keyboardHeight = fullHeight - vh;
-        
-        if (keyboardHeight > 150) {
-          // Keyboard is open
-          modalRef.current.style.transform = `translateY(-${Math.min(keyboardHeight / 3, 100)}px)`;
-        } else {
-          // Keyboard is closed
-          modalRef.current.style.transform = 'translateY(0)';
-        }
-      }
-    };
-
     document.addEventListener('keydown', handleKeyDown);
     
-    // Listen for virtual keyboard changes
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleResize);
-    }
-    
-    // Focus management with delay to allow for keyboard detection
+    // Focus management - delay to allow modal to render
     if (amountInputRef.current) {
-      setTimeout(() => {
-        amountInputRef.current?.focus();
-        // Check keyboard after focusing
-        setTimeout(handleResize, 300);
-      }, 100);
+      setTimeout(() => amountInputRef.current?.focus(), 150);
     }
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleResize);
-      }
     };
   }, [onCancel]);
 
@@ -585,8 +556,6 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
           transform: translateZ(0);
           /* Ensure touch targets are accessible */
           position: relative;
-          /* Smooth keyboard transitions */
-          transition: transform 0.3s ease-out;
         }
 
         .arrangement-modal-header {
@@ -653,6 +622,8 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
           overflow-y: auto;
           /* Better scrolling on mobile */
           -webkit-overflow-scrolling: touch;
+          /* Ensure body can scroll when keyboard is open */
+          min-height: 0;
         }
 
         .arrangement-form {
@@ -796,18 +767,18 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
         /* ==== Mobile Responsive Design ==== */
         @media (max-width: 768px) {
           .arrangement-modal-overlay {
-            padding: 0.5rem;
+            padding: 1rem 0.5rem;
             align-items: flex-start;
-            padding-top: 10vh;
+            padding-top: 8vh;
           }
 
           .arrangement-modal-content {
-            max-height: calc(100vh - 12vh);
+            max-height: 80vh;
+            max-height: 80dvh;
             margin-bottom: 0;
             border-radius: 16px;
             animation: arrangement-slideUpMobile 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            /* Handle virtual keyboard */
-            max-height: calc(100dvh - 12vh);
+            /* Better keyboard handling */
             position: relative;
           }
 
@@ -856,14 +827,14 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
 
         @media (max-width: 480px) {
           .arrangement-modal-overlay {
-            padding: 0.5rem;
+            padding: 0.75rem 0.5rem;
             align-items: flex-start;
             padding-top: 5vh;
           }
 
           .arrangement-modal-content {
-            max-height: calc(100vh - 7vh);
-            max-height: calc(100dvh - 7vh);
+            max-height: 85vh;
+            max-height: 85dvh;
             border-radius: 12px;
             animation: arrangement-slideUpFull 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
           }
