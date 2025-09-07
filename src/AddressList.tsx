@@ -37,7 +37,7 @@ const AddressListComponent = function AddressList({
   onComplete,
   onCreateArrangement: _onCreateArrangement, // Keep for backward compatibility but unused
   onAddArrangement,
-  onAddAddress,
+  onAddAddress: _onAddAddress, // Unused in current implementation
   filterText,
   ensureDayStarted,
 }: Props) {
@@ -523,7 +523,7 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
