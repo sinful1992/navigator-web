@@ -35,14 +35,17 @@ export default function FullScreenArrangementForm({
       if (e.key === 'Escape') onCancel();
     };
     document.addEventListener('keydown', onKeyDown);
-    if (amountInputRef.current) {
-      setTimeout(() => amountInputRef.current?.focus(), 100);
+    // Avoid auto-focus on touch devices to prevent mobile keyboard layout glitches
+    const isCoarsePointer = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    if (!isCoarsePointer && amountInputRef.current) {
+      setTimeout(() => amountInputRef.current?.focus(), 120);
     }
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [onCancel]);
 
+  const normalizeAmount = (value: string) => value.replace(/,/g, '.').trim();
   const validateAmount = (value: string) => {
-    const amt = parseFloat(value || '0');
+    const amt = parseFloat(normalizeAmount(value) || '0');
     if (!value || Number.isNaN(amt) || amt <= 0) {
       setFormErrors((p) => ({ ...p, amount: 'Please enter a valid payment amount' }));
       return false;
@@ -76,7 +79,7 @@ export default function FullScreenArrangementForm({
         phoneNumber: formData.phoneNumber,
         scheduledDate: formData.scheduledDate,
         scheduledTime: formData.scheduledTime,
-        amount: formData.amount,
+        amount: normalizeAmount(formData.amount),
         notes: formData.notes,
         status: 'Scheduled' as ArrangementStatus,
       };
@@ -117,12 +120,18 @@ export default function FullScreenArrangementForm({
             <label className="fsaf-label">Payment Amount *</label>
             <input
               ref={amountInputRef}
-              type="number"
-              step="0.01"
-              min="0"
+              type="text"
               inputMode="decimal"
+              pattern="[0-9]*[.,]?[0-9]*"
               value={formData.amount}
               onChange={(e) => handleAmountChange(e.target.value)}
+              onFocus={(e) => {
+                try {
+                  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+                    setTimeout(() => e.currentTarget.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
+                  }
+                } catch {}
+              }}
               className={`fsaf-input fsaf-input-amount ${formErrors.amount ? 'fsaf-input-error' : ''}`}
               placeholder="0.00"
               required
@@ -200,7 +209,6 @@ export default function FullScreenArrangementForm({
               className="fsaf-btn fsaf-btn-primary"
               isLoading={isLoading}
               loadingText="Creating..."
-              onClick={handleSubmit}
               disabled={!!formErrors.amount}
             >
               Create Arrangement
@@ -218,9 +226,18 @@ export default function FullScreenArrangementForm({
           display: flex;
           flex-direction: column;
           color: var(--text-primary, #1e293b);
+          height: 100vh; /* fallback */
+          height: 100svh; /* better on mobile */
+          min-height: 100vh;
+          overscroll-behavior-y: contain;
+          touch-action: manipulation;
+          overflow: hidden;
         }
         .fsaf-container {
-          display: contents;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          width: 100%;
         }
         .fsaf-header {
           position: sticky;
@@ -251,14 +268,15 @@ export default function FullScreenArrangementForm({
           gap: 1rem;
           padding: 1rem;
           padding-bottom: max(1rem, env(safe-area-inset-bottom));
-          overflow: auto;
+          overflow-y: auto;
           -webkit-overflow-scrolling: touch;
-          flex: 1;
+          flex: 1 1 auto;
+          min-height: 0; /* allow proper scroll within flex container */
         }
         .fsaf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
         .fsaf-field { display: flex; flex-direction: column; gap: 0.5rem; }
         .fsaf-label { font-size: 0.875rem; font-weight: 500; color: var(--text-secondary, #64748b); }
-        .fsaf-input { border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px; padding: 0.75rem; font: inherit; background: var(--surface, #fff); }
+        .fsaf-input { border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px; padding: 0.75rem; font: inherit; font-size: 16px; background: var(--surface, #fff); }
         .fsaf-textarea { resize: vertical; }
 
         .fsaf-amount { border: 2px solid var(--success, #16a34a); background: #dcfce7; border-radius: 12px; padding: 1rem; }
@@ -282,4 +300,3 @@ export default function FullScreenArrangementForm({
     </div>
   );
 }
-
