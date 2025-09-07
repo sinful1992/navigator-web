@@ -318,7 +318,9 @@ const ArrangementsComponent = function Arrangements({
                         )}
                         {arrangement.phoneNumber && (
                           <div className="arrangement-phone">
-                            📞 {arrangement.phoneNumber}
+                            📞 <a href={`tel:${arrangement.phoneNumber}`} style={{ color: "inherit", textDecoration: "underline" }}>
+                              {arrangement.phoneNumber}
+                            </a>
                           </div>
                         )}
                         {arrangement.notes && (

@@ -1,6 +1,7 @@
 // src/AddressList.tsx
 import * as React from "react";
-import type { AppState, Outcome, AddressRow } from "./types";
+import type { AppState, Outcome, AddressRow, Arrangement, ArrangementStatus } from "./types";
+import { LoadingButton } from "./components/LoadingButton";
 
 type Props = {
   state: AppState;
@@ -8,6 +9,8 @@ type Props = {
   cancelActive: () => void;
   onComplete: (index: number, outcome: Outcome, amount?: string) => void;
   onCreateArrangement: (addressIndex: number) => void;
+  onAddArrangement?: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onAddAddress?: (address: AddressRow) => Promise<number>;
   filterText: string;
   ensureDayStarted: () => void; // auto-start day on first Navigate
 };
@@ -32,7 +35,9 @@ const AddressListComponent = function AddressList({
   setActive,
   cancelActive,
   onComplete,
-  onCreateArrangement,
+  onCreateArrangement: _onCreateArrangement, // Keep for backward compatibility but unused
+  onAddArrangement,
+  onAddAddress,
   filterText,
   ensureDayStarted,
 }: Props) {
@@ -72,12 +77,16 @@ const AddressListComponent = function AddressList({
     null
   );
   const [pifAmount, setPifAmount] = React.useState<string>("");
+  
+  // Arrangement form state
+  const [showArrangementForm, setShowArrangementForm] = React.useState<number | null>(null);
 
   // closing outcomes when active changes
   React.useEffect(() => {
     if (activeIndex === null) {
       setOutcomeOpenFor(null);
       setPifAmount("");
+      setShowArrangementForm(null);
     }
   }, [activeIndex]);
 
@@ -180,9 +189,8 @@ const AddressListComponent = function AddressList({
                     <button
                       className="btn btn-ghost"
                       onClick={() => {
-                        onComplete(i, "ARR");
                         setOutcomeOpenFor(null);
-                        onCreateArrangement(i);
+                        setShowArrangementForm(i);
                       }}
                       title="Create arrangement and mark completed"
                     >
@@ -220,12 +228,215 @@ const AddressListComponent = function AddressList({
                 </div>
               </div>
             )}
+            
+            {/* Arrangement Form Modal - only show if showArrangementForm is set */}
+            {showArrangementForm !== null && onAddArrangement && (
+              <ArrangementFormModal 
+                state={state}
+                addressIndex={showArrangementForm}
+                onAddAddress={onAddAddress}
+                onSave={async (arrangementData) => {
+                  await onAddArrangement(arrangementData);
+                  // Mark the address as ARR completed
+                  onComplete(showArrangementForm, "ARR");
+                  setShowArrangementForm(null);
+                }}
+                onCancel={() => setShowArrangementForm(null)}
+              />
+            )}
           </div>
         );
       })}
     </div>
   );
 };
+
+// Arrangement Form Modal Component
+type FormModalProps = {
+  state: AppState;
+  addressIndex: number;
+  onAddAddress?: (address: AddressRow) => Promise<number>;
+  onSave: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  onCancel: () => void;
+};
+
+function ArrangementFormModal({ state, addressIndex, onAddAddress: _onAddAddress, onSave, onCancel }: FormModalProps) {
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [formData, setFormData] = React.useState({
+    customerName: "",
+    phoneNumber: "",
+    scheduledDate: new Date().toISOString().slice(0, 10),
+    scheduledTime: "",
+    amount: "",
+    notes: "",
+  });
+
+  const selectedAddress = state.addresses[addressIndex];
+  if (!selectedAddress) {
+    return null;
+  }
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    
+    const amount = parseFloat(formData.amount || '0');
+    if (!formData.amount || isNaN(amount) || amount <= 0) {
+      alert("Please enter a valid payment amount (numbers only, greater than 0)");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const arrangementData = {
+        addressIndex: addressIndex,
+        address: selectedAddress.address,
+        customerName: formData.customerName,
+        phoneNumber: formData.phoneNumber,
+        scheduledDate: formData.scheduledDate,
+        scheduledTime: formData.scheduledTime,
+        amount: formData.amount,
+        notes: formData.notes,
+        status: "Scheduled" as ArrangementStatus,
+      };
+
+      await onSave(arrangementData);
+    } catch (error) {
+      console.error('Error saving arrangement:', error);
+      alert(`Failed to save arrangement: ${error instanceof Error ? error.message : 'Please try again.'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div 
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '1rem',
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
+      <div 
+        className="card arrangement-form"
+        style={{
+          maxWidth: '500px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+        }}
+      >
+        <div className="card-header">
+          <h3 style={{ margin: 0 }}>
+            📅 Create Payment Arrangement
+          </h3>
+          <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            For: {selectedAddress.address}
+          </div>
+        </div>
+        
+        <div className="card-body">
+          <form onSubmit={handleSubmit} className="form-grid">
+            <div className="form-group">
+              <label>💰 Payment Amount *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.amount}
+                onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+                className="input"
+                placeholder="0.00"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>👤 Customer Name</label>
+              <input
+                type="text"
+                value={formData.customerName}
+                onChange={(e) => setFormData(prev => ({ ...prev, customerName: e.target.value }))}
+                className="input"
+                placeholder="Customer name"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>📞 Phone Number</label>
+              <input
+                type="tel"
+                value={formData.phoneNumber}
+                onChange={(e) => setFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                className="input"
+                placeholder="Phone number"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>📅 Payment Due Date *</label>
+              <input
+                type="date"
+                value={formData.scheduledDate}
+                onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                className="input"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>🕐 Preferred Time</label>
+              <input
+                type="time"
+                value={formData.scheduledTime}
+                onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
+                className="input"
+              />
+            </div>
+
+            <div className="form-group form-group-full">
+              <label>📝 Notes</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                className="input"
+                rows={3}
+                placeholder="Payment terms, special instructions, etc..."
+              />
+            </div>
+          </form>
+        </div>
+
+        <div className="card-footer">
+          <div className="btn-row btn-row-end">
+            <button type="button" className="btn btn-ghost" onClick={onCancel}>
+              Cancel
+            </button>
+            <LoadingButton
+              type="submit" 
+              className="btn btn-primary" 
+              isLoading={isLoading}
+              loadingText="Creating..."
+              onClick={handleSubmit}
+            >
+              📅 Create Arrangement
+            </LoadingButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Memoize component to prevent unnecessary re-renders
 export const AddressList = React.memo(AddressListComponent);

@@ -1099,6 +1099,8 @@ function AuthedApp() {
               cancelActive={cancelActive}
               onComplete={handleComplete}
               onCreateArrangement={handleCreateArrangement}
+              onAddArrangement={addArrangement}
+              onAddAddress={async (addr: AddressRow) => addAddress(addr)}
               filterText={search}
               ensureDayStarted={ensureDayStarted}
             />
