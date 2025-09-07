@@ -290,7 +290,7 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
     return true;
   };
 
-  // Handle keyboard navigation
+  // Handle keyboard navigation - simplified approach
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -767,19 +767,32 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
         /* ==== Mobile Responsive Design ==== */
         @media (max-width: 768px) {
           .arrangement-modal-overlay {
-            padding: 1rem 0.5rem;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            padding: 0;
             align-items: flex-start;
-            padding-top: 8vh;
+            justify-content: center;
+            /* Critical: Make the entire overlay scrollable */
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            /* Prevent body scroll when modal is open */
+            overscroll-behavior: contain;
           }
 
           .arrangement-modal-content {
-            max-height: 80vh;
-            max-height: 80dvh;
-            margin-bottom: 0;
+            margin: 2rem auto;
+            max-width: calc(100vw - 2rem);
+            width: 100%;
+            max-height: none;
             border-radius: 16px;
             animation: arrangement-slideUpMobile 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            /* Better keyboard handling */
-            position: relative;
+            /* Allow natural sizing */
+            min-height: min-content;
+            /* Add margin at bottom so user can scroll modal above keyboard */
+            margin-bottom: 50vh;
           }
 
           .arrangement-modal-header {
@@ -826,25 +839,21 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
         }
 
         @media (max-width: 480px) {
-          .arrangement-modal-overlay {
-            padding: 0.75rem 0.5rem;
-            align-items: flex-start;
-            padding-top: 5vh;
-          }
-
           .arrangement-modal-content {
-            max-height: 85vh;
-            max-height: 85dvh;
+            margin: 1rem auto;
+            max-width: calc(100vw - 2rem);
             border-radius: 12px;
             animation: arrangement-slideUpFull 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            /* Larger bottom margin on small screens for more keyboard clearance */
+            margin-bottom: 60vh;
           }
 
           .arrangement-modal-header {
-            border-radius: 0;
+            border-radius: 12px 12px 0 0;
           }
 
           .arrangement-modal-footer {
-            border-radius: 0;
+            border-radius: 0 0 12px 12px;
           }
         }
 
