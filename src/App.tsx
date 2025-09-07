@@ -174,7 +174,6 @@ function AuthedApp() {
     enqueueOp,
   } = useAppState();
 
-  const cloudSync = useCloudSync();
   const { confirm, alert } = useModalContext();
 
   const [tab, setTab] = React.useState<Tab>("list");
@@ -808,8 +807,11 @@ function AuthedApp() {
     const daCount = completions.filter(
       (c) => c.listVersion === currentVer && c.outcome === "DA"
     ).length;
+    const arrCount = completions.filter(
+      (c) => c.listVersion === currentVer && c.outcome === "ARR"
+    ).length;
     const completed = completedIdx.size;
-    return { total, pending, completed, pifCount, doneCount, daCount };
+    return { total, pending, completed, pifCount, doneCount, daCount, arrCount };
   }, [addresses, completions, state.currentListVersion]);
 
   // Allow changing a completion outcome (by completion array index)
@@ -1127,6 +1129,7 @@ function AuthedApp() {
               <span className="pill pill-pif">PIF {stats.pifCount}</span>
               <span className="pill pill-done">Done {stats.doneCount}</span>
               <span className="pill pill-da">DA {stats.daCount}</span>
+              <span className="pill pill-arr">ARR {stats.arrCount}</span>
               {cloudSync.lastSyncTime && (
                 <span className="muted">
                   Last sync {cloudSync.lastSyncTime.toLocaleTimeString()}

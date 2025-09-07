@@ -53,7 +53,7 @@ const ArrangementsComponent = function Arrangements({
   const filteredArrangements = React.useMemo(() => {
     const now = new Date();
     const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // Monday
-    const weekEnd = endOfWeek(now, { weekStartsOn: 1 }); // Sunday
+    const weekEnd = endOfWeek(now, { weekStartsOn: 1 }); // Monday
 
     let filtered = state.arrangements;
 
@@ -696,7 +696,6 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
             className="btn btn-primary" 
             isLoading={isLoading}
             loadingText={arrangement ? "Updating..." : "Creating..."}
-            onClick={handleSubmit}
             disabled={addressMode === "existing" && state.addresses.length === 0}
           >
             {arrangement ? "💾 Update" : "📅 Create"} Arrangement

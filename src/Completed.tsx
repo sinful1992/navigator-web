@@ -371,6 +371,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
             const seconds = secondsByDay.get(k) || 0;
             const idxs = completionIdxByDay.get(k) || [];
             const pif = idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "PIF").length;
+            const arrCount = idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "ARR").length;
             const total = idxs.length;
 
             return (
@@ -398,6 +399,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                     <span className="pill">Hours {hoursFmt(seconds)}</span>
                     <span className="pill pill-done">Completed {total}</span>
                     <span className="pill pill-pif">PIF {pif}</span>
+                    {arrCount > 0 && <span className="pill pill-arr">ARR {arrCount}</span>}
                   </div>
                   <button className="btn btn-ghost" onClick={() => toggleDay(k)}>
                     {openDays[k] ? "Hide" : "View"}
@@ -451,6 +453,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                   <option value="Done">Done</option>
                                   <option value="PIF">PIF</option>
                                   <option value="DA">DA</option>
+                                  <option value="ARR">ARR</option>
                                 </select>
                               </div>
                             </div>

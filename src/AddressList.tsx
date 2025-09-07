@@ -527,7 +527,7 @@ function ArrangementFormModal({ state, addressIndex, onSave, onCancel }: FormMod
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 1000;
+          z-index: 4000;
           padding: 1rem;
           animation: arrangement-fadeIn 0.2s ease-out;
           /* Performance optimizations */
