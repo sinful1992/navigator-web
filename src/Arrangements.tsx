@@ -236,14 +236,25 @@ const ArrangementsComponent = function Arrangements({
         throw new Error('Selected address is no longer valid. Please refresh and try again.');
       }
       
+      // First create the arrangement
       await onAddArrangement(arrangementData);
-      // record completion (ARR) today for the chosen index
-      onComplete(arrangementData.addressIndex, "ARR");
+      
+      // Then record completion (ARR) - this is synchronous but we should handle any potential errors
+      try {
+        onComplete(arrangementData.addressIndex, "ARR");
+      } catch (completionError) {
+        console.error('Error recording ARR completion:', completionError);
+        // Note: Arrangement was already created successfully, so we don't want to fail completely
+        // This is a data consistency issue but not critical enough to rollback the arrangement
+        alert('Arrangement created successfully, but there was an issue recording the completion. You may need to manually mark this address as ARR.');
+      }
+      
       setShowAddForm(false);
       setEditingId(null);
     } catch (error) {
       console.error('Error saving arrangement:', error);
       alert(`Failed to save arrangement: ${error instanceof Error ? error.message : 'Please try again.'}`);
+      // Don't reset form state on error so user can retry
     } finally {
       setLoadingStates(prev => ({ ...prev, saving: false }));
     }
@@ -561,6 +572,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
   const [addressMode, setAddressMode] = React.useState<"existing" | "manual">(
     preSelectedAddressIndex !== null && preSelectedAddressIndex !== undefined ? "existing" : "existing"
   );
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
   
   const [formData, setFormData] = React.useState({
     addressIndex: arrangement?.addressIndex ?? preSelectedAddressIndex ?? 0,
@@ -629,90 +641,119 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     
-    const amount = parseFloat(formData.amount || '0');
-    if (!formData.amount || isNaN(amount) || amount <= 0) {
-      alert("Please enter a valid payment amount (numbers only, greater than 0)");
+    // Prevent double submission
+    if (isSubmitting || isLoading) {
       return;
     }
 
-    // Validate recurring payment setup
-    if (formData.recurrenceType !== "none") {
-      if (!formData.totalPayments || formData.totalPayments < 2) {
-        alert("Please specify the total number of payments (minimum 2) for recurring arrangements");
-        return;
-      }
-    } else {
-      // For one-time payments, ensure we have a total payment count
-      if (!formData.totalPayments || formData.totalPayments < 1) {
-        alert("Please specify the number of payments");
-        return;
-      }
-    }
+    setIsSubmitting(true);
+    let addedAddressIndex: number | null = null; // Track if we added a new address for rollback
 
-    let finalAddressIndex = formData.addressIndex;
-    let finalAddress = "";
-
-    if (addressMode === "existing") {
-      if (!selectedAddress) {
-        alert("Please select a valid address");
-        return;
-      }
-      finalAddress = selectedAddress.address;
-    } else {
-      // Manual address mode
-      if (!formData.manualAddress.trim()) {
-        alert("Please enter an address");
+    try {
+      const amount = parseFloat(formData.amount || '0');
+      if (!formData.amount || isNaN(amount) || amount <= 0) {
+        alert("Please enter a valid payment amount (numbers only, greater than 0)");
         return;
       }
 
-      // Check if this address already exists in the list
-      const existingIndex = state.addresses.findIndex(
-        addr => (addr.address || "").toLowerCase().trim() === formData.manualAddress.toLowerCase().trim()
-      );
-
-      if (existingIndex >= 0) {
-        finalAddressIndex = existingIndex;
-        finalAddress = state.addresses[existingIndex].address;
+      // Validate recurring payment setup
+      if (formData.recurrenceType !== "none") {
+        if (!formData.totalPayments || formData.totalPayments < 2) {
+          alert("Please specify the total number of payments (minimum 2) for recurring arrangements");
+          return;
+        }
       } else {
-        if (!onAddAddress) {
-          alert("Cannot add new addresses - missing onAddAddress handler");
-          return;
-        }
-
-        try {
-          const newAddressRow: AddressRow = {
-            address: formData.manualAddress.trim(),
-            lat: null,
-            lng: null
-          };
-          
-          finalAddressIndex = await onAddAddress(newAddressRow);
-          finalAddress = newAddressRow.address;
-        } catch (error) {
-          console.error('Error adding address:', error);
-          alert('Failed to add new address. Please try again.');
+        // For one-time payments, ensure we have a total payment count
+        if (!formData.totalPayments || formData.totalPayments < 1) {
+          alert("Please specify the number of payments");
           return;
         }
       }
+
+      let finalAddressIndex = formData.addressIndex;
+      let finalAddress = "";
+
+      if (addressMode === "existing") {
+        if (!selectedAddress) {
+          alert("Please select a valid address");
+          return;
+        }
+        // Additional validation - ensure the selected address index is still valid
+        if (formData.addressIndex < 0 || formData.addressIndex >= state.addresses.length) {
+          alert("Selected address is no longer valid. Please refresh the page and try again.");
+          return;
+        }
+        finalAddress = selectedAddress.address;
+      } else {
+        // Manual address mode
+        if (!formData.manualAddress.trim()) {
+          alert("Please enter an address");
+          return;
+        }
+
+        // Check if this address already exists in the list
+        const existingIndex = state.addresses.findIndex(
+          addr => (addr.address || "").toLowerCase().trim() === formData.manualAddress.toLowerCase().trim()
+        );
+
+        if (existingIndex >= 0) {
+          finalAddressIndex = existingIndex;
+          finalAddress = state.addresses[existingIndex].address;
+        } else {
+          if (!onAddAddress) {
+            alert("Cannot add new addresses - missing onAddAddress handler");
+            return;
+          }
+
+          try {
+            const newAddressRow: AddressRow = {
+              address: formData.manualAddress.trim(),
+              lat: null,
+              lng: null
+            };
+            
+            finalAddressIndex = await onAddAddress(newAddressRow);
+            addedAddressIndex = finalAddressIndex; // Track for potential rollback
+            finalAddress = newAddressRow.address;
+          } catch (error) {
+            console.error('Error adding address:', error);
+            alert('Failed to add new address. Please try again.');
+            return;
+          }
+        }
+      }
+
+      const arrangementData = {
+        addressIndex: finalAddressIndex,
+        address: finalAddress,
+        customerName: formData.customerName,
+        phoneNumber: formData.phoneNumber,
+        scheduledDate: formData.scheduledDate,
+        scheduledTime: formData.scheduledTime,
+        amount: formData.amount,
+        notes: formData.notes,
+        status: formData.status,
+        recurrenceType: formData.recurrenceType,
+        recurrenceInterval: formData.recurrenceType !== "none" ? formData.recurrenceInterval : undefined,
+        totalPayments: formData.recurrenceType !== "none" ? formData.totalPayments : 1,
+        paymentsMade: arrangement?.paymentsMade ?? 0,
+      };
+
+      await onSave(arrangementData);
+    } catch (error) {
+      console.error('Error in form submission:', error);
+      
+      // If we added a new address but arrangement creation failed, we should ideally remove it
+      // However, we don't have a removeAddress function, so we'll just log the issue
+      if (addedAddressIndex !== null) {
+        console.warn(`New address was added at index ${addedAddressIndex} but arrangement creation failed. Manual cleanup may be needed.`);
+      }
+      
+      // Re-throw to let parent handle the error display
+      throw error;
+    } finally {
+      setIsSubmitting(false);
     }
-
-    const arrangementData = {
-      addressIndex: finalAddressIndex,
-      address: finalAddress,
-      customerName: formData.customerName,
-      phoneNumber: formData.phoneNumber,
-      scheduledDate: formData.scheduledDate,
-      scheduledTime: formData.scheduledTime,
-      amount: formData.amount,
-      notes: formData.notes,
-      status: formData.status,
-      recurrenceType: formData.recurrenceType,
-      recurrenceInterval: formData.recurrenceType !== "none" ? formData.recurrenceInterval : undefined,
-      totalPayments: formData.recurrenceType !== "none" ? formData.totalPayments : 1,
-      paymentsMade: arrangement?.paymentsMade ?? 0,
-    };
-
-    await onSave(arrangementData);
   };
 
   return (
@@ -927,7 +968,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
               <LoadingButton
                 type="submit" 
                 className="btn btn-primary" 
-                isLoading={isLoading}
+                isLoading={isLoading || isSubmitting}
                 loadingText={arrangement ? "Updating..." : "Creating..."}
                 disabled={addressMode === "existing" && state.addresses.length === 0}
               >
