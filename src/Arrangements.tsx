@@ -583,24 +583,63 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
   // Update form data when arrangement prop changes (for editing)
   React.useEffect(() => {
     if (arrangement) {
-      setFormData({
-        addressIndex: arrangement.addressIndex,
-        manualAddress: "",
-        customerName: arrangement.customerName ?? "",
-        phoneNumber: arrangement.phoneNumber ?? "",
-        scheduledDate: arrangement.scheduledDate,
-        scheduledTime: arrangement.scheduledTime ?? "",
-        amount: arrangement.amount ?? "",
-        notes: arrangement.notes ?? "",
-        status: arrangement.status,
-        recurrenceType: arrangement.recurrenceType ?? "none" as RecurrenceType,
-        recurrenceInterval: arrangement.recurrenceInterval ?? 1,
-        totalPayments: arrangement.totalPayments ?? undefined,
+      console.log("Updating form data for arrangement:", arrangement.id, "addressIndex:", arrangement.addressIndex);
+      
+      // Check if the arrangement's addressIndex is valid for the current address list
+      const isValidIndex = arrangement.addressIndex >= 0 && arrangement.addressIndex < state.addresses.length;
+      const currentAddress = isValidIndex ? state.addresses[arrangement.addressIndex]?.address : null;
+      const originalAddress = arrangement.address;
+      const addressMatches = currentAddress === originalAddress;
+      
+      console.log("Address validation:", { 
+        isValidIndex, 
+        currentAddress, 
+        originalAddress, 
+        addressMatches 
       });
+      
+      // If address doesn't match current list, use manual mode with original address
+      if (!isValidIndex || !addressMatches) {
+        console.log("Address mismatch detected, switching to manual mode");
+        setAddressMode("manual");
+        setFormData({
+          addressIndex: 0, // Default to first address, but we'll use manual mode
+          manualAddress: originalAddress, // Use the original address from arrangement
+          customerName: arrangement.customerName ?? "",
+          phoneNumber: arrangement.phoneNumber ?? "",
+          scheduledDate: arrangement.scheduledDate,
+          scheduledTime: arrangement.scheduledTime ?? "",
+          amount: arrangement.amount ?? "",
+          notes: arrangement.notes ?? "",
+          status: arrangement.status,
+          recurrenceType: arrangement.recurrenceType ?? "none" as RecurrenceType,
+          recurrenceInterval: arrangement.recurrenceInterval ?? 1,
+          totalPayments: arrangement.totalPayments ?? undefined,
+        });
+      } else {
+        // Address matches, use existing mode
+        console.log("Address matches current list, using existing mode");
+        setAddressMode("existing");
+        setFormData({
+          addressIndex: arrangement.addressIndex,
+          manualAddress: "",
+          customerName: arrangement.customerName ?? "",
+          phoneNumber: arrangement.phoneNumber ?? "",
+          scheduledDate: arrangement.scheduledDate,
+          scheduledTime: arrangement.scheduledTime ?? "",
+          amount: arrangement.amount ?? "",
+          notes: arrangement.notes ?? "",
+          status: arrangement.status,
+          recurrenceType: arrangement.recurrenceType ?? "none" as RecurrenceType,
+          recurrenceInterval: arrangement.recurrenceInterval ?? 1,
+          totalPayments: arrangement.totalPayments ?? undefined,
+        });
+      }
     }
-  }, [arrangement]);
+  }, [arrangement, state.addresses]);
 
   const selectedAddress = addressMode === "existing" ? state.addresses[formData.addressIndex] : null;
+  console.log("Form render - addressIndex:", formData.addressIndex, "selected address:", selectedAddress?.address);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -749,11 +788,14 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
                   className="input"
                   required
                 >
-                  {state.addresses.map((addr, idx) => (
-                    <option key={idx} value={idx}>
-                      #{idx + 1} - {addr.address}
-                    </option>
-                  ))}
+                  {state.addresses.map((addr, idx) => {
+                    console.log("Address option:", idx, addr.address);
+                    return (
+                      <option key={idx} value={idx}>
+                        #{idx + 1} - {addr.address}
+                      </option>
+                    );
+                  })}
                 </select>
               )}
             </div>
