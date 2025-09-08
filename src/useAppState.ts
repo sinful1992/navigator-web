@@ -576,7 +576,6 @@ export function useAppState() {
 
   const updateArrangement = React.useCallback(
     (id: string, updates: Partial<Arrangement>): Promise<void> => {
-      console.log("updateArrangement called with:", { id, updates });
       return new Promise((resolve) => {
         const operationId = generateOperationId("update", "arrangement", {
           id,
@@ -604,7 +603,6 @@ export function useAppState() {
 
           setTimeout(() => {
             confirmOptimisticUpdate(operationId);
-            console.log("updateArrangement completed successfully");
             resolve();
           }, 0);
 

@@ -250,12 +250,9 @@ const ArrangementsComponent = function Arrangements({
   };
 
   const handleArrangementUpdate = async (id: string, arrangementData: Partial<Arrangement>) => {
-    console.log("handleArrangementUpdate called with:", { id, arrangementData });
     setLoadingStates(prev => ({ ...prev, updating: true }));
     try {
-      console.log("About to call onUpdateArrangement");
       await onUpdateArrangement(id, arrangementData);
-      console.log("onUpdateArrangement completed, setting editingId to null");
       setEditingId(null);
     } catch (error) {
       console.error('Error updating arrangement:', error);
@@ -583,24 +580,14 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
   // Update form data when arrangement prop changes (for editing)
   React.useEffect(() => {
     if (arrangement) {
-      console.log("Updating form data for arrangement:", arrangement.id, "addressIndex:", arrangement.addressIndex);
-      
       // Check if the arrangement's addressIndex is valid for the current address list
       const isValidIndex = arrangement.addressIndex >= 0 && arrangement.addressIndex < state.addresses.length;
       const currentAddress = isValidIndex ? state.addresses[arrangement.addressIndex]?.address : null;
       const originalAddress = arrangement.address;
       const addressMatches = currentAddress === originalAddress;
       
-      console.log("Address validation:", { 
-        isValidIndex, 
-        currentAddress, 
-        originalAddress, 
-        addressMatches 
-      });
-      
       // If address doesn't match current list, use manual mode with original address
       if (!isValidIndex || !addressMatches) {
-        console.log("Address mismatch detected, switching to manual mode");
         setAddressMode("manual");
         setFormData({
           addressIndex: 0, // Default to first address, but we'll use manual mode
@@ -618,7 +605,6 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
         });
       } else {
         // Address matches, use existing mode
-        console.log("Address matches current list, using existing mode");
         setAddressMode("existing");
         setFormData({
           addressIndex: arrangement.addressIndex,
@@ -639,11 +625,9 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
   }, [arrangement, state.addresses]);
 
   const selectedAddress = addressMode === "existing" ? state.addresses[formData.addressIndex] : null;
-  console.log("Form render - addressIndex:", formData.addressIndex, "selected address:", selectedAddress?.address);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    console.log("handleSubmit called with:", { arrangement: !!arrangement, formData });
     
     const amount = parseFloat(formData.amount || '0');
     if (!formData.amount || isNaN(amount) || amount <= 0) {
@@ -728,9 +712,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
       paymentsMade: arrangement?.paymentsMade ?? 0,
     };
 
-    console.log("About to call onSave with:", arrangementData);
     await onSave(arrangementData);
-    console.log("onSave completed successfully");
   };
 
   return (
@@ -788,14 +770,11 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
                   className="input"
                   required
                 >
-                  {state.addresses.map((addr, idx) => {
-                    console.log("Address option:", idx, addr.address);
-                    return (
-                      <option key={idx} value={idx}>
-                        #{idx + 1} - {addr.address}
-                      </option>
-                    );
-                  })}
+                  {state.addresses.map((addr, idx) => (
+                    <option key={idx} value={idx}>
+                      #{idx + 1} - {addr.address}
+                    </option>
+                  ))}
                 </select>
               )}
             </div>
