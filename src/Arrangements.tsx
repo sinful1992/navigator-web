@@ -877,24 +877,24 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
               placeholder="Payment terms, special instructions, etc..."
             />
           </div>
+          
+          <div className="form-group form-group-full">
+            <div className="btn-row btn-row-end" style={{ marginTop: "1rem" }}>
+              <button type="button" className="btn btn-ghost" onClick={onCancel}>
+                Cancel
+              </button>
+              <LoadingButton
+                type="submit" 
+                className="btn btn-primary" 
+                isLoading={isLoading}
+                loadingText={arrangement ? "Updating..." : "Creating..."}
+                disabled={addressMode === "existing" && state.addresses.length === 0}
+              >
+                {arrangement ? "💾 Update" : "📅 Create"} Arrangement
+              </LoadingButton>
+            </div>
+          </div>
         </form>
-      </div>
-
-      <div className="card-footer">
-        <div className="btn-row btn-row-end">
-          <button type="button" className="btn btn-ghost" onClick={onCancel}>
-            Cancel
-          </button>
-          <LoadingButton
-            type="submit" 
-            className="btn btn-primary" 
-            isLoading={isLoading}
-            loadingText={arrangement ? "Updating..." : "Creating..."}
-            disabled={addressMode === "existing" && state.addresses.length === 0}
-          >
-            {arrangement ? "💾 Update" : "📅 Create"} Arrangement
-          </LoadingButton>
-        </div>
       </div>
     </div>
   );
