@@ -580,6 +580,26 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
     totalPayments: arrangement?.totalPayments ?? undefined,
   });
 
+  // Update form data when arrangement prop changes (for editing)
+  React.useEffect(() => {
+    if (arrangement) {
+      setFormData({
+        addressIndex: arrangement.addressIndex,
+        manualAddress: "",
+        customerName: arrangement.customerName ?? "",
+        phoneNumber: arrangement.phoneNumber ?? "",
+        scheduledDate: arrangement.scheduledDate,
+        scheduledTime: arrangement.scheduledTime ?? "",
+        amount: arrangement.amount ?? "",
+        notes: arrangement.notes ?? "",
+        status: arrangement.status,
+        recurrenceType: arrangement.recurrenceType ?? "none" as RecurrenceType,
+        recurrenceInterval: arrangement.recurrenceInterval ?? 1,
+        totalPayments: arrangement.totalPayments ?? undefined,
+      });
+    }
+  }, [arrangement]);
+
   const selectedAddress = addressMode === "existing" ? state.addresses[formData.addressIndex] : null;
 
   const handleSubmit = async (e?: React.FormEvent) => {
