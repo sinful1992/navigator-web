@@ -325,7 +325,7 @@ const ArrangementsComponent = function Arrangements({
           arrangement={editingId ? state.arrangements.find(a => a.id === editingId) : undefined}
           preSelectedAddressIndex={autoCreateForAddress}
           onAddAddress={onAddAddress}
-          onSave={editingId ? handleArrangementUpdate.bind(null, editingId) : handleArrangementSave}
+          onSave={editingId ? (arrangementData) => handleArrangementUpdate(editingId, arrangementData) : handleArrangementSave}
           onCancel={() => {
             setShowAddForm(false);
             setEditingId(null);
