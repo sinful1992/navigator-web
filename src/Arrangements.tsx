@@ -250,9 +250,12 @@ const ArrangementsComponent = function Arrangements({
   };
 
   const handleArrangementUpdate = async (id: string, arrangementData: Partial<Arrangement>) => {
+    console.log("handleArrangementUpdate called with:", { id, arrangementData });
     setLoadingStates(prev => ({ ...prev, updating: true }));
     try {
+      console.log("About to call onUpdateArrangement");
       await onUpdateArrangement(id, arrangementData);
+      console.log("onUpdateArrangement completed, setting editingId to null");
       setEditingId(null);
     } catch (error) {
       console.error('Error updating arrangement:', error);
@@ -581,6 +584,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    console.log("handleSubmit called with:", { arrangement: !!arrangement, formData });
     
     const amount = parseFloat(formData.amount || '0');
     if (!formData.amount || isNaN(amount) || amount <= 0) {
@@ -665,7 +669,9 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
       paymentsMade: arrangement?.paymentsMade ?? 0,
     };
 
+    console.log("About to call onSave with:", arrangementData);
     await onSave(arrangementData);
+    console.log("onSave completed successfully");
   };
 
   return (
