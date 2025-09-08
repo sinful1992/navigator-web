@@ -813,8 +813,14 @@ function AuthedApp() {
       (c) => c.listVersion === currentVer && c.outcome === "ARR"
     ).length;
     const completed = completedIdx.size;
-    return { total, pending, completed, pifCount, doneCount, daCount, arrCount };
-  }, [addresses, completions, state.currentListVersion]);
+    
+    // Calculate pending arrangements (exclude Completed and Cancelled)
+    const pendingArrangements = arrangements.filter(arr => 
+      arr.status !== "Completed" && arr.status !== "Cancelled"
+    ).length;
+    
+    return { total, pending, completed, pifCount, doneCount, daCount, arrCount, pendingArrangements };
+  }, [addresses, completions, arrangements, state.currentListVersion]);
 
   // Allow changing a completion outcome (by completion array index)
   const handleChangeOutcome = React.useCallback(
@@ -944,7 +950,7 @@ function AuthedApp() {
               aria-selected={tab === "arrangements"}
               onClick={() => setTab("arrangements")}
             >
-              Arrangements ({arrangements.length})
+              Arrangements ({stats.pendingArrangements})
             </button>
             <button
               className="tab-btn"
