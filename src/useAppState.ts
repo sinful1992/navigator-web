@@ -402,7 +402,7 @@ export function useAppState() {
 
   /** Enhanced completion with optimistic updates */
   const complete = React.useCallback(
-    (index: number, outcome: Outcome, amount?: string): Promise<string> => {
+    (index: number, outcome: Outcome, amount?: string, arrangementId?: string): Promise<string> => {
       return new Promise((resolve, reject) => {
         setBaseState((s) => {
           const a = s.addresses[index];
@@ -421,6 +421,7 @@ export function useAppState() {
             amount,
             timestamp: nowISO,
             listVersion: s.currentListVersion,
+            arrangementId,
           };
 
           const operationId = generateOperationId(

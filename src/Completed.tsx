@@ -1,11 +1,12 @@
 // src/Completed.tsx
 import * as React from "react";
-import type { AddressRow, Completion, DaySession, Outcome } from "./types";
+import type { AddressRow, Completion, DaySession, Outcome, Arrangement } from "./types";
 
 type AppStateSlice = {
   addresses: AddressRow[];
   completions: Completion[];
   daySessions: DaySession[];
+  arrangements: Arrangement[];
 };
 
 type Props = {
@@ -259,7 +260,7 @@ function getCompletionDateKey(c: Completion, fallbackSessions: DaySession[]): st
 }
 
 export default function Completed({ state, onChangeOutcome }: Props) {
-  const { addresses, completions, daySessions } = state;
+  const { addresses, completions, daySessions, arrangements } = state;
 
   // Initial range: last session day or today
   const lastSessionKey =
@@ -420,6 +421,11 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                             (addr && (addr as any).name) ||
                             (typeof comp.index === "number" ? "Address #" + comp.index : "Address");
                           const currentOutcome: Outcome | string | undefined = comp.outcome;
+                          
+                          // Find associated arrangement if this completion has an arrangementId
+                          const arrangement = comp.arrangementId 
+                            ? arrangements.find(arr => arr.id === comp.arrangementId)
+                            : null;
 
                           return (
                             <div
@@ -440,6 +446,19 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                 </div>
                                 <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                                   {"Index " + String(comp.index) + (comp.amount ? " · GBP" + String(comp.amount) : "")}
+                                  {arrangement && (
+                                    <>
+                                      <br />
+                                      <span style={{ color: "var(--primary)", fontSize: "0.75rem" }}>
+                                        📅 From arrangement
+                                        {arrangement.customerName && ` (${arrangement.customerName})`}
+                                        {comp.outcome === "Done" && " • Defaulted"}
+                                        {comp.outcome === "PIF" && arrangement.recurrenceType && arrangement.recurrenceType !== "none" && 
+                                          ` • ${arrangement.recurrenceType === "weekly" ? "Weekly" : "Monthly"} payment`
+                                        }
+                                      </span>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -450,8 +469,12 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                   style={{ padding: "0.25rem 0.5rem", height: 32 }}
                                 >
                                   <option value="">-</option>
-                                  <option value="Done">Done</option>
-                                  <option value="PIF">PIF</option>
+                                  <option value="Done">
+                                    {arrangement ? "Done (Defaulted)" : "Done"}
+                                  </option>
+                                  <option value="PIF">
+                                    {arrangement ? "PIF (Arrangement)" : "PIF"}
+                                  </option>
                                   <option value="DA">DA</option>
                                   <option value="ARR">ARR</option>
                                 </select>

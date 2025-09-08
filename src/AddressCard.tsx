@@ -9,7 +9,7 @@ type Props = {
   isActive: boolean;
   onActivate: (i: number) => void;
   onCancelActive: () => void;
-  onComplete: (i: number, outcome: Outcome, amount?: string) => void;
+  onComplete: (i: number, outcome: Outcome, amount?: string, arrangementId?: string) => void;
   onUndo: (i: number) => void;
 };
 

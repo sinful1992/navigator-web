@@ -7,7 +7,7 @@ type Props = {
   state: AppState;
   setActive: (index: number) => void;
   cancelActive: () => void;
-  onComplete: (index: number, outcome: Outcome, amount?: string) => void;
+  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void;
   onCreateArrangement: (addressIndex: number) => void;
   onAddArrangement?: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onAddAddress?: (address: AddressRow) => Promise<number>;

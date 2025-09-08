@@ -16,6 +16,8 @@ export type Completion = {
   timestamp: string;        // ISO string
   /** The list version this completion belongs to (so new imports don't hide items). */
   listVersion?: number;
+  /** Link to arrangement if this completion came from an arrangement payment. */
+  arrangementId?: string;
 };
 
 export type DaySession = {
@@ -32,6 +34,8 @@ export type ArrangementStatus =
   | "Completed"
   | "Missed";
 
+export type RecurrenceType = "none" | "weekly" | "monthly" | "custom";
+
 export type Arrangement = {
   id: string;               // unique identifier
   addressIndex: number;     // links to address in the main list
@@ -45,6 +49,12 @@ export type Arrangement = {
   amount?: string;
   createdAt: string;
   updatedAt: string;
+  // Recurring payment fields
+  recurrenceType?: RecurrenceType;
+  recurrenceInterval?: number;  // e.g., 1 for weekly, 2 for bi-weekly
+  totalPayments?: number;       // total number of payments expected
+  paymentsMade?: number;        // payments completed so far
+  parentArrangementId?: string; // links recurring payments to original
 };
 
 export type AppState = {

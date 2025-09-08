@@ -529,17 +529,17 @@ function AuthedApp() {
 
   // Enhanced completion with optimistic updates
   const handleComplete = React.useCallback(
-    async (index: number, outcome: Outcome, amount?: string) => {
+    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => {
       const optimisticId = `completion_${Date.now()}_${Math.random()}`;
 
       try {
         setOptimisticUpdates((prev) => {
           const updated = new Map(prev);
-          updated.set(optimisticId, { type: "completion", index, outcome, amount });
+          updated.set(optimisticId, { type: "completion", index, outcome, amount, arrangementId });
           return updated;
         });
 
-        complete(index, outcome, amount);
+        complete(index, outcome, amount, arrangementId);
 
         if (cloudSync.queueOperation) {
           await cloudSync.queueOperation({
@@ -552,6 +552,7 @@ function AuthedApp() {
               amount,
               address: addresses[index]?.address,
               listVersion: safeState.currentListVersion,
+              arrangementId,
             },
           });
         }
