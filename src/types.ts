@@ -7,7 +7,6 @@ export type AddressRow = {
 export type Outcome = "PIF" | "DA" | "Done" | "ARR";
 
 export type Completion = {
-  id: string;               // unique identifier for this completion
   index: number;            // index in the address list at the time of completion
   address: string;
   lat?: number | null;

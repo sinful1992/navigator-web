@@ -102,7 +102,7 @@ const AddressListComponent = function AddressList({
   return (
     <>
       <div className="list">
-        {visible.map(({ a, i }) => {
+        {visible.map(({ a, i }, displayIndex) => {
           const isActive = activeIndex === i;
           const mapHref = makeMapsHref(a);
 
@@ -110,7 +110,7 @@ const AddressListComponent = function AddressList({
             <div key={i} className={`row-card ${isActive ? "card-active" : ""}`}>
               {/* Row header */}
               <div className="row-head">
-                <div className="row-index">{i + 1}</div>
+                <div className="row-index" title={`Display #${displayIndex + 1} (Original index ${i + 1})`}>{displayIndex + 1}</div>
                 <div className="row-title" title={a.address}>
                   {a.address}
                 </div>

@@ -43,7 +43,6 @@ function stampCompletionsWithVersion(
   const src = Array.isArray(completions) ? completions : [];
   return src.map((c: any) => ({
     ...c,
-    id: c.id || `comp_legacy_${c.timestamp || Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
     listVersion: typeof c?.listVersion === "number" ? c.listVersion : version,
   }));
 }
@@ -92,13 +91,13 @@ function applyOptimisticUpdates(
           result.completions = [update.data, ...result.completions];
         } else if (update.operation === "update") {
           result.completions = result.completions.map((c) =>
-            c.id === update.data.id || c.timestamp === update.data.originalTimestamp
+            c.timestamp === update.data.originalTimestamp
               ? { ...c, ...update.data }
               : c
           );
         } else if (update.operation === "delete") {
           result.completions = result.completions.filter(
-            (c) => c.id !== update.data.id && c.timestamp !== update.data.timestamp
+            (c) => c.timestamp !== update.data.timestamp
           );
         }
         break;
@@ -413,9 +412,7 @@ export function useAppState() {
           }
 
           const nowISO = new Date().toISOString();
-          const completionId = `comp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
           const completion: Completion = {
-            id: completionId,
             index,
             address: a.address,
             lat: a.lat ?? null,
@@ -483,7 +480,7 @@ export function useAppState() {
           );
 
           // Add optimistic update for deletion
-          addOptimisticUpdate("delete", "completion", { id: completion.id }, operationId);
+          addOptimisticUpdate("delete", "completion", completion, operationId);
 
           arr.splice(mostRecentPos, 1);
 
@@ -718,17 +715,16 @@ export function useAppState() {
               currentState.currentListVersion
             ),
 
-            // Merge completions, avoiding duplicates by ID first, then by timestamp/index/outcome
+            // Merge completions, avoiding duplicates
             completions: [
               ...currentState.completions,
               ...restoredState.completions.filter(
                 (restored) =>
                   !currentState.completions.some(
                     (existing) =>
-                      existing.id === restored.id || // Same ID
-                      (existing.timestamp === restored.timestamp &&
-                       existing.index === restored.index &&
-                       existing.outcome === restored.outcome)
+                      existing.timestamp === restored.timestamp &&
+                      existing.index === restored.index &&
+                      existing.outcome === restored.outcome
                   )
               ),
             ].sort(
@@ -803,17 +799,16 @@ export function useAppState() {
         nextState.completions.forEach((incoming) => {
           const existing = currentState.completions.find(
             (c) =>
-              (c.id === incoming.id) || // Same completion ID
-              (c.index === incoming.index &&
-               c.outcome === incoming.outcome &&
-               Math.abs(
-                 new Date(c.timestamp).getTime() -
-                   new Date(incoming.timestamp).getTime()
-               ) < 5000)
+              c.index === incoming.index &&
+              c.outcome === incoming.outcome &&
+              Math.abs(
+                new Date(c.timestamp).getTime() -
+                  new Date(incoming.timestamp).getTime()
+              ) < 5000
           );
 
-          if (existing && existing.id !== incoming.id && existing.timestamp !== incoming.timestamp) {
-            conflicts.set(`completion_${incoming.id || incoming.timestamp}`, {
+          if (existing && existing.timestamp !== incoming.timestamp) {
+            conflicts.set(`completion_${incoming.timestamp}`, {
               type: "completion",
               incoming,
               existing,
