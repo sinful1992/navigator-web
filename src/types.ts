@@ -55,6 +55,9 @@ export type Arrangement = {
   totalPayments?: number;       // total number of payments expected
   paymentsMade?: number;        // payments completed so far
   parentArrangementId?: string; // links recurring payments to original
+  // Reminder tracking
+  lastReminderSent?: string;    // ISO timestamp of last reminder
+  reminderCount?: number;       // number of reminders sent
 };
 
 export type AppState = {

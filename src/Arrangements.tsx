@@ -35,13 +35,105 @@ const ArrangementsComponent = function Arrangements({
     deleting: Set<string>;
     markingPaid: Set<string>;
     markingDefaulted: Set<string>;
+    sendingReminder: Set<string>;
   }>({
     saving: false,
     updating: false,
     deleting: new Set(),
     markingPaid: new Set(),
-    markingDefaulted: new Set()
+    markingDefaulted: new Set(),
+    sendingReminder: new Set()
   });
+
+  // State for reminder confirmations
+  const [reminderSent, setReminderSent] = React.useState<Set<string>>(new Set());
+
+  // Create enforcement reminder message template
+  const createReminderMessage = (arrangement: Arrangement): string => {
+    const customerName = arrangement.customerName || "";
+    const amount = arrangement.amount || "the arranged amount";
+    const date = format(parseISO(arrangement.scheduledDate), "dd/MM/yyyy");
+    const time = arrangement.scheduledTime || "";
+    
+    const greeting = customerName ? `${customerName}, ` : "";
+    
+    return `${greeting}PAYMENT REMINDER\n\nYour payment arrangement is due ${date}${time ? ` at ${time}` : ""}.\n\nAmount Due: £${amount}\n\nPayment must be made as agreed. Failure to comply may result in further enforcement action.\n\nContact immediately if unable to pay as arranged.\n\nEnforcement Agent G. Barkus`;
+  };
+
+  // Format phone number for SMS (keep original format, just clean it)
+  const formatPhoneForSMS = (phone: string): string => {
+    if (!phone) return "";
+    
+    // Remove all non-numeric characters except +
+    let cleaned = phone.replace(/[^\d+]/g, "");
+    
+    // If starts with 0, keep as is (UK local format)
+    // If starts with +44, keep as is (international format)
+    // Otherwise assume it's a clean UK number
+    if (cleaned.startsWith("0") || cleaned.startsWith("+44") || cleaned.startsWith("44")) {
+      return cleaned;
+    }
+    
+    // For other formats, assume UK and add leading 0 if it looks like a mobile number
+    if (cleaned.length === 10 && cleaned.startsWith("7")) {
+      return "0" + cleaned;
+    }
+    
+    return cleaned;
+  };
+
+  // Send SMS reminder
+  const sendReminderSMS = async (arrangement: Arrangement) => {
+    if (!arrangement.phoneNumber) {
+      alert("No phone number available for this arrangement.");
+      return;
+    }
+
+    setLoadingStates(prev => ({
+      ...prev,
+      sendingReminder: new Set([...prev.sendingReminder, arrangement.id])
+    }));
+
+    try {
+      const message = createReminderMessage(arrangement);
+      const formattedPhone = formatPhoneForSMS(arrangement.phoneNumber);
+      
+      // Create SMS URL (sms: protocol)
+      const smsUrl = `sms:${formattedPhone}?body=${encodeURIComponent(message)}`;
+      
+      // Open default SMS app
+      window.location.href = smsUrl;
+      
+      // Update arrangement with reminder info
+      const now = new Date().toISOString();
+      await onUpdateArrangement(arrangement.id, {
+        lastReminderSent: now,
+        reminderCount: (arrangement.reminderCount || 0) + 1,
+        updatedAt: now
+      });
+      
+      // Show confirmation
+      setReminderSent(prev => new Set([...prev, arrangement.id]));
+      
+      // Auto-hide confirmation after 3 seconds
+      setTimeout(() => {
+        setReminderSent(prev => {
+          const next = new Set(prev);
+          next.delete(arrangement.id);
+          return next;
+        });
+      }, 3000);
+      
+    } catch (error) {
+      console.error("Failed to send reminder:", error);
+      alert("Failed to update reminder information. Please try again.");
+    } finally {
+      setLoadingStates(prev => ({
+        ...prev,
+        sendingReminder: new Set([...prev.sendingReminder].filter(id => id !== arrangement.id))
+      }));
+    }
+  };
 
   // Handle auto-create from address list
   React.useEffect(() => {
@@ -457,6 +549,54 @@ const ArrangementsComponent = function Arrangements({
                       
                       {(arrangement.status === "Scheduled" || arrangement.status === "Confirmed") && (
                         <>
+                          {/* Send Reminder Button */}
+                          {arrangement.phoneNumber && (
+                            <div style={{ position: 'relative' }}>
+                              <LoadingButton
+                                className="btn btn-sm btn-primary"
+                                isLoading={loadingStates.sendingReminder.has(arrangement.id)}
+                                loadingText="Opening..."
+                                onClick={() => sendReminderSMS(arrangement)}
+                                title={`Send SMS reminder to ${arrangement.phoneNumber}`}
+                              >
+                                📱 Send SMS
+                              </LoadingButton>
+                              
+                              {/* Confirmation message */}
+                              {reminderSent.has(arrangement.id) && (
+                                <div 
+                                  className="reminder-confirmation"
+                                  style={{
+                                    position: 'absolute',
+                                    top: '-35px',
+                                    left: '0',
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '12px',
+                                    whiteSpace: 'nowrap',
+                                    zIndex: 1000,
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                                  }}
+                                >
+                                  ✅ SMS opened!
+                                </div>
+                              )}
+                              
+                              {/* Show reminder history */}
+                              {arrangement.reminderCount && arrangement.reminderCount > 0 && (
+                                <div className="reminder-history">
+                                  {arrangement.reminderCount} SMS reminder{arrangement.reminderCount > 1 ? 's' : ''} sent
+                                  {arrangement.lastReminderSent && (
+                                    <span>
+                                      {' • Last: '}
+                                      {format(parseISO(arrangement.lastReminderSent), 'MMM d, HH:mm')}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           <LoadingButton
                             className="btn btn-sm btn-success"
                             isLoading={loadingStates.markingPaid.has(arrangement.id)}

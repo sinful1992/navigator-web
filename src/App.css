@@ -433,6 +433,31 @@ p, h1, h2, h3, h4, h5, h6 {
 .arrangement-status { flex-shrink: 0; }
 .arrangement-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
 
+/* SMS reminder button and confirmation styles */
+.reminder-confirmation {
+  animation: slideInDown 0.3s ease-out;
+  background: var(--success) !important;
+  color: white !important;
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reminder-history {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  font-style: italic;
+}
+
 /* ==== Complete Bar (after pressing Complete) ==== */
 .complete-bar {
   display: flex;
