@@ -202,9 +202,7 @@ function AuthedApp() {
   const lastFromCloudRef = React.useRef<string | null>(null);
 
   // Optimistic update tracking
-  const [optimisticUpdates, setOptimisticUpdates] = React.useState<
-    Map<string, any>
-  >(new Map());
+  const [optimisticUpdates] = React.useState<Map<string, any>>(new Map());
 
   // Collapsible Tools panel: closed on mobile, open on desktop
   const [toolsOpen, setToolsOpen] = React.useState<boolean>(() => {
@@ -343,7 +341,7 @@ function AuthedApp() {
         setCloudBusy(false);
       }
     },
-    [cloudSync, restoreState]
+    [cloudSync, restoreState, alert, confirm]
   );
 
   React.useEffect(() => {
@@ -527,7 +525,7 @@ function AuthedApp() {
     }
   }, [safeState, setAddresses, cloudSync]);
 
-// FIXED: Enhanced completion with proper error handling (removed duplicate optimistic updates)
+  // FIXED: Enhanced completion with proper error handling (removed duplicate optimistic updates)
   const handleComplete = React.useCallback(
     async (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => {
       try {
