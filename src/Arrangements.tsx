@@ -48,16 +48,33 @@ const ArrangementsComponent = function Arrangements({
   // State for reminder confirmations
   const [reminderSent, setReminderSent] = React.useState<Set<string>>(new Set());
 
-  // Create enforcement reminder message template
+  // Create enforcement reminder message template - GDPR compliant with reference number
   const createReminderMessage = (arrangement: Arrangement): string => {
-    const customerName = arrangement.customerName || "";
+    const customerField = arrangement.customerName || "";
     const amount = arrangement.amount || "the arranged amount";
     const date = format(parseISO(arrangement.scheduledDate), "dd/MM/yyyy");
     const time = arrangement.scheduledTime || "";
     
-    const greeting = customerName ? `${customerName}, ` : "";
+    // Extract reference number and surname from "123456789 surname" format
+    let greeting = "";
+    let referenceNumber = "";
     
-    return `${greeting}PAYMENT REMINDER\n\nYour payment arrangement is due ${date}${time ? ` at ${time}` : ""}.\n\nAmount Due: £${amount}\n\nPayment must be made as agreed. Failure to comply may result in further enforcement action.\n\nContact immediately if unable to pay as arranged.\n\nEnforcement Agent G. Barkus`;
+    if (customerField) {
+      const parts = customerField.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        // Format: "123456789 surname" 
+        referenceNumber = parts[0]; // First part is the reference number
+        const surname = parts.slice(1).join(" "); // Rest is the surname
+        greeting = `Mr/Mrs ${surname}, `;
+      } else {
+        // If only one part, treat as surname only (no reference)
+        greeting = `${customerField}, `;
+      }
+    }
+    
+    const refLine = referenceNumber ? `Reference: ${referenceNumber}\n\n` : "";
+    
+    return `${greeting}PAYMENT REMINDER\n\n${refLine}Your payment arrangement is due ${date}${time ? ` at ${time}` : ""}.\n\nAmount Due: £${amount}\n\nPayment must be made as agreed. Failure to comply may result in further enforcement action.\n\nContact immediately if unable to pay as arranged.\n\nEnforcement Agent G. Barkus`;
   };
 
   // Format phone number for SMS (keep original format, just clean it)
