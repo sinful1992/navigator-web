@@ -78,6 +78,10 @@ const AddressListComponent = function AddressList({
   );
   const [pifAmount, setPifAmount] = React.useState<string>("");
   
+  // Prevent double submissions
+  const [submittingIndex, setSubmittingIndex] = React.useState<number | null>(null);
+  const [lastSubmission, setLastSubmission] = React.useState<{index: number, outcome: string, timestamp: number} | null>(null);
+  
   // Arrangement form state
   const [showArrangementForm, setShowArrangementForm] = React.useState<number | null>(null);
 
@@ -87,8 +91,37 @@ const AddressListComponent = function AddressList({
       setOutcomeOpenFor(null);
       setPifAmount("");
       setShowArrangementForm(null);
+      setSubmittingIndex(null);
     }
   }, [activeIndex]);
+  
+  // Debounced completion handler with duplicate protection
+  const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => {
+    // Check if already submitting this index
+    if (submittingIndex === index) return;
+    
+    // Check for duplicate submission within 2 seconds
+    const now = Date.now();
+    if (lastSubmission && 
+        lastSubmission.index === index && 
+        lastSubmission.outcome === outcome &&
+        now - lastSubmission.timestamp < 2000) {
+      return;
+    }
+    
+    try {
+      setSubmittingIndex(index);
+      setLastSubmission({ index, outcome, timestamp: now });
+      
+      await onComplete(index, outcome, amount, arrangementId);
+      setOutcomeOpenFor(null);
+    } catch (error) {
+      console.error('Completion failed:', error);
+      // Could show user error here
+    } finally {
+      setSubmittingIndex(null);
+    }
+  }, [submittingIndex, lastSubmission, onComplete]);
 
   if (visible.length === 0) {
     return (
@@ -167,24 +200,20 @@ const AddressListComponent = function AddressList({
                     <div className="complete-btns">
                       <button
                         className="btn btn-success"
-                        onClick={() => {
-                          onComplete(i, "Done");
-                          setOutcomeOpenFor(null);
-                        }}
+                        disabled={submittingIndex === i}
+                        onClick={() => handleCompletion(i, "Done")}
                         title="Mark as Done"
                       >
-                        ✅ Done
+                        {submittingIndex === i ? "⏳ Saving..." : "✅ Done"}
                       </button>
 
                       <button
                         className="btn btn-danger"
-                        onClick={() => {
-                          onComplete(i, "DA");
-                          setOutcomeOpenFor(null);
-                        }}
+                        disabled={submittingIndex === i}
+                        onClick={() => handleCompletion(i, "DA")}
                         title="Mark as DA"
                       >
-                        🚫 DA
+                        {submittingIndex === i ? "⏳ Saving..." : "🚫 DA"}
                       </button>
 
                       <button
@@ -212,18 +241,18 @@ const AddressListComponent = function AddressList({
                       />
                       <button
                         className="btn btn-primary"
+                        disabled={submittingIndex === i}
                         onClick={() => {
                           const n = Number(pifAmount);
                           if (!Number.isFinite(n) || n <= 0) {
                             alert("Enter a valid PIF amount (e.g. 50)");
                             return;
                           }
-                          onComplete(i, "PIF", n.toFixed(2));
-                          setOutcomeOpenFor(null);
+                          handleCompletion(i, "PIF", n.toFixed(2));
                         }}
                         title="Save PIF amount"
                       >
-                        💷 Save PIF
+                        {submittingIndex === i ? "⏳ Saving..." : "💷 Save PIF"}
                       </button>
                     </div>
                   </div>
@@ -242,7 +271,7 @@ const AddressListComponent = function AddressList({
           onSave={async (arrangementData) => {
             await onAddArrangement(arrangementData);
             // Mark the address as ARR completed
-            onComplete(showArrangementForm, "ARR");
+            handleCompletion(showArrangementForm, "ARR");
             setShowArrangementForm(null);
           }}
           onCancel={() => setShowArrangementForm(null)}

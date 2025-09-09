@@ -65,4 +65,6 @@ export type AppState = {
   arrangements: Arrangement[];
   /** Increments whenever you import a new Excel list. */
   currentListVersion: number;
+  /** Schema version for data migration. */
+  _schemaVersion?: number;
 };

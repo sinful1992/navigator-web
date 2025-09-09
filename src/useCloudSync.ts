@@ -110,7 +110,9 @@ export function useCloudSync(): UseCloudSync {
     isProcessingQueue.current = true;
     setIsSyncing(true);
 
-    const batch = syncQueue.current.splice(0, 10); // Process in batches of 10
+    // FIXED: Don't remove items until they're successfully processed
+    const batch = syncQueue.current.slice(0, 10); // Copy first 10 items
+    const processedIds = new Set<string>();
     
     try {
       for (const entry of batch) {
@@ -139,24 +141,34 @@ export function useCloudSync(): UseCloudSync {
             }
           }
 
+          // Mark as successfully processed
+          processedIds.add(entry.operation.id);
           entry.resolve(operation);
+          
         } catch (opError: any) {
           // Increment retry count
           entry.operation.retries += 1;
           
           if (entry.operation.retries < 3) {
-            // Re-queue for retry
-            syncQueue.current.push(entry);
+            // Keep in queue for retry (don't mark as processed)
+            console.log(`Retrying operation ${entry.operation.id}, attempt ${entry.operation.retries}`);
           } else {
-            // Max retries exceeded
+            // Max retries exceeded - remove from queue
             console.warn(`Operation ${entry.operation.id} failed after max retries:`, opError);
+            processedIds.add(entry.operation.id); // Remove from queue
             entry.reject(opError);
           }
         }
       }
+      
+      // FIXED: Only remove successfully processed items from queue
+      syncQueue.current = syncQueue.current.filter(
+        entry => !processedIds.has(entry.operation.id)
+      );
+      
     } catch (batchError: any) {
-      // Re-queue the entire batch
-      syncQueue.current.unshift(...batch);
+      // Don't remove any items on batch error - they'll be retried
+      console.error('Sync batch error:', batchError);
       setError(batchError?.message || 'Sync batch failed');
     } finally {
       isProcessingQueue.current = false;
@@ -169,11 +181,24 @@ export function useCloudSync(): UseCloudSync {
     }
   }, [user, isOnline]);
 
-  // Queue an operation for sync
+  // Queue an operation for sync with duplicate detection
   const queueOperation = useCallback(async (
     operation: Omit<SyncOperation, 'id' | 'timestamp' | 'localTimestamp' | 'retries'>
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
+      // Check for duplicate operations based on entity and entityId
+      const duplicateKey = `${operation.type}_${operation.entity}_${operation.entityId}`;
+      const isDuplicate = syncQueue.current.some(entry => 
+        `${entry.operation.type}_${entry.operation.entity}_${entry.operation.entityId}` === duplicateKey &&
+        entry.operation.retries < 3 // Only consider active operations
+      );
+      
+      if (isDuplicate) {
+        console.log(`Skipping duplicate operation: ${duplicateKey}`);
+        resolve(); // Resolve immediately for duplicates
+        return;
+      }
+      
       const now = new Date().toISOString();
       const fullOperation: SyncOperation = {
         ...operation,
@@ -183,11 +208,22 @@ export function useCloudSync(): UseCloudSync {
         retries: 0
       };
 
-      syncQueue.current.push({
+      const entry = {
         operation: fullOperation,
         resolve,
         reject
-      });
+      };
+
+      syncQueue.current.push(entry);
+      
+      // Limit queue size to prevent memory issues
+      if (syncQueue.current.length > 1000) {
+        console.warn('Sync queue size limit reached, removing oldest entries');
+        const removed = syncQueue.current.splice(0, 100);
+        removed.forEach(oldEntry => {
+          oldEntry.reject(new Error('Queue overflow - operation cancelled'));
+        });
+      }
 
       // Start processing if online
       if (isOnline) {

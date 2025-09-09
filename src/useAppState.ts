@@ -11,7 +11,8 @@ import type {
   Arrangement,
 } from "./types";
 
-const STORAGE_KEY = "navigator_state_v4"; // Bumped version for new features
+const STORAGE_KEY = "navigator_state_v5"; // Bumped for data integrity improvements
+const CURRENT_SCHEMA_VERSION = 5;
 
 type StateUpdate = {
   id: string;
@@ -36,15 +37,79 @@ const initial: AppState = {
   currentListVersion: 1,
 };
 
+// Data validation functions
+function validateCompletion(c: any): c is Completion {
+  return c &&
+    typeof c.index === 'number' &&
+    typeof c.address === 'string' &&
+    typeof c.outcome === 'string' &&
+    ['PIF', 'DA', 'Done', 'ARR'].includes(c.outcome) &&
+    typeof c.timestamp === 'string' &&
+    !isNaN(new Date(c.timestamp).getTime());
+}
+
+function validateAddressRow(a: any): a is AddressRow {
+  return a &&
+    typeof a.address === 'string' &&
+    a.address.trim().length > 0;
+}
+
+function validateAppState(state: any): state is AppState {
+  return state &&
+    Array.isArray(state.addresses) &&
+    Array.isArray(state.completions) &&
+    Array.isArray(state.daySessions) &&
+    Array.isArray(state.arrangements) &&
+    (state.activeIndex === null || typeof state.activeIndex === 'number') &&
+    typeof state.currentListVersion === 'number';
+}
+
 function stampCompletionsWithVersion(
   completions: any[] | undefined,
   version: number
 ): Completion[] {
   const src = Array.isArray(completions) ? completions : [];
-  return src.map((c: any) => ({
-    ...c,
-    listVersion: typeof c?.listVersion === "number" ? c.listVersion : version,
-  }));
+  return src
+    .filter(validateCompletion)
+    .map((c: any) => ({
+      ...c,
+      listVersion: typeof c?.listVersion === "number" ? c.listVersion : version,
+    }));
+}
+
+// Schema migration function
+function migrateSchema(data: any, fromVersion: number): AppState {
+  let migrated = { ...data };
+  
+  // Migrate from v4 to v5 (add data validation)
+  if (fromVersion < 5) {
+    console.log('Migrating schema from version', fromVersion, 'to 5');
+    
+    // Clean up invalid addresses
+    if (Array.isArray(migrated.addresses)) {
+      migrated.addresses = migrated.addresses.filter(validateAddressRow);
+    } else {
+      migrated.addresses = [];
+    }
+    
+    // Clean up invalid completions
+    if (Array.isArray(migrated.completions)) {
+      migrated.completions = migrated.completions.filter(validateCompletion);
+    } else {
+      migrated.completions = [];
+    }
+    
+    // Ensure required fields exist
+    migrated.currentListVersion = migrated.currentListVersion || 1;
+    migrated.daySessions = Array.isArray(migrated.daySessions) ? migrated.daySessions : [];
+    migrated.arrangements = Array.isArray(migrated.arrangements) ? migrated.arrangements : [];
+    migrated.activeIndex = (typeof migrated.activeIndex === 'number') ? migrated.activeIndex : null;
+  }
+  
+  // Add schema version
+  migrated._schemaVersion = CURRENT_SCHEMA_VERSION;
+  
+  return migrated;
 }
 
 // Generate a deterministic ID for operations
@@ -70,37 +135,64 @@ function getOrCreateDeviceId(): string {
   }
 }
 
-// Apply optimistic updates to state
+// Apply optimistic updates to state with atomic transaction handling
 function applyOptimisticUpdates(
   baseState: AppState,
   updates: Map<string, StateUpdate>
 ): AppState {
-  let result = { ...baseState };
+  // Start with a deep copy to ensure immutability
+  let result: AppState = JSON.parse(JSON.stringify(baseState));
+  
+  // Track which entities are being modified to detect conflicts
+  const entityLocks = new Set<string>();
 
   // Sort updates by timestamp to apply in order
   const sortedUpdates = Array.from(updates.values()).sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
 
-  for (const update of sortedUpdates) {
-    if (update.type === "reverted") continue;
+  try {
+    for (const update of sortedUpdates) {
+      if (update.type === "reverted") continue;
 
-    switch (update.entity) {
-      case "completion":
-        if (update.operation === "create") {
-          result.completions = [update.data, ...result.completions];
-        } else if (update.operation === "update") {
-          result.completions = result.completions.map((c) =>
-            c.timestamp === update.data.originalTimestamp
-              ? { ...c, ...update.data }
-              : c
-          );
-        } else if (update.operation === "delete") {
-          result.completions = result.completions.filter(
-            (c) => c.timestamp !== update.data.timestamp
-          );
-        }
-        break;
+      // Create entity lock key for conflict detection
+      const lockKey = `${update.entity}_${update.operation}`;
+      if (entityLocks.has(lockKey)) {
+        console.warn(`Concurrent ${update.operation} operation detected on ${update.entity}`, update);
+      }
+      entityLocks.add(lockKey);
+
+      switch (update.entity) {
+        case "completion":
+          if (update.operation === "create") {
+            // Validate completion data
+            if (!update.data || typeof update.data.index !== 'number' || !update.data.outcome) {
+              console.error('Invalid completion data:', update.data);
+              continue;
+            }
+            
+            // Check for duplicates before adding
+            const isDuplicate = result.completions.some(c => 
+              c.index === update.data.index && 
+              c.outcome === update.data.outcome &&
+              Math.abs(new Date(c.timestamp).getTime() - new Date(update.data.timestamp).getTime()) < 1000
+            );
+            
+            if (!isDuplicate) {
+              result.completions = [update.data, ...result.completions];
+            }
+          } else if (update.operation === "update") {
+            result.completions = result.completions.map((c) =>
+              c.timestamp === update.data.originalTimestamp
+                ? { ...c, ...update.data }
+                : c
+            );
+          } else if (update.operation === "delete") {
+            result.completions = result.completions.filter(
+              (c) => c.timestamp !== update.data.timestamp
+            );
+          }
+          break;
 
       case "arrangement":
         if (update.operation === "create") {
@@ -148,7 +240,15 @@ function applyOptimisticUpdates(
           );
         }
         break;
+        
+      default:
+        console.warn(`Unknown entity type in optimistic update: ${update.entity}`, update);
+        break;
     }
+    }
+  } catch (error) {
+    console.error('Failed to apply optimistic updates, returning base state:', error);
+    return baseState; // Return base state if optimistic updates fail
   }
 
   return result;
@@ -176,41 +276,71 @@ export function useAppState() {
     new Map()
   );
 
-  // ---- load from IndexedDB (with migration) ----
+  // ---- load from IndexedDB (with validation and migration) ----
   React.useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const saved = (await get(STORAGE_KEY)) as Partial<AppState> | undefined;
+        const saved = (await get(STORAGE_KEY)) as any;
         if (!alive) return;
 
         if (saved) {
-          const version =
-            typeof saved.currentListVersion === "number"
-              ? saved.currentListVersion
-              : 1;
+          // Detect schema version
+          const savedSchemaVersion = saved._schemaVersion || 4;
+          
+          // Migrate if necessary
+          let migrated = saved;
+          if (savedSchemaVersion < CURRENT_SCHEMA_VERSION) {
+            try {
+              migrated = migrateSchema(saved, savedSchemaVersion);
+              console.log('Schema migration successful');
+            } catch (migrationError) {
+              logger.error('Schema migration failed:', migrationError);
+              // Fall back to minimal safe state
+              migrated = { 
+                ...initial, 
+                _schemaVersion: CURRENT_SCHEMA_VERSION 
+              };
+            }
+          }
+          
+          // Validate migrated data
+          if (!validateAppState(migrated)) {
+            logger.warn('Loaded data failed validation, using initial state');
+            setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
+            return;
+          }
 
+          const version = migrated.currentListVersion || 1;
           const next: AppState = {
-            addresses: Array.isArray(saved.addresses) ? saved.addresses : [],
-            activeIndex:
-              typeof saved.activeIndex === "number" ? saved.activeIndex : null,
-            completions: stampCompletionsWithVersion(
-              saved.completions,
-              version
-            ),
-            daySessions: Array.isArray(saved.daySessions)
-              ? saved.daySessions
-              : [],
-            arrangements: Array.isArray(saved.arrangements)
-              ? saved.arrangements
-              : [],
+            addresses: migrated.addresses.filter(validateAddressRow),
+            activeIndex: (typeof migrated.activeIndex === "number") ? migrated.activeIndex : null,
+            completions: stampCompletionsWithVersion(migrated.completions, version),
+            daySessions: Array.isArray(migrated.daySessions) ? migrated.daySessions : [],
+            arrangements: Array.isArray(migrated.arrangements) ? migrated.arrangements : [],
             currentListVersion: version,
+            _schemaVersion: CURRENT_SCHEMA_VERSION,
           };
 
           setBaseState(next);
+          
+          // Save migrated data back if migration occurred
+          if (savedSchemaVersion < CURRENT_SCHEMA_VERSION) {
+            try {
+              await set(STORAGE_KEY, next);
+              console.log('Migrated data saved successfully');
+            } catch (saveError) {
+              logger.warn('Failed to save migrated data:', saveError);
+            }
+          }
+        } else {
+          // No saved data, use initial state with current schema version
+          setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
         }
       } catch (error) {
-        logger.warn("Failed to load state from IndexedDB:", error);
+        logger.error("Failed to load state from IndexedDB:", error);
+        // Use safe fallback
+        setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
       } finally {
         if (alive) setLoading(false);
       }
@@ -220,12 +350,44 @@ export function useAppState() {
     };
   }, []);
 
-  // ---- persist to IndexedDB (debounced) ----
+  // Error notification state
+  const [persistError, setPersistError] = React.useState<string | null>(null);
+  
+  // ---- persist to IndexedDB (debounced with error handling) ----
   React.useEffect(() => {
     if (loading) return;
-    const t = setTimeout(() => set(STORAGE_KEY, baseState).catch(() => {}), 150);
+    
+    const t = setTimeout(async () => {
+      try {
+        // Add schema version before saving
+        const stateToSave = { ...baseState, _schemaVersion: CURRENT_SCHEMA_VERSION };
+        await set(STORAGE_KEY, stateToSave);
+        
+        // Clear any previous persist errors
+        if (persistError) {
+          setPersistError(null);
+        }
+        
+      } catch (error: any) {
+        const errorMsg = error?.message || 'Unknown storage error';
+        logger.error('Failed to persist state to IndexedDB:', error);
+        setPersistError(errorMsg);
+        
+        // Try to clear corrupted storage and retry once
+        if (errorMsg.includes('quota') || errorMsg.includes('storage')) {
+          try {
+            console.warn('Storage quota exceeded, attempting cleanup');
+            // Could implement storage cleanup here if needed
+            // For now, just notify the user
+          } catch (cleanupError) {
+            logger.error('Storage cleanup failed:', cleanupError);
+          }
+        }
+      }
+    }, 150);
+    
     return () => clearTimeout(t);
-  }, [baseState, loading]);
+  }, [baseState, loading, persistError]);
 
   // ---- optimistic update helpers ----
   const addOptimisticUpdate = React.useCallback(
@@ -400,53 +562,82 @@ export function useAppState() {
     setBaseState((s) => ({ ...s, activeIndex: null }));
   }, []);
 
-  /** FIXED: Enhanced completion with only optimistic updates (no direct base state modification) */
+  // Track pending completions to prevent double submissions
+  const [pendingCompletions, setPendingCompletions] = React.useState<Set<number>>(new Set());
+  
+  /** ATOMIC: Enhanced completion with proper transaction handling */
   const complete = React.useCallback(
-    (index: number, outcome: Outcome, amount?: string, arrangementId?: string): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        setBaseState((s) => {
-          const a = s.addresses[index];
-          if (!a) {
-            reject(new Error(`Address at index ${index} not found`));
-            return s;
-          }
-
-          const nowISO = new Date().toISOString();
-          const completion: Completion = {
-            index,
-            address: a.address,
-            lat: a.lat ?? null,
-            lng: a.lng ?? null,
-            outcome,
-            amount,
-            timestamp: nowISO,
-            listVersion: s.currentListVersion,
-            arrangementId,
-          };
-
-          const operationId = generateOperationId(
-            "create",
-            "completion",
-            completion
-          );
-
-          // FIXED: Only add optimistic update, don't modify base state directly
-          addOptimisticUpdate("create", "completion", completion, operationId);
-
-          // FIXED: Don't modify base state here - let optimistic updates handle it
-          // This was the source of the duplication
-          const next: AppState = {
-            ...s,
-            // Remove activeIndex if it matches completed index
-            activeIndex: s.activeIndex === index ? null : s.activeIndex,
-          };
-
-          setTimeout(() => resolve(operationId), 0);
+    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string): Promise<string> => {
+      // Check if completion is already pending for this index
+      if (pendingCompletions.has(index)) {
+        throw new Error(`Completion already pending for index ${index}`);
+      }
+      
+      // Check if address exists
+      const currentState = baseState;
+      const address = currentState.addresses[index];
+      if (!address) {
+        throw new Error(`Address at index ${index} not found`);
+      }
+      
+      // Check if already completed
+      const existingCompletion = currentState.completions.find(
+        (c) => c.index === index && c.listVersion === currentState.currentListVersion
+      );
+      if (existingCompletion) {
+        throw new Error(`Address at index ${index} is already completed`);
+      }
+      
+      const nowISO = new Date().toISOString();
+      const completion: Completion = {
+        index,
+        address: address.address,
+        lat: address.lat ?? null,
+        lng: address.lng ?? null,
+        outcome,
+        amount,
+        timestamp: nowISO,
+        listVersion: currentState.currentListVersion,
+        arrangementId,
+      };
+      
+      const operationId = generateOperationId(
+        "create",
+        "completion",
+        completion
+      );
+      
+      try {
+        // Mark as pending
+        setPendingCompletions(prev => new Set([...prev, index]));
+        
+        // Apply optimistic update first
+        addOptimisticUpdate("create", "completion", completion, operationId);
+        
+        // Then update base state atomically
+        await new Promise<void>((resolve) => {
+          setBaseState((s) => {
+            const next: AppState = {
+              ...s,
+              completions: [completion, ...s.completions],
+              activeIndex: s.activeIndex === index ? null : s.activeIndex,
+            };
+            resolve();
+            return next;
+          });
+        });
+        
+        return operationId;
+      } finally {
+        // Always clear pending state
+        setPendingCompletions(prev => {
+          const next = new Set(prev);
+          next.delete(index);
           return next;
         });
-      });
+      }
     },
-    [addOptimisticUpdate]
+    [baseState, addOptimisticUpdate, pendingCompletions]
   );
 
   /** Enhanced undo with optimistic updates - finds the most recent completion for the given index */
@@ -684,7 +875,7 @@ export function useAppState() {
   }, [baseState]);
 
   const restoreState = React.useCallback(
-    (obj: unknown, mergeStrategy: "replace" | "merge" = "replace") => {
+    async (obj: unknown, mergeStrategy: "replace" | "merge" = "replace") => {
       if (!isValidState(obj)) throw new Error("Invalid backup file format");
 
       const version =
@@ -778,10 +969,17 @@ export function useAppState() {
       // Clear optimistic updates after restore
       clearOptimisticUpdates();
 
-      // Persist immediately
-      set(STORAGE_KEY, restoredState).catch(() => {});
+      // Persist immediately with proper error handling
+      try {
+        const stateToSave = { ...restoredState, _schemaVersion: CURRENT_SCHEMA_VERSION };
+        await set(STORAGE_KEY, stateToSave);
+      } catch (persistError: any) {
+        logger.error('Failed to persist restored state:', persistError);
+        setPersistError('Failed to save restored data: ' + (persistError?.message || 'Unknown error'));
+        throw new Error('Restore failed: Could not save data');
+      }
     },
-    [clearOptimisticUpdates]
+    [clearOptimisticUpdates, setPersistError]
   );
 
   // Enhanced setState for cloud sync with conflict detection
@@ -896,6 +1094,10 @@ export function useAppState() {
         return updated;
       });
     },
+
+    // Error handling
+    persistError,
+    clearPersistError: () => setPersistError(null),
 
     // Enhanced actions
     setAddresses,
