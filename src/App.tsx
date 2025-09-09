@@ -202,9 +202,7 @@ function AuthedApp() {
   const lastFromCloudRef = React.useRef<string | null>(null);
 
   // Optimistic update tracking
-  const [optimisticUpdates, setOptimisticUpdates] = React.useState<
-    Map<string, any>
-  >(new Map());
+  const [optimisticUpdates] = React.useState<Map<string, any>>(new Map());
 
   // Collapsible Tools panel: closed on mobile, open on desktop
   const [toolsOpen, setToolsOpen] = React.useState<boolean>(() => {
@@ -343,7 +341,7 @@ function AuthedApp() {
         setCloudBusy(false);
       }
     },
-    [cloudSync, restoreState]
+    [cloudSync, restoreState, alert, confirm]
   );
 
   React.useEffect(() => {
@@ -527,25 +525,20 @@ function AuthedApp() {
     }
   }, [safeState, setAddresses, cloudSync]);
 
-  // Enhanced completion with optimistic updates
+  // FIXED: Enhanced completion with proper error handling (removed duplicate optimistic updates)
   const handleComplete = React.useCallback(
     async (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => {
-      const optimisticId = `completion_${Date.now()}_${Math.random()}`;
-
       try {
-        setOptimisticUpdates((prev) => {
-          const updated = new Map(prev);
-          updated.set(optimisticId, { type: "completion", index, outcome, amount, arrangementId });
-          return updated;
-        });
+        // FIXED: Removed the duplicate optimistic update logic from App.tsx
+        // Only the useAppState complete function should handle optimistic updates
+        const operationId = await complete(index, outcome, amount, arrangementId);
 
-        complete(index, outcome, amount, arrangementId);
-
+        // Queue for cloud sync if available
         if (cloudSync.queueOperation) {
           await cloudSync.queueOperation({
             type: "create",
             entity: "completion",
-            entityId: optimisticId,
+            entityId: operationId,
             data: {
               index,
               outcome,
@@ -558,19 +551,7 @@ function AuthedApp() {
         }
       } catch (error) {
         logger.error("Failed to complete address:", error);
-        setOptimisticUpdates((prev) => {
-          const updated = new Map(prev);
-          updated.delete(optimisticId);
-          return updated;
-        });
-      } finally {
-        setTimeout(() => {
-          setOptimisticUpdates((prev) => {
-            const updated = new Map(prev);
-            updated.delete(optimisticId);
-            return updated;
-          });
-        }, 1000);
+        // Could potentially show user feedback here
       }
     },
     [complete, addresses, safeState.currentListVersion, cloudSync]
