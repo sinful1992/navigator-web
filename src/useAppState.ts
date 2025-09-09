@@ -1,4 +1,4 @@
-// src/useAppState.ts
+// src/useAppState.ts - FIXED VERSION
 import * as React from "react";
 import { get, set } from "idb-keyval";
 import { logger } from "./utils/logger";
@@ -400,7 +400,7 @@ export function useAppState() {
     setBaseState((s) => ({ ...s, activeIndex: null }));
   }, []);
 
-  /** Enhanced completion with optimistic updates */
+  /** FIXED: Enhanced completion with only optimistic updates (no direct base state modification) */
   const complete = React.useCallback(
     (index: number, outcome: Outcome, amount?: string, arrangementId?: string): Promise<string> => {
       return new Promise((resolve, reject) => {
@@ -430,14 +430,16 @@ export function useAppState() {
             completion
           );
 
-          // Add optimistic update
+          // FIXED: Only add optimistic update, don't modify base state directly
           addOptimisticUpdate("create", "completion", completion, operationId);
 
+          // FIXED: Don't modify base state here - let optimistic updates handle it
+          // This was the source of the duplication
           const next: AppState = {
             ...s,
-            completions: [completion, ...s.completions],
+            // Remove activeIndex if it matches completed index
+            activeIndex: s.activeIndex === index ? null : s.activeIndex,
           };
-          if (s.activeIndex === index) next.activeIndex = null;
 
           setTimeout(() => resolve(operationId), 0);
           return next;
