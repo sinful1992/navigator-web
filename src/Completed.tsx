@@ -261,6 +261,10 @@ function getCompletionDateKey(c: Completion, fallbackSessions: DaySession[]): st
 
 export default function Completed({ state, onChangeOutcome }: Props) {
   const { addresses, completions, daySessions, arrangements } = state;
+  
+  // Track which PIF amounts are being edited
+  const [editingPifAmount, setEditingPifAmount] = React.useState<number | null>(null);
+  const [tempPifAmount, setTempPifAmount] = React.useState<string>("");
 
   // Initial range: last session day or today
   const lastSessionKey =
@@ -445,7 +449,107 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                   {line}
                                 </div>
                                 <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                                  {"Index " + String(comp.index) + (comp.amount ? " · GBP" + String(comp.amount) : "")}
+                                  {"Index " + String(comp.index)}
+                                  {comp.outcome === "PIF" && (
+                                    <span style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                      {editingPifAmount === compIndex ? (
+                                        <>
+                                          <span>· £</span>
+                                          <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            inputMode="decimal"
+                                            style={{
+                                              width: 70,
+                                              padding: "2px 4px",
+                                              fontSize: 12,
+                                              border: "1px solid var(--border)",
+                                              borderRadius: 3,
+                                              background: "var(--surface)"
+                                            }}
+                                            value={tempPifAmount}
+                                            onChange={(e) => setTempPifAmount(e.target.value)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") {
+                                                const amount = parseFloat(tempPifAmount);
+                                                if (isFinite(amount) && amount >= 0) {
+                                                  onChangeOutcome(compIndex, "PIF", amount.toFixed(2));
+                                                  setEditingPifAmount(null);
+                                                  setTempPifAmount("");
+                                                }
+                                              } else if (e.key === "Escape") {
+                                                setEditingPifAmount(null);
+                                                setTempPifAmount("");
+                                              }
+                                            }}
+                                            autoFocus
+                                          />
+                                          <button
+                                            style={{
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                              background: "var(--success)",
+                                              color: "white",
+                                              border: "none",
+                                              borderRadius: 3,
+                                              cursor: "pointer"
+                                            }}
+                                            onClick={() => {
+                                              const amount = parseFloat(tempPifAmount);
+                                              if (isFinite(amount) && amount >= 0) {
+                                                onChangeOutcome(compIndex, "PIF", amount.toFixed(2));
+                                                setEditingPifAmount(null);
+                                                setTempPifAmount("");
+                                              }
+                                            }}
+                                          >
+                                            ✓
+                                          </button>
+                                          <button
+                                            style={{
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                              background: "var(--danger)",
+                                              color: "white",
+                                              border: "none",
+                                              borderRadius: 3,
+                                              cursor: "pointer"
+                                            }}
+                                            onClick={() => {
+                                              setEditingPifAmount(null);
+                                              setTempPifAmount("");
+                                            }}
+                                          >
+                                            ✕
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span>· £{comp.amount || "0.00"}</span>
+                                          <button
+                                            style={{
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                              background: "var(--primary)",
+                                              color: "white",
+                                              border: "none",
+                                              borderRadius: 3,
+                                              cursor: "pointer",
+                                              marginLeft: 4
+                                            }}
+                                            onClick={() => {
+                                              setEditingPifAmount(compIndex);
+                                              setTempPifAmount(comp.amount || "");
+                                            }}
+                                            title="Edit PIF amount"
+                                          >
+                                            ✏️
+                                          </button>
+                                        </>
+                                      )}
+                                    </span>
+                                  )}
                                   {arrangement && (
                                     <>
                                       <br />
@@ -461,10 +565,10 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                   )}
                                 </div>
                               </div>
-                              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                                 <select
                                   value={(currentOutcome as string) || ""}
-                                  onChange={(e) => onChangeOutcome(compIndex, e.target.value as Outcome)}
+                                  onChange={(e) => onChangeOutcome(compIndex, e.target.value as Outcome, comp.amount)}
                                   className="input"
                                   style={{ padding: "0.25rem 0.5rem", height: 32 }}
                                 >
@@ -478,27 +582,6 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                   <option value="DA">DA</option>
                                   <option value="ARR">ARR</option>
                                 </select>
-                                
-                                {/* PIF amount input - show when outcome is PIF */}
-                                {currentOutcome === "PIF" && (
-                                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                                    <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>£</span>
-                                    <input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      inputMode="decimal"
-                                      className="input"
-                                      style={{ width: 80, padding: "0.25rem 0.5rem", height: 32 }}
-                                      placeholder="Amount"
-                                      value={comp.amount || ""}
-                                      onChange={(e) => {
-                                        const amount = e.target.value;
-                                        onChangeOutcome(compIndex, "PIF", amount);
-                                      }}
-                                    />
-                                  </div>
-                                )}
                               </div>
                             </div>
                           );
