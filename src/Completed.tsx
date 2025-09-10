@@ -461,7 +461,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                   )}
                                 </div>
                               </div>
-                              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                                 <select
                                   value={(currentOutcome as string) || ""}
                                   onChange={(e) => onChangeOutcome(compIndex, e.target.value as Outcome)}
@@ -478,6 +478,27 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                   <option value="DA">DA</option>
                                   <option value="ARR">ARR</option>
                                 </select>
+                                
+                                {/* PIF amount input - show when outcome is PIF */}
+                                {currentOutcome === "PIF" && (
+                                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                                    <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>£</span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      inputMode="decimal"
+                                      className="input"
+                                      style={{ width: 80, padding: "0.25rem 0.5rem", height: 32 }}
+                                      placeholder="Amount"
+                                      value={comp.amount || ""}
+                                      onChange={(e) => {
+                                        const amount = e.target.value;
+                                        onChangeOutcome(compIndex, "PIF", amount);
+                                      }}
+                                    />
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
