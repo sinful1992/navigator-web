@@ -306,11 +306,13 @@ export default function Completed({ state, onChangeOutcome }: Props) {
   let totalSeconds = 0;
   let totalCompleted = 0;
   let totalPIF = 0;
+  let totalDA = 0;
   dayKeys.forEach((k) => {
     totalSeconds += secondsByDay.get(k) || 0;
     const idxs = completionIdxByDay.get(k) || [];
     totalCompleted += idxs.length;
     totalPIF += idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "PIF").length;
+    totalDA += idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "DA").length;
   });
 
   // Per-day expand/collapse (when details are open)
@@ -366,6 +368,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
           <span className="pill">Hours {hoursFmt(totalSeconds)}</span>
           <span className="pill pill-done">Completed {totalCompleted}</span>
           <span className="pill pill-pif">PIF {totalPIF}</span>
+          <span className="pill pill-da">DA {totalDA}</span>
         </div>
       </div>
 
@@ -376,6 +379,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
             const seconds = secondsByDay.get(k) || 0;
             const idxs = completionIdxByDay.get(k) || [];
             const pif = idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "PIF").length;
+            const da = idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "DA").length;
             const arrCount = idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "ARR").length;
             const total = idxs.length;
 
@@ -404,6 +408,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                     <span className="pill">Hours {hoursFmt(seconds)}</span>
                     <span className="pill pill-done">Completed {total}</span>
                     <span className="pill pill-pif">PIF {pif}</span>
+                    <span className="pill pill-da">DA {da}</span>
                     {arrCount > 0 && <span className="pill pill-arr">ARR {arrCount}</span>}
                   </div>
                   <button className="btn btn-ghost" onClick={() => toggleDay(k)}>
