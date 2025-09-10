@@ -276,6 +276,42 @@ function AuthedApp() {
       if ((q as any).error) throw (q as any).error;
 
       const data = ((q as any).data ?? []) as CloudBackupRow[];
+      
+      // If no backups found in database, try listing storage bucket directly
+      if (data.length === 0) {
+        try {
+          console.log('No backups in database, checking storage bucket directly...');
+          const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET || "navigator-backups";
+          
+          const { data: files, error: listError } = await supabase.storage
+            .from(bucket)
+            .list(userId, {
+              limit: 50,
+              sortBy: { column: 'created_at', order: 'desc' }
+            });
+            
+          if (listError) throw listError;
+          
+          if (files && files.length > 0) {
+            const storageBackups = files
+              .filter(file => file.name.includes('backup_') && file.name.endsWith('.json'))
+              .map(file => ({
+                object_path: `${userId}/${file.name}`,
+                size_bytes: file.metadata?.size || 0,
+                created_at: file.created_at || file.updated_at,
+                day_key: file.name.match(/backup_(\d{4}-\d{2}-\d{2})/)?.[1] || '',
+              }));
+            
+            setCloudBackups(storageBackups);
+            console.log(`Found ${storageBackups.length} backups in storage bucket`);
+            return;
+          }
+        } catch (storageError: any) {
+          console.warn('Failed to list storage bucket:', storageError);
+          // Continue with empty list
+        }
+      }
+      
       const list = data.slice().sort((a, b) => {
         const aParts = a.object_path.split("_");
         const bParts = b.object_path.split("_");
@@ -490,16 +526,18 @@ function AuthedApp() {
     };
   }, [safeState, cloudSync, hydrated]);
 
-  // FIXED: Enhanced handleImportExcel with proper state synchronization
+  // FIXED: Enhanced handleImportExcel with automatic completion preservation
   const handleImportExcel = React.useCallback(async (rows: AddressRow[]) => {
     try {
       logger.info(`Starting import of ${rows.length} addresses...`);
       
-      // First, update the local state
-      setAddresses(rows);
+      // Always preserve completions so users can track their PIF and other results over time
+      const preserveCompletions = true;
+      
+      // First, update the local state with preserve flag
+      setAddresses(rows, preserveCompletions);
       
       // Create the new state that will be synced after React updates
-      // We need to wait for the next tick to ensure setAddresses has taken effect
       setTimeout(async () => {
         try {
           const newState = {
@@ -507,14 +545,14 @@ function AuthedApp() {
             addresses: rows,
             activeIndex: null,
             currentListVersion: (safeState.currentListVersion || 1) + 1,
-            completions: [], // Clear completions for new list
+            completions: safeState.completions, // Always preserve completion data
           };
           
           // Sync to cloud with the new state
           await cloudSync.syncData(newState);
           lastFromCloudRef.current = JSON.stringify(newState);
           
-          logger.success(`Successfully imported ${rows.length} addresses and synced to cloud`);
+          logger.success(`Successfully imported ${rows.length} addresses and synced to cloud (completions preserved)`);
         } catch (syncError) {
           logger.error('Failed to sync imported data to cloud:', syncError);
         }

@@ -214,7 +214,7 @@ function applyOptimisticUpdates(
         if (update.operation === "create") {
           result.addresses = [...result.addresses, update.data];
         } else if (update.operation === "update") {
-          // bulk import path: update carries { addresses, bumpVersion }
+          // bulk import path: update carries { addresses, bumpVersion, preserveCompletions }
           if (update.data?.addresses) {
             result.addresses = Array.isArray(update.data.addresses)
               ? update.data.addresses
@@ -222,7 +222,10 @@ function applyOptimisticUpdates(
             if (update.data.bumpVersion) {
               result.currentListVersion =
                 (result.currentListVersion || 1) + 1;
-              result.completions = []; // reset completions when bumping list
+              // Only reset completions if not preserving them
+              if (!update.data.preserveCompletions) {
+                result.completions = [];
+              }
               result.activeIndex = null;
             }
           }
@@ -497,19 +500,20 @@ export function useAppState() {
 
   // ---------------- enhanced actions ----------------
 
-  /** Import a new Excel list: bump list version so previous completions don't hide new list items. */
+  /** Import a new Excel list: bump list version with option to preserve completions. */
   const setAddresses = React.useCallback(
-    (rows: AddressRow[]) => {
+    (rows: AddressRow[], preserveCompletions = true) => {
       const operationId = generateOperationId("update", "address", {
         type: "bulk_import",
         count: rows.length,
+        preserve: preserveCompletions,
       });
 
       // Apply optimistically
       addOptimisticUpdate(
         "update",
         "address",
-        { addresses: rows, bumpVersion: true },
+        { addresses: rows, bumpVersion: true, preserveCompletions },
         operationId
       );
 
@@ -519,7 +523,7 @@ export function useAppState() {
         addresses: Array.isArray(rows) ? rows : [],
         activeIndex: null,
         currentListVersion: (s.currentListVersion || 1) + 1,
-        completions: [], // ensure counters reset for new list
+        completions: preserveCompletions ? s.completions : [], // preserve or clear based on option
       }));
 
       // Confirm immediately for local operations
