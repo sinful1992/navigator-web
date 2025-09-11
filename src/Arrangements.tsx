@@ -553,14 +553,30 @@ const ArrangementsComponent = function Arrangements({
                       {arrangement.status === "Scheduled" && (
                         <LoadingButton
                           className="btn btn-sm btn-success"
-                          isLoading={loadingStates.updating}
-                          loadingText="Confirming..."
-                          onClick={() => onUpdateArrangement(arrangement.id, { 
-                            status: "Confirmed",
-                            updatedAt: new Date().toISOString()
-                          })}
+                          isLoading={loadingStates.markingPaid.has(arrangement.id)}
+                          loadingText="Processing..."
+                          onClick={async () => {
+                            const actualAmount = window.prompt(
+                              `Payment received:\n\nExpected: £${arrangement.amount || '0.00'}\nEnter actual amount received:`,
+                              arrangement.amount || ''
+                            );
+                            if (actualAmount !== null && actualAmount.trim()) {
+                              setLoadingStates(prev => ({
+                                ...prev,
+                                markingPaid: new Set([...prev.markingPaid, arrangement.id])
+                              }));
+                              try {
+                                await markAsPaid(arrangement.id, actualAmount.trim());
+                              } finally {
+                                setLoadingStates(prev => ({
+                                  ...prev,
+                                  markingPaid: new Set([...prev.markingPaid].filter(id => id !== arrangement.id))
+                                }));
+                              }
+                            }
+                          }}
                         >
-                          ✅ Confirm
+                          ✅ Confirm Payment
                         </LoadingButton>
                       )}
                       
