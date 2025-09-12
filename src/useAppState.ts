@@ -567,13 +567,14 @@ export function useAppState() {
   }, []);
 
   // Track pending completions to prevent double submissions
-  const [pendingCompletions, setPendingCompletions] = React.useState<Set<number>>(new Set());
+  const [, setPendingCompletions] = React.useState<Set<number>>(new Set());
+  const pendingCompletionsRef = React.useRef<Set<number>>(new Set());
   
   /** ATOMIC: Enhanced completion with proper transaction handling */
   const complete = React.useCallback(
     async (index: number, outcome: Outcome, amount?: string, arrangementId?: string): Promise<string> => {
       // Check if completion is already pending for this index
-      if (pendingCompletions.has(index)) {
+      if (pendingCompletionsRef.current.has(index)) {
         throw new Error(`Completion already pending for index ${index}`);
       }
       
@@ -613,7 +614,8 @@ export function useAppState() {
       
       try {
         // Mark as pending
-        setPendingCompletions(prev => new Set([...prev, index]));
+        pendingCompletionsRef.current.add(index);
+        setPendingCompletions(new Set(pendingCompletionsRef.current));
         
         // Apply optimistic update first
         addOptimisticUpdate("create", "completion", completion, operationId);
@@ -634,14 +636,11 @@ export function useAppState() {
         return operationId;
       } finally {
         // Always clear pending state
-        setPendingCompletions(prev => {
-          const next = new Set(prev);
-          next.delete(index);
-          return next;
-        });
+        pendingCompletionsRef.current.delete(index);
+        setPendingCompletions(new Set(pendingCompletionsRef.current));
       }
     },
-    [baseState, addOptimisticUpdate, pendingCompletions]
+    [baseState, addOptimisticUpdate]
   );
 
   /** Enhanced undo with optimistic updates - finds the most recent completion for the given index */
