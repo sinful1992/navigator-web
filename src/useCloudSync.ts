@@ -1,5 +1,6 @@
 // src/useCloudSync.ts
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
 import type { AppState } from "./types";
@@ -42,7 +43,7 @@ type UseCloudSync = {
   signOut: () => Promise<void>;
 
   syncData: (state: AppState) => Promise<void>;
-  subscribeToData: (onChange: (s: AppState) => void) => () => void;
+  subscribeToData: (onChange: Dispatch<SetStateAction<AppState>>) => () => void;
   
   // New methods for granular sync
   queueOperation: (operation: Omit<SyncOperation, 'id' | 'timestamp' | 'localTimestamp' | 'retries'>) => Promise<void>;
@@ -69,6 +70,16 @@ function generateChecksum(data: any): string {
     hash = hash & hash; // Convert to 32bit integer
   }
   return hash.toString();
+}
+
+export function mergeStatePreservingActiveIndex(
+  current: AppState,
+  incoming: AppState
+): AppState {
+  return {
+    ...incoming,
+    activeIndex: incoming.activeIndex ?? current.activeIndex ?? null,
+  };
 }
 
 export function useCloudSync(): UseCloudSync {
@@ -469,6 +480,9 @@ export function useCloudSync(): UseCloudSync {
       resolved.currentListVersion = Math.max(localState.currentListVersion, serverState.currentListVersion);
     }
 
+    resolved.activeIndex =
+      localState.activeIndex ?? serverState.activeIndex ?? null;
+
     return resolved;
   }, []);
 
@@ -481,7 +495,7 @@ export function useCloudSync(): UseCloudSync {
 
   // ---- Cloud subscribe (pull) with better change detection ----
   const subscribeToData = useCallback(
-    (onChange: (s: AppState) => void) => {
+    (onChange: Dispatch<SetStateAction<AppState>>) => {
       if (!user || !supabase) return () => {};
 
       clearError();
@@ -524,12 +538,16 @@ export function useCloudSync(): UseCloudSync {
             syncMetadata.current.version = serverVersion;
             syncMetadata.current.checksum = serverChecksum;
 
-            lastSyncedState.current = JSON.stringify(dataObj);
-            setLastSyncTime(new Date(updatedAt));
-
             if (typeof onChange === "function") {
-              onChange(dataObj);
+              onChange(prev => {
+                const merged = mergeStatePreservingActiveIndex(prev, dataObj);
+                lastSyncedState.current = JSON.stringify(merged);
+                return merged;
+              });
+            } else {
+              lastSyncedState.current = JSON.stringify(dataObj);
             }
+            setLastSyncTime(new Date(updatedAt));
           } catch (e: any) {
             console.warn("subscribeToData handler error:", e?.message || e);
             setError("Sync error: " + (e?.message || e));
