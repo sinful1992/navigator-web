@@ -68,6 +68,7 @@ export default function FullScreenArrangementForm({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isLoading) return;
     if (!validateAmount(formData.amount)) {
       amountInputRef.current?.focus();
       return;

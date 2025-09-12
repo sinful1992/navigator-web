@@ -17,7 +17,8 @@ export function Auth({ onSignIn, onSignUp, isLoading, error, onClearError }: Pro
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    if (isLoading) return;
+
     if (!email || !password) {
       alert("Please enter email and password");
       return;

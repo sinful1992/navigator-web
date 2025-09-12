@@ -77,9 +77,10 @@ const AddressListComponent = function AddressList({
     null
   );
   const [pifAmount, setPifAmount] = React.useState<string>("");
-  
+
   // Prevent double submissions
   const [submittingIndex, setSubmittingIndex] = React.useState<number | null>(null);
+  const submittingRef = React.useRef<number | null>(null);
   const [lastSubmission, setLastSubmission] = React.useState<{index: number, outcome: string, timestamp: number} | null>(null);
   
   // Arrangement form state
@@ -98,7 +99,7 @@ const AddressListComponent = function AddressList({
   // Debounced completion handler with duplicate protection
   const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => {
     // Check if already submitting this index
-    if (submittingIndex === index) return;
+    if (submittingRef.current === index) return;
     
     // Check for duplicate submission within 2 seconds
     const now = Date.now();
@@ -110,6 +111,7 @@ const AddressListComponent = function AddressList({
     }
     
     try {
+      submittingRef.current = index;
       setSubmittingIndex(index);
       setLastSubmission({ index, outcome, timestamp: now });
       
@@ -119,9 +121,10 @@ const AddressListComponent = function AddressList({
       console.error('Completion failed:', error);
       // Could show user error here
     } finally {
+      submittingRef.current = null;
       setSubmittingIndex(null);
     }
-  }, [submittingIndex, lastSubmission, onComplete]);
+  }, [lastSubmission, onComplete]);
 
   if (visible.length === 0) {
     return (

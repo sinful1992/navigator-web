@@ -15,6 +15,7 @@ export default function ManualAddressFAB({ onAdd, inline }: Props) {
   const [lat, setLat] = React.useState<string>("");
   const [lng, setLng] = React.useState<string>("");
   const [busy, setBusy] = React.useState(false);
+  const busyRef = React.useRef(false);
   const [err, setErr] = React.useState<string | null>(null);
 
   const reset = () => {
@@ -26,6 +27,7 @@ export default function ManualAddressFAB({ onAdd, inline }: Props) {
 
   const submit = async (e?: React.FormEvent) => {
     e?.preventDefault();
+    if (busyRef.current) return;
     setErr(null);
 
     const trimmed = address.trim();
@@ -45,6 +47,7 @@ export default function ManualAddressFAB({ onAdd, inline }: Props) {
       lngNum = v;
     }
 
+    busyRef.current = true;
     setBusy(true);
     try {
       await onAdd({ address: trimmed, lat: latNum, lng: lngNum } as AddressRow);
@@ -53,6 +56,7 @@ export default function ManualAddressFAB({ onAdd, inline }: Props) {
     } catch (e: any) {
       setErr(e?.message || String(e));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
