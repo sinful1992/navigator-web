@@ -12,10 +12,12 @@ export function ImportExcel({ onImported }: Props) {
   const [loading, setLoading] = React.useState(false);
   const [dragActive, setDragActive] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const loadingRef = React.useRef(false);
 
   const processFile = async (file: File) => {
-    if (!file) return;
-    
+    if (!file || loadingRef.current) return;
+
+    loadingRef.current = true;
     setLoading(true);
     try {
       const data = await file.arrayBuffer();
@@ -90,6 +92,7 @@ export function ImportExcel({ onImported }: Props) {
       console.error(err);
       alert("❌ Failed to read Excel file. Please ensure it's a valid .xlsx or .xls file.");
     } finally {
+      loadingRef.current = false;
       setLoading(false);
       // Clear file input
       if (fileInputRef.current) {
@@ -99,6 +102,7 @@ export function ImportExcel({ onImported }: Props) {
   };
 
   const onFile: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    if (loadingRef.current) return;
     const file = e.target.files?.[0];
     if (file) {
       await processFile(file);
@@ -119,11 +123,12 @@ export function ImportExcel({ onImported }: Props) {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (loadingRef.current) return;
     setDragActive(false);
 
     const files = Array.from(e.dataTransfer.files);
-    const excelFile = files.find(file => 
-      file.name.endsWith('.xlsx') || 
+    const excelFile = files.find(file =>
+      file.name.endsWith('.xlsx') ||
       file.name.endsWith('.xls') ||
       file.type.includes('spreadsheet')
     );
