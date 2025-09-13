@@ -1,4 +1,18 @@
 node_modules/
 dist/
 .env
+.env.local
 .DS_Store
+
+# Sensitive setup/configuration files - DO NOT COMMIT
+SUBSCRIPTION_SETUP.md
+supabase-schema.sql
+*.setup.md
+*.schema.sql
+
+# Backup files
+*.backup
+*.bak
+
+# Local configuration
+.vscode/settings.json

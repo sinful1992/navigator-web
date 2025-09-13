@@ -9,6 +9,7 @@ import type {
   Outcome,
   DaySession,
   Arrangement,
+  UserSubscription,
 } from "./types";
 
 const STORAGE_KEY = "navigator_state_v5"; // Bumped for data integrity improvements
@@ -35,6 +36,7 @@ const initial: AppState = {
   daySessions: [],
   arrangements: [],
   currentListVersion: 1,
+  subscription: null,
 };
 
 // Data validation functions
@@ -61,7 +63,8 @@ function validateAppState(state: any): state is AppState {
     Array.isArray(state.daySessions) &&
     Array.isArray(state.arrangements) &&
     (state.activeIndex === null || typeof state.activeIndex === 'number') &&
-    typeof state.currentListVersion === 'number';
+    typeof state.currentListVersion === 'number' &&
+    (state.subscription === null || state.subscription === undefined || typeof state.subscription === 'object');
 }
 
 function stampCompletionsWithVersion(
@@ -104,6 +107,7 @@ function migrateSchema(data: any, fromVersion: number): AppState {
     migrated.daySessions = Array.isArray(migrated.daySessions) ? migrated.daySessions : [];
     migrated.arrangements = Array.isArray(migrated.arrangements) ? migrated.arrangements : [];
     migrated.activeIndex = (typeof migrated.activeIndex === 'number') ? migrated.activeIndex : null;
+    migrated.subscription = migrated.subscription || null;
   }
   
   // Add schema version
@@ -322,6 +326,7 @@ export function useAppState() {
             daySessions: Array.isArray(migrated.daySessions) ? migrated.daySessions : [],
             arrangements: Array.isArray(migrated.arrangements) ? migrated.arrangements : [],
             currentListVersion: version,
+            subscription: migrated.subscription || null,
             _schemaVersion: CURRENT_SCHEMA_VERSION,
           };
 
@@ -850,6 +855,12 @@ export function useAppState() {
     [addOptimisticUpdate, confirmOptimisticUpdate]
   );
 
+  // ---- subscription management ----
+
+  const setSubscription = React.useCallback((subscription: UserSubscription | null) => {
+    setBaseState((s) => ({ ...s, subscription }));
+  }, []);
+
   // ---- enhanced backup / restore with conflict detection ----
 
   function isValidState(obj: any): obj is AppState {
@@ -1113,6 +1124,7 @@ export function useAppState() {
     addArrangement,
     updateArrangement,
     deleteArrangement,
+    setSubscription,
     backupState,
     restoreState,
   };

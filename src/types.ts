@@ -60,6 +60,33 @@ export type Arrangement = {
   reminderCount?: number;       // number of reminders sent
 };
 
+export type SubscriptionStatus = "active" | "trial" | "expired" | "cancelled";
+
+export type SubscriptionPlan = {
+  id: string;
+  name: string;
+  price: number; // in pence (2500 = £25.00)
+  currency: string;
+  features: string[];
+  trialDays: number;
+};
+
+export type UserSubscription = {
+  id: string;
+  userId: string;
+  planId: string;
+  status: SubscriptionStatus;
+  currentPeriodStart: string; // ISO date
+  currentPeriodEnd: string;   // ISO date
+  trialStart?: string;        // ISO date
+  trialEnd?: string;          // ISO date
+  cancelledAt?: string;       // ISO date
+  createdAt: string;          // ISO date
+  updatedAt: string;          // ISO date
+  lastPaymentAt?: string;     // ISO date
+  nextPaymentDue?: string;    // ISO date
+};
+
 export type AppState = {
   addresses: AddressRow[];
   activeIndex: number | null;
@@ -70,4 +97,6 @@ export type AppState = {
   currentListVersion: number;
   /** Schema version for data migration. */
   _schemaVersion?: number;
+  /** User subscription info */
+  subscription?: UserSubscription | null;
 };
