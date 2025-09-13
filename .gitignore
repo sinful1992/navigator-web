@@ -9,10 +9,68 @@ SUBSCRIPTION_SETUP.md
 supabase-schema.sql
 *.setup.md
 *.schema.sql
+*admin-setup*
+*owner-setup*
 
-# Backup files
+# Environment files (keep .env.example)
+.env
+.env.local
+.env.production
+.env.staging
+.env.*.local
+
+# Secrets and keys
+*.key
+*.pem
+*.p12
+*.secret
+*secrets*
+*credentials*
+
+# Database dumps and backups
+*.sql.gz
+*.dump
 *.backup
 *.bak
+*.db-backup
 
-# Local configuration
+# Logs
+*.log
+logs/
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# Local IDE/Editor files
 .vscode/settings.json
+.vscode/launch.json
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
