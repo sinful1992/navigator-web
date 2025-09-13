@@ -16,6 +16,11 @@ import { readJsonFile } from "./backup";
 import type { AddressRow, Outcome } from "./types";
 import { supabase } from "./lib/supabaseClient";
 import ManualAddressFAB from "./ManualAddressFAB";
+import { SubscriptionManager } from "./SubscriptionManager";
+import { AdminDashboard } from "./AdminDashboard";
+import { SubscriptionGuard } from "./SubscriptionGuard";
+import { useSubscription } from "./useSubscription";
+import { useAdmin } from "./useAdmin";
 
 type Tab = "list" | "completed" | "arrangements";
 
@@ -172,10 +177,17 @@ function AuthedApp() {
     setBaseState,
     deviceId,
     enqueueOp,
+    setSubscription,
   } = useAppState();
 
   const cloudSync = useCloudSync();
   const { confirm, alert } = useModalContext();
+  
+  // Subscription management
+  const { hasAccess } = useSubscription(cloudSync.user);
+  const { isAdmin } = useAdmin(cloudSync.user);
+  const [showSubscription, setShowSubscription] = React.useState(false);
+  const [showAdmin, setShowAdmin] = React.useState(false);
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
@@ -903,6 +915,22 @@ function AuthedApp() {
 
   return (
     <div className="container">
+      {/* Admin Dashboard - only for owner */}
+      {showAdmin && isAdmin && (
+        <AdminDashboard 
+          user={cloudSync.user!} 
+          onClose={() => setShowAdmin(false)} 
+        />
+      )}
+
+      {/* Subscription management modal/page */}
+      {showSubscription && (
+        <SubscriptionManager 
+          user={cloudSync.user!} 
+          onClose={() => setShowSubscription(false)} 
+        />
+      )}
+
       {/* Header */}
       <header className="app-header">
         <div className="left">
@@ -948,6 +976,29 @@ function AuthedApp() {
             <span className="email" title={cloudSync.user?.email ?? ""}>
               {cloudSync.user?.email ?? "Signed in"}
             </span>
+            
+            {/* Admin Dashboard button - only visible to admins */}
+            {isAdmin && (
+              <button 
+                className="btn btn-ghost btn-sm" 
+                onClick={() => setShowAdmin(true)}
+                title="Admin Dashboard"
+                style={{ marginLeft: "0.5rem" }}
+              >
+                Admin
+              </button>
+            )}
+            
+            {/* Subscription button */}
+            <button 
+              className="btn btn-ghost btn-sm" 
+              onClick={() => setShowSubscription(true)}
+              title="Manage subscription"
+              style={{ marginLeft: "0.5rem" }}
+            >
+              {hasAccess ? 'Subscription' : 'Start Trial'}
+            </button>
+            
             <button className="signout-btn" onClick={cloudSync.signOut} title="Sign out">
               Sign Out
             </button>
