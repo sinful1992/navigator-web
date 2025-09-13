@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
 
@@ -130,7 +130,7 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
     try {
       setActionLoading('grant');
       
-      const { data, error } = await supabase
+      const { error } = await supabase
         .rpc('admin_grant_subscription', {
           target_user_id: selectedUserId,
           plan_id: 'enforcement_pro',
@@ -164,7 +164,7 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
     try {
       setActionLoading('extend');
       
-      const { data, error } = await supabase
+      const { error } = await supabase
         .rpc('admin_extend_trial', {
           target_user_id: selectedUserId,
           additional_days: extendDays,

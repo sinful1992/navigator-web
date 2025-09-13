@@ -180,11 +180,9 @@ export function useSubscription(user: User | null): UseSubscription {
         updated_at: now.toISOString(),
       };
 
-      const { data, error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from('user_subscriptions')
-        .insert(subscriptionData)
-        .select()
-        .single();
+        .insert(subscriptionData);
 
       if (insertError) {
         throw insertError;

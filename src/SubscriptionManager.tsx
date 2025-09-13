@@ -1,7 +1,6 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { useSubscription } from "./useSubscription";
-import type { SubscriptionPlan } from "./types";
 
 interface SubscriptionManagerProps {
   user: User;

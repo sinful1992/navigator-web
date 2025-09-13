@@ -18,7 +18,6 @@ import { supabase } from "./lib/supabaseClient";
 import ManualAddressFAB from "./ManualAddressFAB";
 import { SubscriptionManager } from "./SubscriptionManager";
 import { AdminDashboard } from "./AdminDashboard";
-import { SubscriptionGuard } from "./SubscriptionGuard";
 import { useSubscription } from "./useSubscription";
 import { useAdmin } from "./useAdmin";
 
@@ -177,7 +176,6 @@ function AuthedApp() {
     setBaseState,
     deviceId,
     enqueueOp,
-    setSubscription,
   } = useAppState();
 
   const cloudSync = useCloudSync();
