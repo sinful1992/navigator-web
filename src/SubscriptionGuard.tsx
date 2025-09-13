@@ -43,7 +43,7 @@ export function SubscriptionGuard({ user, fallback, children }: SubscriptionGuar
     );
   }
 
-  // If user has access, show the protected content
+  // If user has access (including owner bypass), show the protected content
   if (hasAccess) {
     return <>{children}</>;
   }
@@ -96,7 +96,7 @@ export function useSubscriptionGuard(user: User | null) {
   
   const requiresSubscription = (featureName?: string) => {
     if (!subscription.hasAccess) {
-      console.warn(`Feature "${featureName || 'unknown'}" requires subscription`);
+      console.warn(`Feature "${featureName || 'unknown'}" requires subscription (or owner access)`);
       return false;
     }
     return true;

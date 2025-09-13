@@ -83,15 +83,40 @@ export function useSubscription(user: User | null): UseSubscription {
   const [availablePlans] = useState<SubscriptionPlan[]>(DEFAULT_PLANS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState<boolean>(false);
 
   const clearError = useCallback(() => setError(null), []);
+
+  // Check if user is owner/admin for bypass privileges
+  useEffect(() => {
+    const checkOwnerStatus = async () => {
+      if (!user || !supabase) {
+        setIsOwner(false);
+        return;
+      }
+
+      try {
+        const { data: ownerCheck } = await supabase
+          .rpc('is_owner', { user_uuid: user.id });
+        
+        setIsOwner(ownerCheck || false);
+      } catch (err) {
+        // If function doesn't exist or fails, assume not owner
+        setIsOwner(false);
+      }
+    };
+
+    checkOwnerStatus();
+  }, [user]);
 
   // Derived state
   const isActive = isSubscriptionActive(subscription);
   const isTrial = isSubscriptionTrial(subscription);
   const isExpired = isSubscriptionExpired(subscription);
   const daysRemaining = subscription ? calculateDaysRemaining(subscription.currentPeriodEnd) : 0;
-  const hasAccess = isActive && !isExpired;
+  
+  // Owner bypass: Owners always have access regardless of subscription
+  const hasAccess = isOwner || (isActive && !isExpired);
 
   // Load subscription data from Supabase
   const refreshSubscription = useCallback(async () => {

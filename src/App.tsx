@@ -183,7 +183,7 @@ function AuthedApp() {
   
   // Subscription management
   const { hasAccess } = useSubscription(cloudSync.user);
-  const { isAdmin } = useAdmin(cloudSync.user);
+  const { isAdmin, isOwner } = useAdmin(cloudSync.user);
   const [showSubscription, setShowSubscription] = React.useState(false);
   const [showAdmin, setShowAdmin] = React.useState(false);
 
@@ -994,7 +994,7 @@ function AuthedApp() {
               title="Manage subscription"
               style={{ marginLeft: "0.5rem" }}
             >
-              {hasAccess ? 'Subscription' : 'Start Trial'}
+              {isOwner ? 'Owner Access' : hasAccess ? 'Subscription' : 'Start Trial'}
             </button>
             
             <button className="signout-btn" onClick={cloudSync.signOut} title="Sign out">
