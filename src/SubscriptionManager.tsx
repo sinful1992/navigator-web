@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { useSubscription } from "./useSubscription";
+import { useAdmin } from "./useAdmin";
 
 interface SubscriptionManagerProps {
   user: User;
@@ -44,6 +45,7 @@ export function SubscriptionManager({ user, onClose }: SubscriptionManagerProps)
     clearError
   } = useSubscription(user);
 
+  const { isOwner } = useAdmin(user);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const handleStartTrial = async () => {
@@ -89,6 +91,70 @@ export function SubscriptionManager({ user, onClose }: SubscriptionManagerProps)
         <div className="subscription-loading">
           <div className="spinner"></div>
           <p>Loading subscription...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Owner-specific view
+  if (isOwner) {
+    return (
+      <div className="subscription-manager">
+        <div className="subscription-header">
+          <h2>Owner Access</h2>
+          {onClose && (
+            <button className="close-button" onClick={onClose} aria-label="Close">
+              ✕
+            </button>
+          )}
+        </div>
+
+        <div className="owner-status">
+          <div className="owner-card">
+            <div className="owner-badge">🔑 OWNER</div>
+            <h3>Unlimited Access</h3>
+            <p>As the owner, you have unrestricted access to all premium features:</p>
+            
+            <div className="owner-features">
+              <ul>
+                <li>✓ Route optimization for unlimited addresses</li>
+                <li>✓ Commission tracking & reporting</li>
+                <li>✓ Payment arrangements with SMS reminders</li>
+                <li>✓ Daily/weekly earnings reports</li>
+                <li>✓ Unlimited cloud sync & backup</li>
+                <li>✓ Admin dashboard and user management</li>
+                <li>✓ Priority customer support tools</li>
+              </ul>
+            </div>
+
+            <div className="owner-info">
+              <h4>Business Status</h4>
+              <p><strong>Plan:</strong> Owner Access (No subscription required)</p>
+              <p><strong>Status:</strong> <span className="status-active">Active</span></p>
+              <p><strong>Billing:</strong> N/A - Owner account</p>
+            </div>
+
+            <div className="owner-actions">
+              <p><strong>Need to manage customer subscriptions?</strong></p>
+              <button 
+                className="btn-secondary"
+                onClick={onClose}
+                style={{ marginRight: '8px' }}
+              >
+                Close
+              </button>
+              <button 
+                className="btn-primary"
+                onClick={() => {
+                  // This could open admin dashboard if not already open
+                  console.log('Redirect to admin dashboard');
+                  if (onClose) onClose();
+                }}
+              >
+                Go to Admin Dashboard
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -336,18 +402,22 @@ const styles = `
 .plan-card.featured {
   border-color: #007bff;
   position: relative;
+  margin-top: 16px;
 }
 
 .plan-card.featured::before {
   content: 'Most Popular';
   position: absolute;
-  top: -10px;
-  left: 20px;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
   background: #007bff;
   color: white;
-  padding: 4px 12px;
+  padding: 6px 16px;
   font-size: 12px;
-  border-radius: 4px;
+  font-weight: 600;
+  border-radius: 16px;
+  white-space: nowrap;
 }
 
 .status-badge {
@@ -488,6 +558,81 @@ const styles = `
   border-radius: 6px;
   padding: 16px;
   text-align: center;
+}
+
+.owner-status {
+  margin-bottom: 24px;
+}
+
+.owner-card {
+  border: 2px solid #28a745;
+  border-radius: 12px;
+  padding: 24px;
+  background: linear-gradient(135deg, #f8fff9 0%, #e8f5e8 100%);
+  text-align: center;
+}
+
+.owner-badge {
+  display: inline-block;
+  background: #28a745;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.owner-features {
+  margin: 20px 0;
+  text-align: left;
+}
+
+.owner-features ul {
+  list-style: none;
+  padding: 0;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.owner-features li {
+  padding: 6px 0;
+  color: #28a745;
+  font-weight: 500;
+}
+
+.owner-info {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 20px 0;
+  border: 1px solid #d4edda;
+}
+
+.owner-info h4 {
+  margin: 0 0 12px 0;
+  color: #28a745;
+}
+
+.owner-info p {
+  margin: 8px 0;
+  text-align: left;
+}
+
+.status-active {
+  color: #28a745;
+  font-weight: 600;
+}
+
+.owner-actions {
+  margin-top: 24px;
+}
+
+.owner-actions p {
+  margin-bottom: 16px;
+  font-weight: 500;
 }
 `;
 
