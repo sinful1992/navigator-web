@@ -546,10 +546,9 @@ export function useAppState() {
           const newAddresses = [...s.addresses, addressRow];
           const newIndex = newAddresses.length - 1;
 
-          setTimeout(() => {
-            confirmOptimisticUpdate(operationId);
-            resolve(newIndex);
-          }, 0);
+          // Resolve immediately with the new index - no race condition
+          confirmOptimisticUpdate(operationId);
+          resolve(newIndex);
 
           return { ...s, addresses: newAddresses };
         });
