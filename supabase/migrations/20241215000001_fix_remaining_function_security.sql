@@ -2,9 +2,18 @@
 -- Add search_path = '' to functions missing this security setting
 
 -- Fix update_updated_at_column function
--- Drop existing function first to handle any signature changes
+-- First, drop dependent triggers, then function, then recreate everything
+
+-- Drop triggers that depend on update_updated_at_column
+DROP TRIGGER IF EXISTS update_subscription_plans_updated_at ON public.subscription_plans;
+DROP TRIGGER IF EXISTS update_user_subscriptions_updated_at ON public.user_subscriptions;
+DROP TRIGGER IF EXISTS update_payment_history_updated_at ON public.payment_history;
+DROP TRIGGER IF EXISTS update_admin_users_updated_at ON public.admin_users;
+
+-- Now drop the function
 DROP FUNCTION IF EXISTS update_updated_at_column();
 
+-- Recreate the function with security hardening
 CREATE FUNCTION update_updated_at_column()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -15,6 +24,33 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+
+-- Recreate the triggers
+CREATE TRIGGER update_subscription_plans_updated_at
+    BEFORE UPDATE ON public.subscription_plans
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_subscriptions_updated_at
+    BEFORE UPDATE ON public.user_subscriptions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_payment_history_updated_at
+    BEFORE UPDATE ON public.payment_history
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Check if admin_users table exists and create trigger if needed
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'admin_users' AND table_schema = 'public') THEN
+        EXECUTE 'CREATE TRIGGER update_admin_users_updated_at
+            BEFORE UPDATE ON public.admin_users
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column()';
+    END IF;
+END $$;
 
 -- Fix expire_subscriptions function
 -- Drop existing function first to handle any signature changes
