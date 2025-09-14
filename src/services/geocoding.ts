@@ -30,7 +30,7 @@ const CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 class GeocodingService {
   private cache: GeocodeCache = {};
-  private apiKey: string;
+  public apiKey: string;
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
@@ -264,33 +264,94 @@ export async function geocodeAddresses(
 
 /**
  * Address autocomplete/search using Google Maps Places API
- * Note: This would need Places API instead of Geocoding API for full autocomplete
  */
 export async function searchAddresses(
   query: string,
   _apiKey?: string,
-  _countryCode = "GB",
-  _limit = 5
+  countryCode = "GB",
+  limit = 5
 ): Promise<AddressAutocompleteResult[]> {
-  // Basic geocoding-based search (limited compared to Places API)
   const service = getGeocodingService();
+
+  if (!service.apiKey) {
+    return [];
+  }
 
   if (!query.trim() || query.length < 3) {
     return [];
   }
 
   try {
-    const result = await service.geocodeAddressInternal(query);
-    if (result.success && result.lat && result.lng) {
-      return [{
-        label: result.formattedAddress || result.address,
-        coordinates: [result.lng, result.lat], // [lng, lat] format
-        confidence: result.confidence || 1.0
-      }];
+    console.log(`Searching addresses with Places API: "${query}"`);
+
+    // Use Places Autocomplete API for better results
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/place/autocomplete/json?` +
+      `input=${encodeURIComponent(query)}&` +
+      `components=country:${countryCode}&` +
+      `types=address&` +
+      `key=${service.apiKey}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    const data = await response.json();
+
+    if (data.status === 'OK' && data.predictions?.length > 0) {
+      // Get place details for each prediction to get coordinates
+      const results: AddressAutocompleteResult[] = [];
+
+      for (const prediction of data.predictions.slice(0, limit)) {
+        try {
+          const detailsResponse = await fetch(
+            `https://maps.googleapis.com/maps/api/place/details/json?` +
+            `place_id=${prediction.place_id}&` +
+            `fields=geometry,formatted_address&` +
+            `key=${service.apiKey}`
+          );
+
+          if (detailsResponse.ok) {
+            const detailsData = await detailsResponse.json();
+
+            if (detailsData.status === 'OK' && detailsData.result?.geometry?.location) {
+              results.push({
+                label: prediction.description,
+                coordinates: [
+                  detailsData.result.geometry.location.lng,
+                  detailsData.result.geometry.location.lat
+                ],
+                confidence: 0.9 // Places API provides high confidence results
+              });
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to get place details for:', prediction.description, error);
+        }
+      }
+
+      return results;
+    }
+
     return [];
   } catch (error) {
-    console.error('Address search failed:', error);
+    console.error('Places API search failed, falling back to basic geocoding:', error);
+
+    // Fallback to basic geocoding
+    try {
+      const result = await service.geocodeAddressInternal(query);
+      if (result.success && result.lat && result.lng) {
+        return [{
+          label: result.formattedAddress || result.address,
+          coordinates: [result.lng, result.lat],
+          confidence: result.confidence || 0.7
+        }];
+      }
+    } catch (fallbackError) {
+      console.error('Fallback geocoding also failed:', fallbackError);
+    }
+
     return [];
   }
 }
