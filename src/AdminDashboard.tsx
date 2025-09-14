@@ -13,19 +13,13 @@ interface AdminUser {
 }
 
 interface SubscriptionOverview {
-  user_id: string;
-  email: string;
-  subscription_id: string | null;
-  status: string | null;
-  plan_id: string | null;
-  current_period_start: string | null;
-  current_period_end: string | null;
-  trial_start: string | null;
+  user_email: string;
+  subscription_status: string;
+  subscription_plan: string;
   trial_end: string | null;
+  current_period_end: string | null;
   created_at: string | null;
-  last_payment_at: string | null;
-  days_remaining: number;
-  effective_status: string;
+  total_api_requests: number;
 }
 
 interface AdminAction {
@@ -89,11 +83,9 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
       if (adminError) throw adminError;
       setAdminUser(adminData);
 
-      // Load subscription overview
+      // Load subscription overview using secure function
       const { data: subsData, error: subsError } = await supabase
-        .from('admin_subscription_overview')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .rpc('get_admin_subscription_overview');
 
       if (subsError) throw subsError;
       setSubscriptions(subsData || []);
@@ -283,19 +275,19 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
         <div className="subscriptions-tab">
           <div className="stats-bar">
             <div className="stat">
-              <strong>{subscriptions.filter(s => s.effective_status === 'active_trial').length}</strong>
+              <strong>{subscriptions.filter(s => s.subscription_status === 'trial').length}</strong>
               <span>Active Trials</span>
             </div>
             <div className="stat">
-              <strong>{subscriptions.filter(s => s.effective_status === 'active_paid').length}</strong>
+              <strong>{subscriptions.filter(s => s.subscription_status === 'active').length}</strong>
               <span>Paid Subscriptions</span>
             </div>
             <div className="stat">
-              <strong>{subscriptions.filter(s => s.effective_status === 'expired').length}</strong>
+              <strong>{subscriptions.filter(s => s.subscription_status === 'expired').length}</strong>
               <span>Expired</span>
             </div>
             <div className="stat">
-              <strong>£{subscriptions.filter(s => s.effective_status === 'active_paid').length * 25}</strong>
+              <strong>£{subscriptions.filter(s => s.subscription_status === 'active').length * 25}</strong>
               <span>Monthly Revenue</span>
             </div>
           </div>
@@ -310,8 +302,8 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
                 >
                   <option value="">Select User...</option>
                   {subscriptions.map(sub => (
-                    <option key={sub.user_id} value={sub.user_id}>
-                      {sub.email} - {getStatusBadge(sub.effective_status).props.children}
+                    <option key={sub.user_email} value={sub.user_email}>
+                      {sub.user_email} - {getStatusBadge(sub.subscription_status).props.children}
                     </option>
                   ))}
                 </select>
@@ -376,20 +368,20 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
                   <th>User Email</th>
                   <th>Status</th>
                   <th>Plan</th>
-                  <th>Days Remaining</th>
+                  <th>API Requests</th>
                   <th>Created</th>
-                  <th>Last Payment</th>
+                  <th>Period End</th>
                 </tr>
               </thead>
               <tbody>
                 {subscriptions.map(sub => (
-                  <tr key={sub.user_id}>
-                    <td>{sub.email}</td>
-                    <td>{getStatusBadge(sub.effective_status)}</td>
-                    <td>{sub.plan_id || 'No Plan'}</td>
-                    <td>{sub.days_remaining > 0 ? `${sub.days_remaining} days` : 'Expired'}</td>
+                  <tr key={sub.user_email}>
+                    <td>{sub.user_email}</td>
+                    <td>{getStatusBadge(sub.subscription_status)}</td>
+                    <td>{sub.subscription_plan || 'No Plan'}</td>
+                    <td>{sub.total_api_requests || 0}</td>
                     <td>{formatDate(sub.created_at)}</td>
-                    <td>{formatDate(sub.last_payment_at)}</td>
+                    <td>{formatDate(sub.current_period_end)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -437,9 +429,9 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
             <h4>Quick Stats</h4>
             <ul>
               <li>Total Users: {subscriptions.length}</li>
-              <li>Active Trials: {subscriptions.filter(s => s.effective_status === 'active_trial').length}</li>
-              <li>Paid Customers: {subscriptions.filter(s => s.effective_status === 'active_paid').length}</li>
-              <li>Monthly Revenue: £{subscriptions.filter(s => s.effective_status === 'active_paid').length * 25}</li>
+              <li>Active Trials: {subscriptions.filter(s => s.subscription_status === 'trial').length}</li>
+              <li>Paid Customers: {subscriptions.filter(s => s.subscription_status === 'active').length}</li>
+              <li>Monthly Revenue: £{subscriptions.filter(s => s.subscription_status === 'active').length * 25}</li>
               <li>Total Actions Performed: {recentActions.length}</li>
             </ul>
           </div>
