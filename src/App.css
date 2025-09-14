@@ -567,9 +567,9 @@ p, h1, h2, h3, h4, h5, h6 {
 }
 
 .tab-panel {
-  flex: 0 0 25%;
-  min-width: 25%;
-  max-width: 25%;
+  flex: 0 0 20%;
+  min-width: 20%;
+  max-width: 20%;
   /* Improve rendering performance */
   contain: layout style paint;
   /* Prevent content jumping */
@@ -815,15 +815,15 @@ html, body {
   display: flex;
   transition: transform 280ms ease;
   will-change: transform;
-  width: 400%; /* 4 panels × 100% each */
-  max-width: 400%;
+  width: 500%; /* 5 panels × 100% each */
+  max-width: 500%;
 }
 
 /* 5. Ensure tab panels don't overflow */
 .tab-panel {
-  flex: 0 0 25%; /* 100% ÷ 4 panels */
-  min-width: 25%;
-  max-width: 25%;
+  flex: 0 0 20%; /* 100% ÷ 5 panels */
+  min-width: 20%;
+  max-width: 20%;
   box-sizing: border-box;
   padding: 0; /* Remove any padding that could cause overflow */
   overflow-x: hidden; /* Prevent content from overflowing */

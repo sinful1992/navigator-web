@@ -21,9 +21,9 @@ import { AdminDashboard } from "./AdminDashboard";
 import { useSubscription } from "./useSubscription";
 import { useAdmin } from "./useAdmin";
 import { EarningsCalendar } from "./EarningsCalendar";
-import { RouteOptimizer } from "./RouteOptimizer";
+import { RoutePlanning } from "./RoutePlanning";
 
-type Tab = "list" | "completed" | "arrangements" | "earnings";
+type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
 function normalizeState(raw: any) {
   const r = raw ?? {};
@@ -196,7 +196,7 @@ function AuthedApp() {
     React.useState<number | null>(null);
 
   // Swipe navigation setup
-  const tabOrder: Tab[] = ["list", "completed", "arrangements", "earnings"];
+  const tabOrder: Tab[] = ["list", "completed", "arrangements", "earnings", "planning"];
   const currentTabIndex = tabOrder.indexOf(tab);
 
   const { containerRef, isSwipeActive } = useSwipeNavigation(
@@ -888,18 +888,6 @@ function AuthedApp() {
     }
   }, [cloudSync, safeState]);
 
-  // Handle route optimization result
-  const handleOptimizedRoute = React.useCallback((optimizedIndices: number[]) => {
-    if (optimizedIndices.length === 0) return;
-    
-    const currentAddresses = safeState.addresses;
-    const reorderedAddresses = optimizedIndices.map(index => currentAddresses[index]);
-    
-    // Update addresses in the optimized order
-    setAddresses(reorderedAddresses, true); // Preserve completions
-    
-    logger.info(`Route optimized: reordered ${reorderedAddresses.length} addresses`);
-  }, [safeState.addresses, setAddresses]);
 
   if (loading) {
     return (
@@ -1042,6 +1030,13 @@ function AuthedApp() {
               onClick={() => setTab("earnings")}
             >
               Earnings
+            </button>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "planning"}
+              onClick={() => setTab("planning")}
+            >
+              Planning
             </button>
             <button
               className="tab-btn"
@@ -1194,12 +1189,6 @@ function AuthedApp() {
               />
             </div>
 
-            {/* Route Optimizer */}
-            <RouteOptimizer
-              addresses={addresses}
-              onOptimizedOrder={handleOptimizedRoute}
-              user={cloudSync.user}
-            />
 
             <AddressList
               state={safeState}
@@ -1268,6 +1257,15 @@ function AuthedApp() {
             <EarningsCalendar 
               state={safeState}
               user={cloudSync.user}
+            />
+          </div>
+
+          <div className="tab-panel" data-tab="planning">
+            <RoutePlanning 
+              user={cloudSync.user}
+              onAddressesReady={(newAddresses) => {
+                setAddresses(newAddresses, false); // Don't preserve completions for new addresses
+              }}
             />
           </div>
         </div>
