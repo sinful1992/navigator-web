@@ -218,9 +218,15 @@ END;
 $$;
 
 -- Create sync_wins function if it doesn't exist (appears to be missing)
--- Drop existing function first to handle any signature changes
+-- Drop all possible variations of sync_wins function
 DROP FUNCTION IF EXISTS sync_wins();
+DROP FUNCTION IF EXISTS sync_wins(TEXT);
+DROP FUNCTION IF EXISTS sync_wins(INTEGER);
+DROP FUNCTION IF EXISTS sync_wins(UUID);
+DROP FUNCTION IF EXISTS sync_wins(TEXT, INTEGER);
+DROP FUNCTION IF EXISTS sync_wins(UUID, TEXT);
 
+-- Create the sync_wins function with no parameters
 CREATE FUNCTION sync_wins()
 RETURNS void
 LANGUAGE plpgsql
@@ -235,8 +241,10 @@ BEGIN
     -- For now, just log that the function was called
     RAISE NOTICE 'sync_wins function called at %', NOW();
 
-    -- Add your sync logic here
-    -- Example: UPDATE some_table SET sync_status = 'synced' WHERE sync_status = 'pending';
+    -- Add your sync logic here based on your requirements
+    -- Example possibilities:
+    -- UPDATE some_table SET sync_status = 'synced' WHERE sync_status = 'pending';
+    -- INSERT INTO sync_log (action, timestamp) VALUES ('sync_wins', NOW());
 END;
 $$;
 
