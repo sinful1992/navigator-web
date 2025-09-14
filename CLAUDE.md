@@ -56,9 +56,10 @@ npm run deploy     # Deploy to GitHub Pages
 ## Development Notes
 
 - Uses TypeScript strict mode with proper type definitions
-- IndexedDB via `idb-keyval` for offline persistence  
+- IndexedDB via `idb-keyval` for offline persistence
 - Excel import functionality via `xlsx` library
 - Maps integration through `src/maps.ts`
+- **Hybrid Geocoding**: Google Maps for geocoding (with caching) + OpenRouteService for route optimization
 - Responsive design with mobile-first approach
 - Error boundaries for graceful failure handling
 

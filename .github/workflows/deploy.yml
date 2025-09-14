@@ -34,6 +34,7 @@ jobs:
           cat > .env.local <<EOF
           VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY=${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           # (Optional extras if you use them)
           VITE_DEMO_EMAIL=${{ secrets.VITE_DEMO_EMAIL }}
           VITE_DEMO_PASSWORD=${{ secrets.VITE_DEMO_PASSWORD }}

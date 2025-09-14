@@ -3,17 +3,17 @@ import type { AddressRow } from "./types";
 import { SubscriptionGuard } from "./SubscriptionGuard";
 import { AddressAutocomplete } from "./components/AddressAutocomplete";
 import { ImportExcel } from "./ImportExcel";
-import { 
-  geocodeAddresses, 
-  addressRowToGeocodingResult, 
+import {
+  geocodeAddresses,
+  addressRowToGeocodingResult,
   geocodingResultToAddressRow,
   formatConfidence,
   formatDistance,
   formatDuration,
   optimizeRoute,
-  isCentralizedRoutingAvailable,
-  type GeocodingResult 
-} from "./services/centralizedRouting";
+  isHybridRoutingAvailable,
+  type GeocodingResult
+} from "./services/hybridRouting";
 import type { User } from "@supabase/supabase-js";
 
 interface RoutePlanningProps {
@@ -102,7 +102,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
   // Geocode all addresses that need it
   const handleGeocodeAll = async () => {
-    if (!isCentralizedRoutingAvailable()) {
+    if (!isHybridRoutingAvailable()) {
       alert("Geocoding service is not available. Please check your connection and subscription.");
       return;
     }
@@ -148,7 +148,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
   // Optimize route
   const handleOptimizeRoute = async () => {
-    if (!isCentralizedRoutingAvailable()) {
+    if (!isHybridRoutingAvailable()) {
       alert("Route optimization service is not available. Please check your connection and subscription.");
       return;
     }
@@ -234,7 +234,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
         </div>
 
         {/* Service Status */}
-        {!isCentralizedRoutingAvailable() && (
+        {!isHybridRoutingAvailable() && (
           <div style={{ 
             background: 'var(--warning-light)', 
             border: '1px solid var(--warning)',
@@ -277,7 +277,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                 onChange={setNewAddress}
                 onSelect={handleSelectFromAutocomplete}
                 placeholder="Start typing an address..."
-                disabled={!isCentralizedRoutingAvailable()}
+                disabled={!isHybridRoutingAvailable()}
               />
             </div>
             <button

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { searchAddresses, isCentralizedRoutingAvailable } from "../services/centralizedRouting";
-import type { AddressAutocompleteResult } from "../services/centralizedRouting";
+import { searchAddresses, isHybridRoutingAvailable } from "../services/hybridRouting";
+import type { AddressAutocompleteResult } from "../services/hybridRouting";
 
 interface AddressAutocompleteProps {
   value: string;
@@ -30,7 +30,7 @@ export function AddressAutocomplete({
 
   // Debounced search function
   const debouncedSearch = useCallback(async (query: string) => {
-    if (!isCentralizedRoutingAvailable() || !query.trim() || query.length < 3) {
+    if (!isHybridRoutingAvailable() || !query.trim() || query.length < 3) {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
