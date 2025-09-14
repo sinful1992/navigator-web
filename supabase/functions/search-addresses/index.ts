@@ -159,16 +159,21 @@ serve(async (req) => {
       })))
     }
 
-    // Strategy 2: Try multiple fallback approaches for UK postcodes
+    // Strategy 2: Try fallback approaches for UK addresses (with or without postcodes)
     const hasGoodResults = searchResults.some(r => r.confidence > 0.8)
     const hasPostcode = /[A-Z]{1,2}[0-9]{1,2}\s?[0-9][A-Z]{2}/i.test(query)
+    const hasHouseNumber = /^\d+\s/.test(query.trim()) // Starts with number
     
-    if (hasPostcode && countryCode === 'GB') {
+    if (countryCode === 'GB' && (hasPostcode || (!hasGoodResults && hasHouseNumber))) {
       const postcodeMatch = query.match(/([A-Z]{1,2}[0-9]{1,2}\s?[0-9][A-Z]{2})/i)
       const addressPart = query.replace(/[A-Z]{1,2}[0-9]{1,2}\s?[0-9][A-Z]{2}/i, '').trim()
 
+      // Handle both postcode and non-postcode scenarios
+      const searchStrategies: any[] = []
+      
       if (postcodeMatch) {
-        const searchStrategies: any[] = []
+        // Scenario A: Has postcode
+        const addressPart = query.replace(/[A-Z]{1,2}[0-9]{1,2}\s?[0-9][A-Z]{2}/i, '').trim()
 
         if (addressPart) {
           // Strategy 2A: Structured search "address, postcode"
@@ -217,6 +222,27 @@ serve(async (req) => {
             }
           })
         }
+      } else if (hasHouseNumber && !hasGoodResults) {
+        // Scenario B: No postcode but has house number (e.g., "14 denzil avenue")
+        const houseNumber = query.match(/^\d+/)
+        const streetName = query.replace(/^\d+\s*/, '').trim()
+        
+        if (houseNumber && streetName.length > 3) {
+          console.log(`Trying street search without postcode: "${streetName}"`)
+          
+          // Search for just the street name, then add house number to results
+          searchStrategies.push({
+            name: 'street_only',
+            params: {
+              api_key: ORS_API_KEY,
+              text: streetName,
+              'boundary.country': countryCode,
+              size: '5',
+              layers: 'street,address',
+            }
+          })
+        }
+      }
 
         // Execute fallback strategies
         for (const strategy of searchStrategies) {
@@ -248,6 +274,14 @@ serve(async (req) => {
                     confidence = Math.max(confidence, 0.3) // Lower confidence for area-only
                     if (addressPart) {
                       feature.properties.label = `${addressPart} (near ${feature.properties.label})`
+                    }
+                    break
+                  case 'street_only':
+                    confidence += 0.03
+                    // Add house number to label for non-postcode searches
+                    const houseNum = query.match(/^\d+/)
+                    if (houseNum && !feature.properties.label.includes(houseNum[0])) {
+                      feature.properties.label = `${houseNum[0]} ${feature.properties.label}`
                     }
                     break
                 }
