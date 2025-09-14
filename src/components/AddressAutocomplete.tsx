@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { searchAddresses, isHybridRoutingAvailable } from "../services/hybridRouting";
+import { resolveSelectedPlace } from "../services/geocoding";
 import type { AddressAutocompleteResult } from "../services/hybridRouting";
 
 interface AddressAutocompleteProps {
@@ -68,10 +69,34 @@ export function AddressAutocomplete({
   };
 
   // Handle suggestion selection
-  const handleSelectSuggestion = (suggestion: AddressAutocompleteResult) => {
-    const [lng, lat] = suggestion.coordinates;
-    onChange(suggestion.label);
-    onSelect(suggestion.label, lat, lng);
+  const handleSelectSuggestion = async (suggestion: AddressAutocompleteResult) => {
+    if (suggestion.placeId) {
+      // For Places API results, resolve coordinates using session token
+      setIsLoading(true);
+      try {
+        const placeDetails = await resolveSelectedPlace(suggestion.placeId);
+        if (placeDetails) {
+          onChange(suggestion.label);
+          onSelect(suggestion.label, placeDetails.lat, placeDetails.lng);
+        } else {
+          // Fallback if place details fail
+          onChange(suggestion.label);
+          onSelect(suggestion.label, 0, 0);
+        }
+      } catch (error) {
+        console.error('Failed to resolve place details:', error);
+        onChange(suggestion.label);
+        onSelect(suggestion.label, 0, 0);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // For geocoding fallback results that already have coordinates
+      const [lng, lat] = suggestion.coordinates;
+      onChange(suggestion.label);
+      onSelect(suggestion.label, lat, lng);
+    }
+
     setShowSuggestions(false);
     setSelectedIndex(-1);
     setSuggestions([]);

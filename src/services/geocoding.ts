@@ -16,6 +16,7 @@ export interface AddressAutocompleteResult {
   label: string;
   coordinates: [number, number]; // [lng, lat]
   confidence: number;
+  placeId?: string; // For Places API results
 }
 
 type GeocodeCache = {
@@ -262,8 +263,26 @@ export async function geocodeAddresses(
   return results;
 }
 
+// Session token management for cost-efficient Places API usage
+let currentSessionToken: string | null = null;
+
+function generateSessionToken(): string {
+  return 'session_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+}
+
+function getOrCreateSessionToken(): string {
+  if (!currentSessionToken) {
+    currentSessionToken = generateSessionToken();
+  }
+  return currentSessionToken;
+}
+
+function clearSessionToken(): void {
+  currentSessionToken = null;
+}
+
 /**
- * Address autocomplete/search using Google Maps Places API
+ * Address autocomplete/search using Google Maps Places API with session tokens
  */
 export async function searchAddresses(
   query: string,
@@ -284,12 +303,15 @@ export async function searchAddresses(
   try {
     console.log(`Searching addresses with Places API: "${query}"`);
 
-    // Use Places Autocomplete API for better results
+    const sessionToken = getOrCreateSessionToken();
+
+    // Use Places Autocomplete API with session token for cost efficiency
     const response = await fetch(
       `https://maps.googleapis.com/maps/api/place/autocomplete/json?` +
       `input=${encodeURIComponent(query)}&` +
       `components=country:${countryCode}&` +
       `types=address&` +
+      `sessiontoken=${sessionToken}&` +
       `key=${service.apiKey}`
     );
 
@@ -300,38 +322,14 @@ export async function searchAddresses(
     const data = await response.json();
 
     if (data.status === 'OK' && data.predictions?.length > 0) {
-      // Get place details for each prediction to get coordinates
-      const results: AddressAutocompleteResult[] = [];
-
-      for (const prediction of data.predictions.slice(0, limit)) {
-        try {
-          const detailsResponse = await fetch(
-            `https://maps.googleapis.com/maps/api/place/details/json?` +
-            `place_id=${prediction.place_id}&` +
-            `fields=geometry,formatted_address&` +
-            `key=${service.apiKey}`
-          );
-
-          if (detailsResponse.ok) {
-            const detailsData = await detailsResponse.json();
-
-            if (detailsData.status === 'OK' && detailsData.result?.geometry?.location) {
-              results.push({
-                label: prediction.description,
-                coordinates: [
-                  detailsData.result.geometry.location.lng,
-                  detailsData.result.geometry.location.lat
-                ],
-                confidence: 0.9 // Places API provides high confidence results
-              });
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to get place details for:', prediction.description, error);
-        }
-      }
-
-      return results;
+      // Return predictions with place_id for later resolution
+      // Don't call Place Details here to avoid extra costs
+      return data.predictions.slice(0, limit).map((prediction: any) => ({
+        label: prediction.description,
+        coordinates: [0, 0], // Will be resolved when user selects
+        confidence: 0.9,
+        placeId: prediction.place_id // Store for later resolution
+      }));
     }
 
     return [];
@@ -353,6 +351,57 @@ export async function searchAddresses(
     }
 
     return [];
+  }
+}
+
+/**
+ * Resolve place details when user selects an address
+ * This uses the session token for cost-efficient billing
+ */
+export async function resolveSelectedPlace(placeId: string): Promise<{
+  lat: number;
+  lng: number;
+  formattedAddress: string;
+} | null> {
+  const service = getGeocodingService();
+
+  if (!service.apiKey || !placeId) {
+    return null;
+  }
+
+  try {
+    const sessionToken = currentSessionToken || generateSessionToken();
+
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/place/details/json?` +
+      `place_id=${placeId}&` +
+      `fields=geometry,formatted_address&` +
+      `sessiontoken=${sessionToken}&` +
+      `key=${service.apiKey}`
+    );
+
+    // Clear session token after use (session is complete)
+    clearSessionToken();
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.status === 'OK' && data.result?.geometry?.location) {
+      return {
+        lat: data.result.geometry.location.lat,
+        lng: data.result.geometry.location.lng,
+        formattedAddress: data.result.formatted_address
+      };
+    }
+
+    return null;
+  } catch (error) {
+    clearSessionToken(); // Clear on error too
+    console.error('Failed to resolve place details:', error);
+    return null;
   }
 }
 
