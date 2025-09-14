@@ -36,6 +36,26 @@ export type ArrangementStatus =
 
 export type RecurrenceType = "none" | "weekly" | "monthly" | "custom";
 
+export type ReminderSchedule = {
+  daysBeforePayment: number[];
+  enabled: boolean;
+  autoSend?: boolean;  // Future: auto-send via service
+};
+
+export type MessageTemplate = {
+  id: string;
+  name: string;
+  template: string;
+  variables: string[]; // Available variables like {customerName}, {amount}, {date}, etc.
+};
+
+export type AgentProfile = {
+  name: string;
+  title: string; // e.g., "Enforcement Agent", "Bailiff", "Recovery Officer"
+  signature: string; // e.g., "Enforcement Agent J. Smith"
+  contactInfo?: string;
+};
+
 export type Arrangement = {
   id: string;               // unique identifier
   addressIndex: number;     // links to address in the main list
@@ -58,6 +78,9 @@ export type Arrangement = {
   // Reminder tracking
   lastReminderSent?: string;    // ISO timestamp of last reminder
   reminderCount?: number;       // number of reminders sent
+  reminderSchedule?: ReminderSchedule; // customizable reminder schedule
+  nextReminderDue?: string;     // ISO timestamp for next scheduled reminder
+  scheduledReminders?: string[]; // Array of ISO timestamps for all scheduled reminders
 };
 
 export type SubscriptionStatus = "active" | "trial" | "expired" | "cancelled";
@@ -125,6 +148,32 @@ export type DailyEarnings = {
   workHours?: number;     // Hours worked (from day sessions)
 };
 
+export type ReminderNotification = {
+  id: string;
+  arrangementId: string;
+  type: 'payment_due' | 'overdue' | 'custom';
+  scheduledDate: string;  // When the reminder should be shown/sent
+  status: 'pending' | 'shown' | 'dismissed' | 'sent';
+  message?: string;       // Custom reminder message
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ReminderSettings = {
+  defaultSchedule: ReminderSchedule;
+  globalEnabled: boolean;
+  smsEnabled: boolean;
+  agentProfile: AgentProfile;
+  messageTemplates: MessageTemplate[];
+  activeTemplateId: string;
+  customizableSchedule: {
+    threeDayReminder: boolean;
+    oneDayReminder: boolean;
+    dayOfReminder: boolean;
+    customDays: number[]; // Additional custom reminder days
+  };
+};
+
 export type AppState = {
   addresses: AddressRow[];
   activeIndex: number | null;
@@ -141,4 +190,10 @@ export type AppState = {
   commissionRules?: CommissionRule[];
   activeCommissionRule?: string | null; // ID of currently active rule
   dailyEarnings?: DailyEarnings[];
+  /** Reminder system settings */
+  reminderSettings?: ReminderSettings;
+  /** Pending reminder notifications */
+  reminderNotifications?: ReminderNotification[];
+  /** Last time reminders were processed */
+  lastReminderProcessed?: string; // ISO timestamp
 };

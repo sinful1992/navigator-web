@@ -10,7 +10,15 @@ import type {
   DaySession,
   Arrangement,
   UserSubscription,
+  ReminderSettings,
+  ReminderNotification,
 } from "./types";
+import {
+  processArrangementReminders,
+  updateReminderStatus,
+  cleanupOldNotifications,
+  DEFAULT_REMINDER_SETTINGS,
+} from "./services/reminderScheduler";
 
 const STORAGE_KEY = "navigator_state_v5"; // Bumped for data integrity improvements
 const CURRENT_SCHEMA_VERSION = 5;
@@ -37,6 +45,9 @@ const initial: AppState = {
   arrangements: [],
   currentListVersion: 1,
   subscription: null,
+  reminderSettings: DEFAULT_REMINDER_SETTINGS,
+  reminderNotifications: [],
+  lastReminderProcessed: undefined,
 };
 
 // Data validation functions
@@ -861,6 +872,62 @@ export function useAppState() {
     setBaseState((s) => ({ ...s, subscription }));
   }, []);
 
+  // ---- reminder system management ----
+
+  const updateReminderSettings = React.useCallback((settings: ReminderSettings) => {
+    setBaseState((s) => ({ ...s, reminderSettings: settings }));
+  }, []);
+
+  const updateReminderNotification = React.useCallback(
+    (notificationId: string, status: ReminderNotification['status'], message?: string) => {
+      setBaseState((s) => ({
+        ...s,
+        reminderNotifications: updateReminderStatus(
+          s.reminderNotifications || [],
+          notificationId,
+          status,
+          message
+        ),
+      }));
+    },
+    []
+  );
+
+  const processReminders = React.useCallback(() => {
+    setBaseState((s) => {
+      const newNotifications = processArrangementReminders(s);
+      const cleanedNotifications = cleanupOldNotifications(newNotifications, s.arrangements);
+      
+      return {
+        ...s,
+        reminderNotifications: cleanedNotifications,
+        lastReminderProcessed: new Date().toISOString(),
+      };
+    });
+  }, []);
+
+  // Process reminders periodically
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      if (!loading) {
+        processReminders();
+      }
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [loading, processReminders]);
+
+  // Process reminders when arrangements change
+  React.useEffect(() => {
+    if (!loading) {
+      const timeoutId = setTimeout(() => {
+        processReminders();
+      }, 500); // Small delay to batch arrangement changes
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [baseState.arrangements, loading, processReminders]);
+
   // ---- enhanced backup / restore with conflict detection ----
 
   function isValidState(obj: any): obj is AppState {
@@ -1127,5 +1194,9 @@ export function useAppState() {
     setSubscription,
     backupState,
     restoreState,
+    // Reminder system
+    updateReminderSettings,
+    updateReminderNotification,
+    processReminders,
   };
 }

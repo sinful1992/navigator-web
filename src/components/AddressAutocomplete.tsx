@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { searchAddresses } from "../services/geocoding";
-import type { AddressAutocompleteResult } from "../services/geocoding";
+import { searchAddresses, isCentralizedRoutingAvailable } from "../services/centralizedRouting";
+import type { AddressAutocompleteResult } from "../services/centralizedRouting";
 
 interface AddressAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
   onSelect: (address: string, lat: number, lng: number) => void;
   placeholder?: string;
-  apiKey: string;
   disabled?: boolean;
   className?: string;
 }
@@ -17,7 +16,6 @@ export function AddressAutocomplete({
   onChange,
   onSelect,
   placeholder = "Start typing an address...",
-  apiKey,
   disabled = false,
   className = "input"
 }: AddressAutocompleteProps) {
@@ -32,7 +30,7 @@ export function AddressAutocomplete({
 
   // Debounced search function
   const debouncedSearch = useCallback(async (query: string) => {
-    if (!apiKey || !query.trim() || query.length < 3) {
+    if (!isCentralizedRoutingAvailable() || !query.trim() || query.length < 3) {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
@@ -40,7 +38,7 @@ export function AddressAutocomplete({
 
     setIsLoading(true);
     try {
-      const results = await searchAddresses(query, apiKey);
+      const results = await searchAddresses(query);
       setSuggestions(results);
       setShowSuggestions(results.length > 0);
       setSelectedIndex(-1);
@@ -51,7 +49,7 @@ export function AddressAutocomplete({
     } finally {
       setIsLoading(false);
     }
-  }, [apiKey]);
+  }, []);
 
   // Handle input change with debouncing
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

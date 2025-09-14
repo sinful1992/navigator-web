@@ -178,6 +178,9 @@ function AuthedApp() {
     setBaseState,
     deviceId,
     enqueueOp,
+    // Reminder system functions
+    updateReminderSettings,
+    updateReminderNotification,
   } = useAppState();
 
   const cloudSync = useCloudSync();
@@ -1250,6 +1253,8 @@ function AuthedApp() {
               onComplete={handleComplete}
               autoCreateForAddress={autoCreateArrangementFor}
               onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
+              onUpdateReminderSettings={updateReminderSettings}
+              onUpdateReminderNotification={updateReminderNotification}
             />
           </div>
 

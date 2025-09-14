@@ -1,7 +1,9 @@
 import * as React from "react";
 import { format, parseISO, isWithinInterval, startOfWeek, endOfWeek, isSameDay, isPast, addDays } from "date-fns";
-import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome, RecurrenceType } from "./types";
+import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome, RecurrenceType, ReminderSettings, ReminderNotification } from "./types";
 import { LoadingButton } from "./components/LoadingButton";
+import { ReminderDashboard } from "./components/ReminderDashboard";
+import { generateReminderMessage } from "./services/reminderScheduler";
 
 type Props = {
   state: AppState;
@@ -12,9 +14,12 @@ type Props = {
   onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void; // ✅ mark as completed (ARR)
   autoCreateForAddress?: number | null;
   onAutoCreateHandled?: () => void;
+  // Reminder system props
+  onUpdateReminderSettings?: (settings: ReminderSettings) => void;
+  onUpdateReminderNotification?: (notificationId: string, status: ReminderNotification['status']) => void;
 };
 
-type ViewMode = "thisWeek" | "all";
+type ViewMode = "thisWeek" | "all" | "reminders";
 
 const ArrangementsComponent = function Arrangements({ 
   state, 
@@ -24,7 +29,9 @@ const ArrangementsComponent = function Arrangements({
   onAddAddress,
   onComplete,
   autoCreateForAddress,
-  onAutoCreateHandled
+  onAutoCreateHandled,
+  onUpdateReminderSettings,
+  onUpdateReminderNotification
 }: Props) {
   const [viewMode, setViewMode] = React.useState<ViewMode>("thisWeek");
   const [showAddForm, setShowAddForm] = React.useState(false);
@@ -48,34 +55,6 @@ const ArrangementsComponent = function Arrangements({
   // State for reminder confirmations
   const [reminderSent, setReminderSent] = React.useState<Set<string>>(new Set());
 
-  // Create enforcement reminder message template - GDPR compliant with reference number
-  const createReminderMessage = (arrangement: Arrangement): string => {
-    const customerField = arrangement.customerName || "";
-    const amount = arrangement.amount || "the arranged amount";
-    const date = format(parseISO(arrangement.scheduledDate), "dd/MM/yyyy");
-    const time = arrangement.scheduledTime || "";
-    
-    // Extract reference number and surname from "123456789 surname" format
-    let greeting = "";
-    let referenceNumber = "";
-    
-    if (customerField) {
-      const parts = customerField.trim().split(/\s+/);
-      if (parts.length >= 2) {
-        // Format: "123456789 surname" 
-        referenceNumber = parts[0]; // First part is the reference number
-        const surname = parts.slice(1).join(" "); // Rest is the surname
-        greeting = `Mr/Mrs ${surname}, `;
-      } else {
-        // If only one part, treat as surname only (no reference)
-        greeting = `${customerField}, `;
-      }
-    }
-    
-    const refLine = referenceNumber ? `Reference: ${referenceNumber}\n\n` : "";
-    
-    return `${greeting}PAYMENT REMINDER\n\n${refLine}Your payment arrangement is due ${date}${time ? ` at ${time}` : ""}.\n\nAmount Due: £${amount}\n\nPayment must be made as agreed. Failure to comply may result in further enforcement action.\n\nContact immediately if unable to pay as arranged.\n\nEnforcement Agent G. Barkus`;
-  };
 
   // Format phone number for SMS (keep original format, just clean it)
   const formatPhoneForSMS = (phone: string): string => {
@@ -112,7 +91,18 @@ const ArrangementsComponent = function Arrangements({
     }));
 
     try {
-      const message = createReminderMessage(arrangement);
+      // Create a mock notification for message generation
+      const mockNotification = {
+        id: 'temp',
+        arrangementId: arrangement.id,
+        type: 'payment_due' as const,
+        scheduledDate: new Date().toISOString(),
+        status: 'pending' as const,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      const message = generateReminderMessage(arrangement, mockNotification, state.reminderSettings);
       const formattedPhone = formatPhoneForSMS(arrangement.phoneNumber);
       
       // Create SMS URL (sms: protocol)
@@ -429,6 +419,12 @@ const ArrangementsComponent = function Arrangements({
               📋 All Pending
             </button>
             <button 
+              className={`btn ${viewMode === "reminders" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setViewMode("reminders")}
+            >
+              🔔 Reminders
+            </button>
+            <button 
               className="btn btn-success"
               onClick={() => setShowAddForm(true)}
             >
@@ -454,8 +450,20 @@ const ArrangementsComponent = function Arrangements({
         />
       )}
 
-      {/* Arrangements List */}
-      <div className="days-list">
+      {/* Conditional rendering based on view mode */}
+      {viewMode === "reminders" ? (
+        <ReminderDashboard
+          state={state}
+          onUpdateReminderSettings={onUpdateReminderSettings || (() => {})}
+          onUpdateReminderNotification={onUpdateReminderNotification || (() => {})}
+          onSendReminder={async (arrangement) => {
+            // Reuse the existing SMS reminder functionality
+            await sendReminderSMS(arrangement);
+          }}
+        />
+      ) : (
+        /* Arrangements List */
+        <div className="days-list">
         {groupedArrangements.length === 0 ? (
           <div className="empty-box">
             <div style={{ fontSize: "1.125rem", marginBottom: "0.5rem" }}>
@@ -722,7 +730,8 @@ const ArrangementsComponent = function Arrangements({
             </div>
           ))
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

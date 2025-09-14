@@ -8,9 +8,12 @@ import {
   addressRowToGeocodingResult, 
   geocodingResultToAddressRow,
   formatConfidence,
+  formatDistance,
+  formatDuration,
+  optimizeRoute,
+  isCentralizedRoutingAvailable,
   type GeocodingResult 
-} from "./services/geocoding";
-import { optimizeRoute, formatDistance, formatDuration } from "./services/routeOptimization";
+} from "./services/centralizedRouting";
 import type { User } from "@supabase/supabase-js";
 
 interface RoutePlanningProps {
@@ -30,9 +33,6 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
     current: string;
   } | null>(null);
   
-  // Settings
-  const [apiKey, setApiKey] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
   
   // Optimization results
   const [optimizationResult, setOptimizationResult] = useState<{
@@ -43,24 +43,6 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
     error?: string;
   } | null>(null);
 
-  // Get API key from localStorage on mount
-  const storedApiKey = (() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('ors_api_key') || '';
-    }
-    return '';
-  })();
-
-  const handleApiKeyChange = (newKey: string) => {
-    setApiKey(newKey);
-    if (typeof window !== 'undefined') {
-      if (newKey) {
-        localStorage.setItem('ors_api_key', newKey);
-      } else {
-        localStorage.removeItem('ors_api_key');
-      }
-    }
-  };
 
   // Import addresses from Excel
   const handleImportExcel = useCallback((importedAddresses: AddressRow[]) => {
@@ -120,10 +102,8 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
   // Geocode all addresses that need it
   const handleGeocodeAll = async () => {
-    const keyToUse = apiKey || storedApiKey;
-    if (!keyToUse) {
-      alert("Please enter your OpenRouteService API key first");
-      setShowSettings(true);
+    if (!isCentralizedRoutingAvailable()) {
+      alert("Geocoding service is not available. Please check your connection and subscription.");
       return;
     }
 
@@ -143,7 +123,6 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
       const addressStrings = addressesToGeocode.map(({ addr }) => addr.address);
       const results = await geocodeAddresses(
         addressStrings,
-        keyToUse,
         (completed, total, current) => {
           setGeocodingProgress({ completed, total, current });
         }
@@ -160,7 +139,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
     } catch (error) {
       console.error('Batch geocoding failed:', error);
-      alert('Geocoding failed. Please check your API key and try again.');
+      alert('Geocoding failed. Please check your connection and subscription.');
     } finally {
       setIsGeocoding(false);
       setGeocodingProgress(null);
@@ -169,10 +148,8 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
   // Optimize route
   const handleOptimizeRoute = async () => {
-    const keyToUse = apiKey || storedApiKey;
-    if (!keyToUse) {
-      alert("Please enter your OpenRouteService API key first");
-      setShowSettings(true);
+    if (!isCentralizedRoutingAvailable()) {
+      alert("Route optimization service is not available. Please check your connection and subscription.");
       return;
     }
 
@@ -195,7 +172,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
     try {
       const addressRows = addresses.map(geocodingResultToAddressRow);
-      const result = await optimizeRoute(addressRows, keyToUse);
+      const result = await optimizeRoute(addressRows);
       
       setOptimizationResult({
         optimizedOrder: result.optimizedOrder,
@@ -253,56 +230,24 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
     <SubscriptionGuard user={user} fallback={<RoutePlanningLockedView />}>
       <div className="route-planning" style={{ padding: '1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h2>Route Planning</h2>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => setShowSettings(!showSettings)}
-            title="Settings"
-          >
-            ⚙️ Settings
-          </button>
+          <h2>🗺️ Route Planning</h2>
         </div>
 
-        {/* Settings Panel */}
-        {showSettings && (
+        {/* Service Status */}
+        {!isCentralizedRoutingAvailable() && (
           <div style={{ 
-            background: 'var(--surface)', 
-            border: '1px solid var(--border-light)',
+            background: 'var(--warning-light)', 
+            border: '1px solid var(--warning)',
             borderRadius: 'var(--radius)',
             padding: '1rem',
             marginBottom: '1.5rem'
           }}>
-            <h4 style={{ margin: '0 0 0.5rem 0' }}>OpenRouteService API Key</h4>
-            <p style={{ 
-              fontSize: '0.875rem', 
-              color: 'var(--text-muted)',
-              margin: '0 0 0.5rem 0'
-            }}>
-              Get your free API key at{' '}
-              <a 
-                href="https://openrouteservice.org/" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                style={{ color: 'var(--primary)' }}
-              >
-                openrouteservice.org
-              </a>
-            </p>
-            <input
-              type="password"
-              placeholder="Enter your OpenRouteService API key"
-              value={apiKey || storedApiKey}
-              onChange={(e) => handleApiKeyChange(e.target.value)}
-              className="input"
-              style={{ width: '100%', marginBottom: '0.5rem' }}
-            />
-            <p style={{ 
-              fontSize: '0.75rem', 
-              color: 'var(--text-muted)',
-              margin: 0
-            }}>
-              Your API key is stored locally and never sent to our servers.
-            </p>
+            <div style={{ fontWeight: 'bold', color: 'var(--warning)', marginBottom: '0.5rem' }}>
+              ⚠️ Service Unavailable
+            </div>
+            <div style={{ fontSize: '0.875rem' }}>
+              Route planning services are currently unavailable. Please check your internet connection and subscription status.
+            </div>
           </div>
         )}
 
@@ -332,8 +277,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                 onChange={setNewAddress}
                 onSelect={handleSelectFromAutocomplete}
                 placeholder="Start typing an address..."
-                apiKey={apiKey || storedApiKey}
-                disabled={!apiKey && !storedApiKey}
+                disabled={!isCentralizedRoutingAvailable()}
               />
             </div>
             <button
