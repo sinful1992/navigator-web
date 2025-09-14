@@ -133,50 +133,118 @@ serve(async (req) => {
       })))
     }
 
-    // Strategy 2: If no good results, try structured search for UK postcodes
+    // Strategy 2: Try multiple fallback approaches for UK postcodes
     const hasGoodResults = searchResults.some(r => r.confidence > 0.8)
     const hasPostcode = /[A-Z]{1,2}[0-9]{1,2}\s?[0-9][A-Z]{2}/i.test(query)
     
-    if (!hasGoodResults && hasPostcode && countryCode === 'GB') {
-      // Extract postcode and address parts for better search
+    if (hasPostcode && countryCode === 'GB') {
       const postcodeMatch = query.match(/([A-Z]{1,2}[0-9]{1,2}\s?[0-9][A-Z]{2})/i)
       const addressPart = query.replace(/[A-Z]{1,2}[0-9]{1,2}\s?[0-9][A-Z]{2}/i, '').trim()
       
       if (postcodeMatch && addressPart) {
-        const structuredParams = new URLSearchParams({
-          api_key: ORS_API_KEY,
-          text: `${addressPart}, ${postcodeMatch[1]}`,
-          'boundary.country': countryCode,
-          size: Math.min(limit, 10).toString(),
-          layers: 'address,venue', // Focus on specific addresses
-          'focus.point.lat': '51.5074', // London focus for UK
-          'focus.point.lon': '-0.1278',
+        const searchStrategies = []
+        
+        // Strategy 2A: Structured search "address, postcode"
+        searchStrategies.push({
+          name: 'structured',
+          params: {
+            api_key: ORS_API_KEY,
+            text: `${addressPart}, ${postcodeMatch[1]}`,
+            'boundary.country': countryCode,
+            size: Math.min(limit, 10).toString(),
+            layers: 'address,venue',
+            'focus.point.lat': '51.5074',
+            'focus.point.lon': '-0.1278',
+          }
         })
+        
+        // Strategy 2B: Just the street name + postcode (for interpolation)
+        const streetName = addressPart.replace(/^\d+\s*/, '').trim() // Remove house number
+        if (streetName !== addressPart && streetName.length > 3) {
+          searchStrategies.push({
+            name: 'street_postcode',
+            params: {
+              api_key: ORS_API_KEY,
+              text: `${streetName}, ${postcodeMatch[1]}`,
+              'boundary.country': countryCode,
+              size: '5',
+              layers: 'street,address',
+            }
+          })
+        }
+        
+        // Strategy 2C: Just the postcode for area context
+        if (!hasGoodResults) {
+          searchStrategies.push({
+            name: 'postcode_only',
+            params: {
+              api_key: ORS_API_KEY,
+              text: postcodeMatch[1],
+              'boundary.country': countryCode,
+              size: '3',
+              layers: 'locality,region',
+            }
+          })
+        }
 
-        console.log(`Trying structured search: ${addressPart}, ${postcodeMatch[1]}`)
-        
-        const structuredResponse = await fetch(`${searchUrl}?${structuredParams}`)
-        
-        if (structuredResponse.ok) {
-          const structuredData = await structuredResponse.json()
+        // Execute fallback strategies
+        for (const strategy of searchStrategies) {
+          console.log(`Trying ${strategy.name} search: ${strategy.params.text}`)
           
-          if (structuredData.features) {
-            const structuredResults = structuredData.features.map((feature: any) => ({
-              label: feature.properties.label,
-              coordinates: feature.geometry.coordinates,
-              confidence: (feature.properties.confidence || 0.5) + 0.1 // Slight boost for structured search
-            }))
+          const fallbackResponse = await fetch(`${searchUrl}?${new URLSearchParams(strategy.params)}`)
+          
+          if (fallbackResponse.ok) {
+            const fallbackData = await fallbackResponse.json()
             
-            // Add structured results, avoiding duplicates
-            structuredResults.forEach(newResult => {
-              const isDuplicate = searchResults.some(existing => 
-                Math.abs(existing.coordinates[0] - newResult.coordinates[0]) < 0.0001 &&
-                Math.abs(existing.coordinates[1] - newResult.coordinates[1]) < 0.0001
-              )
-              if (!isDuplicate) {
-                searchResults.push(newResult)
-              }
-            })
+            if (fallbackData.features) {
+              const fallbackResults = fallbackData.features.map((feature: any) => {
+                let confidence = feature.properties.confidence || 0.4
+                
+                // Boost confidence based on strategy
+                switch (strategy.name) {
+                  case 'structured':
+                    confidence += 0.1
+                    break
+                  case 'street_postcode':
+                    confidence += 0.05
+                    // Add house number to label if missing
+                    const houseNumber = addressPart.match(/^\d+/)
+                    if (houseNumber && !feature.properties.label.includes(houseNumber[0])) {
+                      feature.properties.label = `${houseNumber[0]} ${feature.properties.label}`
+                    }
+                    break
+                  case 'postcode_only':
+                    confidence = Math.max(confidence, 0.3) // Lower confidence for area-only
+                    if (addressPart) {
+                      feature.properties.label = `${addressPart} (near ${feature.properties.label})`
+                    }
+                    break
+                }
+                
+                return {
+                  label: feature.properties.label,
+                  coordinates: feature.geometry.coordinates,
+                  confidence
+                }
+              })
+              
+              // Add fallback results, avoiding duplicates
+              fallbackResults.forEach(newResult => {
+                const isDuplicate = searchResults.some(existing => 
+                  Math.abs(existing.coordinates[0] - newResult.coordinates[0]) < 0.001 &&
+                  Math.abs(existing.coordinates[1] - newResult.coordinates[1]) < 0.001
+                )
+                if (!isDuplicate) {
+                  searchResults.push(newResult)
+                }
+              })
+            }
+          }
+          
+          // If we got good results from this strategy, stop trying more fallbacks
+          const currentBest = Math.max(...searchResults.map(r => r.confidence || 0))
+          if (currentBest > 0.8) {
+            break
           }
         }
       }
