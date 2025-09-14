@@ -18,6 +18,7 @@ export interface AddressAutocompleteResult {
   label: string;
   coordinates: [number, number]; // [lng, lat]
   confidence: number;
+  placeId?: string; // For Places API results
 }
 
 interface RouteOptimizationResult {
