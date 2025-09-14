@@ -87,6 +87,44 @@ export type UserSubscription = {
   nextPaymentDue?: string;    // ISO date
 };
 
+export type CourtType = "high_court" | "magistrates" | "custom";
+
+export type CommissionRule = {
+  id: string;
+  name: string;
+  courtType: CourtType;
+  isActive: boolean;
+  fees: {
+    pif: number;     // Fee for PIF completions (in pence)
+    done: number;    // Fee for Done completions (in pence) 
+    da: number;      // Fee for DA completions (in pence)
+    arr: number;     // Fee for ARR completions (in pence)
+  };
+  bonuses?: {
+    dailyTargetAddresses?: number;  // Daily target for bonus
+    dailyBonusAmount?: number;      // Bonus amount if target met (in pence)
+    weeklyTargetPifs?: number;      // Weekly PIF target
+    weeklyBonusAmount?: number;     // Weekly bonus (in pence)
+  };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DailyEarnings = {
+  date: string;           // YYYY-MM-DD
+  ruleId: string;         // Which commission rule was used
+  completions: {
+    pif: { count: number; amount: number; };
+    done: { count: number; amount: number; };
+    da: { count: number; amount: number; };
+    arr: { count: number; amount: number; };
+  };
+  totalEarnings: number;  // Total for the day (in pence)
+  bonusEarned?: number;   // Any bonus earned (in pence)
+  addressesCompleted: number;
+  workHours?: number;     // Hours worked (from day sessions)
+};
+
 export type AppState = {
   addresses: AddressRow[];
   activeIndex: number | null;
@@ -99,4 +137,8 @@ export type AppState = {
   _schemaVersion?: number;
   /** User subscription info */
   subscription?: UserSubscription | null;
+  /** Commission tracking */
+  commissionRules?: CommissionRule[];
+  activeCommissionRule?: string | null; // ID of currently active rule
+  dailyEarnings?: DailyEarnings[];
 };

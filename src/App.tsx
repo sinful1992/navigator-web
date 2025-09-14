@@ -20,8 +20,9 @@ import { SubscriptionManager } from "./SubscriptionManager";
 import { AdminDashboard } from "./AdminDashboard";
 import { useSubscription } from "./useSubscription";
 import { useAdmin } from "./useAdmin";
+import { EarningsCalendar } from "./EarningsCalendar";
 
-type Tab = "list" | "completed" | "arrangements";
+type Tab = "list" | "completed" | "arrangements" | "earnings";
 
 function normalizeState(raw: any) {
   const r = raw ?? {};
@@ -187,13 +188,14 @@ function AuthedApp() {
   const [showSubscription, setShowSubscription] = React.useState(false);
   const [showAdmin, setShowAdmin] = React.useState(false);
 
+
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
   const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
     React.useState<number | null>(null);
 
   // Swipe navigation setup
-  const tabOrder: Tab[] = ["list", "completed", "arrangements"];
+  const tabOrder: Tab[] = ["list", "completed", "arrangements", "earnings"];
   const currentTabIndex = tabOrder.indexOf(tab);
 
   const { containerRef, isSwipeActive } = useSwipeNavigation(
@@ -1022,6 +1024,13 @@ function AuthedApp() {
             </button>
             <button
               className="tab-btn"
+              aria-selected={tab === "earnings"}
+              onClick={() => setTab("earnings")}
+            >
+              Earnings
+            </button>
+            <button
+              className="tab-btn"
               onClick={handleManualSync}
               disabled={cloudSync.isSyncing}
               title={cloudSync.isSyncing ? "Syncing..." : "Force sync now"}
@@ -1231,6 +1240,13 @@ function AuthedApp() {
               onComplete={handleComplete}
               autoCreateForAddress={autoCreateArrangementFor}
               onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
+            />
+          </div>
+
+          <div className="tab-panel" data-tab="earnings">
+            <EarningsCalendar 
+              state={safeState}
+              user={cloudSync.user}
             />
           </div>
         </div>
