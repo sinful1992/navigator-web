@@ -1,6 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { sanitizeLimit } from './utils.ts'
+
+// Utility function to sanitize and validate limit parameter
+function sanitizeLimit(value: unknown, fallback = 5): number {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num < 1) {
+    return fallback
+  }
+  
+  // Enforce maximum limit to prevent abuse
+  if (num > 10) {
+    return 10
+  }
+  
+  return num
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
