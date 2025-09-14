@@ -2,7 +2,10 @@
 -- Add search_path = '' to functions missing this security setting
 
 -- Fix update_updated_at_column function
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+-- Drop existing function first to handle any signature changes
+DROP FUNCTION IF EXISTS update_updated_at_column();
+
+CREATE FUNCTION update_updated_at_column()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SET search_path = ''
@@ -14,7 +17,10 @@ END;
 $$;
 
 -- Fix expire_subscriptions function
-CREATE OR REPLACE FUNCTION expire_subscriptions()
+-- Drop existing function first to handle any signature changes
+DROP FUNCTION IF EXISTS expire_subscriptions();
+
+CREATE FUNCTION expire_subscriptions()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -35,7 +41,12 @@ END;
 $$;
 
 -- Fix admin_grant_subscription function
-CREATE OR REPLACE FUNCTION admin_grant_subscription(
+-- Drop existing function first to handle return type change
+DROP FUNCTION IF EXISTS admin_grant_subscription(UUID, VARCHAR(50), INTEGER, TEXT);
+DROP FUNCTION IF EXISTS admin_grant_subscription(UUID, VARCHAR(50), INTEGER);
+DROP FUNCTION IF EXISTS admin_grant_subscription(UUID, VARCHAR(50));
+
+CREATE FUNCTION admin_grant_subscription(
     target_user_id UUID,
     plan_id VARCHAR(50),
     duration_months INTEGER DEFAULT 1,
@@ -100,7 +111,11 @@ END;
 $$;
 
 -- Fix admin_extend_trial function
-CREATE OR REPLACE FUNCTION admin_extend_trial(
+-- Drop existing function first to handle return type change
+DROP FUNCTION IF EXISTS admin_extend_trial(UUID, INTEGER, TEXT);
+DROP FUNCTION IF EXISTS admin_extend_trial(UUID, INTEGER);
+
+CREATE FUNCTION admin_extend_trial(
     target_user_id UUID,
     additional_days INTEGER,
     admin_notes TEXT DEFAULT ''
@@ -167,7 +182,10 @@ END;
 $$;
 
 -- Create sync_wins function if it doesn't exist (appears to be missing)
-CREATE OR REPLACE FUNCTION sync_wins()
+-- Drop existing function first to handle any signature changes
+DROP FUNCTION IF EXISTS sync_wins();
+
+CREATE FUNCTION sync_wins()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
