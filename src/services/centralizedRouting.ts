@@ -106,11 +106,14 @@ export async function geocodeAddresses(
 /**
  * Search for addresses with autocomplete
  * No API key required - handled server-side
+ * Optional focusLat/focusLon bias results toward a region
  */
 export async function searchAddresses(
   query: string,
   countryCode = "GB",
-  limit = 5
+  limit = 5,
+  focusLat?: number,
+  focusLon?: number,
 ): Promise<AddressAutocompleteResult[]> {
   if (!supabase) {
     console.error('Supabase client not available for address search');
@@ -126,7 +129,8 @@ export async function searchAddresses(
       body: {
         query: query.trim(),
         countryCode,
-        limit: Math.min(limit, 10)
+        limit: Math.min(limit, 10),
+        ...(focusLat !== undefined && focusLon !== undefined ? { focusLat, focusLon } : {})
       }
     });
 

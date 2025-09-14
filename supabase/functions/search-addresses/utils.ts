@@ -3,20 +3,16 @@
 /**
  * Sanitize and validate limit parameter
  */
-export function sanitizeLimit(limitParam: string | number | null | undefined): number {
-  if (limitParam === null || limitParam === undefined) {
-    return 5; // default
+export function sanitizeLimit(value: unknown, fallback = 5): number {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num < 1) {
+    return fallback
   }
   
-  const parsed = typeof limitParam === 'string' ? parseInt(limitParam, 10) : limitParam;
-  
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return 5; // default for invalid values
+  // Enforce maximum limit to prevent abuse
+  if (num > 10) {
+    return 10
   }
   
-  if (parsed > 10) {
-    return 10; // max limit
-  }
-  
-  return parsed;
+  return num
 }
