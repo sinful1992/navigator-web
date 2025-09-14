@@ -293,6 +293,8 @@ export async function searchAddresses(
   const service = getGeocodingService();
 
   if (!service.apiKey) {
+    console.warn('Google Maps API key not found. Env var VITE_GOOGLE_MAPS_API_KEY:',
+      import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? 'SET' : 'NOT SET');
     return [];
   }
 
@@ -302,6 +304,7 @@ export async function searchAddresses(
 
   try {
     console.log(`Searching addresses with Places API: "${query}"`);
+    console.log('Google API Key available:', service.apiKey ? 'YES' : 'NO');
 
     const sessionToken = getOrCreateSessionToken();
 
