@@ -567,9 +567,9 @@ p, h1, h2, h3, h4, h5, h6 {
 }
 
 .tab-panel {
-  flex: 0 0 33.333333%;
-  min-width: 33.333333%;
-  max-width: 33.333333%;
+  flex: 0 0 25%;
+  min-width: 25%;
+  max-width: 25%;
   /* Improve rendering performance */
   contain: layout style paint;
   /* Prevent content jumping */
@@ -815,15 +815,15 @@ html, body {
   display: flex;
   transition: transform 280ms ease;
   will-change: transform;
-  width: 300%; /* 3 panels × 100% each */
-  max-width: 300%;
+  width: 400%; /* 4 panels × 100% each */
+  max-width: 400%;
 }
 
 /* 5. Ensure tab panels don't overflow */
 .tab-panel {
-  flex: 0 0 33.333333%; /* 100% ÷ 3 panels */
-  min-width: 33.333333%;
-  max-width: 33.333333%;
+  flex: 0 0 25%; /* 100% ÷ 4 panels */
+  min-width: 25%;
+  max-width: 25%;
   box-sizing: border-box;
   padding: 0; /* Remove any padding that could cause overflow */
   overflow-x: hidden; /* Prevent content from overflowing */
@@ -930,13 +930,16 @@ html, body {
     gap: 0.125rem;
     padding: 0.25rem;
     max-width: calc(100vw - 1.5rem); /* Account for container padding */
+    flex-wrap: wrap; /* Allow tabs to wrap on very small screens */
+    justify-content: center; /* Center the tabs */
   }
 
   .tab-btn {
-    padding: 0.5rem 0.65rem;
-    font-size: 0.75rem;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.65rem;
     min-width: max-content;
     flex-shrink: 1; /* Allow shrinking on small screens */
+    white-space: nowrap; /* Prevent text wrapping */
   }
 
   .user-chip .email {
