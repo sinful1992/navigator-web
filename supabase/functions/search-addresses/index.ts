@@ -103,27 +103,91 @@ serve(async (req) => {
 
     console.log(`Address search for "${query}" by user ${user.email}`)
 
+    // Enhanced address search with multiple strategies for UK addresses
+    const searchResults: AddressSearchResult[] = []
     const searchUrl = 'https://api.openrouteservice.org/geocode/search'
-    const params = new URLSearchParams({
+    
+    // Strategy 1: Exact search with all available layers for UK
+    const primaryParams = new URLSearchParams({
       api_key: ORS_API_KEY,
       text: query.trim(),
       'boundary.country': countryCode,
-      size: limit.toString(),
+      size: Math.min(limit, 15).toString(), // Get more results for better coverage
+      layers: 'address,venue,street,localadmin,locality,region', // Include all relevant layers
+      sources: 'osm,wof,oa,gn', // Multiple data sources
     })
 
-    const response = await fetch(`${searchUrl}?${params}`)
+    let response = await fetch(`${searchUrl}?${primaryParams}`)
     
     if (!response.ok) {
-      throw new Error(`Search API error: ${response.status}`)
+      throw new Error(`Primary search API error: ${response.status}`)
     }
 
-    const data = await response.json()
+    let data = await response.json()
     
-    const results: AddressSearchResult[] = data.features ? data.features.map((feature: any) => ({
-      label: feature.properties.label,
-      coordinates: feature.geometry.coordinates,
-      confidence: feature.properties.confidence
-    })) : []
+    if (data.features) {
+      searchResults.push(...data.features.map((feature: any) => ({
+        label: feature.properties.label,
+        coordinates: feature.geometry.coordinates,
+        confidence: feature.properties.confidence || 0.5
+      })))
+    }
+
+    // Strategy 2: If no good results, try structured search for UK postcodes
+    const hasGoodResults = searchResults.some(r => r.confidence > 0.8)
+    const hasPostcode = /[A-Z]{1,2}[0-9]{1,2}\s?[0-9][A-Z]{2}/i.test(query)
+    
+    if (!hasGoodResults && hasPostcode && countryCode === 'GB') {
+      // Extract postcode and address parts for better search
+      const postcodeMatch = query.match(/([A-Z]{1,2}[0-9]{1,2}\s?[0-9][A-Z]{2})/i)
+      const addressPart = query.replace(/[A-Z]{1,2}[0-9]{1,2}\s?[0-9][A-Z]{2}/i, '').trim()
+      
+      if (postcodeMatch && addressPart) {
+        const structuredParams = new URLSearchParams({
+          api_key: ORS_API_KEY,
+          text: `${addressPart}, ${postcodeMatch[1]}`,
+          'boundary.country': countryCode,
+          size: Math.min(limit, 10).toString(),
+          layers: 'address,venue', // Focus on specific addresses
+          'focus.point.lat': '51.5074', // London focus for UK
+          'focus.point.lon': '-0.1278',
+        })
+
+        console.log(`Trying structured search: ${addressPart}, ${postcodeMatch[1]}`)
+        
+        const structuredResponse = await fetch(`${searchUrl}?${structuredParams}`)
+        
+        if (structuredResponse.ok) {
+          const structuredData = await structuredResponse.json()
+          
+          if (structuredData.features) {
+            const structuredResults = structuredData.features.map((feature: any) => ({
+              label: feature.properties.label,
+              coordinates: feature.geometry.coordinates,
+              confidence: (feature.properties.confidence || 0.5) + 0.1 // Slight boost for structured search
+            }))
+            
+            // Add structured results, avoiding duplicates
+            structuredResults.forEach(newResult => {
+              const isDuplicate = searchResults.some(existing => 
+                Math.abs(existing.coordinates[0] - newResult.coordinates[0]) < 0.0001 &&
+                Math.abs(existing.coordinates[1] - newResult.coordinates[1]) < 0.0001
+              )
+              if (!isDuplicate) {
+                searchResults.push(newResult)
+              }
+            })
+          }
+        }
+      }
+    }
+
+    // Sort by confidence and remove duplicates
+    const uniqueResults = searchResults
+      .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))
+      .slice(0, limit)
+
+    const results: AddressSearchResult[] = uniqueResults
 
     // Log usage for analytics (lightweight for autocomplete)
     try {

@@ -263,7 +263,10 @@ export function AddressAutocomplete({
             fontSize: '0.875rem'
           }}
         >
-          No addresses found. Try a different search.
+          {/[A-Z]{1,2}[0-9]{1,2}\s?[0-9][A-Z]{2}/i.test(value) ? 
+            'Address not found. Try removing the house number or use just the postcode.' :
+            'No addresses found. Try including the postcode (e.g., "High Street SW1A 1AA").'
+          }
         </div>
       )}
     </div>
