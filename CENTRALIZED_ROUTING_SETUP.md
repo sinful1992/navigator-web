@@ -114,6 +114,7 @@ SELECT * FROM get_api_usage_stats();
 - Real-time address autocomplete
 - Returns up to 10 suggestions per query
 - Optimized for UK addresses
+- Optional `focusLat` & `focusLon` parameters bias results toward a region
 
 ## Rate Limiting & Costs
 
