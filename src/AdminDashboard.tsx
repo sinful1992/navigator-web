@@ -346,7 +346,9 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
             <h3>Admin Actions</h3>
             <div className="admin-form">
               <div className="form-row">
+                <label htmlFor="selected-user-id">Select User</label>
                 <select
+                  id="selected-user-id"
                   name="selectedUserId"
                   value={selectedUserId}
                   onChange={(e) => setSelectedUserId(e.target.value)}
@@ -363,8 +365,9 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
               <div className="form-row">
                 <div className="action-group">
                   <div className="input-group">
-                    <label>Grant Subscription (months):</label>
+                    <label htmlFor="grant-months">Grant Subscription (months):</label>
                     <input
+                      id="grant-months"
                       name="grantMonths"
                       type="number"
                       min="1"
@@ -383,8 +386,9 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
 
                 <div className="action-group">
                   <div className="input-group">
-                    <label>Extend Trial (days):</label>
+                    <label htmlFor="extend-days">Extend Trial (days):</label>
                     <input
+                      id="extend-days"
                       name="extendDays"
                       type="number"
                       min="1"
@@ -403,7 +407,9 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
               </div>
 
               <div className="form-row">
+                <label htmlFor="admin-notes">Admin notes (optional)</label>
                 <textarea
+                  id="admin-notes"
                   name="adminNotes"
                   placeholder="Admin notes (optional)"
                   value={adminNotes}

@@ -4,6 +4,7 @@ import { resolveSelectedPlace } from "../services/geocoding";
 import type { AddressAutocompleteResult } from "../services/hybridRouting";
 
 interface AddressAutocompleteProps {
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   onSelect: (address: string, lat: number, lng: number) => void;
@@ -13,6 +14,7 @@ interface AddressAutocompleteProps {
 }
 
 export function AddressAutocomplete({
+  id,
   value,
   onChange,
   onSelect,
@@ -174,6 +176,7 @@ export function AddressAutocomplete({
     <div style={{ position: 'relative', width: '100%' }}>
       <div style={{ position: 'relative' }}>
         <input
+          id={id}
           ref={inputRef}
           name="address"
           type="text"

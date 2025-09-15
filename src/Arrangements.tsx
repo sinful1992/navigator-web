@@ -951,7 +951,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           {/* Address Mode Toggle */}
           {!arrangement && (
             <div className="form-group form-group-full">
-              <label>📍 Address Source</label>
+              <div>📍 Address Source</div>
               <div className="btn-group">
                 <button
                   type="button"
@@ -974,7 +974,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           {/* Address Selection */}
           {addressMode === "existing" ? (
             <div className="form-group form-group-full">
-              <label>📍 Address *</label>
+              <label htmlFor="address-index">📍 Address *</label>
               {state.addresses.length === 0 ? (
                 <div style={{ 
                   padding: "0.75rem", 
@@ -988,6 +988,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
                 </div>
               ) : (
                 <select
+                  id="address-index"
                   name="addressIndex"
                   value={formData.addressIndex}
                   onChange={(e) => setFormData(prev => ({ ...prev, addressIndex: parseInt(e.target.value) }))}
@@ -1004,7 +1005,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
             </div>
           ) : (
             <div className="form-group form-group-full">
-              <label>📍 Address *</label>
+              <label htmlFor="manual-address">📍 Address *</label>
               <input
                 id="manual-address"
                 name="manualAddress"
@@ -1023,7 +1024,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           )}
 
           <div className="form-group">
-            <label>💰 Payment Amount *</label>
+            <label htmlFor="payment-amount">💰 Payment Amount *</label>
             <input
               id="payment-amount"
               name="paymentAmount"
@@ -1040,7 +1041,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           </div>
 
           <div className="form-group">
-            <label>👤 Customer Name</label>
+            <label htmlFor="customer-name">👤 Customer Name</label>
             <input
               id="customer-name"
               name="customerName"
@@ -1054,7 +1055,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           </div>
 
           <div className="form-group">
-            <label>📞 Phone Number</label>
+            <label htmlFor="phone-number">📞 Phone Number</label>
             <input
               id="phone-number"
               name="phoneNumber"
@@ -1068,7 +1069,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           </div>
 
           <div className="form-group">
-            <label>📅 Payment Due Date *</label>
+            <label htmlFor="scheduled-date">📅 Payment Due Date *</label>
             <input
               id="scheduled-date"
               name="scheduledDate"
@@ -1082,7 +1083,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           </div>
 
           <div className="form-group">
-            <label>🕐 Preferred Time</label>
+            <label htmlFor="scheduled-time">🕐 Preferred Time</label>
             <input
               id="scheduled-time"
               name="scheduledTime"
@@ -1095,8 +1096,9 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           </div>
 
           <div className="form-group form-group-full">
-            <label>🔄 Payment Schedule</label>
+            <label htmlFor="recurrence-type">🔄 Payment Schedule</label>
             <select
+              id="recurrence-type"
               name="recurrenceType"
               value={formData.recurrenceType}
               onChange={(e) => setFormData(prev => ({
@@ -1114,7 +1116,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           </div>
 
           <div className="form-group">
-            <label>🔢 Total Payments *</label>
+            <label htmlFor="total-payments">🔢 Total Payments *</label>
             <input
               id="total-payments"
               name="totalPayments"
@@ -1140,8 +1142,9 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
 
           {formData.recurrenceType !== "none" && (
             <div className="form-group">
-              <label>📅 Interval</label>
+              <label htmlFor="recurrence-interval">📅 Interval</label>
               <select
+                id="recurrence-interval"
                 name="recurrenceInterval"
                 value={formData.recurrenceInterval}
                 onChange={(e) => setFormData(prev => ({ ...prev, recurrenceInterval: parseInt(e.target.value) }))}
@@ -1156,8 +1159,9 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           )}
 
           <div className="form-group form-group-full">
-            <label>📝 Notes</label>
+            <label htmlFor="notes">📝 Notes</label>
             <textarea
+              id="notes"
               name="notes"
               value={formData.notes}
               onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}

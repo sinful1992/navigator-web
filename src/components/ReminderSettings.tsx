@@ -197,8 +197,9 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
               
               <div className="form-grid">
                 <div className="form-group">
-                  <label>👤 Agent Name *</label>
+                  <label htmlFor="agent-name">👤 Agent Name *</label>
                   <input
+                    id="agent-name"
                     name="agentName"
                     type="text"
                     value={localSettings.agentProfile.name}
@@ -208,10 +209,11 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                     required
                   />
                 </div>
-                
+
                 <div className="form-group">
-                  <label>🏷️ Job Title *</label>
+                  <label htmlFor="agent-title">🏷️ Job Title *</label>
                   <select
+                    id="agent-title"
                     name="agentTitle"
                     value={localSettings.agentProfile.title}
                     onChange={(e) => handleProfileUpdate({ title: e.target.value })}
@@ -227,8 +229,9 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                 </div>
                 
                 <div className="form-group form-group-full">
-                  <label>✍️ Message Signature *</label>
+                  <label htmlFor="agent-signature">✍️ Message Signature *</label>
                   <input
+                    id="agent-signature"
                     name="agentSignature"
                     type="text"
                     value={localSettings.agentProfile.signature}
@@ -243,8 +246,9 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                 </div>
                 
                 <div className="form-group form-group-full">
-                  <label>📞 Contact Information (Optional)</label>
+                  <label htmlFor="agent-contact-info">📞 Contact Information (Optional)</label>
                   <input
+                    id="agent-contact-info"
                     name="agentContactInfo"
                     type="text"
                     value={localSettings.agentProfile.contactInfo || ''}
@@ -276,8 +280,9 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
               </div>
               
               <div className="form-group">
-                <label>Active Template</label>
+                <label htmlFor="active-template">Active Template</label>
                 <select
+                  id="active-template"
                   name="activeTemplate"
                   value={localSettings.activeTemplateId}
                   onChange={(e) => setLocalSettings(prev => ({ ...prev, activeTemplateId: e.target.value }))}
@@ -328,8 +333,9 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                     {editingTemplate === template.id && (
                       <div className="template-editor">
                         <div className="form-group">
-                          <label>Template Name</label>
+                          <label htmlFor={`template-name-${template.id}`}>Template Name</label>
                           <input
+                            id={`template-name-${template.id}`}
                             name={`templateName-${template.id}`}
                             type="text"
                             value={template.name}
@@ -338,8 +344,9 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                           />
                         </div>
                         <div className="form-group">
-                          <label>Message Template</label>
+                          <label htmlFor={`template-content-${template.id}`}>Message Template</label>
                           <textarea
+                            id={`template-content-${template.id}`}
                             name={`templateContent-${template.id}`}
                             value={template.template}
                             onChange={(e) => handleTemplateUpdate(template.id, { template: e.target.value })}

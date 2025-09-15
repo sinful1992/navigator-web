@@ -460,7 +460,24 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                       {editingPifAmount === compIndex ? (
                                         <>
                                           <span>· £</span>
+                                          <label
+                                            htmlFor={`pif-amount-${compIndex}`}
+                                            style={{
+                                              position: 'absolute',
+                                              width: 1,
+                                              height: 1,
+                                              padding: 0,
+                                              margin: -1,
+                                              overflow: 'hidden',
+                                              clip: 'rect(0,0,0,0)',
+                                              whiteSpace: 'nowrap',
+                                              border: 0
+                                            }}
+                                          >
+                                            PIF Amount
+                                          </label>
                                           <input
+                                            id={`pif-amount-${compIndex}`}
                                             name="pifAmount"
                                             type="number"
                                             step="0.01"
@@ -572,7 +589,24 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                 </div>
                               </div>
                               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                <label
+                                  htmlFor={`outcome-${compIndex}`}
+                                  style={{
+                                    position: 'absolute',
+                                    width: 1,
+                                    height: 1,
+                                    padding: 0,
+                                    margin: -1,
+                                    overflow: 'hidden',
+                                    clip: 'rect(0,0,0,0)',
+                                    whiteSpace: 'nowrap',
+                                    border: 0
+                                  }}
+                                >
+                                  Outcome
+                                </label>
                                 <select
+                                  id={`outcome-${compIndex}`}
                                   name={`outcome-${compIndex}`}
                                   value={(currentOutcome as string) || ""}
                                   onChange={(e) => onChangeOutcome(compIndex, e.target.value as Outcome, comp.amount)}
