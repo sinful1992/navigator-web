@@ -611,9 +611,6 @@ function AuthedApp() {
     [complete, addresses, safeState.currentListVersion, cloudSync]
   );
 
-  const handleCreateArrangement = React.useCallback((addressIndex: number) => {
-    setAutoCreateArrangementFor(addressIndex);
-  }, []);
 
   const ensureDayStarted = React.useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -1198,9 +1195,7 @@ function AuthedApp() {
               setActive={setActive}
               cancelActive={cancelActive}
               onComplete={handleComplete}
-              onCreateArrangement={handleCreateArrangement}
               onAddArrangement={addArrangement}
-              onAddAddress={async (addr: AddressRow) => addAddress(addr)}
               filterText={search}
               ensureDayStarted={ensureDayStarted}
             />

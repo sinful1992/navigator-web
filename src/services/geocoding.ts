@@ -483,21 +483,8 @@ export function validateUKCoordinates(lat: number, lng: number): boolean {
   return lat >= 49.0 && lat <= 61.0 && lng >= -9.0 && lng <= 3.0;
 }
 
-/**
- * Format confidence score as percentage
- */
-export function formatConfidence(confidence: number): string {
-  return `${Math.round(confidence * 100)}%`;
-}
-
-/**
- * Get confidence level description
- */
-export function getConfidenceLevel(confidence: number): 'high' | 'medium' | 'low' {
-  if (confidence >= 0.8) return 'high';
-  if (confidence >= 0.5) return 'medium';
-  return 'low';
-}
+// Re-export formatters from shared utilities
+export { formatConfidence, getConfidenceLevel } from '../utils/formatters';
 
 /**
  * Get cache statistics for debugging

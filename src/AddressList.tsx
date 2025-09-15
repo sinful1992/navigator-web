@@ -8,9 +8,7 @@ type Props = {
   setActive: (index: number) => void;
   cancelActive: () => void;
   onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void;
-  onCreateArrangement: (addressIndex: number) => void;
   onAddArrangement?: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  onAddAddress?: (address: AddressRow) => Promise<number>;
   filterText: string;
   ensureDayStarted: () => void; // auto-start day on first Navigate
 };
@@ -35,9 +33,7 @@ const AddressListComponent = function AddressList({
   setActive,
   cancelActive,
   onComplete,
-  onCreateArrangement: _onCreateArrangement, // Keep for backward compatibility but unused
   onAddArrangement,
-  onAddAddress: _onAddAddress, // Unused in current implementation
   filterText,
   ensureDayStarted,
 }: Props) {

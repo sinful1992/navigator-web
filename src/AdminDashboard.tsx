@@ -22,12 +22,41 @@ interface SubscriptionOverview {
   total_api_requests: number;
 }
 
+// Define specific types for different admin action details
+type SubscriptionDetails = {
+  plan_type?: string;
+  duration?: string;
+  amount?: number;
+  reason?: string;
+};
+
+type UserManagementDetails = {
+  email?: string;
+  reason?: string;
+  previous_status?: string;
+  new_status?: string;
+};
+
+type SystemActionDetails = {
+  feature?: string;
+  configuration?: Record<string, unknown>;
+  reason?: string;
+};
+
+// Union type for all possible admin action details
+type AdminActionDetails =
+  | SubscriptionDetails
+  | UserManagementDetails
+  | SystemActionDetails
+  | Record<string, unknown>
+  | null;
+
 interface AdminAction {
   id: string;
   action_type: string;
   target_user_id: string;
   performed_at: string;
-  details: any;
+  details: AdminActionDetails;
   admin_email?: string;
 }
 

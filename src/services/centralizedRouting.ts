@@ -278,44 +278,8 @@ export function geocodingResultToAddressRow(result: GeocodingResult): AddressRow
   };
 }
 
-/**
- * Format duration in seconds to human readable format
- */
-export function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes}m`;
-}
-
-/**
- * Format distance in meters to human readable format
- */
-export function formatDistance(meters: number): string {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(1)} km`;
-  }
-  return `${Math.round(meters)} m`;
-}
-
-/**
- * Format confidence score as percentage
- */
-export function formatConfidence(confidence: number): string {
-  return `${Math.round(confidence * 100)}%`;
-}
-
-/**
- * Get confidence level description
- */
-export function getConfidenceLevel(confidence: number): 'high' | 'medium' | 'low' {
-  if (confidence >= 0.8) return 'high';
-  if (confidence >= 0.5) return 'medium';
-  return 'low';
-}
+// Re-export formatters from shared utilities
+export { formatDuration, formatDistance, formatConfidence, getConfidenceLevel } from '../utils/formatters';
 
 /**
  * Check if the centralized routing service is available
