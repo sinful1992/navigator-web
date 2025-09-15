@@ -4,18 +4,11 @@ import "./App.css"; // Use the updated modern CSS
 import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
 import { useCloudSync } from "./useCloudSync";
-import { useSwipeNavigation } from "./hooks/useSwipeNavigation";
-import { ModalProvider, useModalContext } from "./components/ModalProvider";
-import { logger } from "./utils/logger";
+import { ModalProvider } from "./components/ModalProvider";
 import { Auth } from "./Auth";
-import { AddressList } from "./AddressList";
 import Completed from "./Completed";
-import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
-import { readJsonFile } from "./backup";
 import type { AddressRow, Outcome } from "./types";
-import { supabase } from "./lib/supabaseClient";
-import ManualAddressFAB from "./ManualAddressFAB";
 import { SubscriptionManager } from "./SubscriptionManager";
 import { AdminDashboard } from "./AdminDashboard";
 import { useSubscription } from "./useSubscription";
@@ -53,7 +46,7 @@ function StatsCard({ title, value, change, changeType, icon, iconType }: {
 }
 
 // Modern Day Panel Component
-function ModernDayPanel({ sessions, completions, startDay, endDay, onEditStart, onEditEnd }: any) {
+function ModernDayPanel({ sessions, completions, startDay, endDay }: any) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const todaySessions = sessions.filter((s: any) => s.date === todayStr);
   const active = todaySessions.find((s: any) => !s.end) || null;
@@ -144,13 +137,12 @@ function ModernDayPanel({ sessions, completions, startDay, endDay, onEditStart, 
 }
 
 // Modern Address Card Component
-function ModernAddressCard({ 
-  address, 
-  index, 
+function ModernAddressCard({
+  address,
   displayIndex,
-  isActive, 
-  onSetActive, 
-  onNavigate, 
+  isActive,
+  onSetActive,
+  onNavigate,
   onComplete,
   status 
 }: any) {
@@ -218,27 +210,18 @@ function AuthedApp() {
     setAddresses,
     addAddress,
     setActive,
-    cancelActive,
     complete,
-    undo,
     startDay,
     endDay,
     backupState,
-    restoreState,
     addArrangement,
     updateArrangement,
     deleteArrangement,
-    setState,
-    setBaseState,
-    deviceId,
-    enqueueOp,
     updateReminderSettings,
     updateReminderNotification,
   } = useAppState();
 
   const cloudSync = useCloudSync();
-  const { confirm, alert } = useModalContext();
-  
   const { hasAccess } = useSubscription(cloudSync.user);
   const { isAdmin, isOwner } = useAdmin(cloudSync.user);
   const [showSubscription, setShowSubscription] = React.useState(false);
@@ -296,29 +279,19 @@ function AuthedApp() {
     };
   }, [addresses, completions, arrangements, state.currentListVersion]);
 
-  // Filter addresses based on search
-  const filteredAddresses = React.useMemo(() => {
-    const lowerSearch = search.toLowerCase().trim();
-    if (!lowerSearch) return addresses;
-    
-    return addresses.filter((addr, idx) => {
-      const isCompleted = completions.some(
-        c => c.index === idx && c.listVersion === state.currentListVersion
-      );
-      if (isCompleted) return false;
-      
-      return addr.address.toLowerCase().includes(lowerSearch);
-    });
-  }, [addresses, search, completions, state.currentListVersion]);
-
   // Get visible addresses (not completed)
   const visibleAddresses = React.useMemo(() => {
+    const lowerSearch = search.toLowerCase().trim();
+
     return addresses
       .map((addr, idx) => ({ addr, idx }))
       .filter(({ idx }) => !completions.some(
-        c => c.index === idx && c.listVersion === state.currentListVersion
-      ));
-  }, [addresses, completions, state.currentListVersion]);
+        (c) => c.index === idx && c.listVersion === state.currentListVersion
+      ))
+      .filter(({ addr }) =>
+        !lowerSearch || (addr.address ?? "").toLowerCase().includes(lowerSearch)
+      );
+  }, [addresses, completions, search, state.currentListVersion]);
 
   const handleImportExcel = React.useCallback((rows: AddressRow[]) => {
     setAddresses(rows, true);
@@ -432,12 +405,10 @@ function AuthedApp() {
                 completions={completions}
                 startDay={startDay}
                 endDay={() => {
-                  const snap = backupState();
+                  backupState();
                   // Upload backup logic here
                   endDay();
                 }}
-                onEditStart={() => {}}
-                onEditEnd={() => {}}
               />
 
               {/* Stats Grid */}
@@ -495,7 +466,6 @@ function AuthedApp() {
                     <ModernAddressCard
                       key={idx}
                       address={addr}
-                      index={idx}
                       displayIndex={displayIdx}
                       isActive={state.activeIndex === idx}
                       status={state.activeIndex === idx ? 'active' : 'pending'}
