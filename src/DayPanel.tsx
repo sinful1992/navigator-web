@@ -209,8 +209,24 @@ export function DayPanel({
             </button>
           ) : (
             <div className="btn-group" style={{ alignItems: "center" }}>
-              <input type="date" className="input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              <input type="time" className="input" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+              <input
+                id="start-date"
+                name="startDate"
+                type="date"
+                className="input"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                autoComplete="off"
+              />
+              <input
+                id="start-time"
+                name="startTime"
+                type="time"
+                className="input"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                autoComplete="off"
+              />
               <button className="btn btn-primary btn-sm" onClick={saveStart}>💾 Save</button>
               <button className="btn btn-ghost btn-sm" onClick={() => setEditingStart(false)}>Cancel</button>
             </div>
@@ -223,8 +239,24 @@ export function DayPanel({
             </button>
           ) : (
             <div className="btn-group" style={{ alignItems: "center" }}>
-              <input type="date" className="input" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-              <input type="time" className="input" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+              <input
+                id="end-date"
+                name="endDate"
+                type="date"
+                className="input"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                autoComplete="off"
+              />
+              <input
+                id="end-time"
+                name="endTime"
+                type="time"
+                className="input"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                autoComplete="off"
+              />
               <button className="btn btn-primary btn-sm" onClick={saveEnd}>💾 Save</button>
               <button className="btn btn-ghost btn-sm" onClick={() => setEditingEnd(false)}>Cancel</button>
             </div>

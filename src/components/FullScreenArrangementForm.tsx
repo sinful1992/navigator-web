@@ -134,6 +134,8 @@ export default function FullScreenArrangementForm({
               <label className="fsaf-label">Payment Amount *</label>
               <input
                 ref={amountInputRef}
+                id="fsaf-amount"
+                name="fsafAmount"
                 type="text"
                 inputMode="decimal"
                 pattern="[0-9]*[.,]?[0-9]*"
@@ -150,6 +152,7 @@ export default function FullScreenArrangementForm({
                 placeholder="0.00"
                 required
                 aria-describedby={formErrors.amount ? 'amount-error' : undefined}
+                autoComplete="off"
               />
               {formErrors.amount && (
                 <div id="amount-error" className="fsaf-error" role="alert">
@@ -162,21 +165,27 @@ export default function FullScreenArrangementForm({
               <div className="fsaf-field">
                 <label className="fsaf-label">Customer Name</label>
                 <input
+                  id="fsaf-customer-name"
+                  name="fsafCustomerName"
                   type="text"
                   value={formData.customerName}
                   onChange={(e) => setFormData((p) => ({ ...p, customerName: e.target.value }))}
                   className="fsaf-input"
                   placeholder="Customer name"
+                  autoComplete="name"
                 />
               </div>
               <div className="fsaf-field">
                 <label className="fsaf-label">Phone Number</label>
                 <input
+                  id="fsaf-phone-number"
+                  name="fsafPhoneNumber"
                   type="tel"
                   value={formData.phoneNumber}
                   onChange={(e) => setFormData((p) => ({ ...p, phoneNumber: e.target.value }))}
                   className="fsaf-input"
                   placeholder="Phone number"
+                  autoComplete="tel"
                 />
               </div>
             </div>
@@ -185,20 +194,26 @@ export default function FullScreenArrangementForm({
               <div className="fsaf-field">
                 <label className="fsaf-label">Payment Due Date *</label>
                 <input
+                  id="fsaf-scheduled-date"
+                  name="fsafScheduledDate"
                   type="date"
                   value={formData.scheduledDate}
                   onChange={(e) => setFormData((p) => ({ ...p, scheduledDate: e.target.value }))}
                   className="fsaf-input"
                   required
+                  autoComplete="off"
                 />
               </div>
               <div className="fsaf-field">
                 <label className="fsaf-label">Time</label>
                 <input
+                  id="fsaf-scheduled-time"
+                  name="fsafScheduledTime"
                   type="time"
                   value={formData.scheduledTime}
                   onChange={(e) => setFormData((p) => ({ ...p, scheduledTime: e.target.value }))}
                   className="fsaf-input"
+                  autoComplete="off"
                 />
               </div>
             </div>

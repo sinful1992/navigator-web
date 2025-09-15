@@ -1005,12 +1005,15 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
             <div className="form-group form-group-full">
               <label>📍 Address *</label>
               <input
+                id="manual-address"
+                name="manualAddress"
                 type="text"
                 value={formData.manualAddress}
                 onChange={(e) => setFormData(prev => ({ ...prev, manualAddress: e.target.value }))}
                 className="input"
                 placeholder="Enter full address"
                 required
+                autoComplete="street-address"
               />
               <div style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
                 💡 If this address doesn't exist in your list, it will be automatically added.
@@ -1021,6 +1024,8 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           <div className="form-group">
             <label>💰 Payment Amount *</label>
             <input
+              id="payment-amount"
+              name="paymentAmount"
               type="number"
               step="0.01"
               min="0"
@@ -1029,49 +1034,62 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
               className="input"
               placeholder="0.00"
               required
+              autoComplete="off"
             />
           </div>
 
           <div className="form-group">
             <label>👤 Customer Name</label>
             <input
+              id="customer-name"
+              name="customerName"
               type="text"
               value={formData.customerName}
               onChange={(e) => setFormData(prev => ({ ...prev, customerName: e.target.value }))}
               className="input"
               placeholder="Customer name"
+              autoComplete="name"
             />
           </div>
 
           <div className="form-group">
             <label>📞 Phone Number</label>
             <input
+              id="phone-number"
+              name="phoneNumber"
               type="tel"
               value={formData.phoneNumber}
               onChange={(e) => setFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
               className="input"
               placeholder="Phone number"
+              autoComplete="tel"
             />
           </div>
 
           <div className="form-group">
             <label>📅 Payment Due Date *</label>
             <input
+              id="scheduled-date"
+              name="scheduledDate"
               type="date"
               value={formData.scheduledDate}
               onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
               className="input"
               required
+              autoComplete="off"
             />
           </div>
 
           <div className="form-group">
             <label>🕐 Preferred Time</label>
             <input
+              id="scheduled-time"
+              name="scheduledTime"
               type="time"
               value={formData.scheduledTime}
               onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
               className="input"
+              autoComplete="off"
             />
           </div>
 
@@ -1096,16 +1114,19 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           <div className="form-group">
             <label>🔢 Total Payments *</label>
             <input
+              id="total-payments"
+              name="totalPayments"
               type="number"
               min={formData.recurrenceType !== "none" ? "2" : "1"}
               value={formData.totalPayments || ""}
-              onChange={(e) => setFormData(prev => ({ 
-                ...prev, 
-                totalPayments: e.target.value ? parseInt(e.target.value) : undefined 
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                totalPayments: e.target.value ? parseInt(e.target.value) : undefined
               }))}
               className="input"
               placeholder={formData.recurrenceType !== "none" ? "Number of payments (min 2)" : "Number of payments"}
               required
+              autoComplete="off"
             />
             <div style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
               💡 {formData.recurrenceType !== "none" 

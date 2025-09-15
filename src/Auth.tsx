@@ -114,16 +114,21 @@ export function Auth({ onSignIn, onSignUp, isLoading, error, onClearError }: Pro
         <form onSubmit={handleSubmit}>
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             <div>
-              <label style={{ 
-                display: "block", 
-                marginBottom: "0.5rem",
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                color: "var(--text-secondary)"
-              }}>
+              <label
+                htmlFor="email"
+                style={{
+                  display: "block",
+                  marginBottom: "0.5rem",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  color: "var(--text-secondary)"
+                }}
+              >
                 📧 Email
               </label>
               <input
+                id="email"
+                name="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -131,20 +136,26 @@ export function Auth({ onSignIn, onSignUp, isLoading, error, onClearError }: Pro
                 placeholder="your@email.com"
                 disabled={isLoading}
                 required
+                autoComplete="email"
               />
             </div>
 
             <div>
-              <label style={{ 
-                display: "block", 
-                marginBottom: "0.5rem",
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                color: "var(--text-secondary)"
-              }}>
+              <label
+                htmlFor="password"
+                style={{
+                  display: "block",
+                  marginBottom: "0.5rem",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  color: "var(--text-secondary)"
+                }}
+              >
                 🔒 Password
               </label>
               <input
+                id="password"
+                name="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -153,21 +164,27 @@ export function Auth({ onSignIn, onSignUp, isLoading, error, onClearError }: Pro
                 disabled={isLoading}
                 minLength={6}
                 required
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
               />
             </div>
 
             {mode === "signup" && (
               <div>
-                <label style={{ 
-                  display: "block", 
-                  marginBottom: "0.5rem",
-                  fontSize: "0.875rem",
-                  fontWeight: 600,
-                  color: "var(--text-secondary)"
-                }}>
+                <label
+                  htmlFor="confirmPassword"
+                  style={{
+                    display: "block",
+                    marginBottom: "0.5rem",
+                    fontSize: "0.875rem",
+                    fontWeight: 600,
+                    color: "var(--text-secondary)"
+                  }}
+                >
                   🔒 Confirm Password
                 </label>
                 <input
+                  id="confirmPassword"
+                  name="confirmPassword"
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -176,6 +193,7 @@ export function Auth({ onSignIn, onSignUp, isLoading, error, onClearError }: Pro
                   disabled={isLoading}
                   minLength={6}
                   required
+                  autoComplete="new-password"
                 />
               </div>
             )}

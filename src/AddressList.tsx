@@ -229,6 +229,8 @@ const AddressListComponent = function AddressList({
 
                     <div className="pif-group">
                       <input
+                        id={`pif-amount-${i}`}
+                        name={`pifAmount-${i}`}
                         type="number"
                         step="0.01"
                         min="0"
@@ -237,6 +239,7 @@ const AddressListComponent = function AddressList({
                         placeholder="PIF £"
                         value={pifAmount}
                         onChange={(e) => setPifAmount(e.target.value)}
+                        autoComplete="off"
                       />
                       <button
                         className="btn btn-primary"
