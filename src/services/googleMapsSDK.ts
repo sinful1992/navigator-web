@@ -80,20 +80,8 @@ export async function getPlacesPredictions(
 
   // Use new AutocompleteSuggestion API if available (March 2025+)
   if (window.google.maps.places.AutocompleteSuggestion) {
-    try {
-      const request = {
-        input: query,
-        includedPrimaryTypes: options.types || ['street_address'],
-        locationRestriction: options.componentRestrictions ?
-          { country: options.componentRestrictions.country } : { country: 'gb' },
-        sessionToken: options.sessionToken
-      };
-
-      // Note: This is a newer API that might have different method names
-      // For now, fall back to the legacy API since it's still working
-    } catch (error) {
-      console.warn('New AutocompleteSuggestion API not ready, using legacy:', error);
-    }
+    console.log('New AutocompleteSuggestion API available, but not implemented yet');
+    // TODO: Implement new API when documentation is available
   }
 
   // Fall back to legacy AutocompleteService (still supported)
