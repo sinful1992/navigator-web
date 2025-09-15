@@ -4,18 +4,12 @@ import "./App.css"; // Use the updated modern CSS
 import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
 import { useCloudSync } from "./useCloudSync";
-import { useSwipeNavigation } from "./hooks/useSwipeNavigation";
-import { ModalProvider, useModalContext } from "./components/ModalProvider";
-import { logger } from "./utils/logger";
+import { ModalProvider } from "./components/ModalProvider";
 import { Auth } from "./Auth";
-import { AddressList } from "./AddressList";
 import Completed from "./Completed";
-import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
-import { readJsonFile } from "./backup";
+import { AddressList } from "./AddressList";
 import type { AddressRow, Outcome } from "./types";
-import { supabase } from "./lib/supabaseClient";
-import ManualAddressFAB from "./ManualAddressFAB";
 import { SubscriptionManager } from "./SubscriptionManager";
 import { AdminDashboard } from "./AdminDashboard";
 import { useSubscription } from "./useSubscription";
@@ -53,7 +47,7 @@ function StatsCard({ title, value, change, changeType, icon, iconType }: {
 }
 
 // Modern Day Panel Component
-function ModernDayPanel({ sessions, completions, startDay, endDay, onEditStart, onEditEnd }: any) {
+function ModernDayPanel({ sessions, completions, startDay, endDay }: any) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const todaySessions = sessions.filter((s: any) => s.date === todayStr);
   const active = todaySessions.find((s: any) => !s.end) || null;
@@ -143,73 +137,6 @@ function ModernDayPanel({ sessions, completions, startDay, endDay, onEditStart, 
   );
 }
 
-// Modern Address Card Component
-function ModernAddressCard({ 
-  address, 
-  index, 
-  displayIndex,
-  isActive, 
-  onSetActive, 
-  onNavigate, 
-  onComplete,
-  status 
-}: any) {
-  return (
-    <div className={`address-card-modern ${isActive ? 'active' : ''}`}>
-      <div className="address-header-modern">
-        <div className="address-content">
-          <div className="address-number">{displayIndex + 1}</div>
-          <div className="address-info">
-            <div className="address-title">{address.address}</div>
-            <div className="address-meta">
-              {address.customerName && (
-                <div className="address-meta-item">
-                  <span>👤</span>
-                  <span>{address.customerName}</span>
-                </div>
-              )}
-              {address.amount && (
-                <div className="address-meta-item">
-                  <span>💰</span>
-                  <span>£{address.amount}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className={`address-status-badge status-${status || 'pending'}`}>
-          {isActive && <span>●</span>}
-          {status === 'active' ? 'Active' : status || 'Pending'}
-        </div>
-      </div>
-      
-      <div className="address-actions-modern">
-        <button className="action-btn-modern btn-navigate" onClick={onNavigate}>
-          <span>🧭</span>
-          <span>Navigate</span>
-        </button>
-        {isActive ? (
-          <>
-            <button className="action-btn-modern btn-complete" onClick={onComplete}>
-              <span>✅</span>
-              <span>Complete</span>
-            </button>
-            <button className="action-btn-modern btn-arrangement">
-              <span>📅</span>
-              <span>Arrangement</span>
-            </button>
-          </>
-        ) : (
-          <button className="action-btn-modern btn-set-active" onClick={onSetActive}>
-            <span>▶️</span>
-            <span>Set Active</span>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // Main App Component with Modern Layout
 function AuthedApp() {
   const {
@@ -220,25 +147,17 @@ function AuthedApp() {
     setActive,
     cancelActive,
     complete,
-    undo,
     startDay,
     endDay,
     backupState,
-    restoreState,
     addArrangement,
     updateArrangement,
     deleteArrangement,
-    setState,
-    setBaseState,
-    deviceId,
-    enqueueOp,
     updateReminderSettings,
     updateReminderNotification,
   } = useAppState();
 
   const cloudSync = useCloudSync();
-  const { confirm, alert } = useModalContext();
-  
   const { hasAccess } = useSubscription(cloudSync.user);
   const { isAdmin, isOwner } = useAdmin(cloudSync.user);
   const [showSubscription, setShowSubscription] = React.useState(false);
@@ -296,29 +215,33 @@ function AuthedApp() {
     };
   }, [addresses, completions, arrangements, state.currentListVersion]);
 
-  // Filter addresses based on search
-  const filteredAddresses = React.useMemo(() => {
-    const lowerSearch = search.toLowerCase().trim();
-    if (!lowerSearch) return addresses;
-    
-    return addresses.filter((addr, idx) => {
-      const isCompleted = completions.some(
-        c => c.index === idx && c.listVersion === state.currentListVersion
-      );
-      if (isCompleted) return false;
-      
-      return addr.address.toLowerCase().includes(lowerSearch);
-    });
-  }, [addresses, search, completions, state.currentListVersion]);
-
   // Get visible addresses (not completed)
-  const visibleAddresses = React.useMemo(() => {
-    return addresses
-      .map((addr, idx) => ({ addr, idx }))
-      .filter(({ idx }) => !completions.some(
-        c => c.index === idx && c.listVersion === state.currentListVersion
-      ));
-  }, [addresses, completions, state.currentListVersion]);
+  const activeAddressCount = React.useMemo(() => {
+    const lowerSearch = search.toLowerCase().trim();
+
+    let count = 0;
+    addresses.forEach((addr, idx) => {
+      const isCompleted = completions.some(
+        (c) => c.index === idx && c.listVersion === state.currentListVersion
+      );
+      if (isCompleted) {
+        return;
+      }
+
+      if (
+        lowerSearch &&
+        !String(addr.address ?? "")
+          .toLowerCase()
+          .includes(lowerSearch)
+      ) {
+        return;
+      }
+
+      count += 1;
+    });
+
+    return count;
+  }, [addresses, completions, search, state.currentListVersion]);
 
   const handleImportExcel = React.useCallback((rows: AddressRow[]) => {
     setAddresses(rows, true);
@@ -351,6 +274,13 @@ function AuthedApp() {
   };
 
   const syncStatus = getSyncStatus();
+
+  const ensureDayStarted = React.useCallback(() => {
+    const hasActiveSession = daySessions.some((session) => !session.end);
+    if (!hasActiveSession) {
+      startDay();
+    }
+  }, [daySessions, startDay]);
 
   if (loading) {
     return (
@@ -432,12 +362,10 @@ function AuthedApp() {
                 completions={completions}
                 startDay={startDay}
                 endDay={() => {
-                  const snap = backupState();
+                  backupState();
                   // Upload backup logic here
                   endDay();
                 }}
-                onEditStart={() => {}}
-                onEditEnd={() => {}}
               />
 
               {/* Stats Grid */}
@@ -478,42 +406,18 @@ function AuthedApp() {
 
               {/* Address List */}
               <h2 style={{ margin: "2rem 0 1rem", color: "var(--gray-800)" }}>
-                Active Addresses ({visibleAddresses.length})
+                Active Addresses ({activeAddressCount})
               </h2>
-              
-              <div className="address-list-modern">
-                {visibleAddresses.length === 0 ? (
-                  <div className="empty-state">
-                    <div className="empty-icon">📍</div>
-                    <div className="empty-title">No Pending Addresses</div>
-                    <div className="empty-message">
-                      Import an Excel file or add addresses manually to get started
-                    </div>
-                  </div>
-                ) : (
-                  visibleAddresses.map(({ addr, idx }, displayIdx) => (
-                    <ModernAddressCard
-                      key={idx}
-                      address={addr}
-                      index={idx}
-                      displayIndex={displayIdx}
-                      isActive={state.activeIndex === idx}
-                      status={state.activeIndex === idx ? 'active' : 'pending'}
-                      onSetActive={() => setActive(idx)}
-                      onNavigate={() => {
-                        window.open(
-                          `https://www.google.com/maps/search/${encodeURIComponent(addr.address)}`,
-                          "_blank"
-                        );
-                      }}
-                      onComplete={() => {
-                        // Show complete modal
-                        setActive(idx);
-                      }}
-                    />
-                  ))
-                )}
-              </div>
+
+              <AddressList
+                state={state}
+                setActive={setActive}
+                cancelActive={cancelActive}
+                onComplete={handleComplete}
+                onAddArrangement={addArrangement}
+                filterText={search}
+                ensureDayStarted={ensureDayStarted}
+              />
             </>
           )}
 
