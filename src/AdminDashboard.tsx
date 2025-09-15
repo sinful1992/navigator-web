@@ -67,7 +67,10 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
       const { data: isAdminResult, error: adminCheckError } = await supabase
         .rpc('is_admin', { user_uuid: user.id });
 
-      if (adminCheckError) throw adminCheckError;
+      if (adminCheckError) {
+        console.error('Admin check error:', adminCheckError);
+        throw adminCheckError;
+      }
 
       if (!isAdminResult) {
         throw new Error('Access denied: Admin privileges required');
@@ -87,24 +90,38 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
       const { data: subsData, error: subsError } = await supabase
         .rpc('get_admin_subscription_overview');
 
-      if (subsError) throw subsError;
+      if (subsError) {
+        console.error('Subscription overview error:', subsError);
+        throw subsError;
+      }
       setSubscriptions(subsData || []);
 
-      // Load recent admin actions
-      const { data: actionsData, error: actionsError } = await supabase
-        .from('admin_actions')
-        .select(`
-          id,
-          action_type,
-          target_user_id,
-          performed_at,
-          details,
-          admin_users!inner(email)
-        `)
-        .order('performed_at', { ascending: false })
-        .limit(20);
+      // Load recent admin actions (skip if table doesn't exist)
+      let actionsData: any[] = [];
+      try {
+        const { data, error: actionsError } = await supabase
+          .from('admin_actions')
+          .select(`
+            id,
+            action_type,
+            target_user_id,
+            performed_at,
+            details,
+            admin_users!inner(email)
+          `)
+          .order('performed_at', { ascending: false })
+          .limit(20);
 
-      if (actionsError) throw actionsError;
+        if (actionsError) {
+          console.warn('Admin actions table not found or error:', actionsError);
+          actionsData = [];
+        } else {
+          actionsData = data || [];
+        }
+      } catch (e) {
+        console.warn('Failed to load admin actions:', e);
+        actionsData = [];
+      }
       
       const formattedActions = (actionsData || []).map((action: any) => ({
         ...action,
