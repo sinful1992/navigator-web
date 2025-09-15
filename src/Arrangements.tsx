@@ -987,7 +987,8 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
                   ⚠️ No addresses in your list. Switch to "Enter Manually" to add a new address.
                 </div>
               ) : (
-                <select 
+                <select
+                  name="addressIndex"
                   value={formData.addressIndex}
                   onChange={(e) => setFormData(prev => ({ ...prev, addressIndex: parseInt(e.target.value) }))}
                   className="input"
@@ -1096,9 +1097,10 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           <div className="form-group form-group-full">
             <label>🔄 Payment Schedule</label>
             <select
+              name="recurrenceType"
               value={formData.recurrenceType}
-              onChange={(e) => setFormData(prev => ({ 
-                ...prev, 
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
                 recurrenceType: e.target.value as RecurrenceType,
                 recurrenceInterval: 1,
                 totalPayments: undefined
@@ -1140,6 +1142,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
             <div className="form-group">
               <label>📅 Interval</label>
               <select
+                name="recurrenceInterval"
                 value={formData.recurrenceInterval}
                 onChange={(e) => setFormData(prev => ({ ...prev, recurrenceInterval: parseInt(e.target.value) }))}
                 className="input"
@@ -1155,6 +1158,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           <div className="form-group form-group-full">
             <label>📝 Notes</label>
             <textarea
+              name="notes"
               value={formData.notes}
               onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
               className="input"

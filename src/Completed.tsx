@@ -461,6 +461,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                         <>
                                           <span>· £</span>
                                           <input
+                                            name="pifAmount"
                                             type="number"
                                             step="0.01"
                                             min="0"
@@ -572,6 +573,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                               </div>
                               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                                 <select
+                                  name={`outcome-${compIndex}`}
                                   value={(currentOutcome as string) || ""}
                                   onChange={(e) => onChangeOutcome(compIndex, e.target.value as Outcome, comp.amount)}
                                   className="input"
