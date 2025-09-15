@@ -22,7 +22,6 @@ import { useSubscription } from "./useSubscription";
 import { useAdmin } from "./useAdmin";
 import { EarningsCalendar } from "./EarningsCalendar";
 import { RoutePlanning } from "./RoutePlanning";
-import { GeocodingPanel } from "./components/GeocodingPanel";
 
 type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
@@ -1193,13 +1192,6 @@ function AuthedApp() {
               />
             </div>
 
-            {/* GEOCODING PANEL */}
-            <GeocodingPanel
-              addresses={safeState.addresses}
-              onAddressesUpdated={(updatedAddresses) => {
-                setAddresses(updatedAddresses);
-              }}
-            />
 
             <AddressList
               state={safeState}
