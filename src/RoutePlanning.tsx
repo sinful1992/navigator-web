@@ -523,12 +523,13 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                   
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
+                      name={`address-${index}`}
                       type="text"
                       value={addr.address}
                       onChange={(e) => handleEditAddress(index, e.target.value)}
                       className="input"
-                      style={{ 
-                        width: '100%', 
+                      style={{
+                        width: '100%',
                         marginBottom: '0.25rem',
                         fontSize: '0.875rem'
                       }}

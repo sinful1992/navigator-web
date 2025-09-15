@@ -175,6 +175,7 @@ export function AddressAutocomplete({
       <div style={{ position: 'relative' }}>
         <input
           ref={inputRef}
+          name="address"
           type="text"
           value={value}
           onChange={handleInputChange}
