@@ -1,4 +1,4 @@
-name: Build and Deploy (GitHub Pages via Actions)
+name: Secure Deploy (Build Only - No Source Code)
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -27,21 +27,14 @@ jobs:
 
       - run: npm ci
 
-      # Write a build-time env file for Vite.
-      # We MAP your existing secret VITE_SUPABASE_KEY -> VITE_SUPABASE_ANON_KEY.
-      - name: Create .env.local
-        run: |
-          cat > .env.local <<EOF
-          VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_KEY }}
-          VITE_GOOGLE_MAPS_API_KEY=${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
-          # (Optional extras if you use them)
-          VITE_DEMO_EMAIL=${{ secrets.VITE_DEMO_EMAIL }}
-          VITE_DEMO_PASSWORD=${{ secrets.VITE_DEMO_PASSWORD }}
-          EOF
-
-      - name: Build
+      - name: Build with environment variables
         run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_DEMO_EMAIL: ${{ secrets.VITE_DEMO_EMAIL }}
+          VITE_DEMO_PASSWORD: ${{ secrets.VITE_DEMO_PASSWORD }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
