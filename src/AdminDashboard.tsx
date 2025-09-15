@@ -94,7 +94,11 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
       const { data: actionsData, error: actionsError } = await supabase
         .from('admin_actions')
         .select(`
-          *,
+          id,
+          action_type,
+          target_user_id,
+          performed_at,
+          details,
           admin_users!inner(email)
         `)
         .order('performed_at', { ascending: false })
