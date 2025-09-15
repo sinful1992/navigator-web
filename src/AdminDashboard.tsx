@@ -18,7 +18,7 @@ interface SubscriptionOverview {
   subscription_plan: string;
   trial_end: string | null;
   current_period_end: string | null;
-  created_at: string | null;
+  subscription_created_at: string | null;
   total_api_requests: number;
 }
 
@@ -401,7 +401,7 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
                     <td>{getStatusBadge(sub.subscription_status)}</td>
                     <td>{sub.subscription_plan || 'No Plan'}</td>
                     <td>{sub.total_api_requests || 0}</td>
-                    <td>{formatDate(sub.created_at)}</td>
+                    <td>{formatDate(sub.subscription_created_at)}</td>
                     <td>{formatDate(sub.current_period_end)}</td>
                   </tr>
                 ))}
