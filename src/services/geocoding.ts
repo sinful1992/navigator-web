@@ -263,28 +263,12 @@ export async function geocodeAddresses(
   return results;
 }
 
-import { getPlacesPredictions, getPlaceDetails, isGoogleMapsSDKAvailable } from './googleMapsSDK';
+import { getPlaceAutocomplete, getPlaceDetailsNew, isNewPlacesAPIAvailable, getCurrentSessionToken, clearCurrentSessionToken } from './newPlacesAPI';
 
-// Session token management for cost-efficient Places API usage
-let currentSessionToken: string | null = null;
-
-function generateSessionToken(): string {
-  return 'session_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
-}
-
-function getOrCreateSessionToken(): string {
-  if (!currentSessionToken) {
-    currentSessionToken = generateSessionToken();
-  }
-  return currentSessionToken;
-}
-
-function clearSessionToken(): void {
-  currentSessionToken = null;
-}
+// Legacy session token management - now handled by newPlacesAPI service
 
 /**
- * Address autocomplete/search using Google Maps Places API with session tokens
+ * Address autocomplete/search using new Places API with session tokens
  */
 export async function searchAddresses(
   query: string,
@@ -296,16 +280,14 @@ export async function searchAddresses(
     return [];
   }
 
-  // Try Google Maps SDK first (proper way to handle Places API)
-  if (isGoogleMapsSDKAvailable()) {
+  // Try new Places API first
+  if (isNewPlacesAPIAvailable()) {
     try {
-      console.log(`Searching addresses with Google Maps SDK: "${query}"`);
+      console.log(`Searching addresses with new Places API: "${query}"`);
 
-      const sessionToken = getOrCreateSessionToken();
-      const predictions = await getPlacesPredictions(query, {
-        types: ['address'],
+      const predictions = await getPlaceAutocomplete(query, {
         componentRestrictions: { country: countryCode.toLowerCase() },
-        sessionToken
+        types: ['street_address', 'route', 'establishment']
       });
 
       return predictions.slice(0, limit).map(prediction => ({
@@ -316,7 +298,7 @@ export async function searchAddresses(
       }));
 
     } catch (error) {
-      console.warn('Google Maps SDK search failed:', error);
+      console.warn('New Places API search failed:', error);
     }
   }
 
@@ -353,25 +335,25 @@ export async function resolveSelectedPlace(placeId: string): Promise<{
     return null;
   }
 
-  // Try Google Maps SDK first
-  if (isGoogleMapsSDKAvailable()) {
+  // Try new Places API first
+  if (isNewPlacesAPIAvailable()) {
     try {
-      const sessionToken = currentSessionToken || undefined;
-      const place = await getPlaceDetails(placeId, sessionToken);
+      const sessionToken = getCurrentSessionToken() || undefined;
+      const place = await getPlaceDetailsNew(placeId, sessionToken);
 
       // Clear session token after use (session is complete)
-      clearSessionToken();
+      clearCurrentSessionToken();
 
       if (place?.geometry?.location) {
         return {
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng(),
+          lat: place.geometry.location.lat,
+          lng: place.geometry.location.lng,
           formattedAddress: place.formatted_address || place.name || ''
         };
       }
     } catch (error) {
-      clearSessionToken(); // Clear on error too
-      console.error('Failed to resolve place details with SDK:', error);
+      clearCurrentSessionToken(); // Clear on error too
+      console.error('Failed to resolve place details with new API:', error);
     }
   }
 
