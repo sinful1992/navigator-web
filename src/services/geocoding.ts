@@ -263,6 +263,8 @@ export async function geocodeAddresses(
   return results;
 }
 
+import { getPlacesPredictions, getPlaceDetails, isGoogleMapsSDKAvailable } from './googleMapsSDK';
+
 // Session token management for cost-efficient Places API usage
 let currentSessionToken: string | null = null;
 
@@ -290,56 +292,37 @@ export async function searchAddresses(
   countryCode = "GB",
   limit = 5
 ): Promise<AddressAutocompleteResult[]> {
-  const service = getGeocodingService();
-
-  if (!service.apiKey) {
-    console.warn('Google Maps API key not found. Env var VITE_GOOGLE_MAPS_API_KEY:',
-      import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? 'SET' : 'NOT SET');
-    return [];
-  }
-
   if (!query.trim() || query.length < 3) {
     return [];
   }
 
-  try {
-    console.log(`Searching addresses with Places API: "${query}"`);
-    console.log('Google API Key available:', service.apiKey ? 'YES' : 'NO');
+  // Try Google Maps SDK first (proper way to handle Places API)
+  if (isGoogleMapsSDKAvailable()) {
+    try {
+      console.log(`Searching addresses with Google Maps SDK: "${query}"`);
 
-    const sessionToken = getOrCreateSessionToken();
+      const sessionToken = getOrCreateSessionToken();
+      const predictions = await getPlacesPredictions(query, {
+        types: ['address'],
+        componentRestrictions: { country: countryCode.toLowerCase() },
+        sessionToken
+      });
 
-    // Use Places Autocomplete API with session token for cost efficiency
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/place/autocomplete/json?` +
-      `input=${encodeURIComponent(query)}&` +
-      `components=country:${countryCode}&` +
-      `types=address&` +
-      `sessiontoken=${sessionToken}&` +
-      `key=${service.apiKey}`
-    );
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.status === 'OK' && data.predictions?.length > 0) {
-      // Return predictions with place_id for later resolution
-      // Don't call Place Details here to avoid extra costs
-      return data.predictions.slice(0, limit).map((prediction: any) => ({
+      return predictions.slice(0, limit).map(prediction => ({
         label: prediction.description,
         coordinates: [0, 0], // Will be resolved when user selects
         confidence: 0.9,
-        placeId: prediction.place_id // Store for later resolution
+        placeId: prediction.place_id
       }));
+
+    } catch (error) {
+      console.warn('Google Maps SDK search failed:', error);
     }
+  }
 
-    return [];
-  } catch (error) {
-    console.error('Places API search failed, falling back to basic geocoding:', error);
-
-    // Fallback to basic geocoding
+  // Fallback to basic geocoding (but this also fails due to API restrictions)
+  const service = getGeocodingService();
+  if (service.apiKey) {
     try {
       const result = await service.geocodeAddressInternal(query);
       if (result.success && result.lat && result.lng) {
@@ -350,11 +333,11 @@ export async function searchAddresses(
         }];
       }
     } catch (fallbackError) {
-      console.error('Fallback geocoding also failed:', fallbackError);
+      console.warn('Geocoding fallback also failed:', fallbackError);
     }
-
-    return [];
   }
+
+  return [];
 }
 
 /**
@@ -366,46 +349,50 @@ export async function resolveSelectedPlace(placeId: string): Promise<{
   lng: number;
   formattedAddress: string;
 } | null> {
+  if (!placeId) {
+    return null;
+  }
+
+  // Try Google Maps SDK first
+  if (isGoogleMapsSDKAvailable()) {
+    try {
+      const sessionToken = currentSessionToken || undefined;
+      const place = await getPlaceDetails(placeId, sessionToken);
+
+      // Clear session token after use (session is complete)
+      clearSessionToken();
+
+      if (place?.geometry?.location) {
+        return {
+          lat: place.geometry.location.lat(),
+          lng: place.geometry.location.lng(),
+          formattedAddress: place.formatted_address || place.name || ''
+        };
+      }
+    } catch (error) {
+      clearSessionToken(); // Clear on error too
+      console.error('Failed to resolve place details with SDK:', error);
+    }
+  }
+
+  // Fallback to direct API call (though this will likely fail due to CORS)
   const service = getGeocodingService();
-
-  if (!service.apiKey || !placeId) {
-    return null;
+  if (service.apiKey) {
+    try {
+      const result = await service.geocodeAddressInternal(placeId);
+      if (result.success && result.lat && result.lng) {
+        return {
+          lat: result.lat,
+          lng: result.lng,
+          formattedAddress: result.formattedAddress || result.address
+        };
+      }
+    } catch (error) {
+      console.warn('Geocoding fallback for place resolution failed:', error);
+    }
   }
 
-  try {
-    const sessionToken = currentSessionToken || generateSessionToken();
-
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/place/details/json?` +
-      `place_id=${placeId}&` +
-      `fields=geometry,formatted_address&` +
-      `sessiontoken=${sessionToken}&` +
-      `key=${service.apiKey}`
-    );
-
-    // Clear session token after use (session is complete)
-    clearSessionToken();
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.status === 'OK' && data.result?.geometry?.location) {
-      return {
-        lat: data.result.geometry.location.lat,
-        lng: data.result.geometry.location.lng,
-        formattedAddress: data.result.formatted_address
-      };
-    }
-
-    return null;
-  } catch (error) {
-    clearSessionToken(); // Clear on error too
-    console.error('Failed to resolve place details:', error);
-    return null;
-  }
+  return null;
 }
 
 /**
