@@ -225,13 +225,24 @@ function getGeocodingService(): GeocodingService {
 
 /**
  * Geocode a single address using Google Maps
- * Prioritizes Supabase Edge Functions to avoid API key restrictions
+ * Uses Google Maps API directly by default
  */
 export async function geocodeAddress(
   address: string,
   _apiKey?: string // For backward compatibility, but uses env var by default
 ): Promise<GeocodingResult> {
-  // Try Supabase Edge Function first (avoids referer restrictions)
+  // Try Google Maps API directly first
+  const service = getGeocodingService();
+  try {
+    const result = await service.geocodeAddressInternal(address);
+    if (result.success) {
+      return result;
+    }
+  } catch (error) {
+    console.warn('Direct Google Maps API failed, trying Supabase Edge Function:', error);
+  }
+
+  // Fallback to Supabase Edge Function if direct API fails
   try {
     const { geocodeAddresses: centralizedGeocode } = await import('./centralizedRouting');
     const results = await centralizedGeocode([address]);
@@ -239,32 +250,28 @@ export async function geocodeAddress(
       return results[0];
     }
   } catch (error) {
-    console.warn('Centralized geocoding failed, falling back to direct API:', error);
+    console.warn('Centralized geocoding also failed:', error);
   }
 
-  // Fallback to direct API call
-  const service = getGeocodingService();
-  return service.geocodeAddressInternal(address);
+  // Return unsuccessful result if both fail
+  return {
+    success: false,
+    address,
+    originalAddress: address,
+    error: 'All geocoding methods failed'
+  };
 }
 
 /**
  * Batch geocode multiple addresses
- * Prioritizes Supabase Edge Functions to avoid API key restrictions
+ * Uses Google Maps API directly by default
  */
 export async function geocodeAddresses(
   addresses: string[],
   _apiKey?: string, // For backward compatibility
   onProgress?: (completed: number, total: number, currentAddress: string) => void
 ): Promise<GeocodingResult[]> {
-  // Try Supabase Edge Function first (avoids referer restrictions)
-  try {
-    const { geocodeAddresses: centralizedGeocode } = await import('./centralizedRouting');
-    return await centralizedGeocode(addresses, onProgress);
-  } catch (error) {
-    console.warn('Centralized batch geocoding failed, falling back to direct API:', error);
-  }
-
-  // Fallback to direct API calls
+  // Try direct Google Maps API first
   const service = getGeocodingService();
   const results: GeocodingResult[] = [];
   const batchSize = 5; // Process 5 addresses at a time to avoid rate limits
@@ -289,6 +296,23 @@ export async function geocodeAddresses(
     }
   }
 
+  // If many addresses failed, try Supabase Edge Function as fallback
+  const failedCount = results.filter(r => !r.success).length;
+  if (failedCount > addresses.length * 0.5) { // If more than 50% failed
+    console.warn(`${failedCount}/${addresses.length} addresses failed with direct API, trying Supabase Edge Function...`);
+    try {
+      const { geocodeAddresses: centralizedGeocode } = await import('./centralizedRouting');
+      const fallbackResults = await centralizedGeocode(addresses, onProgress);
+
+      // Use fallback results for addresses that failed with direct API
+      return results.map((result, idx) =>
+        result.success ? result : fallbackResults[idx]
+      );
+    } catch (error) {
+      console.warn('Centralized batch geocoding also failed:', error);
+    }
+  }
+
   return results;
 }
 
@@ -297,7 +321,7 @@ import { getPlaceAutocomplete, getPlaceDetailsNew, isNewPlacesAPIAvailable, getC
 // Legacy session token management - now handled by newPlacesAPI service
 
 /**
- * Address autocomplete/search using Supabase Edge Functions with fallback to Places API
+ * Address autocomplete/search using Google Places API with fallback to Supabase Edge Functions
  */
 export async function searchAddresses(
   query: string,
@@ -309,7 +333,31 @@ export async function searchAddresses(
     return [];
   }
 
-  // Try Supabase Edge Function first (avoids referer restrictions)
+  // Try Google Places API directly first
+  if (isNewPlacesAPIAvailable()) {
+    try {
+      console.log(`Searching addresses with Google Places API: "${query}"`);
+
+      const predictions = await getPlaceAutocomplete(query, {
+        componentRestrictions: { country: countryCode.toLowerCase() },
+        types: ['street_address', 'route', 'premise']
+      });
+
+      if (predictions.length > 0) {
+        return predictions.slice(0, limit).map(prediction => ({
+          label: prediction.description,
+          coordinates: [0, 0], // Will be resolved when user selects
+          confidence: 0.9,
+          placeId: prediction.place_id
+        }));
+      }
+
+    } catch (error) {
+      console.warn('Google Places API search failed, trying Supabase Edge Function:', error);
+    }
+  }
+
+  // Fallback to Supabase Edge Function
   try {
     const { searchAddresses: centralizedSearch } = await import('./centralizedRouting');
     const results = await centralizedSearch(query, countryCode, limit);
@@ -317,32 +365,10 @@ export async function searchAddresses(
       return results;
     }
   } catch (error) {
-    console.warn('Centralized address search failed, falling back to Places API:', error);
+    console.warn('Centralized address search also failed:', error);
   }
 
-  // Try new Places API as fallback
-  if (isNewPlacesAPIAvailable()) {
-    try {
-      console.log(`Searching addresses with new Places API: "${query}"`);
-
-      const predictions = await getPlaceAutocomplete(query, {
-        componentRestrictions: { country: countryCode.toLowerCase() },
-        types: ['street_address', 'route', 'premise']
-      });
-
-      return predictions.slice(0, limit).map(prediction => ({
-        label: prediction.description,
-        coordinates: [0, 0], // Will be resolved when user selects
-        confidence: 0.9,
-        placeId: prediction.place_id
-      }));
-
-    } catch (error) {
-      console.warn('New Places API search failed:', error);
-    }
-  }
-
-  // Final fallback to basic geocoding (but this also fails due to API restrictions)
+  // Final fallback to basic geocoding
   const service = getGeocodingService();
   if (service.apiKey) {
     try {
@@ -355,7 +381,7 @@ export async function searchAddresses(
         }];
       }
     } catch (fallbackError) {
-      console.warn('Geocoding fallback also failed:', fallbackError);
+      console.warn('Direct geocoding fallback also failed:', fallbackError);
     }
   }
 
