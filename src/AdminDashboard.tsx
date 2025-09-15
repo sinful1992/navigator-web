@@ -108,7 +108,7 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
       
       const formattedActions = (actionsData || []).map(action => ({
         ...action,
-        admin_email: action.admin_users?.email
+        admin_email: Array.isArray(action.admin_users) ? action.admin_users[0]?.email : action.admin_users?.email
       }));
       setRecentActions(formattedActions);
 
