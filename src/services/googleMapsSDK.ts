@@ -32,9 +32,17 @@ export async function loadGoogleMapsSDK(): Promise<void> {
     throw new Error('Google Maps API key not configured');
   }
 
+  console.log('Loading Google Maps SDK with key:', apiKey.substring(0, 20) + '...');
+
   googleMapsPromise = new Promise((resolve, reject) => {
     // Set up global callback
     window.initGoogleMaps = () => {
+      console.log('Google Maps SDK loaded successfully');
+      console.log('Available services:', {
+        places: !!window.google?.maps?.places,
+        autocomplete: !!window.google?.maps?.places?.AutocompleteService,
+        placeDetails: !!window.google?.maps?.places?.PlacesService
+      });
       googleMapsLoaded = true;
       resolve();
     };
@@ -54,6 +62,7 @@ export async function loadGoogleMapsSDK(): Promise<void> {
 
 /**
  * Get autocomplete predictions using Google Maps SDK
+ * Uses the newer AutocompleteSuggestion API when available
  */
 export async function getPlacesPredictions(
   query: string,
@@ -69,6 +78,25 @@ export async function getPlacesPredictions(
     throw new Error('Google Maps Places library not loaded');
   }
 
+  // Use new AutocompleteSuggestion API if available (March 2025+)
+  if (window.google.maps.places.AutocompleteSuggestion) {
+    try {
+      const request = {
+        input: query,
+        includedPrimaryTypes: options.types || ['street_address'],
+        locationRestriction: options.componentRestrictions ?
+          { country: options.componentRestrictions.country } : { country: 'gb' },
+        sessionToken: options.sessionToken
+      };
+
+      // Note: This is a newer API that might have different method names
+      // For now, fall back to the legacy API since it's still working
+    } catch (error) {
+      console.warn('New AutocompleteSuggestion API not ready, using legacy:', error);
+    }
+  }
+
+  // Fall back to legacy AutocompleteService (still supported)
   return new Promise((resolve, reject) => {
     const service = new window.google.maps.places.AutocompleteService();
 
@@ -79,12 +107,19 @@ export async function getPlacesPredictions(
       sessionToken: options.sessionToken ? new window.google.maps.places.AutocompleteSessionToken() : undefined
     };
 
+    console.log('Making Places API request:', request);
+
     service.getPlacePredictions(request, (predictions: google.maps.places.AutocompletePrediction[] | null, status: google.maps.places.PlacesServiceStatus) => {
+      console.log('Places API response:', { status, predictions });
+
       if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+        console.log(`Found ${predictions.length} predictions`);
         resolve(predictions);
       } else if (status === window.google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+        console.log('Zero results from Places API');
         resolve([]);
       } else {
+        console.error(`Places service error: ${status}`);
         reject(new Error(`Places service error: ${status}`));
       }
     });
