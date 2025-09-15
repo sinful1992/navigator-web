@@ -106,9 +106,9 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
 
       if (actionsError) throw actionsError;
       
-      const formattedActions = (actionsData || []).map(action => ({
+      const formattedActions = (actionsData || []).map((action: any) => ({
         ...action,
-        admin_email: Array.isArray(action.admin_users) ? action.admin_users[0]?.email : action.admin_users?.email
+        admin_email: action.admin_users?.email || (Array.isArray(action.admin_users) ? action.admin_users[0]?.email : null)
       }));
       setRecentActions(formattedActions);
 
