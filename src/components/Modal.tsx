@@ -236,6 +236,7 @@ export function PromptModal({
         <div className="prompt-modal">
           <div className="prompt-message">{message}</div>
           <input
+            name="modalInput"
             type={inputType}
             value={value}
             onChange={(e) => setValue(e.target.value)}

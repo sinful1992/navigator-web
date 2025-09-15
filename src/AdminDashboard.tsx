@@ -346,8 +346,11 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
             <h3>Admin Actions</h3>
             <div className="admin-form">
               <div className="form-row">
-                <select 
-                  value={selectedUserId} 
+                <label htmlFor="selected-user-id">Select User</label>
+                <select
+                  id="selected-user-id"
+                  name="selectedUserId"
+                  value={selectedUserId}
                   onChange={(e) => setSelectedUserId(e.target.value)}
                 >
                   <option value="">Select User...</option>
@@ -362,11 +365,13 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
               <div className="form-row">
                 <div className="action-group">
                   <div className="input-group">
-                    <label>Grant Subscription (months):</label>
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="12" 
+                    <label htmlFor="grant-months">Grant Subscription (months):</label>
+                    <input
+                      id="grant-months"
+                      name="grantMonths"
+                      type="number"
+                      min="1"
+                      max="12"
                       value={grantMonths}
                       onChange={(e) => setGrantMonths(parseInt(e.target.value) || 1)}
                     />
@@ -381,11 +386,13 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
 
                 <div className="action-group">
                   <div className="input-group">
-                    <label>Extend Trial (days):</label>
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="90" 
+                    <label htmlFor="extend-days">Extend Trial (days):</label>
+                    <input
+                      id="extend-days"
+                      name="extendDays"
+                      type="number"
+                      min="1"
+                      max="90"
                       value={extendDays}
                       onChange={(e) => setExtendDays(parseInt(e.target.value) || 7)}
                     />
@@ -400,7 +407,10 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
               </div>
 
               <div className="form-row">
-                <textarea 
+                <label htmlFor="admin-notes">Admin notes (optional)</label>
+                <textarea
+                  id="admin-notes"
+                  name="adminNotes"
                   placeholder="Admin notes (optional)"
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}

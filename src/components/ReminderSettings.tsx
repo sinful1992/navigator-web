@@ -197,8 +197,10 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
               
               <div className="form-grid">
                 <div className="form-group">
-                  <label>👤 Agent Name *</label>
+                  <label htmlFor="agent-name">👤 Agent Name *</label>
                   <input
+                    id="agent-name"
+                    name="agentName"
                     type="text"
                     value={localSettings.agentProfile.name}
                     onChange={(e) => handleProfileUpdate({ name: e.target.value })}
@@ -207,10 +209,12 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                     required
                   />
                 </div>
-                
+
                 <div className="form-group">
-                  <label>🏷️ Job Title *</label>
+                  <label htmlFor="agent-title">🏷️ Job Title *</label>
                   <select
+                    id="agent-title"
+                    name="agentTitle"
                     value={localSettings.agentProfile.title}
                     onChange={(e) => handleProfileUpdate({ title: e.target.value })}
                     className="input"
@@ -225,8 +229,10 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                 </div>
                 
                 <div className="form-group form-group-full">
-                  <label>✍️ Message Signature *</label>
+                  <label htmlFor="agent-signature">✍️ Message Signature *</label>
                   <input
+                    id="agent-signature"
+                    name="agentSignature"
                     type="text"
                     value={localSettings.agentProfile.signature}
                     onChange={(e) => handleProfileUpdate({ signature: e.target.value })}
@@ -240,8 +246,10 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                 </div>
                 
                 <div className="form-group form-group-full">
-                  <label>📞 Contact Information (Optional)</label>
+                  <label htmlFor="agent-contact-info">📞 Contact Information (Optional)</label>
                   <input
+                    id="agent-contact-info"
+                    name="agentContactInfo"
                     type="text"
                     value={localSettings.agentProfile.contactInfo || ''}
                     onChange={(e) => handleProfileUpdate({ contactInfo: e.target.value })}
@@ -272,8 +280,10 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
               </div>
               
               <div className="form-group">
-                <label>Active Template</label>
+                <label htmlFor="active-template">Active Template</label>
                 <select
+                  id="active-template"
+                  name="activeTemplate"
                   value={localSettings.activeTemplateId}
                   onChange={(e) => setLocalSettings(prev => ({ ...prev, activeTemplateId: e.target.value }))}
                   className="input"
@@ -323,8 +333,10 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                     {editingTemplate === template.id && (
                       <div className="template-editor">
                         <div className="form-group">
-                          <label>Template Name</label>
+                          <label htmlFor={`template-name-${template.id}`}>Template Name</label>
                           <input
+                            id={`template-name-${template.id}`}
+                            name={`templateName-${template.id}`}
                             type="text"
                             value={template.name}
                             onChange={(e) => handleTemplateUpdate(template.id, { name: e.target.value })}
@@ -332,8 +344,10 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                           />
                         </div>
                         <div className="form-group">
-                          <label>Message Template</label>
+                          <label htmlFor={`template-content-${template.id}`}>Message Template</label>
                           <textarea
+                            id={`template-content-${template.id}`}
+                            name={`templateContent-${template.id}`}
                             value={template.template}
                             onChange={(e) => handleTemplateUpdate(template.id, { template: e.target.value })}
                             className="input"
@@ -363,6 +377,7 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <input
+                    name="globalEnabled"
                     type="checkbox"
                     checked={localSettings.globalEnabled}
                     onChange={(e) => setLocalSettings(prev => ({ ...prev, globalEnabled: e.target.checked }))}
@@ -374,6 +389,7 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <input
+                    name="smsEnabled"
                     type="checkbox"
                     checked={localSettings.smsEnabled}
                     onChange={(e) => setLocalSettings(prev => ({ ...prev, smsEnabled: e.target.checked }))}
@@ -390,6 +406,7 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                 <div className="form-group">
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <input
+                      name="threeDayReminder"
                       type="checkbox"
                       checked={localSettings.customizableSchedule.threeDayReminder}
                       onChange={(e) => handleScheduleUpdate('threeDayReminder', e.target.checked)}
@@ -402,6 +419,7 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                 <div className="form-group">
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <input
+                      name="oneDayReminder"
                       type="checkbox"
                       checked={localSettings.customizableSchedule.oneDayReminder}
                       onChange={(e) => handleScheduleUpdate('oneDayReminder', e.target.checked)}
@@ -414,6 +432,7 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                 <div className="form-group">
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <input
+                      name="dayOfReminder"
                       type="checkbox"
                       checked={localSettings.customizableSchedule.dayOfReminder}
                       onChange={(e) => handleScheduleUpdate('dayOfReminder', e.target.checked)}
@@ -462,6 +481,7 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                 
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                   <input
+                    name="customDayInput"
                     type="number"
                     min="1"
                     max="365"

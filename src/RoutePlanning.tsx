@@ -269,10 +269,11 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
           {/* Manual Address Entry with Autocomplete */}
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+              <label htmlFor="manual-address-input" style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
                 Or add addresses manually:
               </label>
               <AddressAutocomplete
+                id="manual-address-input"
                 value={newAddress}
                 onChange={setNewAddress}
                 onSelect={handleSelectFromAutocomplete}
@@ -523,12 +524,13 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                   
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
+                      name={`address-${index}`}
                       type="text"
                       value={addr.address}
                       onChange={(e) => handleEditAddress(index, e.target.value)}
                       className="input"
-                      style={{ 
-                        width: '100%', 
+                      style={{
+                        width: '100%',
                         marginBottom: '0.25rem',
                         fontSize: '0.875rem'
                       }}
