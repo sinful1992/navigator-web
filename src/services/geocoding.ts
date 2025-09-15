@@ -287,7 +287,7 @@ export async function searchAddresses(
 
       const predictions = await getPlaceAutocomplete(query, {
         componentRestrictions: { country: countryCode.toLowerCase() },
-        types: ['street_address', 'route', 'establishment']
+        types: ['street_address', 'route', 'premise']
       });
 
       return predictions.slice(0, limit).map(prediction => ({

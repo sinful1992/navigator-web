@@ -77,12 +77,10 @@ export async function getPlaceAutocomplete(
       input: input,
       sessionToken: sessionToken,
       ...(options.componentRestrictions && {
-        locationRestriction: {
-          country: options.componentRestrictions.country.toUpperCase()
-        }
+        regionCode: options.componentRestrictions.country.toUpperCase()
       }),
       ...(options.types && options.types.length > 0 && {
-        includedTypes: options.types
+        includedPrimaryTypes: options.types
       })
     };
 
