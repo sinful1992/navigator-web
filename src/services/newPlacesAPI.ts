@@ -93,7 +93,7 @@ export async function getPlaceAutocomplete(
         headers: {
           'Content-Type': 'application/json',
           'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': 'suggestions.place.id,suggestions.place.displayName,suggestions.place.formattedAddress'
+          'X-Goog-FieldMask': 'suggestions.placePrediction.place,suggestions.placePrediction.placeId,suggestions.placePrediction.text'
         },
         body: JSON.stringify(requestBody)
       }
@@ -111,15 +111,15 @@ export async function getPlaceAutocomplete(
     // Transform the new API response to match our expected format
     if (data.suggestions) {
       return data.suggestions
-        .filter((suggestion: any) => suggestion.place)
+        .filter((suggestion: any) => suggestion.placePrediction)
         .map((suggestion: any) => ({
-          place_id: suggestion.place.id,
-          description: suggestion.place.formattedAddress || suggestion.place.displayName?.text || '',
+          place_id: suggestion.placePrediction.placeId,
+          description: suggestion.placePrediction.text?.text || '',
           structured_formatting: {
-            main_text: suggestion.place.displayName?.text || '',
-            secondary_text: suggestion.place.formattedAddress || ''
+            main_text: suggestion.placePrediction.structuredFormat?.mainText?.text || '',
+            secondary_text: suggestion.placePrediction.structuredFormat?.secondaryText?.text || ''
           },
-          types: suggestion.place.types || []
+          types: suggestion.placePrediction.types || []
         }));
     }
 

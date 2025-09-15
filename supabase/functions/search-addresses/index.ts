@@ -244,73 +244,72 @@ serve(async (req) => {
         }
       }
 
-        // Execute fallback strategies
-        for (const strategy of searchStrategies) {
-          console.log(`Trying ${strategy.name} search: ${strategy.params.text}`)
+      // Execute fallback strategies
+      for (const strategy of searchStrategies) {
+        console.log(`Trying ${strategy.name} search: ${strategy.params.text}`)
 
-          const fallbackResponse = await fetch(`${searchUrl}?${new URLSearchParams(strategy.params)}`)
+        const fallbackResponse = await fetch(`${searchUrl}?${new URLSearchParams(strategy.params)}`)
 
-          if (fallbackResponse.ok) {
-            const fallbackData = await fallbackResponse.json()
+        if (fallbackResponse.ok) {
+          const fallbackData = await fallbackResponse.json()
 
-            if (fallbackData.features) {
-              const fallbackResults = fallbackData.features.map((feature: any) => {
-                let confidence = feature.properties.confidence || 0.4
+          if (fallbackData.features) {
+            const fallbackResults = fallbackData.features.map((feature: any) => {
+              let confidence = feature.properties.confidence || 0.4
 
-                // Boost confidence based on strategy
-                switch (strategy.name) {
-                  case 'structured':
-                    confidence += 0.1
-                    break
-                  case 'street_postcode':
-                    confidence += 0.05
-                    // Add house number to label if missing
-                    const houseNumber = addressPart.match(/^\d+/)
-                    if (houseNumber && !feature.properties.label.includes(houseNumber[0])) {
-                      feature.properties.label = `${houseNumber[0]} ${feature.properties.label}`
-                    }
-                    break
-                  case 'postcode_only':
-                    confidence = Math.max(confidence, 0.3) // Lower confidence for area-only
-                    if (addressPart) {
-                      feature.properties.label = `${addressPart} (near ${feature.properties.label})`
-                    }
-                    break
-                  case 'street_only':
-                    confidence += 0.03
-                    // Add house number to label for non-postcode searches
-                    const houseNum = query.match(/^\d+/)
-                    if (houseNum && !feature.properties.label.includes(houseNum[0])) {
-                      feature.properties.label = `${houseNum[0]} ${feature.properties.label}`
-                    }
-                    break
-                }
+              // Boost confidence based on strategy
+              switch (strategy.name) {
+                case 'structured':
+                  confidence += 0.1
+                  break
+                case 'street_postcode':
+                  confidence += 0.05
+                  // Add house number to label if missing
+                  const houseNumber = addressPart.match(/^\d+/)
+                  if (houseNumber && !feature.properties.label.includes(houseNumber[0])) {
+                    feature.properties.label = `${houseNumber[0]} ${feature.properties.label}`
+                  }
+                  break
+                case 'postcode_only':
+                  confidence = Math.max(confidence, 0.3) // Lower confidence for area-only
+                  if (addressPart) {
+                    feature.properties.label = `${addressPart} (near ${feature.properties.label})`
+                  }
+                  break
+                case 'street_only':
+                  confidence += 0.03
+                  // Add house number to label for non-postcode searches
+                  const houseNum = query.match(/^\d+/)
+                  if (houseNum && !feature.properties.label.includes(houseNum[0])) {
+                    feature.properties.label = `${houseNum[0]} ${feature.properties.label}`
+                  }
+                  break
+              }
 
-                return {
-                  label: feature.properties.label,
-                  coordinates: feature.geometry.coordinates,
-                  confidence
-                }
-              })
+              return {
+                label: feature.properties.label,
+                coordinates: feature.geometry.coordinates,
+                confidence
+              }
+            })
 
-              // Add fallback results, avoiding duplicates
-              fallbackResults.forEach(newResult => {
-                const isDuplicate = searchResults.some(existing =>
-                  Math.abs(existing.coordinates[0] - newResult.coordinates[0]) < 0.001 &&
-                  Math.abs(existing.coordinates[1] - newResult.coordinates[1]) < 0.001
-                )
-                if (!isDuplicate) {
-                  searchResults.push(newResult)
-                }
-              })
-            }
+            // Add fallback results, avoiding duplicates
+            fallbackResults.forEach(newResult => {
+              const isDuplicate = searchResults.some(existing =>
+                Math.abs(existing.coordinates[0] - newResult.coordinates[0]) < 0.001 &&
+                Math.abs(existing.coordinates[1] - newResult.coordinates[1]) < 0.001
+              )
+              if (!isDuplicate) {
+                searchResults.push(newResult)
+              }
+            })
           }
+        }
 
-          // If we got good results from this strategy, stop trying more fallbacks
-          const currentBest = Math.max(...searchResults.map(r => r.confidence || 0))
-          if (currentBest > 0.8) {
-            break
-          }
+        // If we got good results from this strategy, stop trying more fallbacks
+        const currentBest = Math.max(...searchResults.map(r => r.confidence || 0))
+        if (currentBest > 0.8) {
+          break
         }
       }
     }
