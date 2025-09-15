@@ -131,7 +131,7 @@ export default function FullScreenArrangementForm({
         <form className="fsaf-body" onSubmit={handleSubmit}>
           <div className="fsaf-form-section">
             <div className="fsaf-field">
-              <label className="fsaf-label">Payment Amount *</label>
+              <label className="fsaf-label" htmlFor="fsaf-amount">Payment Amount *</label>
               <input
                 ref={amountInputRef}
                 id="fsaf-amount"
@@ -163,7 +163,7 @@ export default function FullScreenArrangementForm({
 
             <div className="fsaf-row">
               <div className="fsaf-field">
-                <label className="fsaf-label">Customer Name</label>
+                <label className="fsaf-label" htmlFor="fsaf-customer-name">Customer Name</label>
                 <input
                   id="fsaf-customer-name"
                   name="fsafCustomerName"
@@ -176,7 +176,7 @@ export default function FullScreenArrangementForm({
                 />
               </div>
               <div className="fsaf-field">
-                <label className="fsaf-label">Phone Number</label>
+                <label className="fsaf-label" htmlFor="fsaf-phone-number">Phone Number</label>
                 <input
                   id="fsaf-phone-number"
                   name="fsafPhoneNumber"
@@ -192,7 +192,7 @@ export default function FullScreenArrangementForm({
 
             <div className="fsaf-row">
               <div className="fsaf-field">
-                <label className="fsaf-label">Payment Due Date *</label>
+                <label className="fsaf-label" htmlFor="fsaf-scheduled-date">Payment Due Date *</label>
                 <input
                   id="fsaf-scheduled-date"
                   name="fsafScheduledDate"
@@ -205,7 +205,7 @@ export default function FullScreenArrangementForm({
                 />
               </div>
               <div className="fsaf-field">
-                <label className="fsaf-label">Time</label>
+                <label className="fsaf-label" htmlFor="fsaf-scheduled-time">Time</label>
                 <input
                   id="fsaf-scheduled-time"
                   name="fsafScheduledTime"
@@ -219,8 +219,9 @@ export default function FullScreenArrangementForm({
             </div>
 
             <div className="fsaf-field">
-              <label className="fsaf-label">Notes</label>
+              <label className="fsaf-label" htmlFor="fsaf-notes">Notes</label>
               <textarea
+                id="fsaf-notes"
                 value={formData.notes}
                 onChange={(e) => setFormData((p) => ({ ...p, notes: e.target.value }))}
                 className="fsaf-input fsaf-textarea"
