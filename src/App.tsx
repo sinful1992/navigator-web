@@ -296,34 +296,68 @@ function AuthedApp() {
       // If no backups found in database, try listing storage bucket directly
       if (data.length === 0) {
         try {
-          console.log('No backups in database, checking storage bucket directly...');
+          console.log("No backups in database, checking storage bucket directly...");
           const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET || "navigator-backups";
-          
-          const { data: files, error: listError } = await supabase.storage
-            .from(bucket)
-            .list(userId, {
-              limit: 50,
-              sortBy: { column: 'created_at', order: 'desc' }
+
+          const daysToCheck: string[] = [];
+          for (let offset = 0; offset < 7; offset += 1) {
+            const d = new Date();
+            d.setDate(d.getDate() - offset);
+            daysToCheck.push(formatKey(d));
+          }
+
+          const storageBackups: CloudBackupRow[] = [];
+
+          for (const dayKey of daysToCheck) {
+            const path = `${userId}/${dayKey}`;
+            const { data: files, error: listError } = await supabase.storage
+              .from(bucket)
+              .list(path, {
+                limit: 50,
+                sortBy: { column: "created_at", order: "desc" },
+              });
+
+            if (listError) {
+              const statusCode = (listError as any)?.statusCode ?? (listError as any)?.status;
+              const message = String((listError as any)?.message || "").toLowerCase();
+              if (statusCode === 404 || message.includes("not found")) {
+                continue;
+              }
+              throw listError;
+            }
+
+            if (!files || files.length === 0) continue;
+
+            for (const file of files) {
+              if (!file.name.includes("backup_") || !file.name.endsWith(".json")) continue;
+
+              const sizeMeta = (file as any)?.metadata?.size;
+              const parsedSize =
+                typeof sizeMeta === "number" ? sizeMeta : Number(sizeMeta);
+              const sizeBytes = Number.isFinite(parsedSize) ? parsedSize : 0;
+
+              storageBackups.push({
+                object_path: `${path}/${file.name}`,
+                size_bytes: sizeBytes,
+                created_at: file.created_at || file.updated_at || file.last_accessed_at,
+                day_key: dayKey,
+              });
+            }
+          }
+
+          if (storageBackups.length > 0) {
+            storageBackups.sort((a, b) => {
+              const aKey = `${a.day_key ?? ""}_${a.created_at ?? ""}`;
+              const bKey = `${b.day_key ?? ""}_${b.created_at ?? ""}`;
+              return bKey.localeCompare(aKey);
             });
-            
-          if (listError) throw listError;
-          
-          if (files && files.length > 0) {
-            const storageBackups = files
-              .filter(file => file.name.includes('backup_') && file.name.endsWith('.json'))
-              .map(file => ({
-                object_path: `${userId}/${file.name}`,
-                size_bytes: file.metadata?.size || 0,
-                created_at: file.created_at || file.updated_at,
-                day_key: file.name.match(/backup_(\d{4}-\d{2}-\d{2})/)?.[1] || '',
-              }));
-            
+
             setCloudBackups(storageBackups);
             console.log(`Found ${storageBackups.length} backups in storage bucket`);
             return;
           }
         } catch (storageError: any) {
-          console.warn('Failed to list storage bucket:', storageError);
+          console.warn("Failed to list storage bucket:", storageError);
           // Continue with empty list
         }
       }
