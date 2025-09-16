@@ -1,6 +1,16 @@
-# Navigator Web
+# Navigator Enforcement Pro
 
-A Progressive Web App (PWA) for field workers managing address lists and navigation routes. Built with React, TypeScript, and Vite with real-time cloud synchronization.
+A professional software tool for licensed enforcement agents, bailiffs, and debt recovery professionals. This Progressive Web App (PWA) helps manage address lists, track completion status, and organize enforcement activities efficiently. Built with React, TypeScript, and Vite with real-time cloud synchronization.
+
+## 🏛️ Professional Use
+
+This tool is designed exclusively for licensed enforcement professionals:
+- Enforcement agents
+- Court bailiffs
+- Certificated enforcement agents
+- Authorized debt recovery professionals
+
+**Users own and control all data** - this is a professional tool, not a data processing service.
 
 ## 🚀 Features
 

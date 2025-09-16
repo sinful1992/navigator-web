@@ -21,6 +21,9 @@ import { useSubscription } from "./useSubscription";
 import { useAdmin } from "./useAdmin";
 import { EarningsCalendar } from "./EarningsCalendar";
 import { RoutePlanning } from "./RoutePlanning";
+import { SupabaseSetup } from "./components/SupabaseSetup";
+import { BackupManager } from "./components/BackupManager";
+import { LocalBackupManager } from "./utils/localBackup";
 
 type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
@@ -256,6 +259,8 @@ function AuthedApp() {
   const [showAdmin, setShowAdmin] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [toolsOpen, setToolsOpen] = React.useState(false);
+  const [showSupabaseSetup, setShowSupabaseSetup] = React.useState(false);
+  const [showBackupManager, setShowBackupManager] = React.useState(false);
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
@@ -385,6 +390,7 @@ function AuthedApp() {
     },
     [cloudSync, restoreState, alert, confirm]
   );
+
 
   // Cloud sync initialization
   React.useEffect(() => {
@@ -617,13 +623,21 @@ function AuthedApp() {
       try {
         await complete(index, outcome, amount, arrangementId);
 
-        // CRITICAL FIX: Immediate backup after each completion to prevent data loss
+        // Enhanced backup system: Cloud + Local + Download
         try {
           const snap = backupState();
-          await uploadBackupToStorage(snap, "manual");
-          logger.info("Auto-backup after completion successful");
+
+          // Cloud backup if available
+          if (supabase) {
+            await uploadBackupToStorage(snap, "manual");
+            logger.info("Cloud backup after completion successful");
+          }
+
+          // Critical local backup with download
+          await LocalBackupManager.performCriticalBackup(snap, "completion");
+          logger.info("Local backup after completion successful");
         } catch (backupError) {
-          logger.error("Auto-backup failed after completion:", backupError);
+          logger.error("Backup failed after completion:", backupError);
           // Don't throw - completion should still succeed even if backup fails
         }
       } catch (error) {
@@ -855,6 +869,87 @@ function AuthedApp() {
     }
   }, [cloudSync, safeState]);
 
+  // Supabase setup handlers
+  const handleSupabaseSetup = (url: string, key: string) => {
+    // Store credentials locally
+    localStorage.setItem('navigator_supabase_url', url);
+    localStorage.setItem('navigator_supabase_key', key);
+
+    // Reload page to reinitialize with new credentials
+    window.location.reload();
+  };
+
+  const handleSkipSupabaseSetup = () => {
+    localStorage.setItem('navigator_supabase_skipped', 'true');
+    setShowSupabaseSetup(false);
+  };
+
+  // Check if user should see Supabase setup
+  React.useEffect(() => {
+    if (!cloudSync.user || loading) return;
+
+    const hasSupabase = !!supabase;
+    const hasSkipped = localStorage.getItem('navigator_supabase_skipped');
+
+    // Show setup if no Supabase configured and hasn't been skipped
+    if (!hasSupabase && !hasSkipped) {
+      setShowSupabaseSetup(true);
+    }
+  }, [cloudSync.user, loading]);
+
+  // Enhanced periodic backup with local storage
+  React.useEffect(() => {
+    if (!hydrated) return;
+
+    let lastBackupState = JSON.stringify(safeState);
+
+    const periodicBackup = async () => {
+      const currentState = JSON.stringify(safeState);
+
+      // Only backup if state has changed and we have meaningful data
+      if (currentState !== lastBackupState &&
+          (safeState.completions.length > 0 || safeState.addresses.length > 0)) {
+        try {
+          logger.info("Performing periodic safety backup...");
+
+          // Cloud backup if available
+          if (cloudSync.user && supabase) {
+            await uploadBackupToStorage(safeState, "periodic");
+          }
+
+          // Always store local backup
+          LocalBackupManager.storeLocalBackup(safeState);
+
+          lastBackupState = currentState;
+          logger.info("Periodic backup successful");
+        } catch (error) {
+          logger.error("Periodic backup failed:", error);
+        }
+      }
+    };
+
+    // Run backup every 5 minutes
+    const interval = setInterval(periodicBackup, 5 * 60 * 1000);
+
+    // Cleanup old backups weekly
+    const cleanupInterval = setInterval(() => {
+      LocalBackupManager.cleanupOldBackups();
+    }, 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Run immediate backup if we have data but no recent local backup
+    const stats = LocalBackupManager.getBackupStats();
+    if (stats.count === 0 || (safeState.completions.length > 0 && stats.count < 3)) {
+      setTimeout(async () => {
+        await periodicBackup();
+      }, 5000); // After 5 seconds to allow app to stabilize
+    }
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(cleanupInterval);
+    };
+  }, [safeState, cloudSync.user, hydrated]);
+
   const getUserInitials = () => {
     const email = cloudSync.user?.email || "";
     const parts = email.split("@")[0].split(".");
@@ -896,19 +991,39 @@ function AuthedApp() {
 
   return (
     <div className="app-wrapper">
+      {/* Supabase Setup Modal */}
+      <SupabaseSetup
+        isOpen={showSupabaseSetup}
+        onSetupComplete={handleSupabaseSetup}
+        onSkip={handleSkipSupabaseSetup}
+      />
+
+      {/* Backup Manager Modal */}
+      <BackupManager
+        isOpen={showBackupManager}
+        onClose={() => setShowBackupManager(false)}
+        currentData={safeState}
+        onRestore={(data) => {
+          restoreState(data);
+          if (cloudSync.user && supabase) {
+            cloudSync.syncData(data);
+          }
+        }}
+      />
+
       {/* Admin Dashboard Modal */}
       {showAdmin && isAdmin && (
-        <AdminDashboard 
-          user={cloudSync.user!} 
-          onClose={() => setShowAdmin(false)} 
+        <AdminDashboard
+          user={cloudSync.user!}
+          onClose={() => setShowAdmin(false)}
         />
       )}
 
       {/* Subscription Modal */}
       {showSubscription && (
-        <SubscriptionManager 
-          user={cloudSync.user!} 
-          onClose={() => setShowSubscription(false)} 
+        <SubscriptionManager
+          user={cloudSync.user!}
+          onClose={() => setShowSubscription(false)}
         />
       )}
 
@@ -1181,14 +1296,26 @@ function AuthedApp() {
               <span className="nav-icon">🛠️</span>
               <span>Import/Export</span>
             </div>
-            <div className="nav-item" onClick={async () => {
-              setCloudMenuOpen(true);
-              await loadRecentCloudBackups();
-              setSidebarOpen(false);
-            }}>
-              <span className="nav-icon">☁️</span>
-              <span>Cloud Backups</span>
+            <div className="nav-item" onClick={() => { setShowBackupManager(true); setSidebarOpen(false); }}>
+              <span className="nav-icon">💾</span>
+              <span>Backup Manager</span>
             </div>
+            {supabase && (
+              <div className="nav-item" onClick={async () => {
+                setCloudMenuOpen(true);
+                await loadRecentCloudBackups();
+                setSidebarOpen(false);
+              }}>
+                <span className="nav-icon">☁️</span>
+                <span>Cloud Backups</span>
+              </div>
+            )}
+            {!supabase && (
+              <div className="nav-item" onClick={() => { setShowSupabaseSetup(true); setSidebarOpen(false); }}>
+                <span className="nav-icon">🔗</span>
+                <span>Connect Cloud Storage</span>
+              </div>
+            )}
           </div>
 
           <div className="nav-section">
