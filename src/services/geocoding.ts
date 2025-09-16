@@ -31,23 +31,35 @@ const CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 class GeocodingService {
   private cache: GeocodeCache = {};
+  private isLoadingCache: boolean = false;
+  private cacheLoadPromise: Promise<void> | null = null;
   public apiKey: string;
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
-    this.loadCache();
+    this.cacheLoadPromise = this.loadCache();
   }
 
   private async loadCache(): Promise<void> {
+    if (this.isLoadingCache) {
+      return this.cacheLoadPromise || Promise.resolve();
+    }
+
+    this.isLoadingCache = true;
     try {
       const cachedData = await get(CACHE_KEY);
       if (cachedData) {
-        this.cache = cachedData;
+        // RACE CONDITION FIX: Merge with existing cache instead of overwriting
+        // This preserves any entries written during the load process
+        this.cache = { ...cachedData, ...this.cache };
         this.cleanExpiredEntries();
       }
     } catch (error) {
       console.warn('Failed to load geocoding cache:', error);
-      this.cache = {};
+      // Don't overwrite existing cache on error
+    } finally {
+      this.isLoadingCache = false;
+      this.cacheLoadPromise = null;
     }
   }
 
@@ -83,6 +95,11 @@ class GeocodingService {
   }
 
   async geocodeAddressInternal(address: string): Promise<GeocodingResult> {
+    // RACE CONDITION FIX: Wait for cache to load before proceeding
+    if (this.cacheLoadPromise) {
+      await this.cacheLoadPromise;
+    }
+
     if (!this.apiKey) {
       return {
         success: false,

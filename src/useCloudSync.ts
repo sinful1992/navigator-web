@@ -266,13 +266,17 @@ export function useCloudSync(): UseCloudSync {
       }
     })();
 
-    if (!supabase) return () => {};
+    if (!supabase) return () => { mounted = false; };
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      // RACE CONDITION FIX: Check mounted flag before setting state
+      if (mounted) {
+        setUser(session?.user ?? null);
+      }
     });
 
     return () => {
+      mounted = false; // RACE CONDITION FIX: Set mounted to false on cleanup
       sub.subscription.unsubscribe();
     };
   }, []);
