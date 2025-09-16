@@ -62,19 +62,26 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-// Upload JSON snapshot to Supabase Storage
+// Enhanced Upload JSON snapshot to Supabase Storage with retry mechanism
 async function uploadBackupToStorage(
   data: unknown,
-  label: "finish" | "manual" = "manual"
+  label: "finish" | "manual" = "manual",
+  retryCount = 0
 ) {
-  if (!supabase) return;
+  if (!supabase) {
+    logger.error("Supabase not configured for backup");
+    throw new Error("Supabase not configured");
+  }
 
   const authResp = await supabase.auth.getUser();
   const userId =
     authResp && authResp.data && authResp.data.user
       ? authResp.data.user.id
       : undefined;
-  if (!userId) return;
+  if (!userId) {
+    logger.error("User not authenticated for backup");
+    throw new Error("User not authenticated");
+  }
 
   const tz = "Europe/London";
   const now = new Date();
@@ -90,27 +97,56 @@ async function uploadBackupToStorage(
     (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
       ? (import.meta as any).env.VITE_SUPABASE_BUCKET
       : "navigator-backups";
-  const name = `backup_${dayKey}_${time}_${label}.json`;
+  const name = `backup_${dayKey}_${time}_${label}_retry${retryCount}.json`;
   const objectPath = `${userId}/${dayKey}/${name}`;
 
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json",
-  });
-  const uploadRes = await supabase
-    .storage
-    .from(bucket)
-    .upload(objectPath, blob, { upsert: false, contentType: "application/json" });
-  if ((uploadRes as any).error) throw new Error((uploadRes as any).error.message);
-
   try {
-    await supabase.from("backups").insert({
-      user_id: userId,
-      day_key: dayKey,
-      object_path: objectPath,
-      size_bytes: blob.size,
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
     });
-  } catch (e) {
-    logger.warn("Backups table insert failed:", (e as any)?.message || e);
+
+    logger.info(`Uploading backup to ${objectPath}, size: ${blob.size} bytes`);
+
+    const uploadRes = await supabase
+      .storage
+      .from(bucket)
+      .upload(objectPath, blob, { upsert: true, contentType: "application/json" }); // Changed to upsert: true for reliability
+
+    if ((uploadRes as any).error) {
+      logger.error("Backup upload failed:", (uploadRes as any).error);
+      throw new Error((uploadRes as any).error.message);
+    }
+
+    logger.info("Backup upload successful:", objectPath);
+
+    // Record backup in database - non-critical, don't fail the backup if this fails
+    try {
+      await supabase.from("backups").insert({
+        user_id: userId,
+        day_key: dayKey,
+        object_path: objectPath,
+        size_bytes: blob.size,
+      });
+      logger.info("Backup database record created");
+    } catch (dbError) {
+      logger.warn("Backups table insert failed (non-critical):", (dbError as any)?.message || dbError);
+    }
+
+    return { objectPath, size: blob.size };
+
+  } catch (error: any) {
+    logger.error(`Backup attempt ${retryCount + 1} failed:`, error);
+
+    // Retry up to 3 times with exponential backoff
+    if (retryCount < 2) {
+      const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+      logger.info(`Retrying backup in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return uploadBackupToStorage(data, label, retryCount + 1);
+    }
+
+    // All retries failed
+    throw new Error(`Backup failed after ${retryCount + 1} attempts: ${error.message}`);
   }
 }
 
@@ -439,6 +475,87 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
 
+  // CRITICAL FIX: Periodic backup to prevent data loss (every 5 minutes when data changes)
+  React.useEffect(() => {
+    if (!cloudSync.user || loading || !hydrated) return;
+
+    let lastBackupState = JSON.stringify(safeState);
+
+    const periodicBackup = async () => {
+      const currentState = JSON.stringify(safeState);
+
+      // Only backup if state has changed and we have meaningful data
+      if (currentState !== lastBackupState &&
+          (safeState.completions.length > 0 || safeState.addresses.length > 0)) {
+        try {
+          logger.info("Performing periodic safety backup...");
+          await uploadBackupToStorage(safeState, "manual");
+          lastBackupState = currentState;
+          logger.info("Periodic backup successful");
+        } catch (error) {
+          logger.error("Periodic backup failed:", error);
+        }
+      }
+    };
+
+    // Run backup every 5 minutes
+    const interval = setInterval(periodicBackup, 5 * 60 * 1000);
+
+    // Run immediate backup if we have data but no recent backup
+    const lastBackup = localStorage.getItem('last_backup_time');
+    const now = Date.now();
+    if (!lastBackup || (now - parseInt(lastBackup)) > 10 * 60 * 1000) { // 10 minutes
+      setTimeout(async () => {
+        await periodicBackup();
+        localStorage.setItem('last_backup_time', now.toString());
+      }, 5000); // After 5 seconds to allow app to stabilize
+    }
+
+    return () => clearInterval(interval);
+  }, [safeState, cloudSync.user, hydrated, loading]);
+
+  // CRITICAL FIX: Data integrity monitoring to detect potential data loss
+  React.useEffect(() => {
+    if (!cloudSync.user || loading || !hydrated) return;
+
+    const checkDataIntegrity = () => {
+      const completionsCount = safeState.completions.length;
+      const addressesCount = safeState.addresses.length;
+
+      // Store current counts
+      const lastCounts = localStorage.getItem('navigator_data_counts');
+      if (lastCounts) {
+        const { completions: lastCompletions, addresses: lastAddresses } = JSON.parse(lastCounts);
+
+        // Warn if we've lost significant data
+        if (completionsCount < lastCompletions - 10) { // Lost more than 10 completions
+          logger.error(`POTENTIAL DATA LOSS DETECTED: Completions dropped from ${lastCompletions} to ${completionsCount}`);
+          alert(`⚠️ POTENTIAL DATA LOSS: Completions count dropped significantly (${lastCompletions} → ${completionsCount}). Check cloud backups immediately!`);
+        }
+
+        if (addressesCount < lastAddresses - 50) { // Lost more than 50 addresses
+          logger.error(`POTENTIAL DATA LOSS DETECTED: Addresses dropped from ${lastAddresses} to ${addressesCount}`);
+          alert(`⚠️ POTENTIAL DATA LOSS: Address count dropped significantly (${lastAddresses} → ${addressesCount}). Check cloud backups immediately!`);
+        }
+      }
+
+      // Update stored counts
+      localStorage.setItem('navigator_data_counts', JSON.stringify({
+        completions: completionsCount,
+        addresses: addressesCount,
+        timestamp: new Date().toISOString()
+      }));
+    };
+
+    // Check integrity every 30 seconds
+    const integrityInterval = setInterval(checkDataIntegrity, 30 * 1000);
+
+    // Run initial check
+    setTimeout(checkDataIntegrity, 3000);
+
+    return () => clearInterval(integrityInterval);
+  }, [safeState, cloudSync.user, hydrated, loading]);
+
   // Stats calculation
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
@@ -491,11 +608,21 @@ function AuthedApp() {
     async (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => {
       try {
         await complete(index, outcome, amount, arrangementId);
+
+        // CRITICAL FIX: Immediate backup after each completion to prevent data loss
+        try {
+          const snap = backupState();
+          await uploadBackupToStorage(snap, "manual");
+          logger.info("Auto-backup after completion successful");
+        } catch (backupError) {
+          logger.error("Auto-backup failed after completion:", backupError);
+          // Don't throw - completion should still succeed even if backup fails
+        }
       } catch (error) {
         logger.error("Failed to complete address:", error);
       }
     },
-    [complete]
+    [complete, backupState]
   );
 
   const ensureDayStarted = React.useCallback(() => {
@@ -670,7 +797,7 @@ function AuthedApp() {
   };
 
   const handleChangeOutcome = React.useCallback(
-    (targetCompletionIndex: number, outcome: Outcome, amount?: string) => {
+    async (targetCompletionIndex: number, outcome: Outcome, amount?: string) => {
       setState((s) => {
         if (
           !Number.isInteger(targetCompletionIndex) ||
@@ -687,8 +814,19 @@ function AuthedApp() {
         };
         return { ...s, completions: comps };
       });
+
+      // CRITICAL FIX: Backup after outcome changes to prevent data loss
+      try {
+        // Small delay to ensure state has updated
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const snap = backupState();
+        await uploadBackupToStorage(snap, "manual");
+        logger.info("Auto-backup after outcome change successful");
+      } catch (backupError) {
+        logger.error("Auto-backup failed after outcome change:", backupError);
+      }
     },
-    [setState]
+    [setState, backupState]
   );
 
   const handleManualSync = React.useCallback(async () => {
@@ -696,6 +834,14 @@ function AuthedApp() {
       logger.sync("Manual sync initiated...");
       await cloudSync.syncData(safeState);
       lastFromCloudRef.current = JSON.stringify(safeState);
+
+      // Also create a safety backup after manual sync
+      try {
+        await uploadBackupToStorage(safeState, "manual");
+        logger.info("Safety backup after manual sync completed");
+      } catch (backupErr) {
+        logger.warn("Safety backup after sync failed:", backupErr);
+      }
     } catch (err) {
       logger.error("Manual sync failed:", err);
     }

@@ -399,7 +399,7 @@ export function useCloudSync(): UseCloudSync {
 
         const finalChecksum = generateChecksum(finalState);
         
-        // Update server state
+        // Update server state with enhanced error handling
         const { data, error: err } = await supabase
           .from("navigator_state")
           .upsert({
@@ -413,7 +413,20 @@ export function useCloudSync(): UseCloudSync {
           .select("updated_at, version, checksum")
           .single();
 
-        if (err) throw err;
+        if (err) {
+          console.error('Cloud sync database error:', err);
+
+          // If this is a version conflict, try to refetch and resolve
+          if (err.code === '23505' || err.message?.includes('conflict')) {
+            console.log('Detected sync conflict, attempting resolution...');
+            // Force a fresh sync on next attempt
+            syncMetadata.current.lastSyncAt = '';
+            syncMetadata.current.version = 0;
+            throw new Error('Sync conflict detected - will retry with fresh data');
+          }
+
+          throw err;
+        }
 
         // Update sync metadata
         syncMetadata.current = {
@@ -436,19 +449,26 @@ export function useCloudSync(): UseCloudSync {
     [user, clearError]
   );
 
-  // Basic conflict resolution strategy
+  // Enhanced conflict resolution strategy
   const resolveConflicts = useCallback(async (localState: AppState, serverState: AppState): Promise<AppState> => {
+    console.log('Resolving conflicts between local and server state');
     const resolved: AppState = { ...localState };
-    
-    // Merge completions (keep both, dedupe by timestamp + index)
+
+    // Merge completions (keep both, dedupe by timestamp + index + outcome)
+    // This is the most critical data - completions represent work done
     const allCompletions = [...localState.completions, ...serverState.completions];
     const uniqueCompletions = allCompletions.filter((completion, index, arr) => {
-      const key = `${completion.timestamp}_${completion.index}_${completion.outcome}`;
-      return arr.findIndex(c => `${c.timestamp}_${c.index}_${c.outcome}` === key) === index;
+      // More comprehensive deduplication key including list version
+      const key = `${completion.timestamp}_${completion.index}_${completion.outcome}_${completion.listVersion || 1}`;
+      return arr.findIndex(c =>
+        `${c.timestamp}_${c.index}_${c.outcome}_${c.listVersion || 1}` === key
+      ) === index;
     });
-    resolved.completions = uniqueCompletions.sort((a, b) => 
+    resolved.completions = uniqueCompletions.sort((a, b) =>
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
+
+    console.log(`Merged completions: local=${localState.completions.length}, server=${serverState.completions.length}, resolved=${resolved.completions.length}`);
 
     // Merge arrangements (prefer local for recent changes, server for older)
     const allArrangements = [...localState.arrangements, ...serverState.arrangements];
