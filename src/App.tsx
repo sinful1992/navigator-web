@@ -1181,14 +1181,11 @@ function AuthedApp() {
             {/* SEARCH BAR UNDER THE DAY PANEL */}
             <div className="search-container">
               <input
-                id="address-search"
-                name="addressSearch"
                 type="search"
                 value={search}
                 placeholder="Search addresses..."
                 onChange={(e) => setSearch(e.target.value)}
                 className="input search-input"
-                autoComplete="off"
               />
             </div>
 
