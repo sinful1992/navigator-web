@@ -1,4 +1,4 @@
-// src/AddressList.tsx
+// src/AddressList.tsx - Modern Design Update
 import * as React from "react";
 import type { AppState, Outcome, AddressRow, Arrangement } from "./types";
 import FullScreenArrangementForm from "./components/FullScreenArrangementForm";
@@ -10,7 +10,7 @@ type Props = {
   onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void;
   onAddArrangement?: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
   filterText: string;
-  ensureDayStarted: () => void; // auto-start day on first Navigate
+  ensureDayStarted: () => void;
 };
 
 function makeMapsHref(row: AddressRow) {
@@ -41,8 +41,7 @@ const AddressListComponent = function AddressList({
   const completions = Array.isArray(state.completions) ? state.completions : [];
   const activeIndex = state.activeIndex;
 
-  // Hide only items completed for the CURRENT list version.
-  // If a completion has no listVersion (older backups), treat it as the current one.
+  // Hide only items completed for the CURRENT list version
   const completedIdx = React.useMemo(() => {
     const set = new Set<number>();
     for (const c of completions) {
@@ -68,10 +67,8 @@ const AddressListComponent = function AddressList({
     [addresses, lowerQ, completedIdx]
   );
 
-  // local UI for outcome panel & PIF
-  const [outcomeOpenFor, setOutcomeOpenFor] = React.useState<number | null>(
-    null
-  );
+  // Local UI state for outcome panel & PIF
+  const [outcomeOpenFor, setOutcomeOpenFor] = React.useState<number | null>(null);
   const [pifAmount, setPifAmount] = React.useState<string>("");
 
   // Prevent double submissions
@@ -82,7 +79,7 @@ const AddressListComponent = function AddressList({
   // Arrangement form state
   const [showArrangementForm, setShowArrangementForm] = React.useState<number | null>(null);
 
-  // closing outcomes when active changes
+  // Closing outcomes when active changes
   React.useEffect(() => {
     if (activeIndex === null) {
       setOutcomeOpenFor(null);
@@ -115,7 +112,6 @@ const AddressListComponent = function AddressList({
       setOutcomeOpenFor(null);
     } catch (error) {
       console.error('Completion failed:', error);
-      // Could show user error here
     } finally {
       submittingRef.current = null;
       setSubmittingIndex(null);
@@ -124,110 +120,146 @@ const AddressListComponent = function AddressList({
 
   if (visible.length === 0) {
     return (
-      <div className="empty-box">
-        <div>No pending addresses</div>
-        <p>Import a list or clear filters to see items.</p>
+      <div className="empty-state">
+        <div className="empty-icon">📍</div>
+        <div className="empty-title">No Pending Addresses</div>
+        <div className="empty-message">
+          Import an Excel file or add addresses manually to get started
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      <div className="list">
+      <div className="address-list-modern">
         {visible.map(({ a, i }, displayIndex) => {
           const isActive = activeIndex === i;
           const mapHref = makeMapsHref(a);
 
           return (
-            <div key={i} className={`row-card ${isActive ? "card-active" : ""}`}>
-              {/* Row header */}
-              <div className="row-head">
-                <div className="row-index" title={`Display #${displayIndex + 1} (Original index ${i + 1})`}>{displayIndex + 1}</div>
-                <div className="row-title" title={a.address}>
-                  {a.address}
+            <div key={i} className={`address-card-modern ${isActive ? 'active' : ''}`}>
+              {/* Card Header */}
+              <div className="address-header-modern">
+                <div className="address-content">
+                  <div className="address-number">
+                    {displayIndex + 1}
+                  </div>
+                  <div className="address-info">
+                    <div className="address-title" title={a.address}>
+                      {a.address}
+                    </div>
+                    <div className="address-meta">
+                      <div className="address-meta-item">
+                        <span>📍</span>
+                        <span>Index #{i + 1}</span>
+                      </div>
+                      {a.lat && a.lng && (
+                        <div className="address-meta-item">
+                          <span>🌍</span>
+                          <span>Coordinates ready</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                {isActive && <span className="active-badge">Active</span>}
+                <div className={`address-status-badge ${isActive ? 'status-active' : 'status-pending'}`}>
+                  {isActive && <span>●</span>}
+                  {isActive ? 'Active' : 'Pending'}
+                </div>
               </div>
 
-              {/* Actions row */}
-              <div className="row-actions">
+              {/* Action Buttons */}
+              <div className="address-actions-modern">
                 <a
-                  className="btn btn-outline btn-sm"
+                  className="action-btn-modern btn-navigate"
                   href={mapHref}
                   target="_blank"
                   rel="noreferrer"
                   title="Open in Google Maps"
                   onClick={() => ensureDayStarted()}
                 >
-                  🧭 Navigate
+                  <span>🧭</span>
+                  <span>Navigate</span>
                 </a>
 
                 {!isActive ? (
                   <button
-                    className="btn btn-primary btn-sm"
+                    className="action-btn-modern btn-set-active"
                     onClick={() => setActive(i)}
                   >
-                    ▶️ Set Active
+                    <span>▶️</span>
+                    <span>Set Active</span>
                   </button>
                 ) : (
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={cancelActive}
-                  >
-                    ❎ Cancel
-                  </button>
-                )}
-
-                {isActive && (
-                  <button
-                    className="btn btn-success btn-sm"
-                    onClick={() => {
-                      const willOpen = outcomeOpenFor !== i;
-                      setOutcomeOpenFor(willOpen ? i : null);
-                      setPifAmount("");
-                    }}
-                  >
-                    ✅ Complete
-                  </button>
+                  <>
+                    <button
+                      className="action-btn-modern btn-complete"
+                      onClick={() => {
+                        const willOpen = outcomeOpenFor !== i;
+                        setOutcomeOpenFor(willOpen ? i : null);
+                        setPifAmount("");
+                      }}
+                    >
+                      <span>✅</span>
+                      <span>Complete</span>
+                    </button>
+                    <button
+                      className="action-btn-modern"
+                      style={{ background: 'var(--gray-100)', color: 'var(--gray-600)' }}
+                      onClick={cancelActive}
+                    >
+                      <span>❎</span>
+                      <span>Cancel</span>
+                    </button>
+                  </>
                 )}
               </div>
 
-              {/* Outcome bar (only when active + Complete pressed) */}
+              {/* Outcome Panel (shown when Complete is pressed) */}
               {isActive && outcomeOpenFor === i && (
-                <div className="card-body">
-                  <div className="complete-bar">
-                    <div className="complete-btns">
-                      <button
-                        className="btn btn-success"
-                        disabled={submittingIndex === i}
-                        onClick={() => handleCompletion(i, "Done")}
-                        title="Mark as Done"
-                      >
-                        {submittingIndex === i ? "⏳ Saving..." : "✅ Done"}
-                      </button>
+                <div className="outcome-panel-modern">
+                  <div className="outcome-header">
+                    <span className="outcome-title">Select Outcome</span>
+                  </div>
+                  
+                  <div className="outcome-buttons">
+                    <button
+                      className="outcome-btn outcome-done"
+                      disabled={submittingIndex === i}
+                      onClick={() => handleCompletion(i, "Done")}
+                      title="Mark as Done"
+                    >
+                      <span className="outcome-icon">✅</span>
+                      <span className="outcome-label">Done</span>
+                    </button>
 
-                      <button
-                        className="btn btn-danger"
-                        disabled={submittingIndex === i}
-                        onClick={() => handleCompletion(i, "DA")}
-                        title="Mark as DA"
-                      >
-                        {submittingIndex === i ? "⏳ Saving..." : "🚫 DA"}
-                      </button>
+                    <button
+                      className="outcome-btn outcome-da"
+                      disabled={submittingIndex === i}
+                      onClick={() => handleCompletion(i, "DA")}
+                      title="Mark as DA"
+                    >
+                      <span className="outcome-icon">🚫</span>
+                      <span className="outcome-label">DA</span>
+                    </button>
 
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => {
-                          setOutcomeOpenFor(null);
-                          setShowArrangementForm(i);
-                        }}
-                        title="Create arrangement and mark completed"
-                      >
-                        📅 Arrangement
-                      </button>
-                    </div>
+                    <button
+                      className="outcome-btn outcome-arr"
+                      onClick={() => {
+                        setOutcomeOpenFor(null);
+                        setShowArrangementForm(i);
+                      }}
+                      title="Create arrangement"
+                    >
+                      <span className="outcome-icon">📅</span>
+                      <span className="outcome-label">Arrangement</span>
+                    </button>
+                  </div>
 
-                    <div className="pif-group">
+                  <div className="pif-section">
+                    <div className="pif-input-group">
+                      <span className="pif-label">💰 PIF Amount:</span>
                       <input
                         id={`pif-amount-${i}`}
                         name={`pifAmount-${i}`}
@@ -235,14 +267,14 @@ const AddressListComponent = function AddressList({
                         step="0.01"
                         min="0"
                         inputMode="decimal"
-                        className="input amount-input"
-                        placeholder="PIF £"
+                        className="pif-input"
+                        placeholder="£0.00"
                         value={pifAmount}
                         onChange={(e) => setPifAmount(e.target.value)}
                         autoComplete="off"
                       />
                       <button
-                        className="btn btn-primary"
+                        className="outcome-btn outcome-pif"
                         disabled={submittingIndex === i}
                         onClick={() => {
                           const n = Number(pifAmount);
@@ -252,12 +284,19 @@ const AddressListComponent = function AddressList({
                           }
                           handleCompletion(i, "PIF", n.toFixed(2));
                         }}
-                        title="Save PIF amount"
                       >
-                        {submittingIndex === i ? "⏳ Saving..." : "💷 Save PIF"}
+                        <span className="outcome-icon">💷</span>
+                        <span className="outcome-label">Save PIF</span>
                       </button>
                     </div>
                   </div>
+
+                  {submittingIndex === i && (
+                    <div className="outcome-loading">
+                      <span className="spinner-small"></span>
+                      <span>Processing...</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -265,7 +304,7 @@ const AddressListComponent = function AddressList({
         })}
       </div>
       
-      {/* Full-Screen Arrangement Form - Rendered at root level for proper overlay */}
+      {/* Full-Screen Arrangement Form */}
       {showArrangementForm !== null && onAddArrangement && addresses[showArrangementForm] && (
         <FullScreenArrangementForm
           address={addresses[showArrangementForm].address}
@@ -279,6 +318,197 @@ const AddressListComponent = function AddressList({
           onCancel={() => setShowArrangementForm(null)}
         />
       )}
+
+      <style>{`
+        /* Modern Outcome Panel Styles */
+        .outcome-panel-modern {
+          background: var(--gray-50);
+          border: 2px solid var(--primary);
+          border-radius: var(--radius-lg);
+          padding: 1rem;
+          margin-top: 1rem;
+          animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .outcome-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 1rem;
+        }
+
+        .outcome-title {
+          font-weight: 600;
+          color: var(--gray-700);
+          font-size: 0.875rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .outcome-buttons {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 0.5rem;
+          margin-bottom: 1rem;
+        }
+
+        .outcome-btn {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 0.25rem;
+          padding: 0.75rem;
+          border: none;
+          border-radius: var(--radius-md);
+          font-weight: 600;
+          cursor: pointer;
+          transition: var(--transition-normal);
+          position: relative;
+          overflow: hidden;
+        }
+
+        .outcome-btn::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(255, 255, 255, 0.1);
+          transform: translateY(100%);
+          transition: transform 0.3s ease;
+        }
+
+        .outcome-btn:hover::before {
+          transform: translateY(0);
+        }
+
+        .outcome-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-md);
+        }
+
+        .outcome-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .outcome-icon {
+          font-size: 1.25rem;
+        }
+
+        .outcome-label {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .outcome-done {
+          background: var(--success);
+          color: white;
+        }
+
+        .outcome-da {
+          background: var(--danger);
+          color: white;
+        }
+
+        .outcome-arr {
+          background: var(--warning);
+          color: white;
+        }
+
+        .outcome-pif {
+          background: var(--primary);
+          color: white;
+        }
+
+        .pif-section {
+          padding-top: 1rem;
+          border-top: 1px solid var(--gray-200);
+        }
+
+        .pif-input-group {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
+        .pif-label {
+          font-weight: 600;
+          color: var(--gray-700);
+          font-size: 0.875rem;
+        }
+
+        .pif-input {
+          flex: 1;
+          padding: 0.625rem 0.75rem;
+          border: 2px solid var(--gray-200);
+          border-radius: var(--radius-md);
+          font-size: 0.875rem;
+          font-weight: 600;
+          text-align: right;
+          transition: var(--transition-normal);
+        }
+
+        .pif-input:focus {
+          outline: none;
+          border-color: var(--primary);
+          box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .outcome-loading {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          padding: 0.75rem;
+          color: var(--gray-600);
+          font-size: 0.875rem;
+        }
+
+        .spinner-small {
+          width: 16px;
+          height: 16px;
+          border: 2px solid var(--gray-300);
+          border-top-color: var(--primary);
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+          .outcome-buttons {
+            grid-template-columns: 1fr;
+          }
+
+          .pif-input-group {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .outcome-btn {
+            flex-direction: row;
+            justify-content: center;
+            gap: 0.5rem;
+          }
+        }
+      `}</style>
     </>
   );
 };
