@@ -1,9 +1,10 @@
-// src/App.tsx - Complete Modern Design with Right Sidebar
+// src/App.tsx - Complete Fixed Version
 import * as React from "react";
-import "./App.css"; // Use the updated modern CSS
+import "./App.css";
 import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
 import { useCloudSync } from "./useCloudSync";
+import { useSwipeNavigation } from "./hooks/useSwipeNavigation";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";
 import { Auth } from "./Auth";
@@ -12,7 +13,7 @@ import Completed from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { readJsonFile } from "./backup";
-import type { AddressRow, Outcome, Completion, DaySession } from "./types";
+import type { AddressRow, Outcome } from "./types";
 import { supabase } from "./lib/supabaseClient";
 import ManualAddressFAB from "./ManualAddressFAB";
 import { SubscriptionManager } from "./SubscriptionManager";
@@ -62,7 +63,7 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-// Upload JSON snapshot to Supabase Storage
+/** Upload JSON snapshot to Supabase Storage and log in backups table */
 async function uploadBackupToStorage(
   data: unknown,
   label: "finish" | "manual" = "manual"
@@ -114,46 +115,15 @@ async function uploadBackupToStorage(
   }
 }
 
-// Modern Stats Card Component
-function StatsCard({ title, value, change, changeType, icon, iconType }: {
-  title: string;
-  value: string | number;
-  change?: string;
-  changeType?: 'positive' | 'negative' | 'neutral';
-  icon: string;
-  iconType: 'success' | 'warning' | 'danger' | 'info';
-}) {
-  return (
-    <div className="stat-card-modern">
-      <div className="stat-header">
-        <div className="stat-title">{title}</div>
-        <div className={`stat-icon ${iconType}`}>{icon}</div>
-      </div>
-      <div className="stat-value">{value}</div>
-      {change && (
-        <div className={`stat-change ${changeType || 'neutral'}`}>
-          {changeType === 'positive' && <span>↑</span>}
-          {changeType === 'negative' && <span>↓</span>}
-          <span>{change}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function App() {
   const cloudSync = useCloudSync();
 
   if (cloudSync.isLoading) {
     return (
-      <div className="app-wrapper">
-        <div className="main-area">
-          <div className="content-area">
-            <div className="loading">
-              <div className="spinner" />
-              Restoring session...
-            </div>
-          </div>
+      <div className="container">
+        <div className="loading">
+          <div className="spinner" />
+          Restoring session...
         </div>
       </div>
     );
@@ -204,9 +174,11 @@ function AuthedApp() {
     updateArrangement,
     deleteArrangement,
     setState,
+    // FIXED: Make sure to destructure these for the edit functionality
     setBaseState,
     deviceId,
     enqueueOp,
+    // Reminder system functions
     updateReminderSettings,
     updateReminderNotification,
   } = useAppState();
@@ -214,22 +186,59 @@ function AuthedApp() {
   const cloudSync = useCloudSync();
   const { confirm, alert } = useModalContext();
   
+  // Subscription management
   const { hasAccess } = useSubscription(cloudSync.user);
   const { isAdmin, isOwner } = useAdmin(cloudSync.user);
   const [showSubscription, setShowSubscription] = React.useState(false);
   const [showAdmin, setShowAdmin] = React.useState(false);
-  const [sidebarOpen, setSidebarOpen] = React.useState(false);
-  const [toolsOpen, setToolsOpen] = React.useState(false);
+
 
   const [tab, setTab] = React.useState<Tab>("list");
   const [search, setSearch] = React.useState("");
-  const [autoCreateArrangementFor, setAutoCreateArrangementFor] = 
+  const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
     React.useState<number | null>(null);
+
+  // Swipe navigation setup
+  const tabOrder: Tab[] = ["list", "completed", "arrangements", "earnings", "planning"];
+  const currentTabIndex = tabOrder.indexOf(tab);
+
+  const { containerRef, isSwipeActive } = useSwipeNavigation(
+    tabOrder.length,
+    currentTabIndex,
+    (newIndex) => setTab(tabOrder[newIndex]),
+    {
+      threshold: 100,
+      velocity: 0.3,
+      resistance: 0.2,
+      preventScroll: true
+    }
+  );
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
-  // Cloud restore state
+  // Optimistic update tracking
+  const [optimisticUpdates] = React.useState<Map<string, any>>(new Map());
+
+  // Collapsible Tools panel: closed on mobile, open on desktop
+  const [toolsOpen, setToolsOpen] = React.useState<boolean>(() => {
+    if (typeof window !== "undefined") return window.innerWidth >= 768;
+    return true;
+  });
+
+  const addresses = Array.isArray(state.addresses) ? state.addresses : [];
+  const completions = Array.isArray(state.completions) ? state.completions : [];
+  const arrangements = Array.isArray(state.arrangements)
+    ? state.arrangements
+    : [];
+  const daySessions = Array.isArray(state.daySessions) ? state.daySessions : [];
+
+  const safeState = React.useMemo(
+    () => ({ ...state, addresses, completions, arrangements, daySessions }),
+    [state, addresses, completions, arrangements, daySessions]
+  );
+
+  // ---------- Cloud Restore state & helpers ----------
   type CloudBackupRow = {
     object_path: string;
     size_bytes?: number;
@@ -242,17 +251,6 @@ function AuthedApp() {
   const [cloudBusy, setCloudBusy] = React.useState(false);
   const [cloudErr, setCloudErr] = React.useState<string | null>(null);
 
-  const addresses = Array.isArray(state.addresses) ? state.addresses : [];
-  const completions = Array.isArray(state.completions) ? state.completions : [];
-  const arrangements = Array.isArray(state.arrangements) ? state.arrangements : [];
-  const daySessions = Array.isArray(state.daySessions) ? state.daySessions : [];
-
-  const safeState = React.useMemo(
-    () => ({ ...state, addresses, completions, arrangements, daySessions }),
-    [state, addresses, completions, arrangements, daySessions]
-  );
-
-  // Format date key
   function formatKey(d: Date, tz = "Europe/London") {
     const y = d.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
     const m = d.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
@@ -260,7 +258,6 @@ function AuthedApp() {
     return `${y}-${m}-${dd}`;
   }
 
-  // Load recent cloud backups
   const loadRecentCloudBackups = React.useCallback(async () => {
     if (!supabase) {
       setCloudErr("Supabase not configured");
@@ -270,7 +267,10 @@ function AuthedApp() {
     setCloudErr(null);
     try {
       const authResp = await supabase.auth.getUser();
-      const userId = authResp?.data?.user?.id;
+      const userId =
+        authResp && authResp.data && authResp.data.user
+          ? authResp.data.user.id
+          : undefined;
       if (!userId) throw new Error("Not authenticated");
 
       const end = new Date();
@@ -292,7 +292,51 @@ function AuthedApp() {
       if ((q as any).error) throw (q as any).error;
 
       const data = ((q as any).data ?? []) as CloudBackupRow[];
-      setCloudBackups(data);
+      
+      // If no backups found in database, try listing storage bucket directly
+      if (data.length === 0) {
+        try {
+          console.log('No backups in database, checking storage bucket directly...');
+          const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET || "navigator-backups";
+          
+          const { data: files, error: listError } = await supabase.storage
+            .from(bucket)
+            .list(userId, {
+              limit: 50,
+              sortBy: { column: 'created_at', order: 'desc' }
+            });
+            
+          if (listError) throw listError;
+          
+          if (files && files.length > 0) {
+            const storageBackups = files
+              .filter(file => file.name.includes('backup_') && file.name.endsWith('.json'))
+              .map(file => ({
+                object_path: `${userId}/${file.name}`,
+                size_bytes: file.metadata?.size || 0,
+                created_at: file.created_at || file.updated_at,
+                day_key: file.name.match(/backup_(\d{4}-\d{2}-\d{2})/)?.[1] || '',
+              }));
+            
+            setCloudBackups(storageBackups);
+            console.log(`Found ${storageBackups.length} backups in storage bucket`);
+            return;
+          }
+        } catch (storageError: any) {
+          console.warn('Failed to list storage bucket:', storageError);
+          // Continue with empty list
+        }
+      }
+      
+      const list = data.slice().sort((a, b) => {
+        const aParts = a.object_path.split("_");
+        const bParts = b.object_path.split("_");
+        const ta = (aParts[1] || "") + (aParts[2] || "");
+        const tb = (bParts[1] || "") + (bParts[2] || "");
+        return tb.localeCompare(ta);
+      });
+
+      setCloudBackups(list);
     } catch (e: any) {
       setCloudErr(e?.message || String(e));
     } finally {
@@ -300,13 +344,12 @@ function AuthedApp() {
     }
   }, []);
 
-  // Restore from cloud
   const restoreFromCloud = React.useCallback(
     async (objectPath: string) => {
       if (!supabase) {
         await alert({
           title: "Configuration Error",
-          message: "Supabase is not configured.",
+          message: "Supabase is not configured. Please check your environment variables.",
           type: "error"
         });
         return;
@@ -314,7 +357,7 @@ function AuthedApp() {
       const fileName = objectPath.split("/").pop() || objectPath;
       const confirmed = await confirm({
         title: "Restore from Cloud",
-        message: `Restore "${fileName}" from cloud?\n\nThis will overwrite your current data.`,
+        message: `Restore "${fileName}" from cloud?\n\nThis will overwrite your current addresses, completions, arrangements and sessions on this device.`,
         confirmText: "Restore",
         cancelText: "Cancel",
         type: "warning"
@@ -324,7 +367,10 @@ function AuthedApp() {
       setCloudBusy(true);
       setCloudErr(null);
       try {
-        const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET || "navigator-backups";
+        const bucket =
+          (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
+            ? (import.meta as any).env.VITE_SUPABASE_BUCKET
+            : "navigator-backups";
         const dl = await supabase.storage.from(bucket).download(objectPath);
         if ((dl as any).error) throw (dl as any).error;
         const blob: Blob = (dl as any).data as Blob;
@@ -350,7 +396,18 @@ function AuthedApp() {
     [cloudSync, restoreState, alert, confirm]
   );
 
-  // Cloud sync initialization
+  React.useEffect(() => {
+    if (!cloudMenuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest || !target.closest(".btn-row"))
+        setCloudMenuOpen(false);
+    }
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [cloudMenuOpen]);
+
+  // ===================== Improved Cloud-first bootstrap =====================
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
     if (!supabase) {
@@ -371,6 +428,12 @@ function AuthedApp() {
 
         const row: any = (sel as any)?.data ?? null;
 
+        const localHasData =
+          addresses.length > 0 ||
+          completions.length > 0 ||
+          arrangements.length > 0 ||
+          daySessions.length > 0;
+
         if (row && row.data) {
           const normalized = normalizeState(row.data);
           if (!cancelled) {
@@ -379,29 +442,23 @@ function AuthedApp() {
             setHydrated(true);
             logger.sync("Restored from cloud, version:", row?.version);
           }
-        } else {
-          const localHasData =
-            addresses.length > 0 ||
-            completions.length > 0 ||
-            arrangements.length > 0 ||
-            daySessions.length > 0;
-            
-          if (localHasData) {
-            logger.sync("Pushing local data to cloud...");
-            await cloudSync.syncData(safeState);
-            if (!cancelled) {
-              lastFromCloudRef.current = JSON.stringify(safeState);
-              setHydrated(true);
-            }
-          } else {
-            if (!cancelled) setHydrated(true);
+        } else if (localHasData) {
+          logger.sync("Pushing local data to cloud...");
+          await cloudSync.syncData(safeState);
+          if (!cancelled) {
+            lastFromCloudRef.current = JSON.stringify(safeState);
+            setHydrated(true);
           }
+        } else {
+          if (!cancelled) setHydrated(true);
         }
 
         cleanup = cloudSync.subscribeToData((newState) => {
           if (!newState) return;
+
           const fromCloudStr = JSON.stringify(newState);
           if (fromCloudStr === lastFromCloudRef.current) return;
+
           const normalized = normalizeState(newState);
           logger.sync("Received cloud update");
           setState(normalized);
@@ -409,7 +466,7 @@ function AuthedApp() {
           setHydrated(true);
         });
       } catch (err) {
-        logger.error("Bootstrap sync failed:", err);
+        logger.error("Bootstrap sync (cloud-first) failed:", err);
         if (!cancelled) setHydrated(true);
       }
     })();
@@ -418,11 +475,13 @@ function AuthedApp() {
       cancelled = true;
       if (cleanup) cleanup();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudSync.user, loading]);
 
-  // Debounced local to cloud sync
+  // ==== Improved debounced local -> cloud sync with optimistic updates ====
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
+
     const currentStr = JSON.stringify(safeState);
     if (currentStr === lastFromCloudRef.current) return;
 
@@ -439,7 +498,331 @@ function AuthedApp() {
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
 
-  // Stats calculation
+  // ==== Enhanced flush pending changes on exit/background ====
+  React.useEffect(() => {
+    if (!cloudSync.user || !hydrated) return;
+
+    const flush = async () => {
+      try {
+        const currentStr = JSON.stringify(safeState);
+        if (currentStr !== lastFromCloudRef.current) {
+          logger.sync("Flushing changes before exit...");
+          await cloudSync.syncData(safeState);
+          lastFromCloudRef.current = currentStr;
+        }
+      } catch (err) {
+        logger.warn("Failed to flush changes:", err);
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        flush();
+      }
+    };
+
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      const currentStr = JSON.stringify(safeState);
+      if (currentStr !== lastFromCloudRef.current && cloudSync.isOnline) {
+        e.preventDefault();
+        e.returnValue =
+          "You have unsaved changes. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", onBeforeUnload);
+
+    return () => {
+      window.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [safeState, cloudSync, hydrated]);
+
+  // FIXED: Enhanced handleImportExcel with automatic completion preservation
+  const handleImportExcel = React.useCallback(async (rows: AddressRow[]) => {
+    try {
+      logger.info(`Starting import of ${rows.length} addresses...`);
+      
+      // Always preserve completions so users can track their PIF and other results over time
+      const preserveCompletions = true;
+      
+      // First, update the local state with preserve flag
+      setAddresses(rows, preserveCompletions);
+      
+      // Create the new state that will be synced after React updates
+      setTimeout(async () => {
+        try {
+          const newState = {
+            ...safeState,
+            addresses: rows,
+            activeIndex: null,
+            currentListVersion: (safeState.currentListVersion || 1) + 1,
+            completions: safeState.completions, // Always preserve completion data
+          };
+          
+          // Sync to cloud with the new state
+          await cloudSync.syncData(newState);
+          lastFromCloudRef.current = JSON.stringify(newState);
+          
+          logger.success(`Successfully imported ${rows.length} addresses and synced to cloud (completions preserved)`);
+        } catch (syncError) {
+          logger.error('Failed to sync imported data to cloud:', syncError);
+        }
+      }, 0);
+      
+    } catch (error) {
+      logger.error('Failed to import Excel data:', error);
+    }
+  }, [safeState, setAddresses, cloudSync]);
+
+  // FIXED: Enhanced completion with proper error handling (removed duplicate optimistic updates)
+  const handleComplete = React.useCallback(
+    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => {
+      try {
+        // FIXED: Removed the duplicate optimistic update logic from App.tsx
+        // Only the useAppState complete function should handle optimistic updates
+        const operationId = await complete(index, outcome, amount, arrangementId);
+
+        // Queue for cloud sync if available
+        if (cloudSync.queueOperation) {
+          await cloudSync.queueOperation({
+            type: "create",
+            entity: "completion",
+            entityId: operationId,
+            data: {
+              index,
+              outcome,
+              amount,
+              address: addresses[index]?.address,
+              listVersion: safeState.currentListVersion,
+              arrangementId,
+            },
+          });
+        }
+      } catch (error) {
+        logger.error("Failed to complete address:", error);
+        // Could potentially show user feedback here
+      }
+    },
+    [complete, addresses, safeState.currentListVersion, cloudSync]
+  );
+
+
+  const ensureDayStarted = React.useCallback(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const hasToday = daySessions.some((d) => d.date === today);
+    if (!hasToday) startDay();
+  }, [daySessions, startDay]);
+
+  // FIXED: Edit START time with proper sync integration
+  const handleEditStart = React.useCallback(
+    (newStartISO: string | Date) => {
+      const parsed =
+        typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
+      if (Number.isNaN(parsed.getTime())) {
+        logger.error('Invalid start date provided:', newStartISO);
+        return;
+      }
+
+      const newISO = parsed.toISOString();
+      const dayKey = newISO.slice(0, 10);
+
+      logger.debug('Editing start time:', { newISO, dayKey });
+
+      setBaseState((s) => {
+        const arr = s.daySessions.slice();
+        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
+        let targetSession: any;
+
+        if (sessionIndex >= 0) {
+          // Update existing session
+          targetSession = { ...arr[sessionIndex], start: newISO };
+        } else {
+          // Create new session
+          targetSession = {
+            date: dayKey,
+            start: newISO,
+          };
+        }
+
+        // Recalculate duration if we have both start and end
+        if (targetSession.end) {
+          try {
+            const start = new Date(newISO).getTime();
+            const end = new Date(targetSession.end).getTime();
+            if (end >= start) {
+              targetSession.durationSeconds = Math.floor((end - start) / 1000);
+            } else {
+              // If new start is after end, clear end time
+              delete targetSession.end;
+              delete targetSession.durationSeconds;
+            }
+          } catch (error) {
+            logger.error('Error calculating duration:', error);
+          }
+        }
+
+        // Add sync metadata
+        const now = new Date().toISOString();
+        targetSession.updatedAt = now;
+        targetSession.updatedBy = deviceId;
+
+        // Create operation for sync queue
+        const operationId = `edit_start_${dayKey}_${Date.now()}`;
+        const forServer = {
+          ...targetSession,
+          id: dayKey,
+          updatedAt: now,
+          updatedBy: deviceId,
+        };
+
+        // Enqueue the operation
+        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
+
+        // Update the sessions array
+        if (sessionIndex >= 0) {
+          arr[sessionIndex] = targetSession;
+        } else {
+          arr.push(targetSession);
+        }
+
+        return { ...s, daySessions: arr };
+      });
+    },
+    [setBaseState, deviceId, enqueueOp]
+  );
+
+  // FIXED: Edit FINISH time with proper sync integration
+  const handleEditEnd = React.useCallback(
+    (newEndISO: string | Date) => {
+      const parsed = typeof newEndISO === "string" ? new Date(newEndISO) : newEndISO;
+      if (Number.isNaN(parsed.getTime())) {
+        logger.error('Invalid end date provided:', newEndISO);
+        return;
+      }
+
+      const endISO = parsed.toISOString();
+      const dayKey = endISO.slice(0, 10);
+
+      logger.debug('Editing end time:', { endISO, dayKey });
+
+      setBaseState((s) => {
+        const arr = s.daySessions.slice();
+        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
+        let targetSession: any;
+
+        logger.debug('Current sessions for day:', arr.filter(d => d.date === dayKey));
+
+        if (sessionIndex >= 0) {
+          // Update existing session
+          targetSession = { ...arr[sessionIndex] };
+          logger.debug('Updating existing session:', targetSession);
+        } else {
+          // Create new session for this day
+          targetSession = {
+            date: dayKey,
+            start: endISO, // Default start to end time if no session exists
+          };
+          logger.debug('Creating new session:', targetSession);
+        }
+
+        // Set the end time
+        targetSession.end = endISO;
+
+        // Calculate duration if we have both start and end
+        if (targetSession.start) {
+          try {
+            const startTime = new Date(targetSession.start).getTime();
+            const endTime = new Date(endISO).getTime();
+            
+            if (endTime >= startTime) {
+              targetSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
+            } else {
+              // If end is before start, set start to end and duration to 0
+              logger.warn('End time is before start time, adjusting start time');
+              targetSession.start = endISO;
+              targetSession.durationSeconds = 0;
+            }
+          } catch (error) {
+            logger.error('Error calculating session duration:', error);
+            targetSession.durationSeconds = 0;
+          }
+        }
+
+        // Add sync metadata for cloud sync
+        const now = new Date().toISOString();
+        targetSession.updatedAt = now;
+        targetSession.updatedBy = deviceId;
+
+        // Create operation for sync queue
+        const operationId = `edit_end_${dayKey}_${Date.now()}`;
+        const forServer = {
+          ...targetSession,
+          id: dayKey,
+          updatedAt: now,
+          updatedBy: deviceId,
+        };
+
+        // Enqueue the operation
+        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
+
+        // Update the sessions array
+        if (sessionIndex >= 0) {
+          arr[sessionIndex] = targetSession;
+        } else {
+          arr.push(targetSession);
+        }
+
+        logger.debug('Updated sessions array:', arr);
+
+        return { ...s, daySessions: arr };
+      });
+    },
+    [setBaseState, deviceId, enqueueOp]
+  );
+
+  // Finish Day with cloud snapshot
+  const endDayWithBackup = React.useCallback(() => {
+    const snap = backupState();
+    uploadBackupToStorage(snap, "finish").catch((e: any) => {
+      logger.warn("Supabase storage backup (finish) failed:", e?.message || e);
+    });
+    endDay();
+  }, [backupState, endDay]);
+
+  // Restore from local file
+  const onRestore: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const raw = await readJsonFile(file);
+      const data = normalizeState(raw);
+      restoreState(data);
+      await cloudSync.syncData(data);
+      lastFromCloudRef.current = JSON.stringify(data);
+      setHydrated(true);
+      await alert({
+        title: "Success", 
+        message: "Restore completed successfully!",
+        type: "success"
+      });
+    } catch (err: any) {
+      logger.error('Restore operation failed:', err);
+      await alert({
+        title: "Error",
+        message: "Restore failed: " + (err?.message || err),
+        type: "error"
+      });
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  // Stats for header pills
   const stats = React.useMemo(() => {
     const currentVer = state.currentListVersion;
     const completedIdx = new Set(
@@ -463,212 +846,15 @@ function AuthedApp() {
     ).length;
     const completed = completedIdx.size;
     
+    // Calculate pending arrangements (exclude Completed and Cancelled)
     const pendingArrangements = arrangements.filter(arr => 
       arr.status !== "Completed" && arr.status !== "Cancelled"
     ).length;
-
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const todaysPIF = completions
-      .filter((c) => 
-        c.outcome === "PIF" && 
-        (c.timestamp || "").slice(0, 10) === todayStr
-      )
-      .reduce((sum, c) => sum + parseFloat(c.amount || "0"), 0);
     
-    return { 
-      total, pending, completed, pifCount, doneCount, 
-      daCount, arrCount, pendingArrangements, todaysPIF 
-    };
+    return { total, pending, completed, pifCount, doneCount, daCount, arrCount, pendingArrangements };
   }, [addresses, completions, arrangements, state.currentListVersion]);
 
-  // Handlers
-  const handleImportExcel = React.useCallback((rows: AddressRow[]) => {
-    logger.info(`Importing ${rows.length} addresses...`);
-    setAddresses(rows, true); // Preserve completions
-  }, [setAddresses]);
-
-  const handleComplete = React.useCallback(
-    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => {
-      try {
-        await complete(index, outcome, amount, arrangementId);
-      } catch (error) {
-        logger.error("Failed to complete address:", error);
-      }
-    },
-    [complete]
-  );
-
-  const ensureDayStarted = React.useCallback(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const hasToday = daySessions.some((d) => d.date === today);
-    if (!hasToday) startDay();
-  }, [daySessions, startDay]);
-
-  // Restore the missing edit functions for day sessions
-  const handleEditStart = React.useCallback(
-    (newStartISO: string | Date) => {
-      const parsed = typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
-      if (Number.isNaN(parsed.getTime())) {
-        logger.error('Invalid start date:', newStartISO);
-        return;
-      }
-      const newISO = parsed.toISOString();
-      const dayKey = newISO.slice(0, 10);
-      
-      setBaseState((s) => {
-        const arr = s.daySessions.slice();
-        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
-        let targetSession: any;
-
-        if (sessionIndex >= 0) {
-          targetSession = { ...arr[sessionIndex], start: newISO };
-        } else {
-          targetSession = { date: dayKey, start: newISO };
-        }
-
-        if (targetSession.end) {
-          try {
-            const start = new Date(newISO).getTime();
-            const end = new Date(targetSession.end).getTime();
-            if (end >= start) {
-              targetSession.durationSeconds = Math.floor((end - start) / 1000);
-            } else {
-              delete targetSession.end;
-              delete targetSession.durationSeconds;
-            }
-          } catch (error) {
-            logger.error('Error calculating duration:', error);
-          }
-        }
-
-        const now = new Date().toISOString();
-        targetSession.updatedAt = now;
-        targetSession.updatedBy = deviceId;
-
-        const operationId = `edit_start_${dayKey}_${Date.now()}`;
-        const forServer = {
-          ...targetSession,
-          id: dayKey,
-          updatedAt: now,
-          updatedBy: deviceId,
-        };
-
-        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
-
-        if (sessionIndex >= 0) {
-          arr[sessionIndex] = targetSession;
-        } else {
-          arr.push(targetSession);
-        }
-
-        return { ...s, daySessions: arr };
-      });
-    },
-    [setBaseState, deviceId, enqueueOp]
-  );
-
-  const handleEditEnd = React.useCallback(
-    (newEndISO: string | Date) => {
-      const parsed = typeof newEndISO === "string" ? new Date(newEndISO) : newEndISO;
-      if (Number.isNaN(parsed.getTime())) {
-        logger.error('Invalid end date:', newEndISO);
-        return;
-      }
-
-      const endISO = parsed.toISOString();
-      const dayKey = endISO.slice(0, 10);
-
-      setBaseState((s) => {
-        const arr = s.daySessions.slice();
-        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
-        let targetSession: any;
-
-        if (sessionIndex >= 0) {
-          targetSession = { ...arr[sessionIndex] };
-        } else {
-          targetSession = { date: dayKey, start: endISO };
-        }
-
-        targetSession.end = endISO;
-
-        if (targetSession.start) {
-          try {
-            const startTime = new Date(targetSession.start).getTime();
-            const endTime = new Date(endISO).getTime();
-            
-            if (endTime >= startTime) {
-              targetSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
-            } else {
-              targetSession.start = endISO;
-              targetSession.durationSeconds = 0;
-            }
-          } catch (error) {
-            logger.error('Error calculating duration:', error);
-            targetSession.durationSeconds = 0;
-          }
-        }
-
-        const now = new Date().toISOString();
-        targetSession.updatedAt = now;
-        targetSession.updatedBy = deviceId;
-
-        const operationId = `edit_end_${dayKey}_${Date.now()}`;
-        const forServer = {
-          ...targetSession,
-          id: dayKey,
-          updatedAt: now,
-          updatedBy: deviceId,
-        };
-
-        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
-
-        if (sessionIndex >= 0) {
-          arr[sessionIndex] = targetSession;
-        } else {
-          arr.push(targetSession);
-        }
-
-        return { ...s, daySessions: arr };
-      });
-    },
-    [setBaseState, deviceId, enqueueOp]
-  );
-
-  const endDayWithBackup = React.useCallback(() => {
-    const snap = backupState();
-    uploadBackupToStorage(snap, "finish").catch((e: any) => {
-      logger.warn("Backup failed:", e?.message || e);
-    });
-    endDay();
-  }, [backupState, endDay]);
-
-  const onRestore: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const raw = await readJsonFile(file);
-      const data = normalizeState(raw);
-      restoreState(data);
-      await cloudSync.syncData(data);
-      lastFromCloudRef.current = JSON.stringify(data);
-      setHydrated(true);
-      await alert({
-        title: "Success", 
-        message: "Restore completed successfully!",
-        type: "success"
-      });
-    } catch (err: any) {
-      logger.error('Restore failed:', err);
-      await alert({
-        title: "Error",
-        message: "Restore failed: " + (err?.message || err),
-        type: "error"
-      });
-    } finally {
-      e.target.value = "";
-    }
-  };
-
+  // Allow changing a completion outcome (by completion array index)
   const handleChangeOutcome = React.useCallback(
     (targetCompletionIndex: number, outcome: Outcome, amount?: string) => {
       setState((s) => {
@@ -691,6 +877,7 @@ function AuthedApp() {
     [setState]
   );
 
+  // Enhanced manual sync with feedback
   const handleManualSync = React.useCallback(async () => {
     try {
       logger.sync("Manual sync initiated...");
@@ -701,48 +888,36 @@ function AuthedApp() {
     }
   }, [cloudSync, safeState]);
 
-  const getUserInitials = () => {
-    const email = cloudSync.user?.email || "";
-    const parts = email.split("@")[0].split(".");
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return email.slice(0, 2).toUpperCase();
-  };
-
-  const getSyncStatus = () => {
-    if (cloudSync.isSyncing) {
-      return { text: "Syncing", color: "var(--warning)" };
-    }
-    if (!cloudSync.isOnline) {
-      return { text: "Offline", color: "var(--danger)" };
-    }
-    if (cloudSync.error) {
-      return { text: "Sync Error", color: "var(--danger)" };
-    }
-    return { text: "Online", color: "var(--success)" };
-  };
-
-  const syncStatus = getSyncStatus();
 
   if (loading) {
     return (
-      <div className="app-wrapper">
-        <div className="main-area">
-          <div className="content-area">
-            <div className="loading">
-              <div className="spinner" />
-              Preparing your workspace...
-            </div>
-          </div>
+      <div className="container">
+        <div className="loading">
+          <div className="spinner" />
+          Preparing your workspace...
         </div>
       </div>
     );
   }
 
+  const getSyncStatus = () => {
+    if (cloudSync.isSyncing) {
+      return { text: "SYNCING", color: "var(--warning)", icon: "⟳" };
+    }
+    if (!cloudSync.isOnline) {
+      return { text: "OFFLINE", color: "var(--danger)", icon: "⚠" };
+    }
+    if (cloudSync.error) {
+      return { text: "SYNC ERROR", color: "var(--danger)", icon: "⚠" };
+    }
+    return { text: "ONLINE", color: "var(--success)", icon: "✓" };
+  };
+
+  const syncStatus = getSyncStatus();
+
   return (
-    <div className="app-wrapper">
-      {/* Admin Dashboard Modal */}
+    <div className="container">
+      {/* Admin Dashboard - only for owner */}
       {showAdmin && isAdmin && (
         <AdminDashboard 
           user={cloudSync.user!} 
@@ -750,7 +925,7 @@ function AuthedApp() {
         />
       )}
 
-      {/* Subscription Modal */}
+      {/* Subscription management modal/page */}
       {showSubscription && (
         <SubscriptionManager 
           user={cloudSync.user!} 
@@ -758,176 +933,315 @@ function AuthedApp() {
         />
       )}
 
-      {/* Main Content Area (Left Side) */}
-      <main className="main-area">
-        {/* Modern Header */}
-        <header className="app-header-modern">
-          <div className="header-left">
-            <div className="logo-section">
-              <div className="logo-icon">📍</div>
-              <div className="logo-text">
-                <div className="logo-title">Navigator</div>
-                <div className="logo-subtitle">Enforcement Pro</div>
-              </div>
-            </div>
-            
-            {tab === "list" && (
-              <div className="search-container-modern">
-                <span className="search-icon">🔍</span>
-                <input
-                  id="search-addresses"
-                  name="searchAddresses"
-                  type="search"
-                  className="search-input-modern"
-                  placeholder="Search addresses..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
+      {/* Header */}
+      <header className="app-header">
+        <div className="left">
+          <h1 className="app-title">Address Navigator</h1>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+            }}
+          >
+            <span
+              style={{
+                color: syncStatus.color,
+                display: "flex",
+                alignItems: "center",
+                gap: "0.25rem",
+              }}
+            >
+              <span>{syncStatus.icon}</span>
+              {syncStatus.text}
+            </span>
+            {cloudSync.lastSyncTime && (
+              <span title={`Last sync: ${cloudSync.lastSyncTime.toLocaleString()}`}>
+                · {cloudSync.lastSyncTime.toLocaleTimeString()}
+              </span>
+            )}
+            {optimisticUpdates.size > 0 && (
+              <span style={{ color: "var(--primary)" }}>
+                · {optimisticUpdates.size} pending
+              </span>
             )}
           </div>
+        </div>
 
-          <div className="header-center">
-            <div className="sync-status">
-              <div className="sync-indicator" style={{ background: syncStatus.color }} />
-              <span>{syncStatus.text}</span>
-              {cloudSync.lastSyncTime && (
-                <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>
-                  {cloudSync.lastSyncTime.toLocaleTimeString()}
-                </span>
-              )}
-            </div>
+        <div className="right">
+          <div className="user-chip" role="group" aria-label="Account">
+            <span className="avatar" aria-hidden>
+              USER
+            </span>
+            <span className="email" title={cloudSync.user?.email ?? ""}>
+              {cloudSync.user?.email ?? "Signed in"}
+            </span>
+            
+            {/* Admin Dashboard button - only visible to admins */}
+            {isAdmin && (
+              <button 
+                className="btn btn-ghost btn-sm" 
+                onClick={() => setShowAdmin(true)}
+                title="Admin Dashboard"
+                style={{ marginLeft: "0.5rem" }}
+              >
+                Admin
+              </button>
+            )}
+            
+            {/* Subscription button */}
+            <button 
+              className="btn btn-ghost btn-sm" 
+              onClick={() => setShowSubscription(true)}
+              title="Manage subscription"
+              style={{ marginLeft: "0.5rem" }}
+            >
+              {isOwner ? 'Owner Access' : hasAccess ? 'Subscription' : 'Start Trial'}
+            </button>
+            
+            <button className="signout-btn" onClick={cloudSync.signOut} title="Sign out">
+              Sign Out
+            </button>
           </div>
 
-          <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            ☰
-          </button>
-        </header>
+          <div className="tabs">
+            <button className="tab-btn" aria-selected={tab === "list"} onClick={() => setTab("list")}>
+              List ({stats.pending})
+            </button>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "completed"}
+              onClick={() => setTab("completed")}
+            >
+              Completed ({stats.completed})
+            </button>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "arrangements"}
+              onClick={() => setTab("arrangements")}
+            >
+              Arrangements ({stats.pendingArrangements})
+            </button>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "earnings"}
+              onClick={() => setTab("earnings")}
+            >
+              Earnings
+            </button>
+            <button
+              className="tab-btn"
+              aria-selected={tab === "planning"}
+              onClick={() => setTab("planning")}
+            >
+              Planning
+            </button>
+            <button
+              className="tab-btn"
+              onClick={handleManualSync}
+              disabled={cloudSync.isSyncing}
+              title={cloudSync.isSyncing ? "Syncing..." : "Force sync now"}
+              style={{
+                opacity: cloudSync.isSyncing ? 0.6 : 1,
+                cursor: cloudSync.isSyncing ? "not-allowed" : "pointer",
+              }}
+            >
+              {cloudSync.isSyncing ? "⟳ Syncing..." : "🔄 Sync"}
+            </button>
+          </div>
+        </div>
+      </header>
 
-        {/* Content Area */}
-        <div className="content-area">
-          {/* Tools Panel (collapsible) */}
-          {toolsOpen && tab === "list" && (
-            <div style={{
-              background: "white",
-              padding: "1rem",
+      {/* Enhanced error display */}
+      {cloudSync.error && (
+        <div
+          style={{
+            background: "var(--danger-light)",
+            border: "1px solid var(--danger)",
+            borderRadius: "var(--radius)",
+            padding: "0.75rem",
+            marginBottom: "1rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span style={{ color: "var(--danger)", fontSize: "0.875rem" }}>
+            ⚠️ Sync error: {cloudSync.error}
+          </span>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={handleManualSync}
+              disabled={cloudSync.isSyncing}
+            >
+              Retry
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={cloudSync.clearError}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tools toggle */}
+      <div
+        style={{ marginBottom: "0.75rem", display: "flex", justifyContent: "center" }}
+      >
+        <button
+          className="btn btn-ghost"
+          onClick={() => setToolsOpen((o) => !o)}
+          title={toolsOpen ? "Hide tools" : "Show tools"}
+        >
+          {toolsOpen ? "Hide tools ^" : "Show tools v"}
+        </button>
+      </div>
+
+      {toolsOpen && (
+        <div style={{ marginBottom: "1rem" }}>
+          <div
+            style={{
+              background: "var(--surface)",
+              padding: "1.0rem",
               borderRadius: "var(--radius-lg)",
-              marginBottom: "1.5rem",
-              border: "1px solid var(--gray-200)",
-              boxShadow: "var(--shadow-sm)"
-            }}>
-              <div className="btn-row">
-                <ImportExcel onImported={handleImportExcel} />
-                
-                <input
-                  type="file"
-                  accept="application/json"
-                  onChange={onRestore}
-                  className="file-input"
-                  id="restore-input"
-                />
-                <label htmlFor="restore-input" className="file-input-label">
-                  📂 Restore (file)
-                </label>
-
-                <button
-                  className="btn btn-ghost"
-                  onClick={handleManualSync}
-                  disabled={cloudSync.isSyncing}
-                >
-                  {cloudSync.isSyncing ? "⟳ Syncing..." : "🔄 Sync Now"}
-                </button>
-              </div>
+              border: "1px solid var(--border-light)",
+              boxShadow: "var(--shadow-sm)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "0.875rem",
+                color: "var(--text-secondary)",
+                marginBottom: "0.75rem",
+                lineHeight: "1.4",
+              }}
+            >
+              Load an Excel file with columns: address, optional lat, lng.
             </div>
-          )}
 
-          {tab === "list" && (
-            <>
-              {/* Original Day Panel with Full Editing */}
-              <DayPanel
-                sessions={daySessions}
-                completions={completions}
-                startDay={startDay}
-                endDay={endDayWithBackup}
-                onEditStart={handleEditStart}
-                onEditEnd={handleEditEnd}
+            <div className="btn-row" style={{ position: "relative" }}>
+              {/* FIXED: Import using the new handler */}
+              <ImportExcel onImported={handleImportExcel} />
+
+              {/* Local file restore */}
+              <input
+                type="file"
+                accept="application/json"
+                onChange={onRestore}
+                className="file-input"
+                id="restore-input"
+              />
+              <label htmlFor="restore-input" className="file-input-label">
+                Restore (file)
+              </label>
+
+              {/* Restore from Cloud (last 7 days) */}
+              <CloudRestore
+                cloudBusy={cloudBusy}
+                cloudErr={cloudErr}
+                cloudBackups={cloudBackups}
+                cloudMenuOpen={cloudMenuOpen}
+                setCloudMenuOpen={setCloudMenuOpen}
+                loadRecentCloudBackups={loadRecentCloudBackups}
+                restoreFromCloud={restoreFromCloud}
               />
 
-              {/* Stats Grid */}
-              <div className="stats-grid">
-                <StatsCard
-                  title="Pending Addresses"
-                  value={stats.pending}
-                  change={`${stats.completed} completed today`}
-                  changeType="positive"
-                  icon="📍"
-                  iconType="info"
-                />
-                <StatsCard
-                  title="Today's Earnings"
-                  value={`£${stats.todaysPIF.toFixed(0)}`}
-                  change={`${stats.pifCount} PIF today`}
-                  changeType="positive"
-                  icon="💰"
-                  iconType="success"
-                />
-                <StatsCard
-                  title="Arrangements Due"
-                  value={stats.pendingArrangements}
-                  change="Check arrangements tab"
-                  changeType="neutral"
-                  icon="📅"
-                  iconType="warning"
-                />
-                <StatsCard
-                  title="Completion Rate"
-                  value={`${Math.round((stats.completed / Math.max(stats.total, 1)) * 100)}%`}
-                  change="Good performance"
-                  changeType="positive"
-                  icon="📊"
-                  iconType="success"
-                />
-              </div>
+              {/* Enhanced tools */}
+              <button
+                className="btn btn-ghost"
+                onClick={cloudSync.forceFullSync}
+                title="Reset sync state and force full sync"
+              >
+                Force Full Sync
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-              {/* Address List */}
-              <AddressList
-                state={safeState}
-                setActive={setActive}
-                cancelActive={cancelActive}
-                onComplete={handleComplete}
-                onAddArrangement={addArrangement}
-                filterText={search}
-                ensureDayStarted={ensureDayStarted}
+      {/* Main content with swipe navigation */}
+      <div className="tabs-viewport">
+        <div 
+          ref={containerRef}
+          className={`tabs-track ${isSwipeActive ? 'swiping' : ''}`}
+        >
+          <div className="tab-panel" data-tab="list">
+            {/* Day panel FIRST */}
+            <DayPanel
+              sessions={daySessions}
+              completions={completions}
+              startDay={startDay}
+              endDay={endDayWithBackup}
+              onEditStart={handleEditStart}
+              onEditEnd={handleEditEnd}
+            />
+
+            {/* SEARCH BAR UNDER THE DAY PANEL */}
+            <div className="search-container">
+              <input
+                id="address-search"
+                name="addressSearch"
+                type="search"
+                value={search}
+                placeholder="Search addresses..."
+                onChange={(e) => setSearch(e.target.value)}
+                className="input search-input"
+                autoComplete="off"
               />
+            </div>
 
-              {/* Bottom Stats */}
-              <div style={{
+
+            <AddressList
+              state={safeState}
+              setActive={setActive}
+              cancelActive={cancelActive}
+              onComplete={handleComplete}
+              onAddArrangement={addArrangement}
+              filterText={search}
+              ensureDayStarted={ensureDayStarted}
+            />
+
+            <div
+              style={{
                 display: "flex",
                 gap: "0.5rem",
                 margin: "1.25rem 0 3rem",
                 flexWrap: "wrap",
                 alignItems: "center",
-              }}>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => undo(-1)}
-                  title="Undo last completion"
-                >
-                  ↶ Undo Last
-                </button>
-                <span className="pill pill-pif">PIF {stats.pifCount}</span>
-                <span className="pill pill-done">Done {stats.doneCount}</span>
-                <span className="pill pill-da">DA {stats.daCount}</span>
-                <span className="pill pill-active">ARR {stats.arrCount}</span>
-              </div>
-            </>
-          )}
+              }}
+            >
+              <button
+                className="btn btn-ghost"
+                onClick={(e) => {
+                  e.preventDefault();
+                  undo(-1);
+                }}
+                title="Undo last completion for this list"
+              >
+                Undo Last
+              </button>
+              <span className="pill pill-pif">PIF {stats.pifCount}</span>
+              <span className="pill pill-done">Done {stats.doneCount}</span>
+              <span className="pill pill-da">DA {stats.daCount}</span>
+              <span className="pill pill-arr">ARR {stats.arrCount}</span>
+              {cloudSync.lastSyncTime && (
+                <span className="muted">
+                  Last sync {cloudSync.lastSyncTime.toLocaleTimeString()}
+                </span>
+              )}
+            </div>
 
-          {tab === "completed" && (
+            {/* Floating + Address button */}
+            <ManualAddressFAB onAdd={addAddress} />
+          </div>
+
+          <div className="tab-panel" data-tab="completed">
             <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
-          )}
+          </div>
 
-          {tab === "arrangements" && (
+          <div className="tab-panel" data-tab="arrangements">
             <Arrangements
               state={safeState}
               onAddArrangement={addArrangement}
@@ -940,260 +1254,152 @@ function AuthedApp() {
               onUpdateReminderSettings={updateReminderSettings}
               onUpdateReminderNotification={updateReminderNotification}
             />
-          )}
+          </div>
 
-          {tab === "earnings" && (
-            <EarningsCalendar state={safeState} user={cloudSync.user} />
-          )}
+          <div className="tab-panel" data-tab="earnings">
+            <EarningsCalendar 
+              state={safeState}
+              user={cloudSync.user}
+            />
+          </div>
 
-          {tab === "planning" && (
+          <div className="tab-panel" data-tab="planning">
             <RoutePlanning 
               user={cloudSync.user}
               onAddressesReady={(newAddresses) => {
-                setAddresses(newAddresses, false);
+                setAddresses(newAddresses, false); // Don't preserve completions for new addresses
               }}
             />
-          )}
-        </div>
-
-        {/* Floating Action Button */}
-        <ManualAddressFAB onAdd={addAddress} />
-      </main>
-
-      {/* Right Sidebar */}
-      <aside className={`sidebar-right ${sidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-header">
-          <div className="user-profile-section">
-            <div className="user-avatar">{getUserInitials()}</div>
-            <div className="user-info">
-              <div className="user-name">{cloudSync.user?.email?.split("@")[0]}</div>
-              <div className="user-plan">
-                {isOwner ? "Owner Access" : hasAccess ? "Premium Plan" : "Free Trial"}
-              </div>
-            </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
 
-        <nav className="nav-menu">
-          <div className="nav-section">
-            <div className="nav-section-title">Main</div>
-            <div 
-              className={`nav-item ${tab === 'list' ? 'active' : ''}`}
-              onClick={() => { setTab('list'); setSidebarOpen(false); }}
-            >
-              <span className="nav-icon">📋</span>
-              <span>Address List</span>
-              <span className="nav-badge">{stats.pending}</span>
-            </div>
-            <div 
-              className={`nav-item ${tab === 'completed' ? 'active' : ''}`}
-              onClick={() => { setTab('completed'); setSidebarOpen(false); }}
-            >
-              <span className="nav-icon">✅</span>
-              <span>Completed</span>
-              <span className="nav-badge">{stats.completed}</span>
-            </div>
-            <div 
-              className={`nav-item ${tab === 'arrangements' ? 'active' : ''}`}
-              onClick={() => { setTab('arrangements'); setSidebarOpen(false); }}
-            >
-              <span className="nav-icon">📅</span>
-              <span>Arrangements</span>
-              <span className="nav-badge">{stats.pendingArrangements}</span>
-            </div>
-          </div>
+/** Small helper component to keep the App body clean */
+function CloudRestore(props: {
+  cloudBusy: boolean;
+  cloudErr: string | null;
+  cloudBackups: {
+    object_path: string;
+    size_bytes?: number;
+    created_at?: string;
+    day_key?: string;
+  }[];
+  cloudMenuOpen: boolean;
+  setCloudMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  loadRecentCloudBackups: () => Promise<void>;
+  restoreFromCloud: (path: string) => Promise<void>;
+}) {
+  const {
+    cloudBusy,
+    cloudErr,
+    cloudBackups,
+    cloudMenuOpen,
+    setCloudMenuOpen,
+    loadRecentCloudBackups,
+    restoreFromCloud,
+  } = props;
 
-          <div className="nav-section">
-            <div className="nav-section-title">Analytics</div>
-            <div 
-              className={`nav-item ${tab === 'earnings' ? 'active' : ''}`}
-              onClick={() => { setTab('earnings'); setSidebarOpen(false); }}
-            >
-              <span className="nav-icon">💰</span>
-              <span>Earnings</span>
-            </div>
-            <div 
-              className={`nav-item ${tab === 'planning' ? 'active' : ''}`}
-              onClick={() => { setTab('planning'); setSidebarOpen(false); }}
-            >
-              <span className="nav-icon">🗺️</span>
-              <span>Route Planning</span>
-            </div>
-          </div>
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <button
+        className="btn btn-ghost"
+        onClick={async () => {
+          setCloudMenuOpen((o) => !o);
+          if (!cloudMenuOpen) await loadRecentCloudBackups();
+        }}
+        title="List recent cloud backups"
+      >
+        Restore from Cloud
+      </button>
 
-          <div className="nav-section">
-            <div className="nav-section-title">Tools</div>
-            <div className="nav-item" onClick={() => { setToolsOpen(!toolsOpen); setSidebarOpen(false); }}>
-              <span className="nav-icon">🛠️</span>
-              <span>Import/Export</span>
-            </div>
-            <div className="nav-item" onClick={async () => {
-              setCloudMenuOpen(true);
-              await loadRecentCloudBackups();
-              setSidebarOpen(false);
-            }}>
-              <span className="nav-icon">☁️</span>
-              <span>Cloud Backups</span>
-            </div>
-          </div>
-
-          <div className="nav-section">
-            <div className="nav-section-title">Account</div>
-            <div className="nav-item" onClick={() => { setShowSubscription(true); setSidebarOpen(false); }}>
-              <span className="nav-icon">⭐</span>
-              <span>Subscription</span>
-            </div>
-            {isAdmin && (
-              <div className="nav-item" onClick={() => { setShowAdmin(true); setSidebarOpen(false); }}>
-                <span className="nav-icon">👑</span>
-                <span>Admin Panel</span>
-              </div>
-            )}
-            <div className="nav-item" onClick={cloudSync.signOut}>
-              <span className="nav-icon">🚪</span>
-              <span>Sign Out</span>
-            </div>
-          </div>
-        </nav>
-      </aside>
-
-      {/* Sidebar Overlay for Mobile */}
-      <div 
-        className={`sidebar-overlay ${sidebarOpen ? 'active' : ''}`}
-        onClick={() => setSidebarOpen(false)}
-      />
-
-      {/* Cloud Restore Menu */}
       {cloudMenuOpen && (
         <div
           style={{
-            position: "fixed",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            zIndex: 2000,
-            minWidth: 320,
-            maxWidth: 500,
-            maxHeight: "70vh",
-            background: "white",
-            borderRadius: "var(--radius-lg)",
-            boxShadow: "var(--shadow-2xl)",
-            overflow: "hidden",
-            display: "flex",
-            flexDirection: "column"
+            position: "absolute",
+            zIndex: 100,
+            top: "110%",
+            left: 0,
+            minWidth: 280,
+            background: "var(--surface)",
+            border: "1px solid var(--border-light)",
+            borderRadius: 12,
+            padding: "0.5rem",
+            boxShadow: "var(--shadow-lg)",
           }}
         >
-          <div style={{
-            padding: "1.5rem",
-            borderBottom: "1px solid var(--gray-200)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center"
-          }}>
-            <h3 style={{ margin: 0 }}>Cloud Backups (Last 7 Days)</h3>
-            <button
-              className="btn btn-ghost"
-              style={{ padding: "0.5rem" }}
-              onClick={() => setCloudMenuOpen(false)}
-            >
-              ✕
-            </button>
+          <div style={{ padding: "0.25rem 0.5rem", fontWeight: 600 }}>
+            Recent backups (7 days)
           </div>
 
-          <div style={{ flex: 1, overflow: "auto", padding: "1rem" }}>
-            {cloudBusy && (
-              <div style={{ textAlign: "center", padding: "2rem" }}>
-                <div className="spinner" />
-                <p>Loading backups...</p>
-              </div>
-            )}
+          {cloudBusy && (
+            <div
+              style={{
+                padding: "0.5rem 0.5rem",
+                fontSize: 12,
+                color: "var(--text-secondary)",
+              }}
+            >
+              Loading...
+            </div>
+          )}
 
-            {!cloudBusy && cloudErr && (
-              <div style={{ padding: "1rem", color: "var(--danger)" }}>
-                {cloudErr}
-              </div>
-            )}
+          {!cloudBusy && cloudErr && (
+            <div
+              style={{ padding: "0.5rem 0.5rem", fontSize: 12, color: "var(--danger)" }}
+            >
+              {cloudErr}
+            </div>
+          )}
 
-            {!cloudBusy && !cloudErr && cloudBackups.length === 0 && (
-              <div style={{ padding: "2rem", textAlign: "center", color: "var(--gray-500)" }}>
-                No backups found
-              </div>
-            )}
+          {!cloudBusy && !cloudErr && cloudBackups.length === 0 && (
+            <div
+              style={{
+                padding: "0.5rem 0.5rem",
+                fontSize: 12,
+                color: "var(--text-secondary)",
+              }}
+            >
+              No backups found.
+            </div>
+          )}
 
-            {!cloudBusy && !cloudErr && cloudBackups.map((row) => {
+          {!cloudBusy &&
+            !cloudErr &&
+            cloudBackups.map((row) => {
               const parts = row.object_path.split("/");
-              const fname = parts[parts.length - 1] || row.object_path;
+              const fname =
+                parts.length > 0 ? parts[parts.length - 1] : row.object_path;
               const day = row.day_key || "";
               const sizeText = row.size_bytes
                 ? Math.round(row.size_bytes / 1024) + " KB"
                 : "";
-
               return (
                 <button
                   key={row.object_path}
                   className="btn btn-ghost"
-                  style={{
-                    width: "100%",
-                    justifyContent: "space-between",
-                    marginBottom: "0.5rem",
-                    padding: "1rem"
-                  }}
+                  style={{ width: "100%", justifyContent: "space-between" }}
                   onClick={() => restoreFromCloud(row.object_path)}
                 >
-                  <span style={{ fontWeight: 500 }}>{fname}</span>
-                  <span style={{ fontSize: "0.875rem", color: "var(--gray-500)" }}>
-                    {day} · {sizeText}
+                  <span
+                    style={{
+                      maxWidth: 170,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={fname}
+                  >
+                    {fname}
+                  </span>
+                  <span style={{ opacity: 0.7, fontSize: 12 }}>
+                    {(day ? day + " · " : "") + sizeText}
                   </span>
                 </button>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {cloudMenuOpen && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0, 0, 0, 0.5)",
-            zIndex: 1999
-          }}
-          onClick={() => setCloudMenuOpen(false)}
-        />
-      )}
-
-      {/* Enhanced error display */}
-      {cloudSync.error && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: "1rem",
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "var(--danger-light)",
-            border: "1px solid var(--danger)",
-            borderRadius: "var(--radius-lg)",
-            padding: "0.75rem 1.5rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            boxShadow: "var(--shadow-lg)",
-            zIndex: 1000
-          }}
-        >
-          <span style={{ color: "var(--danger)" }}>
-            ⚠️ {cloudSync.error}
-          </span>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={cloudSync.clearError}
-          >
-            Dismiss
-          </button>
         </div>
       )}
     </div>
