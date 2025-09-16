@@ -530,12 +530,20 @@ function AuthedApp() {
         // Warn if we've lost significant data
         if (completionsCount < lastCompletions - 10) { // Lost more than 10 completions
           logger.error(`POTENTIAL DATA LOSS DETECTED: Completions dropped from ${lastCompletions} to ${completionsCount}`);
-          alert(`⚠️ POTENTIAL DATA LOSS: Completions count dropped significantly (${lastCompletions} → ${completionsCount}). Check cloud backups immediately!`);
+          alert({
+            title: "⚠️ POTENTIAL DATA LOSS",
+            message: `Completions count dropped significantly (${lastCompletions} → ${completionsCount}). Check cloud backups immediately!`,
+            type: "error"
+          });
         }
 
         if (addressesCount < lastAddresses - 50) { // Lost more than 50 addresses
           logger.error(`POTENTIAL DATA LOSS DETECTED: Addresses dropped from ${lastAddresses} to ${addressesCount}`);
-          alert(`⚠️ POTENTIAL DATA LOSS: Address count dropped significantly (${lastAddresses} → ${addressesCount}). Check cloud backups immediately!`);
+          alert({
+            title: "⚠️ POTENTIAL DATA LOSS",
+            message: `Address count dropped significantly (${lastAddresses} → ${addressesCount}). Check cloud backups immediately!`,
+            type: "error"
+          });
         }
       }
 
