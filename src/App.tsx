@@ -4,7 +4,6 @@ import "./App.css"; // Use the updated modern CSS
 import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
 import { useCloudSync } from "./useCloudSync";
-import { useSwipeNavigation } from "./hooks/useSwipeNavigation";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";
 import { Auth } from "./Auth";
@@ -142,111 +141,6 @@ function StatsCard({ title, value, change, changeType, icon, iconType }: {
   );
 }
 
-// Modern Day Panel Component
-function ModernDayPanel({ 
-  sessions, 
-  completions, 
-  startDay, 
-  endDay, 
-  onEditStart, 
-  onEditEnd 
-}: {
-  sessions: DaySession[];
-  completions: Completion[];
-  startDay: () => void;
-  endDay: () => void;
-  onEditStart: (newStart: string | Date) => void;
-  onEditEnd: (newEnd: string | Date) => void;
-}) {
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todaySessions = sessions.filter((s) => s.date === todayStr);
-  const active = todaySessions.find((s) => !s.end) || null;
-  const isActive = !!active;
-
-  const todays = completions.filter((c) => (c.timestamp || "").slice(0, 10) === todayStr);
-  const stats = {
-    pif: todays.filter((c) => c.outcome === "PIF").length,
-    done: todays.filter((c) => c.outcome === "Done").length,
-    da: todays.filter((c) => c.outcome === "DA").length,
-    arr: todays.filter((c) => c.outcome === "ARR").length,
-    total: todays.length,
-    pifAmount: todays
-      .filter((c) => c.outcome === "PIF")
-      .reduce((sum, c) => sum + parseFloat(c.amount || "0"), 0)
-  };
-
-  const formatTime = (iso?: string) => {
-    if (!iso) return "—";
-    try {
-      const d = new Date(iso);
-      return d.toLocaleTimeString("en-GB", { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: false
-      });
-    } catch {
-      return "—";
-    }
-  };
-
-  return (
-    <div className="day-panel-modern">
-      <div className="day-panel-header">
-        <div className="day-status-section">
-          {isActive && <div className="day-indicator" />}
-          <div className="day-time-info">
-            <div className="day-status-label">
-              {isActive ? "Day Active" : active ? "Day Ended" : "Day Not Started"}
-            </div>
-            <div className="day-time">
-              {active?.start ? formatTime(active.start) : "—"}
-              {isActive ? " - Running" : active?.end ? ` - ${formatTime(active.end)}` : ""}
-            </div>
-          </div>
-        </div>
-        <div className="day-actions">
-          {!isActive ? (
-            <button className="day-action-btn" onClick={startDay}>
-              ▶️ Start Day
-            </button>
-          ) : (
-            <button className="day-action-btn" onClick={endDay}>
-              ⏹️ End Day
-            </button>
-          )}
-        </div>
-      </div>
-      
-      <div className="day-stats-grid">
-        <div className="day-stat">
-          <div className="day-stat-value">{stats.total}</div>
-          <div className="day-stat-label">Completed</div>
-        </div>
-        <div className="day-stat">
-          <div className="day-stat-value">£{stats.pifAmount.toFixed(0)}</div>
-          <div className="day-stat-label">PIF Total</div>
-        </div>
-        <div className="day-stat">
-          <div className="day-stat-value">{stats.pif}</div>
-          <div className="day-stat-label">PIF</div>
-        </div>
-        <div className="day-stat">
-          <div className="day-stat-value">{stats.done}</div>
-          <div className="day-stat-label">Done</div>
-        </div>
-        <div className="day-stat">
-          <div className="day-stat-value">{stats.arr}</div>
-          <div className="day-stat-label">ARR</div>
-        </div>
-        <div className="day-stat">
-          <div className="day-stat-value">{stats.da}</div>
-          <div className="day-stat-label">DA</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const cloudSync = useCloudSync();
 
@@ -334,7 +228,6 @@ function AuthedApp() {
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
-  const [optimisticUpdates] = React.useState<Map<string, any>>(new Map());
 
   // Cloud restore state
   type CloudBackupRow = {
@@ -611,6 +504,7 @@ function AuthedApp() {
     if (!hasToday) startDay();
   }, [daySessions, startDay]);
 
+  // Restore the missing edit functions for day sessions
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
       const parsed = typeof newStartISO === "string" ? new Date(newStartISO) : newStartISO;
@@ -949,8 +843,8 @@ function AuthedApp() {
 
           {tab === "list" && (
             <>
-              {/* Modern Day Panel */}
-              <ModernDayPanel
+              {/* Original Day Panel with Full Editing */}
+              <DayPanel
                 sessions={daySessions}
                 completions={completions}
                 startDay={startDay}
