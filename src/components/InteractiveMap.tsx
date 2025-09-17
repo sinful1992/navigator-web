@@ -276,11 +276,12 @@ export function InteractiveMap({
 
   return (
     <div style={{
-      background: 'white',
+      background: 'var(--gray-100)',
       border: '1px solid var(--gray-200)',
       borderRadius: 'var(--radius-md)',
       overflow: 'hidden',
-      boxShadow: 'var(--shadow-sm)'
+      boxShadow: 'var(--shadow-sm)',
+      color: 'var(--gray-800)'
     }}>
       {/* Header */}
       <div style={{
@@ -332,7 +333,7 @@ export function InteractiveMap({
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            background: 'white',
+            background: 'var(--gray-100)',
             padding: '1rem',
             borderRadius: 'var(--radius-md)',
             border: '1px solid var(--gray-200)',
@@ -414,7 +415,7 @@ export function InteractiveMap({
                     alignItems: 'center',
                     gap: '0.75rem',
                     padding: '0.5rem',
-                    background: 'white',
+                    background: 'var(--gray-100)',
                     borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--gray-200)'
                   }}
@@ -488,13 +489,14 @@ export function InteractiveMap({
           zIndex: 1000
         }}>
           <div style={{
-            background: 'white',
+            background: 'var(--gray-100)',
             border: '1px solid var(--gray-200)',
             borderRadius: 'var(--radius-md)',
             padding: '1.5rem',
             minWidth: '300px',
             maxWidth: '90vw',
-            boxShadow: 'var(--shadow-lg)'
+            boxShadow: 'var(--shadow-lg)',
+            color: 'var(--gray-800)'
           }}>
             <h4 style={{ margin: '0 0 1rem 0' }}>Edit Address</h4>
             <input

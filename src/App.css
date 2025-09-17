@@ -1715,6 +1715,59 @@ body {
   color: var(--gray-300);
 }
 
+/* ==== Input and Form Styling ==== */
+.input, input[type="text"], input[type="email"], input[type="password"], input[type="search"],
+textarea, select {
+  padding: 0.75rem;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  background: var(--gray-100);
+  color: var(--gray-800);
+  font-size: 0.875rem;
+  transition: all var(--transition-normal);
+  outline: none;
+}
+
+.input:focus, input[type="text"]:focus, input[type="email"]:focus, input[type="password"]:focus,
+input[type="search"]:focus, textarea:focus, select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.input::placeholder, input::placeholder, textarea::placeholder {
+  color: var(--gray-400);
+}
+
+/* Dark mode input styling */
+.dark-mode .input,
+.dark-mode input[type="text"],
+.dark-mode input[type="email"],
+.dark-mode input[type="password"],
+.dark-mode input[type="search"],
+.dark-mode textarea,
+.dark-mode select {
+  background: var(--gray-200);
+  border-color: var(--gray-300);
+  color: var(--gray-800);
+}
+
+.dark-mode .input:focus,
+.dark-mode input[type="text"]:focus,
+.dark-mode input[type="email"]:focus,
+.dark-mode input[type="password"]:focus,
+.dark-mode input[type="search"]:focus,
+.dark-mode textarea:focus,
+.dark-mode select:focus {
+  border-color: var(--primary);
+  background: var(--gray-100);
+}
+
+.dark-mode .input::placeholder,
+.dark-mode input::placeholder,
+.dark-mode textarea::placeholder {
+  color: var(--gray-500);
+}
+
 /* ==== Animation Classes ==== */
 .fade-in {
   animation: fadeIn 0.3s ease-out;

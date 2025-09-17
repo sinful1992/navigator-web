@@ -286,12 +286,13 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
         {/* Import/Add Section */}
         <div style={{
-          background: 'white',
+          background: 'var(--gray-100)',
           border: '1px solid var(--gray-200)',
           borderRadius: 'var(--radius-md)',
           padding: '1rem',
           marginBottom: '1.5rem',
-          boxShadow: 'var(--shadow-sm)'
+          boxShadow: 'var(--shadow-sm)',
+          color: 'var(--gray-800)'
         }}>
           <h3 style={{ margin: '0 0 1rem 0' }}>Add Addresses</h3>
           
@@ -329,12 +330,13 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
         {/* Statistics */}
         {addresses.length > 0 && (
           <div style={{
-            background: 'white',
+            background: 'var(--gray-100)',
             border: '1px solid var(--gray-200)',
             borderRadius: 'var(--radius-md)',
             padding: '1rem',
             marginBottom: '1.5rem',
-            boxShadow: 'var(--shadow-sm)'
+            boxShadow: 'var(--shadow-sm)',
+            color: 'var(--gray-800)'
           }}>
             <h3 style={{ margin: '0 0 1rem 0' }}>Address Status</h3>
             <div style={{ 
@@ -465,7 +467,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
               Geocoding: {geocodingProgress.completed}/{geocodingProgress.total}
             </div>
             <div style={{
-              background: 'white',
+              background: 'var(--gray-200)',
               borderRadius: 'var(--radius-md)',
               height: '0.5rem',
               overflow: 'hidden',
@@ -533,11 +535,12 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
             />
           ) : (
             <div style={{
-              background: 'white',
+              background: 'var(--gray-100)',
               border: '1px solid var(--gray-200)',
               borderRadius: 'var(--radius-md)',
               overflow: 'hidden',
-              boxShadow: 'var(--shadow-sm)'
+              boxShadow: 'var(--shadow-sm)',
+              color: 'var(--gray-800)'
             }}>
               <div style={{
                 padding: '1rem',
@@ -668,10 +671,11 @@ function RoutePlanningLockedView() {
     <div style={{
       padding: '2rem',
       textAlign: 'center',
-      background: 'white',
+      background: 'var(--gray-100)',
       border: '1px solid var(--gray-200)',
       borderRadius: 'var(--radius-md)',
-      boxShadow: 'var(--shadow-sm)'
+      boxShadow: 'var(--shadow-sm)',
+      color: 'var(--gray-800)'
     }}>
       <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🗺️</div>
       <h2>Route Planning</h2>
