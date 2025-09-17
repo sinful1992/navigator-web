@@ -261,17 +261,17 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
   return (
     <SubscriptionGuard user={user} fallback={<RoutePlanningLockedView />}>
-      <div className="route-planning" style={{ padding: '1rem' }}>
+      <div className="route-planning">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h2>🗺️ Route Planning</h2>
         </div>
 
         {/* Service Status */}
         {!isHybridRoutingAvailable() && (
-          <div style={{ 
-            background: 'var(--warning-light)', 
+          <div style={{
+            background: 'var(--warning-light)',
             border: '1px solid var(--warning)',
-            borderRadius: 'var(--radius)',
+            borderRadius: 'var(--radius-md)',
             padding: '1rem',
             marginBottom: '1.5rem'
           }}>
@@ -285,12 +285,13 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
         )}
 
         {/* Import/Add Section */}
-        <div style={{ 
-          background: 'var(--surface)', 
-          border: '1px solid var(--border-light)',
-          borderRadius: 'var(--radius)',
+        <div style={{
+          background: 'white',
+          border: '1px solid var(--gray-200)',
+          borderRadius: 'var(--radius-md)',
           padding: '1rem',
-          marginBottom: '1.5rem'
+          marginBottom: '1.5rem',
+          boxShadow: 'var(--shadow-sm)'
         }}>
           <h3 style={{ margin: '0 0 1rem 0' }}>Add Addresses</h3>
           
@@ -327,12 +328,13 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
         {/* Statistics */}
         {addresses.length > 0 && (
-          <div style={{ 
-            background: 'var(--surface)', 
-            border: '1px solid var(--border-light)',
-            borderRadius: 'var(--radius)',
+          <div style={{
+            background: 'white',
+            border: '1px solid var(--gray-200)',
+            borderRadius: 'var(--radius-md)',
             padding: '1rem',
-            marginBottom: '1.5rem'
+            marginBottom: '1.5rem',
+            boxShadow: 'var(--shadow-sm)'
           }}>
             <h3 style={{ margin: '0 0 1rem 0' }}>Address Status</h3>
             <div style={{ 
@@ -452,19 +454,19 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
         {/* Geocoding Progress */}
         {geocodingProgress && (
-          <div style={{ 
-            background: 'var(--primary-light)', 
+          <div style={{
+            background: 'var(--primary-light)',
             border: '1px solid var(--primary)',
-            borderRadius: 'var(--radius)',
+            borderRadius: 'var(--radius-md)',
             padding: '1rem',
             marginBottom: '1.5rem'
           }}>
             <div style={{ marginBottom: '0.5rem' }}>
               Geocoding: {geocodingProgress.completed}/{geocodingProgress.total}
             </div>
-            <div style={{ 
-              background: 'var(--surface)',
-              borderRadius: 'var(--radius)',
+            <div style={{
+              background: 'white',
+              borderRadius: 'var(--radius-md)',
               height: '0.5rem',
               overflow: 'hidden',
               marginBottom: '0.5rem'
@@ -484,10 +486,10 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
         {/* Optimization Results */}
         {optimizationResult && (
-          <div style={{ 
+          <div style={{
             background: optimizationResult.error ? 'var(--danger-light)' : 'var(--success-light)',
             border: `1px solid ${optimizationResult.error ? 'var(--danger)' : 'var(--success)'}`,
-            borderRadius: 'var(--radius)',
+            borderRadius: 'var(--radius-md)',
             padding: '1rem',
             marginBottom: '1.5rem'
           }}>
@@ -531,15 +533,16 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
             />
           ) : (
             <div style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border-light)',
-              borderRadius: 'var(--radius)',
-              overflow: 'hidden'
+              background: 'white',
+              border: '1px solid var(--gray-200)',
+              borderRadius: 'var(--radius-md)',
+              overflow: 'hidden',
+              boxShadow: 'var(--shadow-sm)'
             }}>
               <div style={{
                 padding: '1rem',
-                borderBottom: '1px solid var(--border-light)',
-                background: 'var(--background)',
+                borderBottom: '1px solid var(--gray-200)',
+                background: 'var(--gray-50)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center'
@@ -550,7 +553,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                     background: 'var(--primary-light)',
                     color: 'var(--primary)',
                     padding: '0.25rem 0.75rem',
-                    borderRadius: 'var(--radius)',
+                    borderRadius: 'var(--radius-md)',
                     fontSize: '0.875rem'
                   }}>
                     🏠 Start: #{startingPointIndex + 1}
@@ -563,7 +566,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                     key={index}
                     style={{
                       padding: '0.75rem 1rem',
-                      borderBottom: index < addresses.length - 1 ? '1px solid var(--border-light)' : 'none',
+                      borderBottom: index < addresses.length - 1 ? '1px solid var(--gray-200)' : 'none',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.75rem',
@@ -604,7 +607,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                           fontSize: '0.875rem'
                         }}
                       />
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)' }}>
                         {addr.success ? (
                           <>
                             ✅ {addr.formattedAddress || addr.address}
@@ -646,7 +649,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
           <div style={{
             textAlign: 'center',
             padding: '3rem 1rem',
-            color: 'var(--text-muted)'
+            color: 'var(--gray-500)'
           }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🗺️</div>
             <h3 style={{ marginBottom: '0.5rem' }}>No addresses yet</h3>
@@ -662,31 +665,31 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
 function RoutePlanningLockedView() {
   return (
-    <div style={{ 
-      padding: '2rem', 
+    <div style={{
+      padding: '2rem',
       textAlign: 'center',
-      background: 'var(--surface)',
-      border: '1px solid var(--border-light)',
-      borderRadius: 'var(--radius)',
-      margin: '1rem'
+      background: 'white',
+      border: '1px solid var(--gray-200)',
+      borderRadius: 'var(--radius-md)',
+      boxShadow: 'var(--shadow-sm)'
     }}>
       <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🗺️</div>
       <h2>Route Planning</h2>
-      <p style={{ marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
+      <p style={{ marginBottom: '1.5rem', color: 'var(--gray-500)' }}>
         Plan your daily routes with intelligent address geocoding and route optimization.
       </p>
       <div style={{ marginBottom: '1.5rem' }}>
         <span style={{ 
-          background: 'var(--primary-light)', 
-          color: 'var(--primary)', 
+          background: 'var(--primary-light)',
+          color: 'var(--primary)',
           padding: '0.5rem 1rem',
-          borderRadius: 'var(--radius)',
+          borderRadius: 'var(--radius-md)',
           fontSize: '0.875rem'
         }}>
           Premium Feature
         </span>
       </div>
-      <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'left', maxWidth: '400px', margin: '0 auto' }}>
+      <div style={{ fontSize: '0.875rem', color: 'var(--gray-500)', textAlign: 'left', maxWidth: '400px', margin: '0 auto' }}>
         <div style={{ marginBottom: '0.5rem' }}>✅ Import addresses from Excel</div>
         <div style={{ marginBottom: '0.5rem' }}>✅ Google-style address autocomplete</div>
         <div style={{ marginBottom: '0.5rem' }}>✅ Automatic geocoding with confidence scores</div>

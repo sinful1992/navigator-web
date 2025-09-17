@@ -276,16 +276,17 @@ export function InteractiveMap({
 
   return (
     <div style={{
-      background: 'var(--surface)',
-      border: '1px solid var(--border-light)',
-      borderRadius: 'var(--radius)',
-      overflow: 'hidden'
+      background: 'white',
+      border: '1px solid var(--gray-200)',
+      borderRadius: 'var(--radius-md)',
+      overflow: 'hidden',
+      boxShadow: 'var(--shadow-sm)'
     }}>
       {/* Header */}
       <div style={{
         padding: '1rem',
-        borderBottom: '1px solid var(--border-light)',
-        background: 'var(--background)'
+        borderBottom: '1px solid var(--gray-200)',
+        background: 'var(--gray-50)'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>📍 Interactive Map</h3>
@@ -331,10 +332,10 @@ export function InteractiveMap({
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            background: 'var(--surface)',
+            background: 'white',
             padding: '1rem',
-            borderRadius: 'var(--radius)',
-            border: '1px solid var(--border-light)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--gray-200)',
             textAlign: 'center'
           }}>
             <div style={{ marginBottom: '0.5rem' }}>Loading map...</div>
@@ -352,7 +353,7 @@ export function InteractiveMap({
             background: 'var(--danger-light)',
             color: 'var(--danger)',
             padding: '1rem',
-            borderRadius: 'var(--radius)',
+            borderRadius: 'var(--radius-md)',
             border: '1px solid var(--danger)',
             textAlign: 'center',
             maxWidth: '80%'
@@ -376,7 +377,7 @@ export function InteractiveMap({
             background: 'var(--warning-light)',
             color: 'var(--warning)',
             padding: '1rem',
-            borderRadius: 'var(--radius)',
+            borderRadius: 'var(--radius-md)',
             border: '1px solid var(--warning)',
             textAlign: 'center',
             maxWidth: '80%'
@@ -395,7 +396,7 @@ export function InteractiveMap({
       {stats.needsGeocoding > 0 && (
         <div style={{
           padding: '1rem',
-          borderTop: '1px solid var(--border-light)',
+          borderTop: '1px solid var(--gray-200)',
           background: 'var(--warning-light)'
         }}>
           <h4 style={{ margin: '0 0 0.75rem 0', color: 'var(--warning)' }}>
@@ -413,9 +414,9 @@ export function InteractiveMap({
                     alignItems: 'center',
                     gap: '0.75rem',
                     padding: '0.5rem',
-                    background: 'var(--surface)',
-                    borderRadius: 'var(--radius)',
-                    border: '1px solid var(--border-light)'
+                    background: 'white',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--gray-200)'
                   }}
                 >
                   <div style={{
@@ -452,7 +453,7 @@ export function InteractiveMap({
           </div>
           <div style={{
             fontSize: '0.75rem',
-            color: 'var(--text-muted)',
+            color: 'var(--gray-500)',
             marginTop: '0.75rem'
           }}>
             Click "🌍 Locate" to geocode automatically, or click on the map where you want to place the address.
@@ -465,7 +466,7 @@ export function InteractiveMap({
         <div style={{
           padding: '2rem',
           textAlign: 'center',
-          color: 'var(--text-muted)'
+          color: 'var(--gray-500)'
         }}>
           <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🗺️</div>
           <div>Add addresses to see them on the map</div>
@@ -487,12 +488,13 @@ export function InteractiveMap({
           zIndex: 1000
         }}>
           <div style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border-light)',
-            borderRadius: 'var(--radius)',
+            background: 'white',
+            border: '1px solid var(--gray-200)',
+            borderRadius: 'var(--radius-md)',
             padding: '1.5rem',
             minWidth: '300px',
-            maxWidth: '90vw'
+            maxWidth: '90vw',
+            boxShadow: 'var(--shadow-lg)'
           }}>
             <h4 style={{ margin: '0 0 1rem 0' }}>Edit Address</h4>
             <input
