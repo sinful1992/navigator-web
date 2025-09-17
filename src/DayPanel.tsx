@@ -1,6 +1,10 @@
 // src/DayPanel.tsx - FIXED VERSION
 import * as React from "react";
 import type { DaySession, Completion, Outcome } from "./types";
+import { useBackupLoading } from "./hooks/useBackupLoading";
+import { useSettings } from "./hooks/useSettings";
+import { Modal } from "./components/Modal";
+import { LoadingSpinner } from "./components/LoadingButton";
 
 type Props = {
   sessions: DaySession[];
@@ -11,6 +15,8 @@ type Props = {
   onEditStart: (newStart: string | Date) => void;
   /** Called with a Date or ISO string. App will update (or create) today's session end. */
   onEditEnd: (newEnd: string | Date) => void;
+  /** Optional backup function called when ending day if backup is enabled */
+  onBackup?: () => Promise<void>;
 };
 
 // 🔧 FIXED: Create local time instead of UTC
@@ -77,7 +83,10 @@ export function DayPanel({
   endDay,
   onEditStart,
   onEditEnd,
+  onBackup,
 }: Props) {
+  const { settings } = useSettings();
+  const { isLoading, executeBackup } = useBackupLoading();
   const todayStr = new Date().toISOString().slice(0, 10);
 
   // Prefer an active session; else the most recent for today
@@ -92,6 +101,20 @@ export function DayPanel({
     })[0];
 
   const isActive = !!active;
+
+  // Enhanced end day function with backup functionality
+  const handleEndDay = async () => {
+    try {
+      if (settings.backupOnEndOfDay && onBackup) {
+        await executeBackup(onBackup);
+      }
+      endDay();
+    } catch (error) {
+      console.error('Failed to complete backup during end day:', error);
+      // Still end the day even if backup fails
+      endDay();
+    }
+  };
 
   // Today's completions summary
   const todays = completions.filter((c) => (c.timestamp || "").slice(0, 10) === todayStr);
@@ -219,9 +242,13 @@ export function DayPanel({
               Start Day
             </button>
           ) : (
-            <button className="btn btn-danger btn-modern" onClick={endDay}>
-              <span className="btn-icon">⏹️</span>
-              End Day
+            <button
+              className="btn btn-danger btn-modern"
+              onClick={handleEndDay}
+              disabled={isLoading}
+            >
+              <span className="btn-icon">{isLoading ? "⏳" : "⏹️"}</span>
+              {isLoading ? "Ending Day..." : "End Day"}
             </button>
           )}
         </div>
@@ -288,6 +315,27 @@ export function DayPanel({
           )}
         </div>
         </div>
+
+        {/* Loading Modal for Backup */}
+        <Modal
+          isOpen={isLoading}
+          onClose={() => {}} // Prevent closing during backup
+          title="Backing up data"
+          showCloseButton={false}
+          size="sm"
+        >
+          <div className="backup-loading-modal">
+            <div className="backup-loading-content">
+              <LoadingSpinner size="lg" />
+              <h3 className="backup-loading-title">
+                Downloading backup, please wait...
+              </h3>
+              <p className="backup-loading-message">
+                Do not close the app or press the button again. This may take a few moments.
+              </p>
+            </div>
+          </div>
+        </Modal>
 
         <style>{`
         .day-panel-modern {
@@ -434,6 +482,43 @@ export function DayPanel({
 
         .btn-icon {
           font-size: 1rem;
+        }
+
+        /* Backup Loading Modal Styles */
+        .backup-loading-modal {
+          text-align: center;
+          padding: 2rem;
+        }
+
+        .backup-loading-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .backup-loading-title {
+          font-size: 1.125rem;
+          font-weight: 600;
+          color: var(--gray-800);
+          margin: 0;
+        }
+
+        .backup-loading-message {
+          font-size: 0.875rem;
+          color: var(--gray-600);
+          margin: 0;
+          line-height: 1.5;
+          max-width: 300px;
+        }
+
+        /* Dark mode support for backup modal */
+        .dark-mode .backup-loading-title {
+          color: var(--gray-100);
+        }
+
+        .dark-mode .backup-loading-message {
+          color: var(--gray-300);
         }
 
         @media (max-width: 768px) {

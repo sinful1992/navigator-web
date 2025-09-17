@@ -1027,6 +1027,100 @@ body {
   opacity: 1;
 }
 
+/* ==== Dark Mode Support ==== */
+.dark-mode {
+  --gray-50: #18181b;
+  --gray-100: #27272a;
+  --gray-200: #3f3f46;
+  --gray-300: #52525b;
+  --gray-400: #71717a;
+  --gray-500: #a1a1aa;
+  --gray-600: #d4d4d8;
+  --gray-700: #e4e4e7;
+  --gray-800: #f4f4f5;
+  --gray-900: #fafafa;
+}
+
+.dark-mode .app-wrapper {
+  background: var(--gray-50);
+}
+
+.dark-mode .main-area {
+  background: var(--gray-50);
+}
+
+.dark-mode .app-header-modern {
+  background: var(--gray-100);
+  border-bottom-color: var(--gray-200);
+  color: var(--gray-800);
+}
+
+.dark-mode .logo-title {
+  color: var(--gray-800);
+}
+
+.dark-mode .logo-subtitle {
+  color: var(--gray-500);
+}
+
+.dark-mode .search-input-modern {
+  background: var(--gray-200);
+  border-color: var(--gray-300);
+  color: var(--gray-800);
+}
+
+.dark-mode .search-input-modern:focus {
+  background: var(--gray-100);
+}
+
+.dark-mode .sync-status {
+  background: var(--gray-200);
+  border-color: var(--gray-300);
+  color: var(--gray-700);
+}
+
+.dark-mode .menu-toggle {
+  background: var(--gray-200);
+  color: var(--gray-700);
+}
+
+.dark-mode .menu-toggle:hover {
+  background: var(--gray-300);
+}
+
+.dark-mode .content-area {
+  background: var(--gray-50);
+}
+
+.dark-mode .sidebar-right {
+  background: var(--gray-100);
+  border-left-color: var(--gray-200);
+}
+
+.dark-mode .sidebar-header {
+  background: var(--gray-800);
+  color: var(--gray-100);
+}
+
+.dark-mode .user-avatar {
+  background: var(--gray-700);
+  color: var(--gray-100);
+}
+
+.dark-mode .nav-item {
+  color: var(--gray-600);
+}
+
+.dark-mode .nav-item:hover {
+  background: var(--gray-200);
+  color: var(--gray-800);
+}
+
+.dark-mode .nav-item.active {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
 /* ==== Animation Classes ==== */
 .fade-in {
   animation: fadeIn 0.3s ease-out;
@@ -1042,11 +1136,11 @@ body {
 }
 
 @keyframes slideUp {
-  from { 
+  from {
     opacity: 0;
     transform: translateY(20px);
   }
-  to { 
+  to {
     opacity: 1;
     transform: translateY(0);
   }
@@ -1057,11 +1151,11 @@ body {
 }
 
 @keyframes scaleIn {
-  from { 
+  from {
     opacity: 0;
     transform: scale(0.9);
   }
-  to { 
+  to {
     opacity: 1;
     transform: scale(1);
   }

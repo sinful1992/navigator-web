@@ -24,6 +24,7 @@ import { RoutePlanning } from "./RoutePlanning";
 import { SupabaseSetup } from "./components/SupabaseSetup";
 import { BackupManager } from "./components/BackupManager";
 import { LocalBackupManager } from "./utils/localBackup";
+import { SettingsDropdown } from "./components/SettingsDropdown";
 
 type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
@@ -1086,6 +1087,7 @@ function AuthedApp() {
                 </span>
               )}
             </div>
+            <SettingsDropdown />
           </div>
 
           <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
@@ -1137,9 +1139,22 @@ function AuthedApp() {
                 sessions={daySessions}
                 completions={completions}
                 startDay={startDay}
-                endDay={endDayWithBackup}
+                endDay={endDay}
                 onEditStart={handleEditStart}
                 onEditEnd={handleEditEnd}
+                onBackup={async () => {
+                  const snap = backupState();
+
+                  // Cloud backup if available
+                  if (supabase) {
+                    await uploadBackupToStorage(snap, "finish");
+                    logger.info("Cloud backup at day end successful");
+                  }
+
+                  // Critical local backup with download (day-end is important)
+                  await LocalBackupManager.performCriticalBackup(snap, "day-end");
+                  logger.info("Local backup at day end successful");
+                }}
               />
 
               {/* Stats Grid */}
