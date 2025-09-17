@@ -119,29 +119,28 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({ trigger }) =
             <p className="settings-subtitle">Customize your experience</p>
           </div>
 
-          {/* Backup Option - Conditional */}
-          {isSupabaseConfigured() && (
-            <>
-              <div className="settings-section">
-                <div className="setting-item">
-                  <div className="setting-info">
-                    <label htmlFor="backup-toggle" className="setting-label">
-                      Backup download on end of day
-                    </label>
-                    <p className="setting-description">
-                      Automatically download backup when finishing the day (requires cloud sync).
-                    </p>
-                  </div>
-                  <ToggleSwitch
-                    id="backup-toggle"
-                    checked={settings.backupOnEndOfDay}
-                    onChange={toggleBackup}
-                  />
-                </div>
+          {/* Backup Option - Always Available */}
+          <div className="settings-section">
+            <div className="setting-item">
+              <div className="setting-info">
+                <label htmlFor="backup-toggle" className="setting-label">
+                  Auto-download backup on end of day
+                </label>
+                <p className="setting-description">
+                  {isSupabaseConfigured()
+                    ? "Automatically download backup file when finishing the day."
+                    : "Automatically download backup file when finishing the day (local backup only)."
+                  }
+                </p>
               </div>
-              <div className="settings-separator" />
-            </>
-          )}
+              <ToggleSwitch
+                id="backup-toggle"
+                checked={settings.backupOnEndOfDay}
+                onChange={toggleBackup}
+              />
+            </div>
+          </div>
+          <div className="settings-separator" />
 
           {/* Arrangement Reminder Text */}
           <div className="settings-section">

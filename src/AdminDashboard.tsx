@@ -501,152 +501,253 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
   );
 }
 
-// CSS Styles (would typically be in a separate file)
+// Modern CSS Styles with Dark Mode Support
 const adminStyles = `
+/* ==== Admin Dashboard Modern Styles ==== */
 .admin-dashboard {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  padding: 2rem;
+  background: var(--gray-50);
+  min-height: 100vh;
 }
 
 .admin-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  border-bottom: 2px solid #007bff;
-  padding-bottom: 10px;
+  margin-bottom: 2rem;
+  background: white;
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--gray-200);
+}
+
+.admin-header h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--gray-800);
+  margin: 0;
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .admin-info {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 1rem;
+  color: var(--gray-600);
+  font-size: 0.875rem;
 }
 
 .close-button {
-  background: none;
-  border: none;
-  font-size: 20px;
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  padding: 5px;
+  transition: var(--transition-normal);
+  color: var(--gray-600);
+}
+
+.close-button:hover {
+  background: var(--gray-200);
+  color: var(--gray-800);
 }
 
 .admin-tabs {
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid #ddd;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  background: white;
+  padding: 0.5rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--gray-200);
 }
 
 .admin-tabs button {
-  padding: 10px 20px;
+  flex: 1;
+  padding: 0.75rem 1.5rem;
   border: none;
-  background: none;
+  background: transparent;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  color: var(--gray-600);
+  transition: var(--transition-normal);
+  position: relative;
+}
+
+.admin-tabs button:hover {
+  background: var(--gray-50);
+  color: var(--gray-800);
 }
 
 .admin-tabs button.active {
-  border-bottom-color: #007bff;
-  color: #007bff;
-  font-weight: 500;
+  background: var(--primary);
+  color: white;
+  box-shadow: var(--shadow-sm);
 }
 
 .stats-bar {
-  display: flex;
-  gap: 20px;
-  margin-bottom: 30px;
-  background: #f8f9fa;
-  padding: 20px;
-  border-radius: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .stat {
+  background: white;
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--gray-200);
   text-align: center;
+  transition: var(--transition-normal);
+}
+
+.stat:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .stat strong {
   display: block;
-  font-size: 24px;
-  color: #007bff;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 0.5rem;
 }
 
 .stat span {
-  font-size: 14px;
-  color: #6c757d;
+  font-size: 0.875rem;
+  color: var(--gray-500);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .admin-actions-panel {
   background: white;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-actions-panel h3 {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--gray-800);
 }
 
 .admin-form .form-row {
-  margin-bottom: 15px;
+  margin-bottom: 1.5rem;
 }
 
-.admin-form select, .admin-form input, .admin-form textarea {
+.admin-form label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: var(--gray-700);
+  font-size: 0.875rem;
+}
+
+.admin-form select,
+.admin-form input,
+.admin-form textarea {
   width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
+  padding: 0.75rem;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  transition: var(--transition-normal);
+  background: white;
+  color: var(--gray-800);
+}
+
+.admin-form select:focus,
+.admin-form input:focus,
+.admin-form textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 .form-row .action-group {
   display: flex;
-  gap: 20px;
+  gap: 1.5rem;
   align-items: end;
 }
 
 .input-group {
   display: flex;
-  gap: 10px;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.5rem;
   flex: 1;
 }
 
 .input-group label {
-  white-space: nowrap;
-  font-size: 14px;
-  font-weight: 500;
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-500);
 }
 
 .input-group input {
-  width: 80px;
+  width: 100px;
 }
 
 .input-group button {
-  background: #007bff;
+  background: var(--primary);
   color: white;
   border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-md);
   cursor: pointer;
+  font-weight: 600;
+  transition: var(--transition-normal);
+}
+
+.input-group button:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
 }
 
 .input-group button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
 .subscriptions-table {
   background: white;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .subscriptions-table h3 {
   margin: 0;
-  padding: 15px 20px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #ddd;
+  padding: 1rem 1.5rem;
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--gray-200);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--gray-800);
 }
 
 .subscriptions-table table {
@@ -656,95 +757,289 @@ const adminStyles = `
 
 .subscriptions-table th,
 .subscriptions-table td {
-  padding: 12px 15px;
+  padding: 1rem 1.5rem;
   text-align: left;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--gray-100);
 }
 
 .subscriptions-table th {
-  background: #f8f9fa;
+  background: var(--gray-50);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .subscriptions-table td {
-  font-size: 14px;
+  font-size: 0.875rem;
+  color: var(--gray-700);
 }
 
 .actions-list {
   max-height: 600px;
   overflow-y: auto;
+  padding-right: 0.5rem;
 }
 
 .action-item {
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  margin-bottom: 15px;
-  padding: 15px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  margin-bottom: 1rem;
+  padding: 1.5rem;
   background: white;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-normal);
+}
+
+.action-item:hover {
+  box-shadow: var(--shadow-md);
 }
 
 .action-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 1rem;
+}
+
+.action-header strong {
+  color: var(--primary);
+  font-weight: 600;
 }
 
 .action-date {
-  color: #6c757d;
-  font-size: 14px;
+  color: var(--gray-500);
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
 .action-details p {
-  margin: 5px 0;
-  font-size: 14px;
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  color: var(--gray-600);
 }
 
 .action-notes {
-  margin-top: 10px;
+  margin-top: 1rem;
 }
 
 .action-notes pre {
-  background: #f8f9fa;
-  padding: 10px;
-  border-radius: 4px;
-  font-size: 12px;
+  background: var(--gray-50);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
   overflow-x: auto;
+  border: 1px solid var(--gray-200);
+  color: var(--gray-700);
 }
 
-.settings-info, .quick-stats {
+.settings-info,
+.quick-stats {
   background: white;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
 }
 
-.settings-info p, .quick-stats ul {
-  margin: 10px 0;
+.settings-info h4,
+.quick-stats h4 {
+  margin: 0 0 1rem 0;
+  color: var(--gray-800);
+  font-weight: 600;
+}
+
+.settings-info p {
+  margin: 0.75rem 0;
+  color: var(--gray-600);
 }
 
 .quick-stats ul {
   list-style: none;
   padding: 0;
+  margin: 0;
 }
 
 .quick-stats li {
-  padding: 5px 0;
-  border-bottom: 1px solid #eee;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--gray-100);
+  color: var(--gray-600);
+  display: flex;
+  justify-content: space-between;
 }
 
-.loading, .error {
+.quick-stats li:last-child {
+  border-bottom: none;
+}
+
+.loading,
+.error {
   text-align: center;
-  padding: 40px;
+  padding: 3rem;
   background: white;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .error h3 {
-  color: #dc3545;
+  color: var(--danger);
+  margin-bottom: 1rem;
+}
+
+.loading {
+  color: var(--gray-600);
+}
+
+/* ==== Dark Mode Support ==== */
+.dark-mode .admin-dashboard {
+  background: var(--gray-50);
+}
+
+.dark-mode .admin-header {
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+}
+
+.dark-mode .admin-header h2 {
+  color: var(--gray-800);
+}
+
+.dark-mode .admin-info {
+  color: var(--gray-600);
+}
+
+.dark-mode .close-button {
+  background: var(--gray-200);
+  border-color: var(--gray-300);
+  color: var(--gray-700);
+}
+
+.dark-mode .close-button:hover {
+  background: var(--gray-300);
+  color: var(--gray-800);
+}
+
+.dark-mode .admin-tabs {
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+}
+
+.dark-mode .admin-tabs button {
+  color: var(--gray-600);
+}
+
+.dark-mode .admin-tabs button:hover {
+  background: var(--gray-200);
+  color: var(--gray-800);
+}
+
+.dark-mode .stat {
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+}
+
+.dark-mode .stat span {
+  color: var(--gray-500);
+}
+
+.dark-mode .admin-actions-panel,
+.dark-mode .subscriptions-table,
+.dark-mode .action-item,
+.dark-mode .settings-info,
+.dark-mode .quick-stats,
+.dark-mode .loading,
+.dark-mode .error {
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+}
+
+.dark-mode .admin-actions-panel h3,
+.dark-mode .subscriptions-table h3 {
+  color: var(--gray-800);
+}
+
+.dark-mode .admin-form label {
+  color: var(--gray-700);
+}
+
+.dark-mode .admin-form select,
+.dark-mode .admin-form input,
+.dark-mode .admin-form textarea {
+  background: var(--gray-200);
+  border-color: var(--gray-300);
+  color: var(--gray-800);
+}
+
+.dark-mode .subscriptions-table th {
+  background: var(--gray-200);
+  color: var(--gray-600);
+}
+
+.dark-mode .subscriptions-table td {
+  color: var(--gray-700);
+}
+
+.dark-mode .action-notes pre {
+  background: var(--gray-200);
+  border-color: var(--gray-300);
+  color: var(--gray-700);
+}
+
+.dark-mode .settings-info p,
+.dark-mode .quick-stats li {
+  color: var(--gray-600);
+}
+
+.dark-mode .quick-stats li {
+  border-bottom-color: var(--gray-200);
+}
+
+/* ==== Responsive Design ==== */
+@media (max-width: 768px) {
+  .admin-dashboard {
+    padding: 1rem;
+  }
+
+  .admin-header {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .admin-tabs {
+    flex-direction: column;
+  }
+
+  .stats-bar {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+
+  .form-row .action-group {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .subscriptions-table {
+    overflow-x: auto;
+  }
+
+  .subscriptions-table table {
+    min-width: 600px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .stat strong {
+    font-size: 1.5rem;
+  }
 }
 `;
 
