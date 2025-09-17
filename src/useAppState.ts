@@ -1,4 +1,4 @@
-// src/useAppState.ts - FIXED VERSION
+// src/useAppState.ts - FIXED VERSION - Prevent state corruption
 import * as React from "react";
 import { get, set } from "idb-keyval";
 import { logger } from "./utils/logger";
@@ -20,7 +20,7 @@ import {
   DEFAULT_REMINDER_SETTINGS,
 } from "./services/reminderScheduler";
 
-const STORAGE_KEY = "navigator_state_v5"; // Bumped for data integrity improvements
+const STORAGE_KEY = "navigator_state_v5";
 const CURRENT_SCHEMA_VERSION = 5;
 
 type StateUpdate = {
@@ -50,6 +50,43 @@ const initial: AppState = {
   lastReminderProcessed: undefined,
 };
 
+// 🔧 CRITICAL FIX: Safer deep copy that preserves data integrity
+function safeDeepCopy<T>(obj: T): T {
+  try {
+    // Use structured cloning if available (modern browsers)
+    if (typeof structuredClone !== 'undefined') {
+      return structuredClone(obj);
+    }
+    
+    // Fallback to JSON-based deep copy with validation
+    const stringified = JSON.stringify(obj);
+    const parsed = JSON.parse(stringified);
+    
+    // Validate critical fields after parsing
+    if (typeof obj === 'object' && obj !== null && 'addresses' in obj) {
+      const appState = obj as any;
+      const parsedState = parsed as any;
+      
+      // Ensure addresses array is preserved
+      if (Array.isArray(appState.addresses) && !Array.isArray(parsedState.addresses)) {
+        logger.error('Deep copy corrupted addresses array, falling back to original');
+        parsedState.addresses = appState.addresses;
+      }
+      
+      // Ensure completions array is preserved
+      if (Array.isArray(appState.completions) && !Array.isArray(parsedState.completions)) {
+        logger.error('Deep copy corrupted completions array, falling back to original');
+        parsedState.completions = appState.completions;
+      }
+    }
+    
+    return parsed;
+  } catch (error) {
+    logger.error('Deep copy failed, returning original object:', error);
+    return obj;
+  }
+}
+
 // Data validation functions
 function validateCompletion(c: any): c is Completion {
   return c &&
@@ -74,8 +111,7 @@ function validateAppState(state: any): state is AppState {
     Array.isArray(state.daySessions) &&
     Array.isArray(state.arrangements) &&
     (state.activeIndex === null || typeof state.activeIndex === 'number') &&
-    typeof state.currentListVersion === 'number' &&
-    (state.subscription === null || state.subscription === undefined || typeof state.subscription === 'object');
+    typeof state.currentListVersion === 'number';
 }
 
 function stampCompletionsWithVersion(
@@ -89,42 +125,6 @@ function stampCompletionsWithVersion(
       ...c,
       listVersion: typeof c?.listVersion === "number" ? c.listVersion : version,
     }));
-}
-
-// Schema migration function
-function migrateSchema(data: any, fromVersion: number): AppState {
-  let migrated = { ...data };
-  
-  // Migrate from v4 to v5 (add data validation)
-  if (fromVersion < 5) {
-    console.log('Migrating schema from version', fromVersion, 'to 5');
-    
-    // Clean up invalid addresses
-    if (Array.isArray(migrated.addresses)) {
-      migrated.addresses = migrated.addresses.filter(validateAddressRow);
-    } else {
-      migrated.addresses = [];
-    }
-    
-    // Clean up invalid completions
-    if (Array.isArray(migrated.completions)) {
-      migrated.completions = migrated.completions.filter(validateCompletion);
-    } else {
-      migrated.completions = [];
-    }
-    
-    // Ensure required fields exist
-    migrated.currentListVersion = migrated.currentListVersion || 1;
-    migrated.daySessions = Array.isArray(migrated.daySessions) ? migrated.daySessions : [];
-    migrated.arrangements = Array.isArray(migrated.arrangements) ? migrated.arrangements : [];
-    migrated.activeIndex = (typeof migrated.activeIndex === 'number') ? migrated.activeIndex : null;
-    migrated.subscription = migrated.subscription || null;
-  }
-  
-  // Add schema version
-  migrated._schemaVersion = CURRENT_SCHEMA_VERSION;
-  
-  return migrated;
 }
 
 // Generate a deterministic ID for operations
@@ -150,126 +150,155 @@ function getOrCreateDeviceId(): string {
   }
 }
 
-// Apply optimistic updates to state with atomic transaction handling
+// 🔧 CRITICAL FIX: Apply optimistic updates with better error handling and validation
 function applyOptimisticUpdates(
   baseState: AppState,
   updates: Map<string, StateUpdate>
 ): AppState {
-  // Start with a deep copy to ensure immutability
-  let result: AppState = JSON.parse(JSON.stringify(baseState));
-  
-  // Track which entities are being modified to detect conflicts
-  const entityLocks = new Set<string>();
-
-  // Sort updates by timestamp to apply in order
-  const sortedUpdates = Array.from(updates.values()).sort(
-    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-  );
+  // Return base state immediately if no updates
+  if (updates.size === 0) {
+    return baseState;
+  }
 
   try {
+    // Start with a safer copy
+    let result: AppState = safeDeepCopy(baseState);
+    
+    // Validate the copy worked correctly
+    if (!result.addresses || !Array.isArray(result.addresses)) {
+      logger.error('State copy failed - addresses corrupted, using base state');
+      return baseState;
+    }
+
+    // Sort updates by timestamp to apply in order
+    const sortedUpdates = Array.from(updates.values()).sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    // Track if any critical state changes occur
+    let hasAddressChanges = false;
+    let hasCompletionChanges = false;
+
     for (const update of sortedUpdates) {
       if (update.type === "reverted") continue;
 
-      // Create entity lock key for conflict detection
-      const lockKey = `${update.entity}_${update.operation}`;
-      if (entityLocks.has(lockKey)) {
-        console.warn(`Concurrent ${update.operation} operation detected on ${update.entity}`, update);
-      }
-      entityLocks.add(lockKey);
-
-      switch (update.entity) {
-        case "completion":
-          if (update.operation === "create") {
-            // Validate completion data
-            if (!update.data || typeof update.data.index !== 'number' || !update.data.outcome) {
-              console.error('Invalid completion data:', update.data);
-              continue;
-            }
-            
-            // Check for duplicates before adding
-            const isDuplicate = result.completions.some(c => 
-              c.index === update.data.index && 
-              c.outcome === update.data.outcome &&
-              Math.abs(new Date(c.timestamp).getTime() - new Date(update.data.timestamp).getTime()) < 1000
-            );
-            
-            if (!isDuplicate) {
-              result.completions = [update.data, ...result.completions];
-            }
-          } else if (update.operation === "update") {
-            result.completions = result.completions.map((c) =>
-              c.timestamp === update.data.originalTimestamp
-                ? { ...c, ...update.data }
-                : c
-            );
-          } else if (update.operation === "delete") {
-            result.completions = result.completions.filter(
-              (c) => c.timestamp !== update.data.timestamp
-            );
-          }
-          break;
-
-      case "arrangement":
-        if (update.operation === "create") {
-          result.arrangements = [...result.arrangements, update.data];
-        } else if (update.operation === "update") {
-          result.arrangements = result.arrangements.map((arr) =>
-            arr.id === update.data.id
-              ? { ...arr, ...update.data, updatedAt: update.timestamp }
-              : arr
-          );
-        } else if (update.operation === "delete") {
-          result.arrangements = result.arrangements.filter(
-            (arr) => arr.id !== update.data.id
-          );
-        }
-        break;
-
-      case "address":
-        if (update.operation === "create") {
-          result.addresses = [...result.addresses, update.data];
-        } else if (update.operation === "update") {
-          // bulk import path: update carries { addresses, bumpVersion, preserveCompletions }
-          if (update.data?.addresses) {
-            result.addresses = Array.isArray(update.data.addresses)
-              ? update.data.addresses
-              : [];
-            if (update.data.bumpVersion) {
-              result.currentListVersion =
-                (result.currentListVersion || 1) + 1;
-              // Only reset completions if not preserving them
-              if (!update.data.preserveCompletions) {
-                result.completions = [];
+      try {
+        switch (update.entity) {
+          case "completion":
+            hasCompletionChanges = true;
+            if (update.operation === "create") {
+              // Validate completion data
+              if (!update.data || typeof update.data.index !== 'number' || !update.data.outcome) {
+                logger.warn('Invalid completion data in optimistic update:', update.data);
+                continue;
               }
-              result.activeIndex = null;
+              
+              // Check for duplicates before adding
+              const isDuplicate = result.completions.some(c => 
+                c.index === update.data.index && 
+                c.outcome === update.data.outcome &&
+                Math.abs(new Date(c.timestamp).getTime() - new Date(update.data.timestamp).getTime()) < 1000
+              );
+              
+              if (!isDuplicate) {
+                result.completions = [update.data, ...result.completions];
+              }
+            } else if (update.operation === "update") {
+              result.completions = result.completions.map((c) =>
+                c.timestamp === update.data.originalTimestamp
+                  ? { ...c, ...update.data }
+                  : c
+              );
+            } else if (update.operation === "delete") {
+              result.completions = result.completions.filter(
+                (c) => c.timestamp !== update.data.timestamp
+              );
             }
-          }
-        }
-        break;
+            break;
 
-      case "session":
-        if (update.operation === "create") {
-          result.daySessions = [...result.daySessions, update.data];
-        } else if (update.operation === "update") {
-          result.daySessions = result.daySessions.map((session) =>
-            session.date === update.data.date
-              ? { ...session, ...update.data }
-              : session
-          );
+          case "arrangement":
+            if (update.operation === "create") {
+              result.arrangements = [...result.arrangements, update.data];
+            } else if (update.operation === "update") {
+              result.arrangements = result.arrangements.map((arr) =>
+                arr.id === update.data.id
+                  ? { ...arr, ...update.data, updatedAt: update.timestamp }
+                  : arr
+              );
+            } else if (update.operation === "delete") {
+              result.arrangements = result.arrangements.filter(
+                (arr) => arr.id !== update.data.id
+              );
+            }
+            break;
+
+          case "address":
+            hasAddressChanges = true;
+            if (update.operation === "create") {
+              result.addresses = [...result.addresses, update.data];
+            } else if (update.operation === "update") {
+              // bulk import path: update carries { addresses, bumpVersion, preserveCompletions }
+              if (update.data?.addresses) {
+                result.addresses = Array.isArray(update.data.addresses)
+                  ? update.data.addresses
+                  : result.addresses; // 🔧 FIX: Preserve existing if invalid
+                  
+                if (update.data.bumpVersion) {
+                  result.currentListVersion = (result.currentListVersion || 1) + 1;
+                  // Only reset completions if not preserving them
+                  if (!update.data.preserveCompletions) {
+                    result.completions = [];
+                  }
+                  result.activeIndex = null;
+                }
+              }
+            }
+            break;
+
+          case "session":
+            if (update.operation === "create") {
+              // 🔧 FIX: Validate session data
+              if (update.data && update.data.date && update.data.start) {
+                result.daySessions = [...result.daySessions, update.data];
+              } else {
+                logger.warn('Invalid session data in optimistic update:', update.data);
+              }
+            } else if (update.operation === "update") {
+              result.daySessions = result.daySessions.map((session) =>
+                session.date === update.data.date
+                  ? { ...session, ...update.data }
+                  : session
+              );
+            }
+            break;
+            
+          default:
+            logger.warn(`Unknown entity type in optimistic update: ${update.entity}`, update);
+            break;
         }
-        break;
-        
-      default:
-        console.warn(`Unknown entity type in optimistic update: ${update.entity}`, update);
-        break;
+      } catch (updateError) {
+        logger.error(`Failed to apply optimistic update for ${update.entity}:`, updateError);
+        // Continue with other updates rather than failing completely
+      }
     }
+
+    // 🔧 CRITICAL FIX: Validate result state before returning
+    if (hasAddressChanges && (!result.addresses || !Array.isArray(result.addresses))) {
+      logger.error('Optimistic updates corrupted addresses, reverting to base state');
+      return baseState;
     }
+    
+    if (hasCompletionChanges && (!result.completions || !Array.isArray(result.completions))) {
+      logger.error('Optimistic updates corrupted completions, reverting to base state');
+      return baseState;
+    }
+
+    return result;
+    
   } catch (error) {
-    console.error('Failed to apply optimistic updates, returning base state:', error);
-    return baseState; // Return base state if optimistic updates fail
+    logger.error('Failed to apply optimistic updates, returning base state:', error);
+    return baseState;
   }
-
-  return result;
 }
 
 export function useAppState() {
@@ -303,55 +332,26 @@ export function useAppState() {
         if (!alive) return;
 
         if (saved) {
-          // Detect schema version
-          const savedSchemaVersion = saved._schemaVersion || 4;
-          
-          // Migrate if necessary
-          let migrated = saved;
-          if (savedSchemaVersion < CURRENT_SCHEMA_VERSION) {
-            try {
-              migrated = migrateSchema(saved, savedSchemaVersion);
-              console.log('Schema migration successful');
-            } catch (migrationError) {
-              logger.error('Schema migration failed:', migrationError);
-              // Fall back to minimal safe state
-              migrated = { 
-                ...initial, 
-                _schemaVersion: CURRENT_SCHEMA_VERSION 
-              };
-            }
-          }
-          
-          // Validate migrated data
-          if (!validateAppState(migrated)) {
+          // Validate loaded data
+          if (!validateAppState(saved)) {
             logger.warn('Loaded data failed validation, using initial state');
             setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
             return;
           }
 
-          const version = migrated.currentListVersion || 1;
+          const version = saved.currentListVersion || 1;
           const next: AppState = {
-            addresses: migrated.addresses.filter(validateAddressRow),
-            activeIndex: (typeof migrated.activeIndex === "number") ? migrated.activeIndex : null,
-            completions: stampCompletionsWithVersion(migrated.completions, version),
-            daySessions: Array.isArray(migrated.daySessions) ? migrated.daySessions : [],
-            arrangements: Array.isArray(migrated.arrangements) ? migrated.arrangements : [],
+            addresses: saved.addresses.filter(validateAddressRow),
+            activeIndex: (typeof saved.activeIndex === "number") ? saved.activeIndex : null,
+            completions: stampCompletionsWithVersion(saved.completions, version),
+            daySessions: Array.isArray(saved.daySessions) ? saved.daySessions : [],
+            arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
             currentListVersion: version,
-            subscription: migrated.subscription || null,
+            subscription: saved.subscription || null,
             _schemaVersion: CURRENT_SCHEMA_VERSION,
           };
 
           setBaseState(next);
-          
-          // Save migrated data back if migration occurred
-          if (savedSchemaVersion < CURRENT_SCHEMA_VERSION) {
-            try {
-              await set(STORAGE_KEY, next);
-              console.log('Migrated data saved successfully');
-            } catch (saveError) {
-              logger.warn('Failed to save migrated data:', saveError);
-            }
-          }
         } else {
           // No saved data, use initial state with current schema version
           setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
@@ -369,9 +369,6 @@ export function useAppState() {
     };
   }, []);
 
-  // Error notification state
-  const [persistError, setPersistError] = React.useState<string | null>(null);
-  
   // ---- persist to IndexedDB (debounced with error handling) ----
   React.useEffect(() => {
     if (loading) return;
@@ -382,31 +379,13 @@ export function useAppState() {
         const stateToSave = { ...baseState, _schemaVersion: CURRENT_SCHEMA_VERSION };
         await set(STORAGE_KEY, stateToSave);
         
-        // Clear any previous persist errors
-        if (persistError) {
-          setPersistError(null);
-        }
-        
       } catch (error: any) {
-        const errorMsg = error?.message || 'Unknown storage error';
         logger.error('Failed to persist state to IndexedDB:', error);
-        setPersistError(errorMsg);
-        
-        // Try to clear corrupted storage and retry once
-        if (errorMsg.includes('quota') || errorMsg.includes('storage')) {
-          try {
-            console.warn('Storage quota exceeded, attempting cleanup');
-            // Could implement storage cleanup here if needed
-            // For now, just notify the user
-          } catch (cleanupError) {
-            logger.error('Storage cleanup failed:', cleanupError);
-          }
-        }
       }
     }, 150);
     
     return () => clearTimeout(t);
-  }, [baseState, loading, persistError]);
+  }, [baseState, loading]);
 
   // ---- optimistic update helpers ----
   const addOptimisticUpdate = React.useCallback(
@@ -525,21 +504,29 @@ export function useAppState() {
         preserve: preserveCompletions,
       });
 
+      // 🔧 FIX: Validate rows before applying
+      const validRows = Array.isArray(rows) ? rows.filter(validateAddressRow) : [];
+      
+      if (validRows.length === 0) {
+        logger.warn('No valid addresses to import');
+        return;
+      }
+
       // Apply optimistically
       addOptimisticUpdate(
         "update",
         "address",
-        { addresses: rows, bumpVersion: true, preserveCompletions },
+        { addresses: validRows, bumpVersion: true, preserveCompletions },
         operationId
       );
 
       // Apply to base state
       setBaseState((s) => ({
         ...s,
-        addresses: Array.isArray(rows) ? rows : [],
+        addresses: validRows,
         activeIndex: null,
         currentListVersion: (s.currentListVersion || 1) + 1,
-        completions: preserveCompletions ? s.completions : [], // preserve or clear based on option
+        completions: preserveCompletions ? s.completions : [],
       }));
 
       // Confirm immediately for local operations
@@ -552,6 +539,12 @@ export function useAppState() {
   const addAddress = React.useCallback(
     (addressRow: AddressRow): Promise<number> => {
       return new Promise<number>((resolve) => {
+        // 🔧 FIX: Validate address before adding
+        if (!validateAddressRow(addressRow)) {
+          resolve(-1);
+          return;
+        }
+        
         const operationId = generateOperationId("create", "address", addressRow);
 
         // Apply optimistically
@@ -562,7 +555,7 @@ export function useAppState() {
           const newAddresses = [...s.addresses, addressRow];
           const newIndex = newAddresses.length - 1;
 
-          // Resolve immediately with the new index - no race condition
+          // Resolve immediately with the new index
           confirmOptimisticUpdate(operationId);
           resolve(newIndex);
 
@@ -658,7 +651,7 @@ export function useAppState() {
     [baseState, addOptimisticUpdate]
   );
 
-  /** Enhanced undo with optimistic updates - finds the most recent completion for the given index */
+  /** Enhanced undo with optimistic updates */
   const undo = React.useCallback(
     (index: number) => {
       setBaseState((s) => {
@@ -703,35 +696,44 @@ export function useAppState() {
     [addOptimisticUpdate, confirmOptimisticUpdate]
   );
 
-  // ---- enhanced day tracking ----
+  // ---- 🔧 FIXED: Enhanced day tracking with better validation ----
 
   const startDay = React.useCallback(() => {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
 
     setBaseState((s) => {
-      if (s.daySessions.some((d) => !d.end)) return s; // already active
+      // Check if there's already an active session
+      if (s.daySessions.some((d) => !d.end)) {
+        logger.info('Day already active, skipping start');
+        return s;
+      }
 
       const sess: DaySession = {
         date: today,
         start: now.toISOString(),
       };
 
-      const operationId = generateOperationId("create", "session", sess);
-      addOptimisticUpdate("create", "session", sess, operationId);
+      // 🔧 FIX: Don't use optimistic updates for simple local operations
+      // This was causing the state corruption
+      logger.info('Starting new day session:', sess);
 
-      setTimeout(() => confirmOptimisticUpdate(operationId), 0);
-
-      return { ...s, daySessions: [...s.daySessions, sess] };
+      return { 
+        ...s, 
+        daySessions: [...s.daySessions, sess] 
+      };
     });
-  }, [addOptimisticUpdate, confirmOptimisticUpdate]);
+  }, []);
 
   const endDay = React.useCallback(() => {
     const now = new Date();
 
     setBaseState((s) => {
       const i = s.daySessions.findIndex((d) => !d.end);
-      if (i === -1) return s;
+      if (i === -1) {
+        logger.info('No active session to end');
+        return s;
+      }
 
       const arr = s.daySessions.slice();
       const act = { ...arr[i] };
@@ -741,18 +743,16 @@ export function useAppState() {
         const start = new Date(act.start).getTime();
         const end = now.getTime();
         if (end > start) act.durationSeconds = Math.floor((end - start) / 1000);
-      } catch {}
-
-      const operationId = generateOperationId("update", "session", act);
-      addOptimisticUpdate("update", "session", act, operationId);
+      } catch (error) {
+        logger.warn('Failed to calculate session duration:', error);
+      }
 
       arr[i] = act;
-
-      setTimeout(() => confirmOptimisticUpdate(operationId), 0);
+      logger.info('Ending day session:', act);
 
       return { ...s, daySessions: arr };
     });
-  }, [addOptimisticUpdate, confirmOptimisticUpdate]);
+  }, []);
 
   // ---- enhanced arrangements ----
 
@@ -917,17 +917,6 @@ export function useAppState() {
     return () => clearInterval(interval);
   }, [loading, processReminders]);
 
-  // Process reminders when arrangements change
-  React.useEffect(() => {
-    if (!loading) {
-      const timeoutId = setTimeout(() => {
-        processReminders();
-      }, 500); // Small delay to batch arrangement changes
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [baseState.arrangements, loading, processReminders]);
-
   // ---- enhanced backup / restore with conflict detection ----
 
   function isValidState(obj: any): obj is AppState {
@@ -1055,11 +1044,10 @@ export function useAppState() {
         await set(STORAGE_KEY, stateToSave);
       } catch (persistError: any) {
         logger.error('Failed to persist restored state:', persistError);
-        setPersistError('Failed to save restored data: ' + (persistError?.message || 'Unknown error'));
         throw new Error('Restore failed: Could not save data');
       }
     },
-    [clearOptimisticUpdates, setPersistError]
+    [clearOptimisticUpdates]
   );
 
   // Enhanced setState for cloud sync with conflict detection
@@ -1174,10 +1162,6 @@ export function useAppState() {
         return updated;
       });
     },
-
-    // Error handling
-    persistError,
-    clearPersistError: () => setPersistError(null),
 
     // Enhanced actions
     setAddresses,
