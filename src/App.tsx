@@ -68,7 +68,7 @@ class ErrorBoundary extends React.Component<
 // Enhanced Upload JSON snapshot to Supabase Storage with retry mechanism
 async function uploadBackupToStorage(
   data: unknown,
-  label: "finish" | "manual" = "manual",
+  label: "finish" | "manual" | "periodic" = "manual",
   retryCount = 0
 ) {
   if (!supabase) {

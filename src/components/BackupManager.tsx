@@ -62,7 +62,7 @@ export function BackupManager({ currentData, onRestore, isOpen, onClose }: Backu
     }
   };
 
-  const downloadBackup = (backup: any, index: number) => {
+  const downloadBackup = (backup: any, _index: number) => {
     try {
       const timestamp = new Date(backup.timestamp).toISOString().replace(/[:.]/g, '-');
       LocalBackupManager.downloadBackup(backup.data, `navigator-backup-${timestamp}.json`);
