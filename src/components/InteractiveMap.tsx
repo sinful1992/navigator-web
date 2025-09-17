@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { AddressRow } from "../types";
-import { geocodeAddresses, type GeocodingResult } from "../services/hybridRouting";
+import { geocodeAddresses } from "../services/hybridRouting";
 import { loadGoogleMapsSDK, isGoogleMapsSDKAvailable } from "../services/googleMapsSDK";
 
 interface MapPin {

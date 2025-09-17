@@ -526,7 +526,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
             <InteractiveMap
               addresses={addresses.map(geocodingResultToAddressRow)}
               onAddressesUpdate={handleMapAddressesUpdate}
-              startingPointIndex={startingPointIndex}
+              startingPointIndex={startingPointIndex ?? undefined}
               onStartingPointChange={setStartingPointIndex}
             />
           ) : (
