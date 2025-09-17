@@ -162,8 +162,7 @@ export function DayPanel({
   }, [endDate, endTime, onEditEnd]);
 
   return (
-    <>
-      <div className={`day-panel-modern ${isActive ? "day-panel-active" : ""}`}>
+    <div className={`day-panel-modern ${isActive ? "day-panel-active" : ""}`}>
       <div className="day-panel-header">
         <div className="day-status">
           <div className="day-status-icon">
@@ -289,9 +288,8 @@ export function DayPanel({
           )}
         </div>
         </div>
-      </div>
 
-      <style>{`
+        <style>{`
         .day-panel-modern {
           background: linear-gradient(135deg, var(--white) 0%, var(--gray-50) 100%);
           border: 1px solid var(--border);
@@ -459,7 +457,6 @@ export function DayPanel({
           }
         }
       `}</style>
-      </div>
-    </>
+    </div>
   );
 }

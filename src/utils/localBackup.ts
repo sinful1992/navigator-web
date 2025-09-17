@@ -4,7 +4,6 @@ import { logger } from './logger';
 export class LocalBackupManager {
   private static readonly BACKUP_KEY = 'navigator_local_backups';
   private static readonly MAX_BACKUPS = 10;
-  private static readonly BACKUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 
   // Download backup as file to user's Downloads folder
   static downloadBackup(data: any, filename?: string): void {

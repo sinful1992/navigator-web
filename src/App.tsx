@@ -629,7 +629,7 @@ function AuthedApp() {
 
           // Cloud backup if available
           if (supabase) {
-            await uploadBackupToStorage(snap, "completion");
+            await uploadBackupToStorage(snap, "manual");
             logger.info("Cloud backup after completion successful");
           }
 
@@ -857,7 +857,7 @@ function AuthedApp() {
 
         // Cloud backup if available
         if (supabase) {
-          await uploadBackupToStorage(snap, "outcome-change");
+          await uploadBackupToStorage(snap, "manual");
           logger.info("Cloud backup after outcome change successful");
         }
 

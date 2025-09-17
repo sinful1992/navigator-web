@@ -212,16 +212,6 @@ const ArrangementsComponent = function Arrangements({
     return { total, todayCount, overdue, totalAmountDue };
   }, [filteredArrangements]);
 
-  const getStatusColor = (status: ArrangementStatus): string => {
-    switch (status) {
-      case "Confirmed": return "var(--success)";
-      case "Completed": return "var(--primary)";
-      case "Cancelled": return "var(--text-muted)";
-      case "Missed": return "var(--danger)";
-      default: return "var(--warning)";
-    }
-  };
-
   const getStatusIcon = (status: ArrangementStatus): string => {
     switch (status) {
       case "Scheduled": return "📅";
@@ -373,8 +363,7 @@ const ArrangementsComponent = function Arrangements({
   };
 
   return (
-    <>
-      <div className="arrangements-wrap">
+    <div className="arrangements-wrap">
       {/* Header with view toggle */}
       <div className="top-row">
         <div className="stat-item">
@@ -767,6 +756,236 @@ const ArrangementsComponent = function Arrangements({
         )}
         </div>
       )}
+
+      <style>{`
+        .arrangement-card-modern {
+          background: linear-gradient(135deg, var(--white) 0%, var(--gray-25) 100%);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          padding: 1.5rem;
+          margin-bottom: 1rem;
+          box-shadow: var(--shadow-sm);
+          transition: all 0.2s ease;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .arrangement-card-modern:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-md);
+          border-color: var(--primary-light);
+        }
+
+        .arrangement-card-modern::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%);
+        }
+
+        .arrangement-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 1.25rem;
+          gap: 1rem;
+        }
+
+        .arrangement-primary-info {
+          flex: 1;
+        }
+
+        .arrangement-address-modern {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .address-index {
+          background: var(--primary);
+          color: white;
+          font-size: 0.75rem;
+          font-weight: 600;
+          padding: 0.25rem 0.5rem;
+          border-radius: var(--radius-sm);
+          min-width: 2rem;
+          text-align: center;
+        }
+
+        .address-text {
+          font-weight: 600;
+          font-size: 1.1rem;
+          color: var(--text-primary);
+          line-height: 1.2;
+        }
+
+        .arrangement-customer-modern {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.9rem;
+          color: var(--text-secondary);
+        }
+
+        .customer-icon {
+          font-size: 1rem;
+        }
+
+        .customer-name {
+          font-weight: 500;
+        }
+
+        .arrangement-status-modern {
+          flex-shrink: 0;
+        }
+
+        .status-badge-modern {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          border-radius: var(--radius-full);
+          font-size: 0.875rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          transition: all 0.2s ease;
+        }
+
+        .status-badge-modern.status-scheduled {
+          background: linear-gradient(135deg, var(--blue-50) 0%, var(--blue-25) 100%);
+          color: var(--blue-700);
+          border: 1px solid var(--blue-200);
+        }
+
+        .status-badge-modern.status-confirmed {
+          background: linear-gradient(135deg, var(--success-light) 0%, var(--success-lighter) 100%);
+          color: var(--success-dark);
+          border: 1px solid var(--success-border);
+        }
+
+        .status-badge-modern.status-completed {
+          background: linear-gradient(135deg, var(--green-50) 0%, var(--green-25) 100%);
+          color: var(--green-700);
+          border: 1px solid var(--green-200);
+        }
+
+        .status-badge-modern.status-cancelled {
+          background: linear-gradient(135deg, var(--gray-50) 0%, var(--gray-25) 100%);
+          color: var(--gray-700);
+          border: 1px solid var(--gray-200);
+        }
+
+        .status-badge-modern.status-missed {
+          background: linear-gradient(135deg, var(--danger-light) 0%, var(--danger-lighter) 100%);
+          color: var(--danger-dark);
+          border: 1px solid var(--danger-border);
+        }
+
+        .status-icon {
+          font-size: 0.875rem;
+        }
+
+        .arrangement-card-body {
+          margin-bottom: 1.25rem;
+        }
+
+        .arrangement-details-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 1rem;
+        }
+
+        .detail-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.75rem;
+          padding: 0.75rem;
+          background: var(--gray-25);
+          border-radius: var(--radius-md);
+          transition: all 0.2s ease;
+        }
+
+        .detail-item:hover {
+          background: var(--gray-50);
+        }
+
+        .detail-notes {
+          grid-column: 1 / -1;
+        }
+
+        .detail-icon {
+          font-size: 1.1rem;
+          flex-shrink: 0;
+          margin-top: 0.125rem;
+        }
+
+        .detail-content {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .detail-label {
+          display: block;
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: var(--text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin-bottom: 0.25rem;
+        }
+
+        .detail-value {
+          display: block;
+          font-size: 0.9rem;
+          color: var(--text-primary);
+          font-weight: 500;
+          word-break: break-word;
+        }
+
+        .amount-value {
+          color: var(--success-dark);
+          font-weight: 700;
+          font-size: 1rem;
+        }
+
+        .phone-link {
+          color: var(--primary) !important;
+          text-decoration: none;
+          transition: color 0.2s ease;
+        }
+
+        .phone-link:hover {
+          color: var(--primary-dark) !important;
+          text-decoration: underline;
+        }
+
+        .recurrence-progress {
+          font-size: 0.8rem;
+          color: var(--text-secondary);
+          margin-top: 0.25rem;
+          font-weight: 400;
+        }
+
+        @media (max-width: 768px) {
+          .arrangement-card-header {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .arrangement-details-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .detail-notes {
+            grid-column: 1;
+          }
+        }
+      `}</style>
     </div>
   );
 };
@@ -1225,237 +1444,5 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
         </form>
       </div>
     </div>
-
-    <style>{`
-      .arrangement-card-modern {
-        background: linear-gradient(135deg, var(--white) 0%, var(--gray-25) 100%);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-        box-shadow: var(--shadow-sm);
-        transition: all 0.2s ease;
-        position: relative;
-        overflow: hidden;
-      }
-
-      .arrangement-card-modern:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-md);
-        border-color: var(--primary-light);
-      }
-
-      .arrangement-card-modern::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%);
-      }
-
-      .arrangement-card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 1.25rem;
-        gap: 1rem;
-      }
-
-      .arrangement-primary-info {
-        flex: 1;
-      }
-
-      .arrangement-address-modern {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 0.5rem;
-      }
-
-      .address-index {
-        background: var(--primary);
-        color: white;
-        font-size: 0.75rem;
-        font-weight: 600;
-        padding: 0.25rem 0.5rem;
-        border-radius: var(--radius-sm);
-        min-width: 2rem;
-        text-align: center;
-      }
-
-      .address-text {
-        font-weight: 600;
-        font-size: 1.1rem;
-        color: var(--text-primary);
-        line-height: 1.2;
-      }
-
-      .arrangement-customer-modern {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 0.9rem;
-        color: var(--text-secondary);
-      }
-
-      .customer-icon {
-        font-size: 1rem;
-      }
-
-      .customer-name {
-        font-weight: 500;
-      }
-
-      .arrangement-status-modern {
-        flex-shrink: 0;
-      }
-
-      .status-badge-modern {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        border-radius: var(--radius-full);
-        font-size: 0.875rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        transition: all 0.2s ease;
-      }
-
-      .status-badge-modern.status-scheduled {
-        background: linear-gradient(135deg, var(--blue-50) 0%, var(--blue-25) 100%);
-        color: var(--blue-700);
-        border: 1px solid var(--blue-200);
-      }
-
-      .status-badge-modern.status-confirmed {
-        background: linear-gradient(135deg, var(--success-light) 0%, var(--success-lighter) 100%);
-        color: var(--success-dark);
-        border: 1px solid var(--success-border);
-      }
-
-      .status-badge-modern.status-completed {
-        background: linear-gradient(135deg, var(--green-50) 0%, var(--green-25) 100%);
-        color: var(--green-700);
-        border: 1px solid var(--green-200);
-      }
-
-      .status-badge-modern.status-cancelled {
-        background: linear-gradient(135deg, var(--gray-50) 0%, var(--gray-25) 100%);
-        color: var(--gray-700);
-        border: 1px solid var(--gray-200);
-      }
-
-      .status-badge-modern.status-missed {
-        background: linear-gradient(135deg, var(--danger-light) 0%, var(--danger-lighter) 100%);
-        color: var(--danger-dark);
-        border: 1px solid var(--danger-border);
-      }
-
-      .status-icon {
-        font-size: 0.875rem;
-      }
-
-      .arrangement-card-body {
-        margin-bottom: 1.25rem;
-      }
-
-      .arrangement-details-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-      }
-
-      .detail-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.75rem;
-        padding: 0.75rem;
-        background: var(--gray-25);
-        border-radius: var(--radius-md);
-        transition: all 0.2s ease;
-      }
-
-      .detail-item:hover {
-        background: var(--gray-50);
-      }
-
-      .detail-notes {
-        grid-column: 1 / -1;
-      }
-
-      .detail-icon {
-        font-size: 1.1rem;
-        flex-shrink: 0;
-        margin-top: 0.125rem;
-      }
-
-      .detail-content {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .detail-label {
-        display: block;
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.25rem;
-      }
-
-      .detail-value {
-        display: block;
-        font-size: 0.9rem;
-        color: var(--text-primary);
-        font-weight: 500;
-        word-break: break-word;
-      }
-
-      .amount-value {
-        color: var(--success-dark);
-        font-weight: 700;
-        font-size: 1rem;
-      }
-
-      .phone-link {
-        color: var(--primary) !important;
-        text-decoration: none;
-        transition: color 0.2s ease;
-      }
-
-      .phone-link:hover {
-        color: var(--primary-dark) !important;
-        text-decoration: underline;
-      }
-
-      .recurrence-progress {
-        font-size: 0.8rem;
-        color: var(--text-secondary);
-        margin-top: 0.25rem;
-        font-weight: 400;
-      }
-
-      @media (max-width: 768px) {
-        .arrangement-card-header {
-          flex-direction: column;
-          align-items: stretch;
-        }
-
-        .arrangement-details-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .detail-notes {
-          grid-column: 1;
-        }
-      }
-    `}</style>
-      </div>
-    </>
   );
 }
