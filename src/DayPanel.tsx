@@ -1,4 +1,4 @@
-// src/DayPanel.tsx - FIXED VERSION
+// src/DayPanel.tsx - FIXED VERSION - Removed conflicting styles
 import * as React from "react";
 import type { DaySession, Completion, Outcome } from "./types";
 import { useBackupLoading } from "./hooks/useBackupLoading";
@@ -43,7 +43,7 @@ function fmtTime(iso?: string) {
       hour: '2-digit', 
       minute: '2-digit',
       hour12: false,
-      timeZone: 'Europe/London' // Or use Intl.DateTimeFormat().resolvedOptions().timeZone for auto-detect
+      timeZone: 'Europe/London'
     });
   } catch {
     return "—";
@@ -260,12 +260,12 @@ export function DayPanel({
               ✏️ Edit start
             </button>
           ) : (
-            <div className="btn-group" style={{ alignItems: "center" }}>
+            <div className="day-edit-group">
               <input
                 id="start-date"
                 name="startDate"
                 type="date"
-                className="input"
+                className="input input-sm"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 autoComplete="off"
@@ -274,13 +274,13 @@ export function DayPanel({
                 id="start-time"
                 name="startTime"
                 type="time"
-                className="input"
+                className="input input-sm"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
                 autoComplete="off"
               />
-              <button className="btn btn-primary btn-sm" onClick={saveStart}>💾 Save</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setEditingStart(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={saveStart}>💾</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditingStart(false)}>✕</button>
             </div>
           )}
 
@@ -290,12 +290,12 @@ export function DayPanel({
               ✏️ Edit finish
             </button>
           ) : (
-            <div className="btn-group" style={{ alignItems: "center" }}>
+            <div className="day-edit-group">
               <input
                 id="end-date"
                 name="endDate"
                 type="date"
-                className="input"
+                className="input input-sm"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 autoComplete="off"
@@ -304,244 +304,38 @@ export function DayPanel({
                 id="end-time"
                 name="endTime"
                 type="time"
-                className="input"
+                className="input input-sm"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
                 autoComplete="off"
               />
-              <button className="btn btn-primary btn-sm" onClick={saveEnd}>💾 Save</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setEditingEnd(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={saveEnd}>💾</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditingEnd(false)}>✕</button>
             </div>
           )}
         </div>
-        </div>
+      </div>
 
-        {/* Loading Modal for Backup */}
-        <Modal
-          isOpen={isLoading}
-          onClose={() => {}} // Prevent closing during backup
-          title="Backing up data"
-          showCloseButton={false}
-          size="sm"
-        >
-          <div className="backup-loading-modal">
-            <div className="backup-loading-content">
-              <LoadingSpinner size="lg" />
-              <h3 className="backup-loading-title">
-                Downloading backup, please wait...
-              </h3>
-              <p className="backup-loading-message">
-                Do not close the app or press the button again. This may take a few moments.
-              </p>
-            </div>
+      {/* Loading Modal for Backup */}
+      <Modal
+        isOpen={isLoading}
+        onClose={() => {}} // Prevent closing during backup
+        title="Backing up data"
+        showCloseButton={false}
+        size="sm"
+      >
+        <div className="backup-loading-modal">
+          <div className="backup-loading-content">
+            <LoadingSpinner size="lg" />
+            <h3 className="backup-loading-title">
+              Downloading backup, please wait...
+            </h3>
+            <p className="backup-loading-message">
+              Do not close the app or press the button again. This may take a few moments.
+            </p>
           </div>
-        </Modal>
-
-        <style>{`
-        .day-panel-modern {
-          background: linear-gradient(135deg, var(--white) 0%, var(--gray-50) 100%);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg);
-          padding: 1.5rem;
-          margin-bottom: 1.5rem;
-          box-shadow: var(--shadow-sm);
-          transition: all 0.2s ease;
-        }
-
-        .day-panel-modern.day-panel-active {
-          border-color: var(--success);
-          box-shadow: 0 0 0 3px var(--success-light);
-          background: linear-gradient(135deg, var(--success-light) 0%, var(--white) 100%);
-        }
-
-        .day-panel-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 1.25rem;
-          gap: 1rem;
-        }
-
-        .day-status {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          flex: 1;
-        }
-
-        .day-status-icon {
-          font-size: 1.5rem;
-          line-height: 1;
-        }
-
-        .day-status-text {
-          flex: 1;
-        }
-
-        .day-status-title {
-          font-weight: 600;
-          font-size: 1.1rem;
-          color: var(--text-primary);
-          margin-bottom: 0.25rem;
-        }
-
-        .day-status-subtitle {
-          font-size: 0.9rem;
-          color: var(--text-secondary);
-          font-family: monospace;
-        }
-
-        .day-stats-modern {
-          display: flex;
-          gap: 0.75rem;
-          flex-wrap: wrap;
-        }
-
-        .stat-pill {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          padding: 0.5rem 0.75rem;
-          border-radius: var(--radius-md);
-          min-width: 50px;
-          transition: all 0.2s ease;
-        }
-
-        .stat-pill:hover {
-          transform: translateY(-1px);
-          box-shadow: var(--shadow-md);
-        }
-
-        .stat-pill-pif {
-          background: linear-gradient(135deg, var(--success-light) 0%, var(--success-lighter) 100%);
-          border: 1px solid var(--success-border);
-        }
-
-        .stat-pill-done {
-          background: linear-gradient(135deg, var(--blue-50) 0%, var(--blue-25) 100%);
-          border: 1px solid var(--blue-200);
-        }
-
-        .stat-pill-da {
-          background: linear-gradient(135deg, var(--warning-light) 0%, var(--warning-lighter) 100%);
-          border: 1px solid var(--warning-border);
-        }
-
-        .stat-pill-arr {
-          background: linear-gradient(135deg, var(--purple-50) 0%, var(--purple-25) 100%);
-          border: 1px solid var(--purple-200);
-        }
-
-        .stat-number {
-          font-weight: 700;
-          font-size: 1.1rem;
-          line-height: 1;
-          color: var(--text-primary);
-        }
-
-        .stat-label {
-          font-size: 0.75rem;
-          font-weight: 500;
-          color: var(--text-secondary);
-          margin-top: 0.125rem;
-        }
-
-        .day-panel-actions {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 1rem;
-          flex-wrap: wrap;
-        }
-
-        .primary-actions {
-          display: flex;
-          gap: 0.75rem;
-        }
-
-        .edit-actions {
-          display: flex;
-          gap: 0.5rem;
-          align-items: center;
-          flex-wrap: wrap;
-        }
-
-        .btn-modern {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.75rem 1.25rem;
-          font-weight: 500;
-          transition: all 0.2s ease;
-        }
-
-        .btn-modern:hover {
-          transform: translateY(-1px);
-          box-shadow: var(--shadow-md);
-        }
-
-        .btn-icon {
-          font-size: 1rem;
-        }
-
-        /* Backup Loading Modal Styles */
-        .backup-loading-modal {
-          text-align: center;
-          padding: 2rem;
-        }
-
-        .backup-loading-content {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 1rem;
-        }
-
-        .backup-loading-title {
-          font-size: 1.125rem;
-          font-weight: 600;
-          color: var(--gray-800);
-          margin: 0;
-        }
-
-        .backup-loading-message {
-          font-size: 0.875rem;
-          color: var(--gray-600);
-          margin: 0;
-          line-height: 1.5;
-          max-width: 300px;
-        }
-
-        /* Dark mode support for backup modal */
-        .dark-mode .backup-loading-title {
-          color: var(--gray-100);
-        }
-
-        .dark-mode .backup-loading-message {
-          color: var(--gray-300);
-        }
-
-        @media (max-width: 768px) {
-          .day-panel-header {
-            flex-direction: column;
-            align-items: stretch;
-          }
-
-          .day-stats-modern {
-            justify-content: center;
-          }
-
-          .day-panel-actions {
-            flex-direction: column;
-            align-items: stretch;
-          }
-
-          .primary-actions,
-          .edit-actions {
-            justify-content: center;
-          }
-        }
-      `}</style>
+        </div>
+      </Modal>
     </div>
   );
 }
