@@ -36,7 +36,7 @@ export function SupabaseSetup({ onSetupComplete, onSkip, isOpen }: SupabaseSetup
 
       // Test connection
       const testClient = createClient(url, key);
-      const { data, error } = await testClient.auth.getSession();
+      const { data: _data, error } = await testClient.auth.getSession();
 
       if (error && error.message !== 'Auth session missing!') {
         throw error;
