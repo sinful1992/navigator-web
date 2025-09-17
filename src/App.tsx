@@ -784,25 +784,6 @@ function AuthedApp() {
     [setBaseState, deviceId, enqueueOp]
   );
 
-  const endDayWithBackup = React.useCallback(async () => {
-    try {
-      const snap = backupState();
-
-      // Cloud backup if available
-      if (supabase) {
-        await uploadBackupToStorage(snap, "finish");
-        logger.info("Cloud backup at day end successful");
-      }
-
-      // Critical local backup with download (day-end is important)
-      await LocalBackupManager.performCriticalBackup(snap, "day-end");
-      logger.info("Local backup at day end successful");
-    } catch (error) {
-      logger.warn("Backup at day end failed:", error);
-    }
-
-    endDay();
-  }, [backupState, endDay]);
 
   const onRestore: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
