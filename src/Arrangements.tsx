@@ -373,7 +373,8 @@ const ArrangementsComponent = function Arrangements({
   };
 
   return (
-    <div className="arrangements-wrap">
+    <>
+      <div className="arrangements-wrap">
       {/* Header with view toggle */}
       <div className="top-row">
         <div className="stat-item">
@@ -1454,5 +1455,7 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
         }
       }
     `}</style>
+      </div>
+    </>
   );
 }
