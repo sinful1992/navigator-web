@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import type { AddressRow } from "./types";
 import { SubscriptionGuard } from "./SubscriptionGuard";
 import { AddressAutocomplete } from "./components/AddressAutocomplete";
+import { InteractiveMap } from "./components/InteractiveMap";
 import { ImportExcel } from "./ImportExcel";
 import {
   geocodeAddresses,
@@ -27,6 +28,8 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
   const [newAddress, setNewAddress] = useState("");
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [startingPointIndex, setStartingPointIndex] = useState<number | null>(null);
+  const [showMap, setShowMap] = useState(false);
   const [geocodingProgress, setGeocodingProgress] = useState<{
     completed: number;
     total: number;
@@ -49,6 +52,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
     const geocodingResults = importedAddresses.map(addressRowToGeocodingResult);
     setAddresses(geocodingResults);
     setOptimizationResult(null);
+    setStartingPointIndex(null);
   }, []);
 
   // Add single address manually
@@ -88,6 +92,12 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
   const handleRemoveAddress = (index: number) => {
     setAddresses(prev => prev.filter((_, i) => i !== index));
     setOptimizationResult(null);
+    // Adjust starting point index if needed
+    if (startingPointIndex === index) {
+      setStartingPointIndex(null);
+    } else if (startingPointIndex !== null && startingPointIndex > index) {
+      setStartingPointIndex(startingPointIndex - 1);
+    }
   };
 
   // Edit address inline
@@ -154,7 +164,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
     }
 
     const validAddresses = addresses.filter(addr => addr.success && addr.lat && addr.lng);
-    
+
     if (validAddresses.length === 0) {
       alert("No addresses with valid coordinates available for optimization");
       return;
@@ -172,8 +182,18 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
     try {
       const addressRows = addresses.map(geocodingResultToAddressRow);
-      const result = await optimizeRoute(addressRows);
-      
+
+      // Use starting point if selected
+      let startLocation: [number, number] | undefined;
+      if (startingPointIndex !== null && startingPointIndex >= 0) {
+        const startAddr = addresses[startingPointIndex];
+        if (startAddr.success && startAddr.lat && startAddr.lng) {
+          startLocation = [startAddr.lng, startAddr.lat];
+        }
+      }
+
+      const result = await optimizeRoute(addressRows, startLocation);
+
       setOptimizationResult({
         optimizedOrder: result.optimizedOrder,
         totalDistance: result.totalDistance,
@@ -186,6 +206,11 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
         // Reorder addresses based on optimization
         const optimizedAddresses = result.optimizedOrder.map(index => addresses[index]);
         setAddresses(optimizedAddresses);
+        // Update starting point index to reflect new order
+        if (startingPointIndex !== null) {
+          const newStartIndex = result.optimizedOrder.indexOf(startingPointIndex);
+          setStartingPointIndex(newStartIndex >= 0 ? newStartIndex : null);
+        }
       }
 
     } catch (error) {
@@ -214,7 +239,15 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
     if (confirm("Are you sure you want to clear all addresses?")) {
       setAddresses([]);
       setOptimizationResult(null);
+      setStartingPointIndex(null);
     }
+  };
+
+  // Handle map address updates
+  const handleMapAddressesUpdate = (updatedAddresses: AddressRow[]) => {
+    const geocodingResults = updatedAddresses.map(addressRowToGeocodingResult);
+    setAddresses(geocodingResults);
+    setOptimizationResult(null);
   };
 
   // Statistics
@@ -392,6 +425,14 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
             </button>
 
             <button
+              className="btn btn-primary"
+              onClick={() => setShowMap(!showMap)}
+              disabled={addresses.length === 0}
+            >
+              {showMap ? '📋 Show List' : '🗺️ Show Map'}
+            </button>
+
+            <button
               className="btn btn-success"
               onClick={handleExportToMainList}
               disabled={addresses.length === 0}
@@ -479,96 +520,125 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
           </div>
         )}
 
-        {/* Address List */}
+        {/* Interactive Map or Address List */}
         {addresses.length > 0 && (
-          <div style={{ 
-            background: 'var(--surface)', 
-            border: '1px solid var(--border-light)',
-            borderRadius: 'var(--radius)',
-            overflow: 'hidden'
-          }}>
-            <div style={{ 
-              padding: '1rem', 
-              borderBottom: '1px solid var(--border-light)',
-              background: 'var(--background)'
+          showMap ? (
+            <InteractiveMap
+              addresses={addresses.map(geocodingResultToAddressRow)}
+              onAddressesUpdate={handleMapAddressesUpdate}
+              startingPointIndex={startingPointIndex}
+              onStartingPointChange={setStartingPointIndex}
+            />
+          ) : (
+            <div style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border-light)',
+              borderRadius: 'var(--radius)',
+              overflow: 'hidden'
             }}>
-              <h3 style={{ margin: 0 }}>Addresses ({addresses.length})</h3>
-            </div>
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {addresses.map((addr, index) => (
-                <div
-                  key={index}
-                  style={{
-                    padding: '0.75rem 1rem',
-                    borderBottom: index < addresses.length - 1 ? '1px solid var(--border-light)' : 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem'
-                  }}
-                >
-                  <div style={{ 
-                    width: '1.5rem', 
-                    height: '1.5rem', 
-                    borderRadius: '50%',
-                    background: addr.success ? 'var(--success)' : 'var(--warning)',
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.75rem',
-                    fontWeight: 'bold',
-                    flexShrink: 0
+              <div style={{
+                padding: '1rem',
+                borderBottom: '1px solid var(--border-light)',
+                background: 'var(--background)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <h3 style={{ margin: 0 }}>Addresses ({addresses.length})</h3>
+                {startingPointIndex !== null && (
+                  <div style={{
+                    background: 'var(--primary-light)',
+                    color: 'var(--primary)',
+                    padding: '0.25rem 0.75rem',
+                    borderRadius: 'var(--radius)',
+                    fontSize: '0.875rem'
                   }}>
-                    {index + 1}
+                    🏠 Start: #{startingPointIndex + 1}
                   </div>
-                  
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <input
-                      name={`address-${index}`}
-                      type="text"
-                      value={addr.address}
-                      onChange={(e) => handleEditAddress(index, e.target.value)}
-                      className="input"
-                      style={{
-                        width: '100%',
-                        marginBottom: '0.25rem',
-                        fontSize: '0.875rem'
-                      }}
-                    />
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {addr.success ? (
-                        <>
-                          ✅ {addr.formattedAddress || addr.address}
-                          {addr.confidence && (
-                            <span style={{ 
-                              marginLeft: '0.5rem',
-                              color: addr.confidence >= 0.8 ? 'var(--success)' : 
-                                     addr.confidence >= 0.5 ? 'var(--warning)' : 'var(--danger)'
-                            }}>
-                              {formatConfidence(addr.confidence)} confidence
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        <span style={{ color: 'var(--warning)' }}>
-                          ⚠️ {addr.error}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => handleRemoveAddress(index)}
-                    title="Remove address"
-                    style={{ flexShrink: 0 }}
+                )}
+              </div>
+              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                {addresses.map((addr, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      borderBottom: index < addresses.length - 1 ? '1px solid var(--border-light)' : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      background: index === startingPointIndex ? 'var(--primary-light)' : 'transparent'
+                    }}
                   >
-                    ✕
-                  </button>
-                </div>
-              ))}
+                    <div style={{
+                      width: '1.5rem',
+                      height: '1.5rem',
+                      borderRadius: '50%',
+                      background: index === startingPointIndex ? 'var(--primary)' :
+                                 addr.success ? 'var(--success)' : 'var(--warning)',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold',
+                      flexShrink: 0,
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => setStartingPointIndex(index === startingPointIndex ? null : index)}
+                    title={index === startingPointIndex ? 'Remove as starting point' : 'Set as starting point'}
+                    >
+                      {index === startingPointIndex ? '🏠' : index + 1}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <input
+                        name={`address-${index}`}
+                        type="text"
+                        value={addr.address}
+                        onChange={(e) => handleEditAddress(index, e.target.value)}
+                        className="input"
+                        style={{
+                          width: '100%',
+                          marginBottom: '0.25rem',
+                          fontSize: '0.875rem'
+                        }}
+                      />
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {addr.success ? (
+                          <>
+                            ✅ {addr.formattedAddress || addr.address}
+                            {addr.confidence && (
+                              <span style={{
+                                marginLeft: '0.5rem',
+                                color: addr.confidence >= 0.8 ? 'var(--success)' :
+                                       addr.confidence >= 0.5 ? 'var(--warning)' : 'var(--danger)'
+                              }}>
+                                {formatConfidence(addr.confidence)} confidence
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span style={{ color: 'var(--warning)' }}>
+                            ⚠️ {addr.error}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => handleRemoveAddress(index)}
+                      title="Remove address"
+                      style={{ flexShrink: 0 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )
         )}
 
         {/* Empty State */}
