@@ -162,46 +162,71 @@ export function DayPanel({
   }, [endDate, endTime, onEditEnd]);
 
   return (
-    <div className={`day-panel ${isActive ? "day-panel-active" : ""}`}>
-      <div className="day-panel-content">
-        <div className="day-panel-info">
-          <div>
-            <div style={{ fontWeight: 700, color: "var(--text-primary)" }}>
-              {isActive ? "Day Running" : latestToday ? "Day (ended)" : "No session today"}
+    <div className={`day-panel-modern ${isActive ? "day-panel-active" : ""}`}>
+      <div className="day-panel-header">
+        <div className="day-status">
+          <div className="day-status-icon">
+            {isActive ? "🟢" : latestToday ? "🔴" : "⚫"}
+          </div>
+          <div className="day-status-text">
+            <div className="day-status-title">
+              {isActive ? "Day Running" : latestToday ? "Day Completed" : "No Session Today"}
             </div>
-            <div className="muted">
+            <div className="day-status-subtitle">
               {latestToday?.start ? (
                 <>
-                  Start: <strong>{fmtTime(latestToday.start)}</strong>
-                  {latestToday?.end ? (
-                    <>
-                      {" "}
-                      • End: <strong>{fmtTime(latestToday.end)}</strong>
-                    </>
-                  ) : null}
+                  {fmtTime(latestToday.start)}
+                  {latestToday?.end && (
+                    <> → {fmtTime(latestToday.end)}</>
+                  )}
+                  {isActive && !latestToday?.end && (
+                    <> • <span style={{ color: 'var(--success)' }}>Active</span></>
+                  )}
                 </>
               ) : (
-                "—"
+                "Click 'Start Day' to begin tracking"
               )}
             </div>
           </div>
-
-          {/* Today's quick stats */}
-          <div className="day-stats" style={{ display: "flex", gap: "0.5rem" }}>
-            <span className="pill pill-pif">PIF {outcomeCounts.PIF}</span>
-            <span className="pill pill-done">Done {outcomeCounts.Done}</span>
-            <span className="pill pill-da">DA {outcomeCounts.DA}</span>
-            <span className="pill pill-active">ARR {outcomeCounts.ARR}</span>
-          </div>
         </div>
 
-        <div className="day-panel-actions" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          {!isActive ? (
-            <button className="btn btn-success" onClick={startDay}>▶️ Start Day</button>
-          ) : (
-            <button className="btn btn-danger" onClick={endDay}>⏹️ End Day</button>
-          )}
+        {/* Today's quick stats */}
+        <div className="day-stats-modern">
+          <div className="stat-pill stat-pill-pif">
+            <span className="stat-number">{outcomeCounts.PIF}</span>
+            <span className="stat-label">PIF</span>
+          </div>
+          <div className="stat-pill stat-pill-done">
+            <span className="stat-number">{outcomeCounts.Done}</span>
+            <span className="stat-label">Done</span>
+          </div>
+          <div className="stat-pill stat-pill-da">
+            <span className="stat-number">{outcomeCounts.DA}</span>
+            <span className="stat-label">DA</span>
+          </div>
+          <div className="stat-pill stat-pill-arr">
+            <span className="stat-number">{outcomeCounts.ARR}</span>
+            <span className="stat-label">ARR</span>
+          </div>
+        </div>
+      </div>
 
+      <div className="day-panel-actions">
+        <div className="primary-actions">
+          {!isActive ? (
+            <button className="btn btn-primary btn-modern" onClick={startDay}>
+              <span className="btn-icon">▶️</span>
+              Start Day
+            </button>
+          ) : (
+            <button className="btn btn-danger btn-modern" onClick={endDay}>
+              <span className="btn-icon">⏹️</span>
+              End Day
+            </button>
+          )}
+        </div>
+
+        <div className="edit-actions">
           {/* Edit START */}
           {!editingStart ? (
             <button className="btn btn-ghost btn-sm" onClick={() => setEditingStart(true)} title="Edit today's start time">
@@ -262,7 +287,177 @@ export function DayPanel({
             </div>
           )}
         </div>
+        </div>
       </div>
+
+      <style>{`
+        .day-panel-modern {
+          background: linear-gradient(135deg, var(--white) 0%, var(--gray-50) 100%);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          padding: 1.5rem;
+          margin-bottom: 1.5rem;
+          box-shadow: var(--shadow-sm);
+          transition: all 0.2s ease;
+        }
+
+        .day-panel-modern.day-panel-active {
+          border-color: var(--success);
+          box-shadow: 0 0 0 3px var(--success-light);
+          background: linear-gradient(135deg, var(--success-light) 0%, var(--white) 100%);
+        }
+
+        .day-panel-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 1.25rem;
+          gap: 1rem;
+        }
+
+        .day-status {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          flex: 1;
+        }
+
+        .day-status-icon {
+          font-size: 1.5rem;
+          line-height: 1;
+        }
+
+        .day-status-text {
+          flex: 1;
+        }
+
+        .day-status-title {
+          font-weight: 600;
+          font-size: 1.1rem;
+          color: var(--text-primary);
+          margin-bottom: 0.25rem;
+        }
+
+        .day-status-subtitle {
+          font-size: 0.9rem;
+          color: var(--text-secondary);
+          font-family: monospace;
+        }
+
+        .day-stats-modern {
+          display: flex;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+
+        .stat-pill {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 0.5rem 0.75rem;
+          border-radius: var(--radius-md);
+          min-width: 50px;
+          transition: all 0.2s ease;
+        }
+
+        .stat-pill:hover {
+          transform: translateY(-1px);
+          box-shadow: var(--shadow-md);
+        }
+
+        .stat-pill-pif {
+          background: linear-gradient(135deg, var(--success-light) 0%, var(--success-lighter) 100%);
+          border: 1px solid var(--success-border);
+        }
+
+        .stat-pill-done {
+          background: linear-gradient(135deg, var(--blue-50) 0%, var(--blue-25) 100%);
+          border: 1px solid var(--blue-200);
+        }
+
+        .stat-pill-da {
+          background: linear-gradient(135deg, var(--warning-light) 0%, var(--warning-lighter) 100%);
+          border: 1px solid var(--warning-border);
+        }
+
+        .stat-pill-arr {
+          background: linear-gradient(135deg, var(--purple-50) 0%, var(--purple-25) 100%);
+          border: 1px solid var(--purple-200);
+        }
+
+        .stat-number {
+          font-weight: 700;
+          font-size: 1.1rem;
+          line-height: 1;
+          color: var(--text-primary);
+        }
+
+        .stat-label {
+          font-size: 0.75rem;
+          font-weight: 500;
+          color: var(--text-secondary);
+          margin-top: 0.125rem;
+        }
+
+        .day-panel-actions {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 1rem;
+          flex-wrap: wrap;
+        }
+
+        .primary-actions {
+          display: flex;
+          gap: 0.75rem;
+        }
+
+        .edit-actions {
+          display: flex;
+          gap: 0.5rem;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+
+        .btn-modern {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.75rem 1.25rem;
+          font-weight: 500;
+          transition: all 0.2s ease;
+        }
+
+        .btn-modern:hover {
+          transform: translateY(-1px);
+          box-shadow: var(--shadow-md);
+        }
+
+        .btn-icon {
+          font-size: 1rem;
+        }
+
+        @media (max-width: 768px) {
+          .day-panel-header {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .day-stats-modern {
+            justify-content: center;
+          }
+
+          .day-panel-actions {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .primary-actions,
+          .edit-actions {
+            justify-content: center;
+          }
+        }
+      `}</style>
     </div>
   );
 }

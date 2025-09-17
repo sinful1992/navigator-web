@@ -4,6 +4,7 @@ import { logger } from './logger';
 export class LocalBackupManager {
   private static readonly BACKUP_KEY = 'navigator_local_backups';
   private static readonly MAX_BACKUPS = 10;
+  private static readonly BACKUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 
   // Download backup as file to user's Downloads folder
   static downloadBackup(data: any, filename?: string): void {
@@ -149,17 +150,21 @@ export class LocalBackupManager {
     }
   }
 
-  // Auto-backup with download on critical events
+  // Auto-backup with download on critical events (REDUCED FREQUENCY)
   static async performCriticalBackup(data: any, reason: string): Promise<void> {
     try {
       logger.info(`Performing critical backup: ${reason}`);
 
-      // Store locally
+      // Always store locally
       this.storeLocalBackup(data);
 
-      // Download to files for safety
-      const comprehensiveBackup = this.createComprehensiveBackup(data);
-      this.downloadBackup(comprehensiveBackup, `navigator-critical-${reason}-${Date.now()}.json`);
+      // Only download files for truly critical events (not every completion)
+      const shouldDownload = this.shouldDownloadBackup(reason);
+      if (shouldDownload) {
+        const comprehensiveBackup = this.createComprehensiveBackup(data);
+        this.downloadBackup(comprehensiveBackup, `navigator-critical-${reason}-${Date.now()}.json`);
+        logger.info(`Backup file downloaded for critical event: ${reason}`);
+      }
 
       // Check storage health
       const isLow = await this.isStorageLow();
@@ -171,6 +176,19 @@ export class LocalBackupManager {
       logger.error('Critical backup failed:', error);
       throw error;
     }
+  }
+
+  // Determine if we should download a backup file (reduce frequency)
+  private static shouldDownloadBackup(reason: string): boolean {
+    const downloadReasons = [
+      'manual',           // User manually requested backup
+      'import',           // After importing new data
+      'day-end',          // At end of work day
+      'restore',          // After restoring data
+      'data-loss-risk'    // When data loss is detected
+    ];
+
+    return downloadReasons.includes(reason);
   }
 
   // Clean up old backups

@@ -504,13 +504,13 @@ function AuthedApp() {
       }
     };
 
-    // Run backup every 5 minutes
-    const interval = setInterval(periodicBackup, 5 * 60 * 1000);
+    // Run backup every 1 hour
+    const interval = setInterval(periodicBackup, 60 * 60 * 1000);
 
     // Run immediate backup if we have data but no recent backup
     const lastBackup = localStorage.getItem('last_backup_time');
     const now = Date.now();
-    if (!lastBackup || (now - parseInt(lastBackup)) > 10 * 60 * 1000) { // 10 minutes
+    if (!lastBackup || (now - parseInt(lastBackup)) > 60 * 60 * 1000) { // 1 hour
       setTimeout(async () => {
         await periodicBackup();
         localStorage.setItem('last_backup_time', now.toString());
@@ -623,19 +623,19 @@ function AuthedApp() {
       try {
         await complete(index, outcome, amount, arrangementId);
 
-        // Enhanced backup system: Cloud + Local + Download
+        // FIXED: Reduced backup - only cloud backup + local storage (no file downloads)
         try {
           const snap = backupState();
 
           // Cloud backup if available
           if (supabase) {
-            await uploadBackupToStorage(snap, "manual");
+            await uploadBackupToStorage(snap, "completion");
             logger.info("Cloud backup after completion successful");
           }
 
-          // Critical local backup with download
-          await LocalBackupManager.performCriticalBackup(snap, "completion");
-          logger.info("Local backup after completion successful");
+          // Local storage backup only (no file download to prevent data loss)
+          LocalBackupManager.storeLocalBackup(snap);
+          logger.info("Local storage backup after completion successful");
         } catch (backupError) {
           logger.error("Backup failed after completion:", backupError);
           // Don't throw - completion should still succeed even if backup fails
@@ -783,11 +783,23 @@ function AuthedApp() {
     [setBaseState, deviceId, enqueueOp]
   );
 
-  const endDayWithBackup = React.useCallback(() => {
-    const snap = backupState();
-    uploadBackupToStorage(snap, "finish").catch((e: any) => {
-      logger.warn("Backup failed:", e?.message || e);
-    });
+  const endDayWithBackup = React.useCallback(async () => {
+    try {
+      const snap = backupState();
+
+      // Cloud backup if available
+      if (supabase) {
+        await uploadBackupToStorage(snap, "finish");
+        logger.info("Cloud backup at day end successful");
+      }
+
+      // Critical local backup with download (day-end is important)
+      await LocalBackupManager.performCriticalBackup(snap, "day-end");
+      logger.info("Local backup at day end successful");
+    } catch (error) {
+      logger.warn("Backup at day end failed:", error);
+    }
+
     endDay();
   }, [backupState, endDay]);
 
@@ -837,15 +849,23 @@ function AuthedApp() {
         return { ...s, completions: comps };
       });
 
-      // CRITICAL FIX: Backup after outcome changes to prevent data loss
+      // FIXED: Reduced backup - only cloud backup + local storage (no file downloads)
       try {
         // Small delay to ensure state has updated
         await new Promise(resolve => setTimeout(resolve, 100));
         const snap = backupState();
-        await uploadBackupToStorage(snap, "manual");
-        logger.info("Auto-backup after outcome change successful");
+
+        // Cloud backup if available
+        if (supabase) {
+          await uploadBackupToStorage(snap, "outcome-change");
+          logger.info("Cloud backup after outcome change successful");
+        }
+
+        // Local storage backup only (no file download)
+        LocalBackupManager.storeLocalBackup(snap);
+        logger.info("Local storage backup after outcome change successful");
       } catch (backupError) {
-        logger.error("Auto-backup failed after outcome change:", backupError);
+        logger.error("Backup failed after outcome change:", backupError);
       }
     },
     [setState, backupState]
@@ -928,8 +948,8 @@ function AuthedApp() {
       }
     };
 
-    // Run backup every 5 minutes
-    const interval = setInterval(periodicBackup, 5 * 60 * 1000);
+    // Run backup every 1 hour
+    const interval = setInterval(periodicBackup, 60 * 60 * 1000);
 
     // Cleanup old backups weekly
     const cleanupInterval = setInterval(() => {
