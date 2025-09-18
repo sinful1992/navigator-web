@@ -1095,7 +1095,10 @@ function AuthedApp() {
                 </span>
               )}
             </div>
-            <SettingsDropdown />
+            <SettingsDropdown
+              reminderSettings={state.reminderSettings}
+              onUpdateReminderSettings={updateReminderSettings}
+            />
           </div>
 
           <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>

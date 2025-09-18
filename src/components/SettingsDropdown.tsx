@@ -1,13 +1,23 @@
 // src/components/SettingsDropdown.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { useSettings, PREDEFINED_REMINDERS, isSupabaseConfigured } from '../hooks/useSettings';
+import { ReminderSettings } from './ReminderSettings';
+import type { ReminderSettings as ReminderSettingsType } from '../types';
+import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
 
 interface SettingsDropdownProps {
   trigger?: React.ReactNode;
+  reminderSettings?: ReminderSettingsType;
+  onUpdateReminderSettings?: (settings: ReminderSettingsType) => void;
 }
 
-export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({ trigger }) => {
+export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
+  trigger,
+  reminderSettings,
+  onUpdateReminderSettings
+}) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [showSMSSettings, setShowSMSSettings] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const {
     settings,
@@ -172,6 +182,29 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({ trigger }) =
           </div>
           <div className="settings-separator" />
 
+          {/* SMS Template Settings */}
+          {reminderSettings && onUpdateReminderSettings && (
+            <>
+              <div className="settings-section">
+                <button
+                  className="sms-settings-button"
+                  onClick={() => {
+                    setShowSMSSettings(true);
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="sms-settings-icon">📱</span>
+                  <div className="sms-settings-info">
+                    <div className="sms-settings-title">SMS Template Settings</div>
+                    <div className="sms-settings-desc">Customize reminder message templates and variables</div>
+                  </div>
+                  <span className="sms-settings-arrow">→</span>
+                </button>
+              </div>
+              <div className="settings-separator" />
+            </>
+          )}
+
           {/* Other Settings */}
           <div className="settings-section">
             <div className="setting-item">
@@ -219,6 +252,18 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({ trigger }) =
             Settings are saved locally and synced to cloud if configured.
           </div>
         </div>
+      )}
+
+      {/* SMS Template Settings Modal */}
+      {showSMSSettings && reminderSettings && onUpdateReminderSettings && (
+        <ReminderSettings
+          settings={reminderSettings || DEFAULT_REMINDER_SETTINGS}
+          onUpdateSettings={(settings) => {
+            onUpdateReminderSettings(settings);
+            setShowSMSSettings(false);
+          }}
+          onClose={() => setShowSMSSettings(false)}
+        />
       )}
 
       <style>{`
@@ -449,6 +494,80 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({ trigger }) =
         .dark-mode .settings-select:focus,
         .dark-mode .settings-input:focus {
           border-color: var(--primary);
+        }
+
+        /* SMS Settings Button Styles */
+        .sms-settings-button {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.75rem;
+          background: var(--gray-50);
+          border: 1px solid var(--gray-200);
+          border-radius: var(--radius-md);
+          color: var(--gray-700);
+          text-align: left;
+          cursor: pointer;
+          transition: var(--transition-normal);
+        }
+
+        .sms-settings-button:hover {
+          background: var(--gray-100);
+          border-color: var(--primary);
+          color: var(--gray-800);
+        }
+
+        .sms-settings-icon {
+          font-size: 1.25rem;
+          flex-shrink: 0;
+        }
+
+        .sms-settings-info {
+          flex: 1;
+        }
+
+        .sms-settings-title {
+          font-size: 0.875rem;
+          font-weight: 500;
+          color: var(--gray-800);
+          margin-bottom: 0.125rem;
+        }
+
+        .sms-settings-desc {
+          font-size: 0.75rem;
+          color: var(--gray-500);
+          line-height: 1.3;
+        }
+
+        .sms-settings-arrow {
+          font-size: 0.875rem;
+          color: var(--gray-400);
+          flex-shrink: 0;
+        }
+
+        .dark-mode .sms-settings-button {
+          background: var(--gray-700);
+          border-color: var(--gray-600);
+          color: var(--gray-200);
+        }
+
+        .dark-mode .sms-settings-button:hover {
+          background: var(--gray-600);
+          border-color: var(--primary);
+          color: var(--gray-100);
+        }
+
+        .dark-mode .sms-settings-title {
+          color: var(--gray-100);
+        }
+
+        .dark-mode .sms-settings-desc {
+          color: var(--gray-400);
+        }
+
+        .dark-mode .sms-settings-arrow {
+          color: var(--gray-500);
         }
 
         @media (max-width: 768px) {
