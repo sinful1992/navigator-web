@@ -1016,6 +1016,24 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
         .dark-mode .variable-reference-panel ul {
           color: var(--gray-300, #d1d5db) !important;
         }
+
+        /* Template List Dark Mode */
+        .dark-mode .template-item strong {
+          color: var(--gray-100, #f3f4f6) !important;
+        }
+
+        .dark-mode .pill {
+          background: var(--success-dark, #166534) !important;
+          color: var(--success-light, #86efac) !important;
+        }
+
+        .dark-mode .template-header strong {
+          color: var(--gray-100, #f3f4f6) !important;
+        }
+
+        .dark-mode .template-header {
+          color: var(--gray-100, #f3f4f6) !important;
+        }
       `}</style>
     </div>
   );
