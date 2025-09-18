@@ -2012,9 +2012,20 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
                   <div>💰 Total Balance: £{formData.totalBalance}</div>
                   <div>🎯 Initial Payment (Today): £{formData.initialPayment}</div>
                   <div>📅 Remaining Balance: £{(parseFloat(formData.totalBalance) - parseFloat(formData.initialPayment)).toFixed(2)}</div>
-                  {formData.remainingPaymentSchedule !== "single" && formData.totalPayments && (
-                    <div>🔄 {formData.totalPayments} payments of £{((parseFloat(formData.totalBalance) - parseFloat(formData.initialPayment)) / formData.totalPayments).toFixed(2)} each</div>
+
+                  {/* Payment amount and schedule details */}
+                  {formData.remainingPaymentSchedule === "single" ? (
+                    <div>💳 Single payment: £{(parseFloat(formData.totalBalance) - parseFloat(formData.initialPayment)).toFixed(2)}</div>
+                  ) : formData.totalPayments && formData.totalPayments > 0 ? (
+                    <div>💳 {formData.totalPayments} × £{((parseFloat(formData.totalBalance) - parseFloat(formData.initialPayment)) / formData.totalPayments).toFixed(2)} {
+                      formData.remainingPaymentSchedule === "weekly" ? "weekly" :
+                      formData.remainingPaymentSchedule === "4weekly" ? "every 4 weeks" :
+                      formData.remainingPaymentSchedule === "monthly" ? "monthly" : ""
+                    }</div>
+                  ) : (
+                    <div>💳 Payment amount: Enter number of payments above</div>
                   )}
+
                   <div>📋 Schedule: {formData.remainingPaymentSchedule === "single" ? "Single payment" :
                     formData.remainingPaymentSchedule === "4weekly" ? "Every 4 weeks" :
                     formData.remainingPaymentSchedule.charAt(0).toUpperCase() + formData.remainingPaymentSchedule.slice(1)}</div>
