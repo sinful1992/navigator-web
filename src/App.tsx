@@ -532,7 +532,7 @@ function AuthedApp() {
       // Store current counts
       const lastCounts = localStorage.getItem('navigator_data_counts');
       if (lastCounts) {
-        const { completions: lastCompletions, addresses: lastAddresses, timestamp: lastCheck } = JSON.parse(lastCounts);
+        const { completions: lastCompletions, addresses: lastAddresses } = JSON.parse(lastCounts);
 
         // Skip check if cloud sync is currently active to avoid false positives
         if (cloudSync.isSyncing) {
