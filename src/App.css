@@ -36,22 +36,30 @@ body {
   --primary-light: #eef2ff;
   --primary-dark: #4338ca;
   --primary-gradient: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
-  
+
   --success: #10b981;
   --success-light: #d1fae5;
   --success-dark: #059669;
-  
+
   --danger: #ef4444;
   --danger-light: #fee2e2;
   --danger-dark: #dc2626;
-  
+
   --warning: #f59e0b;
   --warning-light: #fef3c7;
   --warning-dark: #d97706;
-  
+
   --info: #3b82f6;
   --info-light: #dbeafe;
   --info-dark: #1d4ed8;
+
+  /* Additional variables for components */
+  --surface: white;
+  --surface-strong: var(--gray-100);
+  --text-primary: var(--gray-800);
+  --text-secondary: var(--gray-500);
+  --border: var(--gray-200);
+  --border-light: var(--gray-200);
   
   /* Neutral Colors */
   --gray-50: #f9fafb;
@@ -1355,6 +1363,14 @@ body {
   --gray-700: #e4e4e7;
   --gray-800: #f4f4f5;
   --gray-900: #fafafa;
+
+  /* Dark mode component variables */
+  --surface: var(--gray-100);
+  --surface-strong: var(--gray-200);
+  --text-primary: var(--gray-800);
+  --text-secondary: var(--gray-500);
+  --border: var(--gray-300);
+  --border-light: var(--gray-300);
 }
 
 .dark-mode .app-wrapper {
@@ -1676,6 +1692,75 @@ body {
   background: var(--primary-light);
   color: var(--primary-dark);
   border-color: var(--primary);
+}
+
+/* ==== Dark Mode Text Visibility ==== */
+.dark-mode strong {
+  color: var(--gray-800);
+}
+
+.dark-mode div[style*="fontWeight: 600"],
+.dark-mode div[style*="fontWeight: 500"],
+.dark-mode div[style*="fontWeight: 700"] {
+  color: var(--gray-800);
+}
+
+.dark-mode div[style*="fontSize: 14"],
+.dark-mode div[style*="fontSize: 12"] {
+  color: var(--text-secondary);
+}
+
+/* Ensure all text elements in completed tab are visible */
+.dark-mode div[style*="color: var(--text-secondary)"] {
+  color: var(--gray-500) !important;
+}
+
+.dark-mode div[style*="color: var(--primary)"] {
+  color: var(--primary) !important;
+}
+
+/* Calendar grid text visibility */
+.dark-mode div[style*="textAlign: center"] {
+  color: var(--gray-800);
+}
+
+/* Input elements in completed tab */
+.dark-mode select.input,
+.dark-mode input[style*="fontSize: 12"] {
+  background: var(--gray-200);
+  border-color: var(--gray-300);
+  color: var(--gray-800);
+}
+
+/* Small buttons in completed tab */
+.dark-mode button[style*="fontSize: 10"] {
+  color: white !important;
+}
+
+.dark-mode button[style*="background: var(--success)"] {
+  background: var(--success) !important;
+  color: white !important;
+}
+
+.dark-mode button[style*="background: var(--danger)"] {
+  background: var(--danger) !important;
+  color: white !important;
+}
+
+.dark-mode button[style*="background: var(--primary)"] {
+  background: var(--primary) !important;
+  color: white !important;
+}
+
+/* Calendar specific styling */
+.dark-mode div[style*="border: 1px solid var(--border-light)"] {
+  border-color: var(--gray-300) !important;
+  background: var(--surface) !important;
+}
+
+/* Weekdays header */
+.dark-mode div[style*="color: var(--text-secondary)"][style*="fontSize: 12"] {
+  color: var(--gray-500) !important;
 }
 
 /* ==== Backup Loading Modal Styles ==== */
