@@ -759,8 +759,8 @@ const ArrangementsComponent = function Arrangements({
 
       <style>{`
         .arrangement-card-modern {
-          background: linear-gradient(135deg, var(--white) 0%, var(--gray-25) 100%);
-          border: 1px solid var(--border);
+          background: linear-gradient(135deg, white 0%, var(--gray-50) 100%);
+          border: 1px solid var(--gray-200);
           border-radius: var(--radius-lg);
           padding: 1.5rem;
           margin-bottom: 1rem;
@@ -918,6 +918,361 @@ const ArrangementsComponent = function Arrangements({
           grid-column: 1 / -1;
         }
 
+        /* Dark mode styles for arrangements */
+        .dark-mode .arrangement-card-modern {
+          background: linear-gradient(135deg, var(--gray-100) 0%, var(--gray-200) 100%);
+          border-color: var(--gray-300);
+        }
+
+        .dark-mode .arrangement-card-modern:hover {
+          border-color: var(--primary);
+          background: linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%);
+        }
+
+        .dark-mode .address-text {
+          color: var(--gray-800);
+        }
+
+        .dark-mode .customer-name {
+          color: var(--gray-600);
+        }
+
+        .dark-mode .detail-item {
+          background: var(--gray-200);
+          border-color: var(--gray-300);
+        }
+
+        .dark-mode .detail-item:hover {
+          background: var(--gray-300);
+        }
+
+        .dark-mode .detail-label {
+          color: var(--gray-500);
+        }
+
+        .dark-mode .detail-value {
+          color: var(--gray-800);
+        }
+
+        .dark-mode .phone-link {
+          color: var(--primary) !important;
+        }
+
+        .dark-mode .recurrence-progress {
+          color: var(--gray-500);
+        }
+
+        .dark-mode .reminder-confirmation {
+          background: var(--gray-200) !important;
+          color: var(--gray-800) !important;
+        }
+
+        .dark-mode .reminder-history {
+          color: var(--gray-600) !important;
+        }
+
+        /* Basic card and form styles */
+        .card {
+          background: white;
+          border: 1px solid var(--gray-200);
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-sm);
+          overflow: hidden;
+        }
+
+        .card-header {
+          padding: 1.5rem;
+          border-bottom: 1px solid var(--gray-200);
+          background: var(--gray-50);
+        }
+
+        .card-body {
+          padding: 1.5rem;
+        }
+
+        .form-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 1rem;
+        }
+
+        .form-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .form-group-full {
+          grid-column: 1 / -1;
+        }
+
+        .form-group label {
+          font-weight: 600;
+          color: var(--gray-700);
+          font-size: 0.875rem;
+        }
+
+        .btn-row {
+          display: flex;
+          gap: 0.75rem;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+
+        .btn-row-end {
+          justify-content: flex-end;
+        }
+
+        .arrangements-wrap {
+          max-width: none;
+          width: 100%;
+        }
+
+        .top-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          margin-bottom: 2rem;
+          flex-wrap: wrap;
+        }
+
+        .stat-item {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 0.75rem 1rem;
+          background: white;
+          border-radius: var(--radius-md);
+          box-shadow: var(--shadow-sm);
+          border: 1px solid var(--gray-200);
+          min-width: 80px;
+        }
+
+        .stat-label {
+          font-size: 0.75rem;
+          color: var(--gray-600);
+          margin-bottom: 0.25rem;
+          font-weight: 500;
+        }
+
+        .stat-value {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: var(--gray-800);
+        }
+
+        .stat-actions {
+          display: flex;
+          gap: 1rem;
+          align-items: center;
+        }
+
+        .days-list {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+        }
+
+        .day-card {
+          background: white;
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-sm);
+          border: 1px solid var(--gray-200);
+          overflow: hidden;
+        }
+
+        .day-header {
+          padding: 1.5rem;
+          background: var(--gray-50);
+          border-bottom: 1px solid var(--gray-200);
+        }
+
+        .day-title {
+          font-size: 1.125rem;
+          font-weight: 700;
+          color: var(--gray-800);
+          margin-bottom: 0.25rem;
+        }
+
+        .muted {
+          font-size: 0.875rem;
+          color: var(--gray-500);
+        }
+
+        .arrangements-list {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          padding: 1.5rem;
+        }
+
+        .empty-box {
+          padding: 3rem;
+          text-align: center;
+          background: white;
+          border-radius: var(--radius-lg);
+          border: 2px dashed var(--gray-300);
+          color: var(--gray-500);
+        }
+
+        .fade-in-up {
+          animation: fadeInUp 0.3s ease-out;
+        }
+
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        /* Dark mode for basic elements */
+        .dark-mode .card {
+          background: var(--gray-100);
+          border-color: var(--gray-200);
+        }
+
+        .dark-mode .card-header {
+          background: var(--gray-200);
+          border-bottom-color: var(--gray-300);
+        }
+
+        .dark-mode .form-group label {
+          color: var(--gray-700);
+        }
+
+        .dark-mode .stat-item {
+          background: var(--gray-100);
+          border-color: var(--gray-300);
+        }
+
+        .dark-mode .stat-label {
+          color: var(--gray-500);
+        }
+
+        .dark-mode .stat-value {
+          color: var(--gray-800);
+        }
+
+        .dark-mode .day-card {
+          background: var(--gray-100);
+          border-color: var(--gray-200);
+        }
+
+        .dark-mode .day-header {
+          background: var(--gray-200);
+          border-bottom-color: var(--gray-300);
+        }
+
+        .dark-mode .day-title {
+          color: var(--gray-800);
+        }
+
+        .dark-mode .muted {
+          color: var(--gray-500);
+        }
+
+        .dark-mode .empty-box {
+          background: var(--gray-100);
+          border-color: var(--gray-400);
+          color: var(--gray-500);
+        }
+
+        /* Dark mode button styles */
+        .dark-mode .btn-warning {
+          background: var(--warning);
+          color: white;
+          border-color: var(--warning);
+        }
+
+        .dark-mode .btn-warning:hover {
+          background: var(--warning-dark);
+          border-color: var(--warning-dark);
+        }
+
+        .dark-mode .btn-danger {
+          background: var(--danger);
+          color: white;
+          border-color: var(--danger);
+        }
+
+        .dark-mode .btn-danger:hover {
+          background: var(--danger-dark);
+          border-color: var(--danger-dark);
+        }
+
+        /* Dark mode arrangement actions */
+        .dark-mode .arrangement-actions .btn {
+          background: var(--gray-200);
+          color: var(--gray-700);
+          border-color: var(--gray-300);
+        }
+
+        .dark-mode .arrangement-actions .btn:hover {
+          background: var(--gray-300);
+          color: var(--gray-800);
+        }
+
+        .dark-mode .arrangement-actions .btn-success {
+          background: var(--success);
+          color: white;
+          border-color: var(--success);
+        }
+
+        .dark-mode .arrangement-actions .btn-success:hover {
+          background: var(--success-dark);
+          border-color: var(--success-dark);
+        }
+
+        .dark-mode .arrangement-actions .btn-primary {
+          background: var(--primary);
+          color: white;
+          border-color: var(--primary);
+        }
+
+        .dark-mode .arrangement-actions .btn-primary:hover {
+          background: var(--primary-hover);
+          border-color: var(--primary-hover);
+        }
+
+        .dark-mode .arrangement-actions .btn-warning {
+          background: var(--warning);
+          color: white;
+          border-color: var(--warning);
+        }
+
+        .dark-mode .arrangement-actions .btn-warning:hover {
+          background: var(--warning-dark);
+          border-color: var(--warning-dark);
+        }
+
+        .dark-mode .arrangement-actions .btn-danger {
+          background: var(--danger);
+          color: white;
+          border-color: var(--danger);
+        }
+
+        .dark-mode .arrangement-actions .btn-danger:hover {
+          background: var(--danger-dark);
+          border-color: var(--danger-dark);
+        }
+
+        .dark-mode .arrangement-actions .btn-ghost {
+          background: transparent;
+          color: var(--gray-600);
+          border-color: var(--gray-400);
+        }
+
+        .dark-mode .arrangement-actions .btn-ghost:hover {
+          background: var(--gray-200);
+          color: var(--gray-800);
+        }
+
         .detail-icon {
           font-size: 1.1rem;
           flex-shrink: 0;
@@ -969,6 +1324,20 @@ const ArrangementsComponent = function Arrangements({
           color: var(--text-secondary);
           margin-top: 0.25rem;
           font-weight: 400;
+        }
+
+        .arrangement-actions {
+          display: flex;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+          align-items: center;
+          margin-top: 1.5rem;
+          padding-top: 1.5rem;
+          border-top: 1px solid var(--gray-200);
+        }
+
+        .dark-mode .arrangement-actions {
+          border-top-color: var(--gray-300);
         }
 
         @media (max-width: 768px) {
