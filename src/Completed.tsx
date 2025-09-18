@@ -149,7 +149,7 @@ function CalendarRange({ startKey, endKey, onChange }: CalendarRangeProps) {
         <button className="btn btn-ghost" onClick={gotoPrevMonth} aria-label="Previous month">
           Prev
         </button>
-        <div style={{ fontWeight: 600 }}>{monthLabel}</div>
+        <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{monthLabel}</div>
         <button className="btn btn-ghost" onClick={gotoNextMonth} aria-label="Next month">
           Next
         </button>
@@ -207,7 +207,7 @@ function CalendarRange({ startKey, endKey, onChange }: CalendarRangeProps) {
           };
           return (
             <div key={c.key} style={baseStyle} title={c.key} onClick={() => handlePick(c.key)}>
-              <div style={{ fontWeight: isStart || isEnd ? 700 : 500 }}>{String(c.date.getDate())}</div>
+              <div style={{ fontWeight: isStart || isEnd ? 700 : 500, color: "var(--text-primary)" }}>{String(c.date.getDate())}</div>
               <div style={dotStyle} />
               <div style={ringStyle} />
             </div>
@@ -356,7 +356,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
             flexWrap: "wrap",
           }}
         >
-          <div style={{ fontWeight: 600 }}>
+          <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>
             {"Summary " + (startKey === endKey ? "(" + startKey + ")" : "(" + startKey + " -> " + endKey + ")")}
           </div>
           <button className="btn btn-ghost" onClick={() => setDetailsOpen((v) => !v)}>
@@ -450,7 +450,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                               }}
                             >
                               <div style={{ minWidth: 0 }}>
-                                <div style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>
+                                <div style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", color: "var(--text-primary)" }}>
                                   {line}
                                 </div>
                                 <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>

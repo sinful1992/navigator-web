@@ -1694,72 +1694,86 @@ body {
   border-color: var(--primary);
 }
 
-/* ==== Dark Mode Text Visibility ==== */
+/* ==== Dark Mode Text Visibility - Completed Tab ==== */
+
+/* Universal text color fixes for completed tab */
 .dark-mode strong {
+  color: var(--gray-800) !important;
+}
+
+/* All div elements in dark mode get proper text color by default */
+.dark-mode div {
   color: var(--gray-800);
 }
 
-.dark-mode div[style*="fontWeight: 600"],
-.dark-mode div[style*="fontWeight: 500"],
-.dark-mode div[style*="fontWeight: 700"] {
-  color: var(--gray-800);
-}
-
-.dark-mode div[style*="fontSize: 14"],
-.dark-mode div[style*="fontSize: 12"] {
-  color: var(--text-secondary);
-}
-
-/* Ensure all text elements in completed tab are visible */
-.dark-mode div[style*="color: var(--text-secondary)"] {
+/* Specific overrides for secondary text */
+.dark-mode div[style*="var(--text-secondary)"] {
   color: var(--gray-500) !important;
 }
 
-.dark-mode div[style*="color: var(--primary)"] {
-  color: var(--primary) !important;
+/* Calendar and grid elements */
+.dark-mode div[style*="textAlign"] div {
+  color: var(--gray-800) !important;
 }
 
-/* Calendar grid text visibility */
-.dark-mode div[style*="textAlign: center"] {
+/* Summary and day headers */
+.dark-mode div[style*="fontWeight"] {
+  color: var(--gray-800) !important;
+}
+
+/* All buttons in completed tab */
+.dark-mode button {
   color: var(--gray-800);
 }
 
-/* Input elements in completed tab */
-.dark-mode select.input,
-.dark-mode input[style*="fontSize: 12"] {
-  background: var(--gray-200);
-  border-color: var(--gray-300);
-  color: var(--gray-800);
-}
-
-/* Small buttons in completed tab */
-.dark-mode button[style*="fontSize: 10"] {
-  color: white !important;
-}
-
-.dark-mode button[style*="background: var(--success)"] {
+.dark-mode button[style*="var(--success)"] {
   background: var(--success) !important;
   color: white !important;
 }
 
-.dark-mode button[style*="background: var(--danger)"] {
+.dark-mode button[style*="var(--danger)"] {
   background: var(--danger) !important;
   color: white !important;
 }
 
-.dark-mode button[style*="background: var(--primary)"] {
+.dark-mode button[style*="var(--primary)"] {
   background: var(--primary) !important;
   color: white !important;
 }
 
-/* Calendar specific styling */
-.dark-mode div[style*="border: 1px solid var(--border-light)"] {
+/* Input and select elements */
+.dark-mode input,
+.dark-mode select {
+  background: var(--gray-200) !important;
   border-color: var(--gray-300) !important;
-  background: var(--surface) !important;
+  color: var(--gray-800) !important;
 }
 
-/* Weekdays header */
-.dark-mode div[style*="color: var(--text-secondary)"][style*="fontSize: 12"] {
+/* Override any inline styles that set colors */
+.dark-mode *[style*="color:"] {
+  color: var(--gray-800) !important;
+}
+
+/* Nuclear option - force all text to be visible in dark mode */
+.dark-mode .content-area * {
+  color: var(--gray-800) !important;
+}
+
+.dark-mode .content-area *[style*="var(--text-secondary)"] {
+  color: var(--gray-500) !important;
+}
+
+.dark-mode .content-area *[style*="var(--primary)"] {
+  color: var(--primary) !important;
+}
+
+/* Ensure spans and small text elements are visible */
+.dark-mode span {
+  color: inherit;
+}
+
+/* Fix calendar weekday headers specifically */
+.dark-mode div[style*="fontSize: 12"][style*="color: var(--text-secondary)"] {
   color: var(--gray-500) !important;
 }
 
