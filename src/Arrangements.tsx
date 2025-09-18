@@ -426,7 +426,7 @@ const ArrangementsComponent = function Arrangements({
 
       {/* Add/Edit Form */}
       {(showAddForm || editingId) && (
-        <ArrangementForm 
+        <ArrangementForm
           state={state}
           arrangement={editingId ? state.arrangements.find(a => a.id === editingId) : undefined}
           preSelectedAddressIndex={autoCreateForAddress}
@@ -437,6 +437,7 @@ const ArrangementsComponent = function Arrangements({
             setEditingId(null);
           }}
           isLoading={loadingStates.saving || loadingStates.updating}
+          onComplete={onComplete}
         />
       )}
 
@@ -1371,9 +1372,10 @@ type FormProps = {
   onSave: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void> | void;
   onCancel: () => void;
   isLoading?: boolean;
+  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void;
 };
 
-function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAddress, onSave, onCancel, isLoading = false }: FormProps) {
+function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAddress, onSave, onCancel, isLoading = false, onComplete }: FormProps) {
   const [addressMode, setAddressMode] = React.useState<"existing" | "manual">(
     preSelectedAddressIndex !== null && preSelectedAddressIndex !== undefined ? "existing" : "existing"
   );
@@ -1392,6 +1394,11 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
     recurrenceType: arrangement?.recurrenceType ?? "none" as RecurrenceType,
     recurrenceInterval: arrangement?.recurrenceInterval ?? 1,
     totalPayments: arrangement?.totalPayments ?? undefined,
+    // New fields for improved payment handling
+    paymentType: "full_balance" as "full_balance" | "initial_plus_balance",
+    totalBalance: "",
+    initialPayment: "",
+    remainingPaymentSchedule: "single" as "single" | "weekly" | "4weekly" | "monthly",
   });
 
   // Update form data when arrangement prop changes (for editing)
@@ -1419,6 +1426,11 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           recurrenceType: arrangement.recurrenceType ?? "none" as RecurrenceType,
           recurrenceInterval: arrangement.recurrenceInterval ?? 1,
           totalPayments: arrangement.totalPayments ?? undefined,
+          // New fields for improved payment handling - default to full balance for existing arrangements
+          paymentType: "full_balance" as "full_balance" | "initial_plus_balance",
+          totalBalance: arrangement.amount ?? "",
+          initialPayment: "",
+          remainingPaymentSchedule: "single" as "single" | "weekly" | "4weekly" | "monthly",
         });
       } else {
         // Address matches, use existing mode
@@ -1436,6 +1448,11 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
           recurrenceType: arrangement.recurrenceType ?? "none" as RecurrenceType,
           recurrenceInterval: arrangement.recurrenceInterval ?? 1,
           totalPayments: arrangement.totalPayments ?? undefined,
+          // New fields for improved payment handling - default to full balance for existing arrangements
+          paymentType: "full_balance" as "full_balance" | "initial_plus_balance",
+          totalBalance: arrangement.amount ?? "",
+          initialPayment: "",
+          remainingPaymentSchedule: "single" as "single" | "weekly" | "4weekly" | "monthly",
         });
       }
     }
@@ -1455,23 +1472,58 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
     let addedAddressIndex: number | null = null; // Track if we added a new address for rollback
 
     try {
-      const amount = parseFloat(formData.amount || '0');
-      if (!formData.amount || isNaN(amount) || amount <= 0) {
-        alert("Please enter a valid payment amount (numbers only, greater than 0)");
-        return;
-      }
-
-      // Validate recurring payment setup
-      if (formData.recurrenceType !== "none") {
-        if (!formData.totalPayments || formData.totalPayments < 2) {
-          alert("Please specify the total number of payments (minimum 2) for recurring arrangements");
+      // Validate payment amounts based on payment type
+      if (formData.paymentType === "full_balance") {
+        const amount = parseFloat(formData.amount || '0');
+        if (!formData.amount || isNaN(amount) || amount <= 0) {
+          alert("Please enter a valid payment amount (numbers only, greater than 0)");
           return;
         }
       } else {
-        // For one-time payments, ensure we have a total payment count
-        if (!formData.totalPayments || formData.totalPayments < 1) {
-          alert("Please specify the number of payments");
+        // Initial + balance mode
+        const totalBalance = parseFloat(formData.totalBalance || '0');
+        const initialPayment = parseFloat(formData.initialPayment || '0');
+
+        if (!formData.totalBalance || isNaN(totalBalance) || totalBalance <= 0) {
+          alert("Please enter a valid total balance amount");
           return;
+        }
+
+        if (!formData.initialPayment || isNaN(initialPayment) || initialPayment <= 0) {
+          alert("Please enter a valid initial payment amount");
+          return;
+        }
+
+        if (initialPayment >= totalBalance) {
+          alert("Initial payment must be less than the total balance");
+          return;
+        }
+      }
+
+      // Validate payment setup based on type
+      if (formData.paymentType === "full_balance") {
+        // Original validation logic for single payment amounts
+        if (formData.recurrenceType !== "none") {
+          if (!formData.totalPayments || formData.totalPayments < 2) {
+            alert("Please specify the total number of payments (minimum 2) for recurring arrangements");
+            return;
+          }
+        } else {
+          if (!formData.totalPayments || formData.totalPayments < 1) {
+            alert("Please specify the number of payments");
+            return;
+          }
+        }
+      } else {
+        // Initial + balance mode
+        if (formData.remainingPaymentSchedule === "single") {
+          // Single payment for remaining balance - no additional validation needed
+        } else {
+          // Recurring payments for remaining balance
+          if (!formData.totalPayments || formData.totalPayments < 1) {
+            alert("Please specify the total number of remaining payments");
+            return;
+          }
         }
       }
 
@@ -1528,23 +1580,81 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
         }
       }
 
-      const arrangementData = {
-        addressIndex: finalAddressIndex,
-        address: finalAddress,
-        customerName: formData.customerName,
-        phoneNumber: formData.phoneNumber,
-        scheduledDate: formData.scheduledDate,
-        scheduledTime: formData.scheduledTime,
-        amount: formData.amount,
-        notes: formData.notes,
-        status: formData.status,
-        recurrenceType: formData.recurrenceType,
-        recurrenceInterval: formData.recurrenceType !== "none" ? formData.recurrenceInterval : undefined,
-        totalPayments: formData.recurrenceType !== "none" ? formData.totalPayments : 1,
-        paymentsMade: arrangement?.paymentsMade ?? 0,
-      };
+      // Calculate arrangement data based on payment type
+      let arrangementData;
+
+      if (formData.paymentType === "full_balance") {
+        // Original single payment logic
+        arrangementData = {
+          addressIndex: finalAddressIndex,
+          address: finalAddress,
+          customerName: formData.customerName,
+          phoneNumber: formData.phoneNumber,
+          scheduledDate: formData.scheduledDate,
+          scheduledTime: formData.scheduledTime,
+          amount: formData.amount,
+          notes: formData.notes,
+          status: formData.status,
+          recurrenceType: formData.recurrenceType,
+          recurrenceInterval: formData.recurrenceType !== "none" ? formData.recurrenceInterval : undefined,
+          totalPayments: formData.recurrenceType !== "none" ? formData.totalPayments : 1,
+          paymentsMade: arrangement?.paymentsMade ?? 0,
+        };
+      } else {
+        // Initial payment + remaining balance logic
+        const totalBalance = parseFloat(formData.totalBalance);
+        const initialPayment = parseFloat(formData.initialPayment);
+        const remainingBalance = totalBalance - initialPayment;
+
+        // Determine recurrence settings for remaining balance
+        let recurrenceType: RecurrenceType = "none";
+        let recurrenceInterval = 1;
+        let totalPayments = 1;
+
+        if (formData.remainingPaymentSchedule === "weekly") {
+          recurrenceType = "weekly";
+          totalPayments = formData.totalPayments || 1;
+        } else if (formData.remainingPaymentSchedule === "4weekly") {
+          recurrenceType = "weekly";
+          recurrenceInterval = 4;
+          totalPayments = formData.totalPayments || 1;
+        } else if (formData.remainingPaymentSchedule === "monthly") {
+          recurrenceType = "monthly";
+          totalPayments = formData.totalPayments || 1;
+        }
+
+        const perPaymentAmount = totalPayments > 1 ? (remainingBalance / totalPayments).toFixed(2) : remainingBalance.toFixed(2);
+
+        arrangementData = {
+          addressIndex: finalAddressIndex,
+          address: finalAddress,
+          customerName: formData.customerName,
+          phoneNumber: formData.phoneNumber,
+          scheduledDate: formData.scheduledDate,
+          scheduledTime: formData.scheduledTime,
+          amount: perPaymentAmount,
+          notes: `${formData.notes}${formData.notes ? '\n' : ''}Total Balance: £${formData.totalBalance}, Initial Payment: £${formData.initialPayment}, Remaining: £${remainingBalance.toFixed(2)}`,
+          status: formData.status,
+          recurrenceType,
+          recurrenceInterval: recurrenceType !== "none" ? recurrenceInterval : undefined,
+          totalPayments,
+          paymentsMade: arrangement?.paymentsMade ?? 0,
+        };
+      }
 
       await onSave(arrangementData);
+
+      // If using initial payment mode, automatically record the initial payment as completed
+      if (formData.paymentType === "initial_plus_balance") {
+        try {
+          // Record initial payment as PIF completion
+          onComplete(finalAddressIndex, "PIF", formData.initialPayment);
+        } catch (completionError) {
+          console.error('Error recording initial payment completion:', completionError);
+          // Don't fail the whole process, but warn the user
+          alert('Arrangement created successfully, but there was an issue recording the initial payment. You may need to manually mark this address as PIF.');
+        }
+      }
     } catch (error) {
       console.error('Error in form submission:', error);
       
@@ -1646,22 +1756,87 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
             </div>
           )}
 
-          <div className="form-group">
-            <label htmlFor="payment-amount">💰 Payment Amount *</label>
-            <input
-              id="payment-amount"
-              name="paymentAmount"
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.amount}
-              onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-              className="input"
-              placeholder="0.00"
-              required
-              autoComplete="off"
-            />
+          {/* Payment Type Selection */}
+          <div className="form-group form-group-full">
+            <label>💰 Payment Setup</label>
+            <div className="btn-group">
+              <button
+                type="button"
+                className={`btn ${formData.paymentType === "full_balance" ? "btn-primary" : "btn-ghost"}`}
+                onClick={() => setFormData(prev => ({ ...prev, paymentType: "full_balance" }))}
+              >
+                💵 Full Balance Payment
+              </button>
+              <button
+                type="button"
+                className={`btn ${formData.paymentType === "initial_plus_balance" ? "btn-primary" : "btn-ghost"}`}
+                onClick={() => setFormData(prev => ({ ...prev, paymentType: "initial_plus_balance" }))}
+              >
+                🎯 Initial Payment + Schedule
+              </button>
+            </div>
           </div>
+
+          {/* Payment Amount Fields */}
+          {formData.paymentType === "full_balance" ? (
+            <div className="form-group">
+              <label htmlFor="payment-amount">💰 Payment Amount *</label>
+              <input
+                id="payment-amount"
+                name="paymentAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.amount}
+                onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+                className="input"
+                placeholder="0.00"
+                required
+                autoComplete="off"
+              />
+            </div>
+          ) : (
+            <>
+              <div className="form-group">
+                <label htmlFor="total-balance">💰 Total Balance *</label>
+                <input
+                  id="total-balance"
+                  name="totalBalance"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.totalBalance}
+                  onChange={(e) => setFormData(prev => ({ ...prev, totalBalance: e.target.value }))}
+                  className="input"
+                  placeholder="0.00"
+                  required
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="initial-payment">🎯 Initial Payment (Today) *</label>
+                <input
+                  id="initial-payment"
+                  name="initialPayment"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.initialPayment}
+                  onChange={(e) => setFormData(prev => ({ ...prev, initialPayment: e.target.value }))}
+                  className="input"
+                  placeholder="0.00"
+                  required
+                  autoComplete="off"
+                />
+                {formData.totalBalance && formData.initialPayment && (
+                  <div style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
+                    💡 Remaining balance: £{(parseFloat(formData.totalBalance || '0') - parseFloat(formData.initialPayment || '0')).toFixed(2)}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           <div className="form-group">
             <label htmlFor="customer-name">👤 Customer Name</label>
@@ -1718,52 +1893,81 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
             />
           </div>
 
-          <div className="form-group form-group-full">
-            <label htmlFor="recurrence-type">🔄 Payment Schedule</label>
-            <select
-              id="recurrence-type"
-              name="recurrenceType"
-              value={formData.recurrenceType}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                recurrenceType: e.target.value as RecurrenceType,
-                recurrenceInterval: 1,
-                totalPayments: undefined
-              }))}
-              className="input"
-            >
-              <option value="none">One-time payment</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="total-payments">🔢 Total Payments *</label>
-            <input
-              id="total-payments"
-              name="totalPayments"
-              type="number"
-              min={formData.recurrenceType !== "none" ? "2" : "1"}
-              value={formData.totalPayments || ""}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                totalPayments: e.target.value ? parseInt(e.target.value) : undefined
-              }))}
-              className="input"
-              placeholder={formData.recurrenceType !== "none" ? "Number of payments (min 2)" : "Number of payments"}
-              required
-              autoComplete="off"
-            />
-            <div style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-              💡 {formData.recurrenceType !== "none" 
-                ? "Minimum 2 payments required for recurring arrangements"
-                : "Single payment arrangements are for future full payments"
-              }
+          {/* Payment Schedule */}
+          {formData.paymentType === "full_balance" ? (
+            <div className="form-group form-group-full">
+              <label htmlFor="recurrence-type">🔄 Payment Schedule</label>
+              <select
+                id="recurrence-type"
+                name="recurrenceType"
+                value={formData.recurrenceType}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  recurrenceType: e.target.value as RecurrenceType,
+                  recurrenceInterval: 1,
+                  totalPayments: undefined
+                }))}
+                className="input"
+              >
+                <option value="none">One-time payment</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
             </div>
-          </div>
+          ) : (
+            <div className="form-group form-group-full">
+              <label htmlFor="remaining-schedule">🔄 Remaining Balance Schedule</label>
+              <select
+                id="remaining-schedule"
+                name="remainingSchedule"
+                value={formData.remainingPaymentSchedule}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  remainingPaymentSchedule: e.target.value as "single" | "weekly" | "4weekly" | "monthly",
+                  totalPayments: e.target.value === "single" ? 1 : undefined
+                }))}
+                className="input"
+              >
+                <option value="single">Single payment (specific date)</option>
+                <option value="weekly">Weekly payments</option>
+                <option value="4weekly">4-weekly payments</option>
+                <option value="monthly">Monthly payments</option>
+              </select>
+            </div>
+          )}
 
-          {formData.recurrenceType !== "none" && (
+          {/* Total Payments */}
+          {((formData.paymentType === "full_balance" && formData.recurrenceType !== "none") ||
+            (formData.paymentType === "initial_plus_balance" && formData.remainingPaymentSchedule !== "single")) && (
+            <div className="form-group">
+              <label htmlFor="total-payments">
+                🔢 {formData.paymentType === "initial_plus_balance" ? "Remaining Payments" : "Total Payments"} *
+              </label>
+              <input
+                id="total-payments"
+                name="totalPayments"
+                type="number"
+                min="1"
+                value={formData.totalPayments || ""}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  totalPayments: e.target.value ? parseInt(e.target.value) : undefined
+                }))}
+                className="input"
+                placeholder="Number of payments"
+                required
+                autoComplete="off"
+              />
+              {formData.paymentType === "initial_plus_balance" && formData.totalPayments && formData.totalBalance && formData.initialPayment && (
+                <div style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
+                  💡 £{((parseFloat(formData.totalBalance) - parseFloat(formData.initialPayment)) / formData.totalPayments).toFixed(2)} per payment
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Recurrence Interval - only for full balance recurring payments */}
+          {formData.paymentType === "full_balance" && formData.recurrenceType !== "none" && (
             <div className="form-group">
               <label htmlFor="recurrence-interval">📅 Interval</label>
               <select
@@ -1794,6 +1998,31 @@ function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAdd
             />
           </div>
           
+          {/* Payment Summary */}
+          {formData.paymentType === "initial_plus_balance" && formData.totalBalance && formData.initialPayment && (
+            <div className="form-group form-group-full">
+              <div style={{
+                padding: "1rem",
+                backgroundColor: "var(--gray-50)",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--gray-200)"
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: "0.5rem", color: "var(--text-primary)" }}>📊 Payment Summary</div>
+                <div style={{ fontSize: "0.875rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                  <div>💰 Total Balance: £{formData.totalBalance}</div>
+                  <div>🎯 Initial Payment (Today): £{formData.initialPayment}</div>
+                  <div>📅 Remaining Balance: £{(parseFloat(formData.totalBalance) - parseFloat(formData.initialPayment)).toFixed(2)}</div>
+                  {formData.remainingPaymentSchedule !== "single" && formData.totalPayments && (
+                    <div>🔄 {formData.totalPayments} payments of £{((parseFloat(formData.totalBalance) - parseFloat(formData.initialPayment)) / formData.totalPayments).toFixed(2)} each</div>
+                  )}
+                  <div>📋 Schedule: {formData.remainingPaymentSchedule === "single" ? "Single payment" :
+                    formData.remainingPaymentSchedule === "4weekly" ? "Every 4 weeks" :
+                    formData.remainingPaymentSchedule.charAt(0).toUpperCase() + formData.remainingPaymentSchedule.slice(1)}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="form-group form-group-full">
             <div className="btn-row btn-row-end" style={{ marginTop: "1rem" }}>
               <button type="button" className="btn btn-ghost" onClick={onCancel}>
