@@ -149,6 +149,14 @@ export function mergeStatePreservingActiveIndex(
       ? incoming.addresses
       : [];
 
+    // Respect list versions - prefer higher version regardless of length
+    if (incomingListVersion > currentListVersion) {
+      return incomingAddresses;
+    } else if (currentListVersion > incomingListVersion) {
+      return currentAddresses;
+    }
+
+    // Same version - use length as tiebreaker
     return incomingAddresses.length >= currentAddresses.length
       ? incomingAddresses
       : currentAddresses;
@@ -331,21 +339,25 @@ export function useCloudSync(): UseCloudSync {
     }
   }, [user, isOnline]);
 
-  // Queue an operation for sync with duplicate detection
+  // Queue an operation for sync
   const queueOperation = useCallback(async (
     operation: Omit<SyncOperation, 'id' | 'timestamp' | 'localTimestamp' | 'retries'>
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
-      // Check for duplicate operations based on entity and entityId
-      const duplicateKey = `${operation.type}_${operation.entity}_${operation.entityId}`;
-      const isDuplicate = syncQueue.current.some(entry => 
-        `${entry.operation.type}_${entry.operation.entity}_${entry.operation.entityId}` === duplicateKey &&
-        entry.operation.retries < 3 // Only consider active operations
-      );
-      
+      // Generate a unique operation key that includes data hash to distinguish distinct operations
+      const dataHash = JSON.stringify(operation.data);
+      const operationKey = `${operation.type}_${operation.entity}_${operation.entityId}_${dataHash}`;
+
+      // Only check for exact duplicate operations (same data), not just same entity
+      const isDuplicate = syncQueue.current.some(entry => {
+        const entryDataHash = JSON.stringify(entry.operation.data);
+        const entryKey = `${entry.operation.type}_${entry.operation.entity}_${entry.operation.entityId}_${entryDataHash}`;
+        return entryKey === operationKey && entry.operation.retries < 3;
+      });
+
       if (isDuplicate) {
-        console.log(`Skipping duplicate operation: ${duplicateKey}`);
-        resolve(); // Resolve immediately for duplicates
+        console.log(`Skipping exact duplicate operation: ${operationKey}`);
+        resolve(); // Resolve immediately for exact duplicates
         return;
       }
       

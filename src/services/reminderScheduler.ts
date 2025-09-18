@@ -71,36 +71,42 @@ export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
  * Calculate reminder dates for an arrangement using customizable settings
  */
 export function calculateReminderDates(
-  arrangement: Arrangement, 
+  arrangement: Arrangement,
   settings: ReminderSettings = DEFAULT_REMINDER_SETTINGS
 ): string[] {
   const schedule = arrangement.reminderSchedule || settings.defaultSchedule;
-  
+
   if (!schedule.enabled || !settings.globalEnabled) {
     return [];
   }
 
   const paymentDate = parseISO(arrangement.scheduledDate);
-  
-  // Build reminder days from settings
-  const reminderDays: number[] = [];
-  
-  if (settings.customizableSchedule.threeDayReminder) {
-    reminderDays.push(3);
+
+  // Use the schedule's daysBeforePayment array if available, otherwise fall back to customizable settings
+  let reminderDays: number[] = [];
+
+  if (schedule.daysBeforePayment && schedule.daysBeforePayment.length > 0) {
+    // Use arrangement-specific or default schedule days
+    reminderDays = [...schedule.daysBeforePayment];
+  } else {
+    // Fall back to global customizable schedule
+    if (settings.customizableSchedule.threeDayReminder) {
+      reminderDays.push(3);
+    }
+    if (settings.customizableSchedule.oneDayReminder) {
+      reminderDays.push(1);
+    }
+    if (settings.customizableSchedule.dayOfReminder) {
+      reminderDays.push(0);
+    }
+
+    // Add any custom days
+    reminderDays.push(...settings.customizableSchedule.customDays);
   }
-  if (settings.customizableSchedule.oneDayReminder) {
-    reminderDays.push(1);
-  }
-  if (settings.customizableSchedule.dayOfReminder) {
-    reminderDays.push(0);
-  }
-  
-  // Add any custom days
-  reminderDays.push(...settings.customizableSchedule.customDays);
-  
+
   // Remove duplicates and sort
   const uniqueDays = [...new Set(reminderDays)].sort((a, b) => b - a);
-  
+
   return uniqueDays.map(daysBefore => {
     const reminderDate = subDays(paymentDate, daysBefore);
     return reminderDate.toISOString();
