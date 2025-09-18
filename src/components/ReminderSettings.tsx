@@ -18,7 +18,7 @@ type Props = {
 
 export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props) {
   const [localSettings, setLocalSettings] = React.useState<ReminderSettings>(settings);
-  const [activeTab, setActiveTab] = React.useState<'profile' | 'templates' | 'schedule'>('profile');
+  const [activeTab, setActiveTab] = React.useState<'profile' | 'templates' | 'schedule'>('templates');
   const [editingTemplate, setEditingTemplate] = React.useState<string | null>(null);
   const [previewMessage, setPreviewMessage] = React.useState<string>('');
   const [showPreview, setShowPreview] = React.useState(false);

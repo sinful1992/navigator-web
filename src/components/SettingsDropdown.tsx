@@ -183,27 +183,23 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
           <div className="settings-separator" />
 
           {/* SMS Template Settings */}
-          {reminderSettings && onUpdateReminderSettings && (
-            <>
-              <div className="settings-section">
-                <button
-                  className="sms-settings-button"
-                  onClick={() => {
-                    setShowSMSSettings(true);
-                    setIsOpen(false);
-                  }}
-                >
-                  <span className="sms-settings-icon">📱</span>
-                  <div className="sms-settings-info">
-                    <div className="sms-settings-title">SMS Template Settings</div>
-                    <div className="sms-settings-desc">Customize reminder message templates and variables</div>
-                  </div>
-                  <span className="sms-settings-arrow">→</span>
-                </button>
+          <div className="settings-section">
+            <button
+              className="sms-settings-button"
+              onClick={() => {
+                setShowSMSSettings(true);
+                setIsOpen(false);
+              }}
+            >
+              <span className="sms-settings-icon">📱</span>
+              <div className="sms-settings-info">
+                <div className="sms-settings-title">SMS Template Settings</div>
+                <div className="sms-settings-desc">Customize reminder message templates and variables</div>
               </div>
-              <div className="settings-separator" />
-            </>
-          )}
+              <span className="sms-settings-arrow">→</span>
+            </button>
+          </div>
+          <div className="settings-separator" />
 
           {/* Other Settings */}
           <div className="settings-section">
@@ -255,11 +251,13 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
       )}
 
       {/* SMS Template Settings Modal */}
-      {showSMSSettings && reminderSettings && onUpdateReminderSettings && (
+      {showSMSSettings && (
         <ReminderSettings
           settings={reminderSettings || DEFAULT_REMINDER_SETTINGS}
           onUpdateSettings={(settings) => {
-            onUpdateReminderSettings(settings);
+            if (onUpdateReminderSettings) {
+              onUpdateReminderSettings(settings);
+            }
             setShowSMSSettings(false);
           }}
           onClose={() => setShowSMSSettings(false)}
