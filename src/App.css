@@ -1749,21 +1749,22 @@ body {
   color: var(--gray-800) !important;
 }
 
-/* Override any inline styles that set colors */
-.dark-mode *[style*="color:"] {
+/* Override specific inline text color styles only for text elements */
+.dark-mode div[style*="color:"],
+.dark-mode span[style*="color:"] {
   color: var(--gray-800) !important;
 }
 
-/* Nuclear option - force all text to be visible in dark mode */
-.dark-mode .content-area * {
-  color: var(--gray-800) !important;
+/* Targeted text visibility fixes - no nuclear option */
+.dark-mode .content-area div[style*="fontWeight"] {
+  color: var(--gray-800);
 }
 
-.dark-mode .content-area *[style*="var(--text-secondary)"] {
+.dark-mode .content-area div[style*="var(--text-secondary)"] {
   color: var(--gray-500) !important;
 }
 
-.dark-mode .content-area *[style*="var(--primary)"] {
+.dark-mode .content-area div[style*="var(--primary)"] {
   color: var(--primary) !important;
 }
 
