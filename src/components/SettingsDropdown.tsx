@@ -1,6 +1,6 @@
 // src/components/SettingsDropdown.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import { useSettings, PREDEFINED_REMINDERS, isSupabaseConfigured } from '../hooks/useSettings';
+import { useSettings, isSupabaseConfigured } from '../hooks/useSettings';
 import { ReminderSettings } from './ReminderSettings';
 import type { ReminderSettings as ReminderSettingsType } from '../types';
 import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
@@ -25,16 +25,8 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     toggleDarkMode,
     togglePushNotifications,
     toggleAutoSync,
-    updateReminderText,
-    predefinedReminders,
   } = useSettings();
 
-  const [customReminder, setCustomReminder] = useState(settings.reminderText);
-  const [selectedReminder, setSelectedReminder] = useState(
-    predefinedReminders.includes(settings.reminderText as any)
-      ? (settings.reminderText as typeof PREDEFINED_REMINDERS[number])
-      : 'custom'
-  );
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -70,22 +62,6 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     };
   }, [isOpen]);
 
-  const handleReminderChange = (value: string) => {
-    if (value === 'custom') {
-      updateReminderText(customReminder);
-    } else {
-      updateReminderText(value);
-      setCustomReminder(value);
-    }
-    setSelectedReminder(value);
-  };
-
-  const handleCustomInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCustomReminder(e.target.value);
-    if (selectedReminder === 'custom') {
-      updateReminderText(e.target.value);
-    }
-  };
 
   const ToggleSwitch: React.FC<{
     checked: boolean;
@@ -152,37 +128,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
           </div>
           <div className="settings-separator" />
 
-          {/* Arrangement Reminder Text */}
-          <div className="settings-section">
-            <label className="setting-label">Arrangement Reminder Text</label>
-            <select
-              className="settings-select"
-              value={selectedReminder}
-              onChange={(e) => handleReminderChange(e.target.value)}
-            >
-              {predefinedReminders.map((text) => (
-                <option key={text} value={text}>
-                  {text.length > 50 ? `${text.substring(0, 50)}...` : text}
-                </option>
-              ))}
-              <option value="custom">Custom...</option>
-            </select>
-            {selectedReminder === 'custom' && (
-              <input
-                type="text"
-                value={customReminder}
-                onChange={handleCustomInputChange}
-                placeholder="Enter your custom reminder text..."
-                className="settings-input"
-              />
-            )}
-            <p className="setting-description">
-              This text will be used for sending SMS arrangement reminders.
-            </p>
-          </div>
-          <div className="settings-separator" />
-
-          {/* SMS Template Settings */}
+          {/* Reminder & SMS Settings */}
           <div className="settings-section">
             <button
               className="sms-settings-button"
@@ -191,10 +137,10 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
                 setIsOpen(false);
               }}
             >
-              <span className="sms-settings-icon">📱</span>
+              <span className="sms-settings-icon">🔔</span>
               <div className="sms-settings-info">
-                <div className="sms-settings-title">SMS Template Settings</div>
-                <div className="sms-settings-desc">Customize reminder message templates and variables</div>
+                <div className="sms-settings-title">Reminder & SMS Settings</div>
+                <div className="sms-settings-desc">Message templates, scheduling, agent profile, and reminder preferences</div>
               </div>
               <span className="sms-settings-arrow">→</span>
             </button>
