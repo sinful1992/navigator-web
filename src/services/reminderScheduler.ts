@@ -22,26 +22,32 @@ export const DEFAULT_MESSAGE_TEMPLATES: MessageTemplate[] = [
   {
     id: 'professional_standard',
     name: 'Professional Standard',
-    template: `{greeting}PAYMENT REMINDER\n\n{refLine}Your payment arrangement is due {date}{time}.\n\nAmount Due: £{amount}\n\nPayment must be made as agreed. Failure to comply may result in further enforcement action.\n\nContact immediately if unable to pay as arranged.\n\n{signature}`,
-    variables: ['greeting', 'refLine', 'date', 'time', 'amount', 'signature']
+    template: `{greeting}PAYMENT REMINDER\n\n{refLine}Your payment arrangement is due {date}{time}.\n\nAmount Due: £{amount}\n\nPayment must be made as agreed. Failure to comply may result in further enforcement action.\n\nContact immediately if unable to pay as arranged.\n\n{signature}{contactInfo}`,
+    variables: ['greeting', 'refLine', 'date', 'time', 'amount', 'signature', 'contactInfo', 'customerName', 'referenceNumber', 'agentName', 'agentTitle']
   },
   {
     id: 'friendly_reminder',
     name: 'Friendly Reminder',
-    template: `{greeting}Payment Reminder\n\n{refLine}This is a friendly reminder that your payment arrangement is due {date}{time}.\n\nAmount: £{amount}\n\nPlease ensure payment is made as agreed. If you need to discuss this arrangement, please contact us immediately.\n\nThank you,\n{signature}`,
-    variables: ['greeting', 'refLine', 'date', 'time', 'amount', 'signature']
+    template: `{greeting}Payment Reminder\n\n{refLine}This is a friendly reminder that your payment arrangement is due {date}{time}.\n\nAmount: £{amount}\n\nPlease ensure payment is made as agreed. If you need to discuss this arrangement, please contact us immediately.\n\nThank you,\n{signature}{contactInfo}`,
+    variables: ['greeting', 'refLine', 'date', 'time', 'amount', 'signature', 'contactInfo', 'customerName', 'referenceNumber', 'agentName', 'agentTitle']
   },
   {
     id: 'urgent_notice',
     name: 'Urgent Notice',
-    template: `{greeting}URGENT: PAYMENT DUE\n\n{refLine}Your payment arrangement is due {date}{time}.\n\nAmount Due: £{amount}\n\nIMPORTANT: Payment must be made TODAY as agreed. Failure to comply will result in immediate further enforcement action.\n\nContact us NOW if unable to pay.\n\n{signature}`,
-    variables: ['greeting', 'refLine', 'date', 'time', 'amount', 'signature']
+    template: `{greeting}URGENT: PAYMENT DUE\n\n{refLine}Your payment arrangement is due {date}{time}.\n\nAmount Due: £{amount}\n\nIMPORTANT: Payment must be made TODAY as agreed. Failure to comply will result in immediate further enforcement action.\n\nContact us NOW if unable to pay.\n\n{signature}{contactInfo}`,
+    variables: ['greeting', 'refLine', 'date', 'time', 'amount', 'signature', 'contactInfo', 'customerName', 'referenceNumber', 'agentName', 'agentTitle']
+  },
+  {
+    id: 'payment_plan_reminder',
+    name: 'Payment Plan Reminder',
+    template: `{greeting}Payment Plan Reminder\n\n{refLine}Your next payment is due {date}{time}.\n\nPayment Amount: £{amount}\n\nThis is part of your agreed payment plan. Please ensure this payment is made on time to keep your arrangement active.\n\nIf you have any questions about your payment plan, please contact us.\n\n{signature}{contactInfo}`,
+    variables: ['greeting', 'refLine', 'date', 'time', 'amount', 'signature', 'contactInfo', 'customerName', 'referenceNumber', 'agentName', 'agentTitle']
   },
   {
     id: 'custom',
     name: 'Custom Template',
     template: `{greeting}Payment Reminder\n\n{refLine}Your payment is due {date}{time}.\n\nAmount: £{amount}\n\n[Customize this message]\n\n{signature}`,
-    variables: ['greeting', 'refLine', 'date', 'time', 'amount', 'signature']
+    variables: ['greeting', 'refLine', 'date', 'time', 'amount', 'signature', 'contactInfo', 'customerName', 'referenceNumber', 'agentName', 'agentTitle']
   }
 ];
 
@@ -287,6 +293,10 @@ export function generateReminderMessage(
   // Replace template variables
   let message = template.template;
   
+  const contactInfoFormatted = settings.agentProfile.contactInfo
+    ? `\n${settings.agentProfile.contactInfo}`
+    : '';
+
   const replacements: Record<string, string> = {
     greeting,
     refLine,
@@ -298,7 +308,7 @@ export function generateReminderMessage(
     referenceNumber: referenceNumber || '',
     agentName: settings.agentProfile.name,
     agentTitle: settings.agentProfile.title,
-    contactInfo: settings.agentProfile.contactInfo || ''
+    contactInfo: contactInfoFormatted
   };
   
   // Replace all template variables

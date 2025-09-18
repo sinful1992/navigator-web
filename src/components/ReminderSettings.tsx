@@ -77,9 +77,9 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
   const handleAddTemplate = () => {
     const newTemplate: MessageTemplate = {
       id: `custom_${Date.now()}`,
-      name: 'New Template',
-      template: '{greeting}Payment Reminder\\n\\n{refLine}Your payment is due {date}{time}.\\n\\nAmount: £{amount}\\n\\n[Your custom message here]\\n\\n{signature}',
-      variables: ['greeting', 'refLine', 'date', 'time', 'amount', 'signature']
+      name: 'New Custom Template',
+      template: '{greeting}Payment Reminder\\n\\n{refLine}Your payment is due {date}{time}.\\n\\nAmount: £{amount}\\n\\n[Your custom message here]\\n\\n{signature}{contactInfo}',
+      variables: ['greeting', 'refLine', 'date', 'time', 'amount', 'signature', 'contactInfo', 'customerName', 'referenceNumber', 'agentName', 'agentTitle']
     };
     
     setLocalSettings(prev => ({
@@ -267,16 +267,21 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
           {/* Message Templates Tab */}
           {activeTab === 'templates' && (
             <div className="settings-tab">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3>Message Templates</h3>
-                <div>
-                  <button className="btn btn-ghost btn-sm" onClick={handlePreviewMessage}>
-                    👁️ Preview
-                  </button>
-                  <button className="btn btn-success btn-sm" onClick={handleAddTemplate}>
-                    ➕ Add Template
-                  </button>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <h3>Message Templates</h3>
+                  <div>
+                    <button className="btn btn-ghost btn-sm" onClick={handlePreviewMessage}>
+                      👁️ Preview
+                    </button>
+                    <button className="btn btn-success btn-sm" onClick={handleAddTemplate}>
+                      ➕ Add Template
+                    </button>
+                  </div>
                 </div>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
+                  Create and customize SMS reminder messages. Use variables to automatically insert customer and payment details.
+                </p>
               </div>
               
               <div className="form-group">
@@ -343,19 +348,119 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                             className="input"
                           />
                         </div>
-                        <div className="form-group">
-                          <label htmlFor={`template-content-${template.id}`}>Message Template</label>
-                          <textarea
-                            id={`template-content-${template.id}`}
-                            name={`templateContent-${template.id}`}
-                            value={template.template}
-                            onChange={(e) => handleTemplateUpdate(template.id, { template: e.target.value })}
-                            className="input"
-                            rows={8}
-                            style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
-                          />
-                          <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                            Available variables: {template.variables.map(v => `{${v}}`).join(', ')}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '1rem' }}>
+                          <div className="form-group">
+                            <label htmlFor={`template-content-${template.id}`}>Message Template</label>
+                            <textarea
+                              id={`template-content-${template.id}`}
+                              name={`templateContent-${template.id}`}
+                              value={template.template}
+                              onChange={(e) => handleTemplateUpdate(template.id, { template: e.target.value })}
+                              className="input"
+                              rows={12}
+                              style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                            />
+                            <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                              Use variables like {'{greeting}'} and {'{amount}'} - see reference panel →
+                            </div>
+                          </div>
+
+                          <div className="variable-reference-panel" style={{
+                            padding: '1rem',
+                            backgroundColor: 'var(--gray-50)',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--gray-200)',
+                            fontSize: '0.8125rem',
+                            maxHeight: '400px',
+                            overflowY: 'auto'
+                          }}>
+                            <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', color: 'var(--text-primary)' }}>
+                              📋 Available Variables
+                            </h4>
+
+                            <div className="variable-group">
+                              <h5 style={{ margin: '0 0 0.5rem', fontSize: '0.8125rem', color: 'var(--primary)' }}>Customer Info</h5>
+                              <div className="variable-item" style={{ marginBottom: '0.5rem' }}>
+                                <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{'{greeting}'}</code>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Smart greeting: "Mr/Mrs Smith, "
+                                </div>
+                              </div>
+                              <div className="variable-item" style={{ marginBottom: '0.5rem' }}>
+                                <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{'{refLine}'}</code>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Reference line: "Reference: 123456789\\n\\n"
+                                </div>
+                              </div>
+                              <div className="variable-item" style={{ marginBottom: '0.5rem' }}>
+                                <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{'{customerName}'}</code>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Full name: "123456789 Smith"
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="variable-group" style={{ marginTop: '1rem' }}>
+                              <h5 style={{ margin: '0 0 0.5rem', fontSize: '0.8125rem', color: 'var(--primary)' }}>Payment Details</h5>
+                              <div className="variable-item" style={{ marginBottom: '0.5rem' }}>
+                                <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{'{amount}'}</code>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Payment amount: "125.00"
+                                </div>
+                              </div>
+                              <div className="variable-item" style={{ marginBottom: '0.5rem' }}>
+                                <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{'{date}'}</code>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Due date: "15/01/2025"
+                                </div>
+                              </div>
+                              <div className="variable-item" style={{ marginBottom: '0.5rem' }}>
+                                <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{'{time}'}</code>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Time (if set): " at 14:00"
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="variable-group" style={{ marginTop: '1rem' }}>
+                              <h5 style={{ margin: '0 0 0.5rem', fontSize: '0.8125rem', color: 'var(--primary)' }}>Agent Info</h5>
+                              <div className="variable-item" style={{ marginBottom: '0.5rem' }}>
+                                <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{'{signature}'}</code>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Full signature: "Enforcement Agent J. Smith"
+                                </div>
+                              </div>
+                              <div className="variable-item" style={{ marginBottom: '0.5rem' }}>
+                                <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{'{agentName}'}</code>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Name only: "J. Smith"
+                                </div>
+                              </div>
+                              <div className="variable-item" style={{ marginBottom: '0.5rem' }}>
+                                <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{'{agentTitle}'}</code>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Job title: "Enforcement Agent"
+                                </div>
+                              </div>
+                              <div className="variable-item" style={{ marginBottom: '0.5rem' }}>
+                                <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{'{contactInfo}'}</code>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Contact: "Tel: 01234 567890"
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: 'var(--blue-50)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--blue-200)' }}>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--blue-700)', fontWeight: 600, marginBottom: '0.25rem' }}>
+                                💡 Tips:
+                              </div>
+                              <ul style={{ margin: 0, paddingLeft: '1rem', fontSize: '0.75rem', color: 'var(--blue-600)' }}>
+                                <li>Use \\n for line breaks</li>
+                                <li>Variables are case-sensitive</li>
+                                <li>Preview to test your template</li>
+                                <li>Empty variables won't show</li>
+                              </ul>
+                            </div>
                           </div>
                         </div>
                       </div>
