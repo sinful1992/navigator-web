@@ -101,12 +101,12 @@ interface AlertModalProps {
   type?: "info" | "success" | "warning" | "error";
 }
 
-export function AlertModal({ 
-  isOpen, 
-  onClose, 
-  title, 
-  message, 
-  type = "info" 
+export function AlertModal({
+  isOpen,
+  onClose,
+  title,
+  message,
+  type = "info"
 }: AlertModalProps) {
   const typeConfig = {
     info: { icon: "ℹ️", className: "alert-info" },
@@ -117,20 +117,63 @@ export function AlertModal({
 
   const config = typeConfig[type];
 
+  // Handle escape key and focus management
+  React.useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = "hidden";
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "";
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
-      <div className={`alert-modal ${config.className}`}>
-        <div className="alert-content">
-          <div className="alert-icon">{config.icon}</div>
-          <div className="alert-message">{message}</div>
-        </div>
-        <div className="modal-actions">
-          <button className="btn btn-primary" onClick={onClose}>
-            OK
-          </button>
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className={`modal-content modal-sm alert-modal ${config.className}`}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? "modal-title" : undefined}
+      >
+        {title && (
+          <div className="modal-header">
+            <h2 id="modal-title" className="modal-title">
+              {title}
+            </h2>
+            <button
+              className="modal-close-btn"
+              onClick={onClose}
+              aria-label="Close modal"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        <div className="modal-body">
+          <div className="alert-content">
+            <div className="alert-icon">{config.icon}</div>
+            <div className="alert-message">{message}</div>
+          </div>
+          <div className="modal-actions">
+            <button className="btn btn-primary" onClick={onClose}>
+              OK
+            </button>
+          </div>
         </div>
       </div>
-    </Modal>
+    </div>
   );
 }
 

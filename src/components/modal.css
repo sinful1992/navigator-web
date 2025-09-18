@@ -1,4 +1,22 @@
 /* ==== Modal Styles ==== */
+
+/* Define modal-specific CSS variables */
+:root {
+  --surface: white;
+  --text-primary: var(--gray-800);
+  --text-muted: var(--gray-500);
+  --border-light: var(--gray-200);
+  --bg-secondary: var(--gray-50);
+}
+
+.dark-mode {
+  --surface: var(--gray-100);
+  --text-primary: var(--gray-800);
+  --text-muted: var(--gray-500);
+  --border-light: var(--gray-300);
+  --bg-secondary: var(--gray-200);
+}
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -13,6 +31,10 @@
   padding: 1rem;
 }
 
+.dark-mode .modal-overlay {
+  background: rgba(0, 0, 0, 0.7);
+}
+
 .modal-content {
   background: var(--surface);
   border-radius: var(--radius-lg);
@@ -21,6 +43,7 @@
   max-height: 90vh;
   overflow-y: auto;
   animation: modalSlideIn 0.2s ease-out;
+  border: 1px solid var(--border-light);
 }
 
 .modal-content.modal-sm {
@@ -133,6 +156,38 @@
   color: var(--danger);
 }
 
+.alert-modal.alert-error {
+  border-left: 4px solid var(--danger);
+}
+
+.alert-modal.alert-error .modal-title {
+  color: var(--danger);
+}
+
+.alert-modal.alert-warning {
+  border-left: 4px solid var(--warning);
+}
+
+.alert-modal.alert-warning .modal-title {
+  color: var(--warning);
+}
+
+.alert-modal.alert-success {
+  border-left: 4px solid var(--success);
+}
+
+.alert-modal.alert-success .modal-title {
+  color: var(--success);
+}
+
+.alert-modal.alert-info {
+  border-left: 4px solid var(--primary);
+}
+
+.alert-modal.alert-info .modal-title {
+  color: var(--primary);
+}
+
 /* ==== Confirm Modal ==== */
 .confirm-modal .confirm-content {
   display: flex;
@@ -219,4 +274,110 @@
 .btn-danger:hover {
   background: #dc2626;
   border-color: #dc2626;
+}
+
+/* ==== Dark mode button overrides for modals ==== */
+.dark-mode .modal-content .btn {
+  background: var(--gray-200);
+  color: var(--gray-700);
+  border-color: var(--gray-300);
+}
+
+.dark-mode .modal-content .btn:hover {
+  background: var(--gray-300);
+  color: var(--gray-800);
+}
+
+.dark-mode .modal-content .btn-primary {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.dark-mode .modal-content .btn-primary:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.dark-mode .modal-content .btn-success {
+  background: var(--success);
+  color: white;
+  border-color: var(--success);
+}
+
+.dark-mode .modal-content .btn-success:hover {
+  background: var(--success-dark);
+  border-color: var(--success-dark);
+}
+
+.dark-mode .modal-content .btn-warning {
+  background: var(--warning);
+  color: white;
+  border-color: var(--warning);
+}
+
+.dark-mode .modal-content .btn-warning:hover {
+  background: var(--warning-dark);
+  border-color: var(--warning-dark);
+}
+
+.dark-mode .modal-content .btn-danger {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+
+.dark-mode .modal-content .btn-danger:hover {
+  background: var(--danger-dark);
+  border-color: var(--danger-dark);
+}
+
+.dark-mode .modal-content .btn-ghost {
+  background: transparent;
+  color: var(--gray-600);
+  border-color: var(--gray-400);
+}
+
+.dark-mode .modal-content .btn-ghost:hover {
+  background: var(--gray-200);
+  color: var(--gray-800);
+}
+
+/* ==== Dark mode input styling in modals ==== */
+.dark-mode .modal-content input,
+.dark-mode .modal-content textarea,
+.dark-mode .modal-content select {
+  background: var(--gray-200);
+  border-color: var(--gray-300);
+  color: var(--gray-800);
+}
+
+.dark-mode .modal-content input:focus,
+.dark-mode .modal-content textarea:focus,
+.dark-mode .modal-content select:focus {
+  border-color: var(--primary);
+  background: var(--gray-100);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.dark-mode .modal-content input::placeholder,
+.dark-mode .modal-content textarea::placeholder {
+  color: var(--gray-500);
+}
+
+/* ==== Enhance error alert prominence ==== */
+.alert-modal.alert-error .modal-content {
+  background: linear-gradient(135deg, var(--surface) 0%, rgba(239, 68, 68, 0.05) 100%);
+}
+
+.alert-modal.alert-warning .modal-content {
+  background: linear-gradient(135deg, var(--surface) 0%, rgba(245, 158, 11, 0.05) 100%);
+}
+
+.dark-mode .alert-modal.alert-error .modal-content {
+  background: linear-gradient(135deg, var(--surface) 0%, rgba(239, 68, 68, 0.1) 100%);
+}
+
+.dark-mode .alert-modal.alert-warning .modal-content {
+  background: linear-gradient(135deg, var(--surface) 0%, rgba(245, 158, 11, 0.1) 100%);
 }

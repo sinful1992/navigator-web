@@ -532,25 +532,52 @@ function AuthedApp() {
       // Store current counts
       const lastCounts = localStorage.getItem('navigator_data_counts');
       if (lastCounts) {
-        const { completions: lastCompletions, addresses: lastAddresses } = JSON.parse(lastCounts);
+        const { completions: lastCompletions, addresses: lastAddresses, timestamp: lastCheck } = JSON.parse(lastCounts);
 
-        // Warn if we've lost significant data
-        if (completionsCount < lastCompletions - 10) { // Lost more than 10 completions
-          logger.error(`POTENTIAL DATA LOSS DETECTED: Completions dropped from ${lastCompletions} to ${completionsCount}`);
-          alert({
-            title: "⚠️ POTENTIAL DATA LOSS",
-            message: `Completions count dropped significantly (${lastCompletions} → ${completionsCount}). Check cloud backups immediately!`,
-            type: "error"
-          });
+        // Skip check if cloud sync is currently active to avoid false positives
+        if (cloudSync.isSyncing) {
+          logger.info('Skipping data integrity check - cloud sync in progress');
+          return;
         }
 
-        if (addressesCount < lastAddresses - 50) { // Lost more than 50 addresses
+        // Be more tolerant if sync happened recently (within last 2 minutes)
+        const recentSyncThreshold = 2 * 60 * 1000; // 2 minutes
+        const timeSinceLastSync = cloudSync.lastSyncTime ? Date.now() - cloudSync.lastSyncTime.getTime() : Infinity;
+        const isRecentSync = timeSinceLastSync < recentSyncThreshold;
+
+        // Use more relaxed thresholds during/after sync operations
+        const completionThreshold = isRecentSync ? 50 : 10; // Be more tolerant after recent sync
+        const addressThreshold = isRecentSync ? 200 : 50;   // Be more tolerant after recent sync
+
+        // Warn if we've lost significant data (but not during legitimate sync operations)
+        if (completionsCount < lastCompletions - completionThreshold) {
+          logger.error(`POTENTIAL DATA LOSS DETECTED: Completions dropped from ${lastCompletions} to ${completionsCount}`);
+
+          // Only show alert if this wasn't due to recent sync activity
+          if (!isRecentSync) {
+            alert({
+              title: "⚠️ POTENTIAL DATA LOSS",
+              message: `Completions count dropped significantly (${lastCompletions} → ${completionsCount}). Check cloud backups immediately!`,
+              type: "error"
+            });
+          } else {
+            logger.warn(`Large completion count change during recent sync (${lastCompletions} → ${completionsCount}) - monitoring`);
+          }
+        }
+
+        if (addressesCount < lastAddresses - addressThreshold) {
           logger.error(`POTENTIAL DATA LOSS DETECTED: Addresses dropped from ${lastAddresses} to ${addressesCount}`);
-          alert({
-            title: "⚠️ POTENTIAL DATA LOSS",
-            message: `Address count dropped significantly (${lastAddresses} → ${addressesCount}). Check cloud backups immediately!`,
-            type: "error"
-          });
+
+          // Only show alert if this wasn't due to recent sync activity
+          if (!isRecentSync) {
+            alert({
+              title: "⚠️ POTENTIAL DATA LOSS",
+              message: `Address count dropped significantly (${lastAddresses} → ${addressesCount}). Check cloud backups immediately!`,
+              type: "error"
+            });
+          } else {
+            logger.warn(`Large address count change during recent sync (${lastAddresses} → ${addressesCount}) - monitoring`);
+          }
         }
       }
 
@@ -569,7 +596,7 @@ function AuthedApp() {
     setTimeout(checkDataIntegrity, 3000);
 
     return () => clearInterval(integrityInterval);
-  }, [safeState, cloudSync.user, hydrated, loading]);
+  }, [safeState, cloudSync.user, cloudSync.isSyncing, cloudSync.lastSyncTime, hydrated, loading]);
 
   // Stats calculation
   const stats = React.useMemo(() => {
