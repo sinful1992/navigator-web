@@ -910,9 +910,35 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
           border-top-color: var(--gray-700, #374151);
         }
 
+        /* Form Elements Dark Mode */
+        .dark-mode .form-group label {
+          color: var(--gray-200, #e5e7eb);
+        }
+
+        .dark-mode .form-group .input {
+          background: var(--gray-700, #374151);
+          border-color: var(--gray-600, #4b5563);
+          color: var(--gray-100, #f3f4f6);
+        }
+
+        .dark-mode .form-group .input:focus {
+          border-color: var(--primary, #0ea5e9);
+          background: var(--gray-700, #374151);
+        }
+
+        .dark-mode .form-group .input::placeholder {
+          color: var(--gray-400, #9ca3af);
+        }
+
+        /* Variable Reference Panel Dark Mode */
         .dark-mode .variable-reference-panel {
           background: var(--gray-700, #374151);
           border-color: var(--gray-600, #4b5563);
+          color: var(--gray-100, #f3f4f6);
+        }
+
+        .dark-mode .variable-group h5 {
+          color: var(--primary-light, #38bdf8);
         }
 
         .dark-mode .variable-item {
@@ -920,13 +946,75 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
           border-color: var(--gray-600, #4b5563);
         }
 
+        .dark-mode .variable-item code {
+          background: var(--primary-dark, #0c4a6e);
+          color: var(--primary-light, #38bdf8);
+        }
+
+        .dark-mode .variable-item div {
+          color: var(--gray-300, #d1d5db);
+        }
+
+        /* Template Items Dark Mode */
         .dark-mode .template-item {
           border-color: var(--gray-600, #4b5563);
+          background: var(--gray-800, #1f2937);
         }
 
         .dark-mode .template-header {
           background: var(--gray-700, #374151);
           border-bottom-color: var(--gray-600, #4b5563);
+          color: var(--gray-100, #f3f4f6);
+        }
+
+        .dark-mode .template-editor {
+          background: var(--gray-800, #1f2937);
+        }
+
+        /* Button Group Dark Mode */
+        .dark-mode .btn-group .btn {
+          border-color: var(--gray-600, #4b5563);
+          color: var(--gray-200, #e5e7eb);
+        }
+
+        .dark-mode .btn-group .btn.btn-primary {
+          background: var(--primary, #0ea5e9);
+          color: white;
+        }
+
+        .dark-mode .btn-group .btn.btn-ghost {
+          background: var(--gray-700, #374151);
+        }
+
+        .dark-mode .btn-group .btn.btn-ghost:hover {
+          background: var(--gray-600, #4b5563);
+        }
+
+        /* Additional Text Elements */
+        .dark-mode .settings-tab h3 {
+          color: var(--gray-100, #f3f4f6);
+        }
+
+        .dark-mode .settings-tab p {
+          color: var(--gray-300, #d1d5db);
+        }
+
+        .dark-mode .setting-description {
+          color: var(--gray-400, #9ca3af);
+        }
+
+        /* Tips Box Dark Mode */
+        .dark-mode .variable-reference-panel div[style*="background: var(--blue-50)"] {
+          background: var(--gray-600, #4b5563) !important;
+          border-color: var(--gray-500, #6b7280) !important;
+        }
+
+        .dark-mode .variable-reference-panel div[style*="color: var(--blue-700)"] {
+          color: var(--blue-300, #93c5fd) !important;
+        }
+
+        .dark-mode .variable-reference-panel ul {
+          color: var(--gray-300, #d1d5db) !important;
         }
       `}</style>
     </div>

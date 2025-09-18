@@ -1,8 +1,7 @@
 import * as React from "react";
 import { format, parseISO, isWithinInterval, startOfWeek, endOfWeek, isSameDay, isPast, addDays } from "date-fns";
-import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome, RecurrenceType, ReminderSettings, ReminderNotification } from "./types";
+import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome, RecurrenceType } from "./types";
 import { LoadingButton } from "./components/LoadingButton";
-import { ReminderDashboard } from "./components/ReminderDashboard";
 import { generateReminderMessage } from "./services/reminderScheduler";
 
 type Props = {
@@ -14,24 +13,19 @@ type Props = {
   onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void; // ✅ mark as completed (ARR)
   autoCreateForAddress?: number | null;
   onAutoCreateHandled?: () => void;
-  // Reminder system props
-  onUpdateReminderSettings?: (settings: ReminderSettings) => void;
-  onUpdateReminderNotification?: (notificationId: string, status: ReminderNotification['status']) => void;
 };
 
-type ViewMode = "thisWeek" | "all" | "reminders";
+type ViewMode = "thisWeek" | "all";
 
-const ArrangementsComponent = function Arrangements({ 
-  state, 
-  onAddArrangement, 
-  onUpdateArrangement, 
+const ArrangementsComponent = function Arrangements({
+  state,
+  onAddArrangement,
+  onUpdateArrangement,
   onDeleteArrangement,
   onAddAddress,
   onComplete,
   autoCreateForAddress,
-  onAutoCreateHandled,
-  onUpdateReminderSettings,
-  onUpdateReminderNotification
+  onAutoCreateHandled
 }: Props) {
   const [viewMode, setViewMode] = React.useState<ViewMode>("thisWeek");
   const [showAddForm, setShowAddForm] = React.useState(false);
@@ -409,12 +403,6 @@ const ArrangementsComponent = function Arrangements({
               📋 All Pending
             </button>
             <button 
-              className={`btn ${viewMode === "reminders" ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => setViewMode("reminders")}
-            >
-              🔔 Reminders
-            </button>
-            <button 
               className="btn btn-success"
               onClick={() => setShowAddForm(true)}
             >
@@ -441,20 +429,8 @@ const ArrangementsComponent = function Arrangements({
         />
       )}
 
-      {/* Conditional rendering based on view mode */}
-      {viewMode === "reminders" ? (
-        <ReminderDashboard
-          state={state}
-          onUpdateReminderSettings={onUpdateReminderSettings || (() => {})}
-          onUpdateReminderNotification={onUpdateReminderNotification || (() => {})}
-          onSendReminder={async (arrangement) => {
-            // Reuse the existing SMS reminder functionality
-            await sendReminderSMS(arrangement);
-          }}
-        />
-      ) : (
-        /* Arrangements List */
-        <div className="days-list">
+      {/* Arrangements List */}
+      <div className="days-list">
         {groupedArrangements.length === 0 ? (
           <div className="empty-box">
             <div style={{ fontSize: "1.125rem", marginBottom: "0.5rem" }}>
@@ -756,7 +732,6 @@ const ArrangementsComponent = function Arrangements({
           ))
         )}
         </div>
-      )}
 
       <style>{`
         .arrangement-card-modern {
