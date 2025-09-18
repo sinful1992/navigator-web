@@ -281,6 +281,8 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                 </div>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
                   Create and customize SMS reminder messages. Use variables to automatically insert customer and payment details.
+                  <br />
+                  <strong>💡 Click the ✏️ Edit button next to any template to see the enhanced editor with variable reference panel.</strong>
                 </p>
               </div>
               
@@ -348,7 +350,7 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                             className="input"
                           />
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '1rem' }}>
+                        <div className="template-editor-layout">
                           <div className="form-group">
                             <label htmlFor={`template-content-${template.id}`}>Message Template</label>
                             <textarea
@@ -365,15 +367,7 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
                             </div>
                           </div>
 
-                          <div className="variable-reference-panel" style={{
-                            padding: '1rem',
-                            backgroundColor: 'var(--gray-50)',
-                            borderRadius: 'var(--radius-md)',
-                            border: '1px solid var(--gray-200)',
-                            fontSize: '0.8125rem',
-                            maxHeight: '400px',
-                            overflowY: 'auto'
-                          }}>
+                          <div className="variable-reference-panel">
                             <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', color: 'var(--text-primary)' }}>
                               📋 Available Variables
                             </h4>
@@ -671,6 +665,66 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
           </div>
         </div>
       )}
+
+      <style>{`
+        .template-editor-layout {
+          display: grid;
+          grid-template-columns: 1fr 300px;
+          gap: 1rem;
+        }
+
+        @media (max-width: 768px) {
+          .template-editor-layout {
+            grid-template-columns: 1fr;
+          }
+
+          .variable-reference-panel {
+            order: -1;
+            max-height: 200px !important;
+          }
+        }
+
+        .variable-reference-panel {
+          background: var(--gray-50, #f8f9fa);
+          border: 1px solid var(--gray-200, #e9ecef);
+          border-radius: var(--radius-md, 8px);
+          padding: 1rem;
+          font-size: 0.8125rem;
+          max-height: 400px;
+          overflow-y: auto;
+        }
+
+        .variable-group {
+          margin-bottom: 1rem;
+        }
+
+        .variable-group h5 {
+          margin: 0 0 0.5rem;
+          font-size: 0.8125rem;
+          color: var(--primary, #0ea5e9);
+          font-weight: 600;
+        }
+
+        .variable-item {
+          margin-bottom: 0.5rem;
+        }
+
+        .variable-item code {
+          color: var(--primary, #0ea5e9);
+          font-weight: 600;
+          background: var(--primary-light, #e0f2fe);
+          padding: 0.125rem 0.25rem;
+          border-radius: 0.25rem;
+          font-size: 0.75rem;
+        }
+
+        .variable-item div {
+          color: var(--text-muted, #6b7280);
+          font-size: 0.75rem;
+          margin-top: 0.125rem;
+          line-height: 1.3;
+        }
+      `}</style>
     </div>
   );
 }
