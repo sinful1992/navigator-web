@@ -548,7 +548,8 @@ export function useCloudSync(): UseCloudSync {
         options: {
           data: {
             signup_source: 'navigator_web'
-          }
+          },
+          emailRedirectTo: undefined // Disable email confirmation for immediate access
         }
       });
 
@@ -572,6 +573,27 @@ export function useCloudSync(): UseCloudSync {
         } catch (initError) {
           console.error("Failed to initialize new user:", initError);
           // Don't throw - user is created, just missing subscription setup
+        }
+
+        // If no session was created, try to sign in immediately to create one
+        if (!data.session) {
+          console.log("No session created during signup, attempting immediate signin...");
+          try {
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+              email,
+              password
+            });
+
+            if (signInError) {
+              console.warn("Immediate signin failed:", signInError);
+            } else {
+              console.log("Immediate signin successful, session created");
+              setUser(signInData.user);
+              return { user: signInData.user! };
+            }
+          } catch (signInErr) {
+            console.warn("Immediate signin error:", signInErr);
+          }
         }
 
         setUser(data.user);
