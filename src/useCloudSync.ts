@@ -17,31 +17,20 @@ async function initializeNewUser(userId: string): Promise<void> {
 
   console.log("Creating trial subscription for user:", userId);
 
-  const subscriptionData = {
-    user_id: userId,
-    plan_id: 'trial',
-    status: 'trialing',
-    trial_start: new Date().toISOString(),
-    trial_end: trialEndDate.toISOString(),
-    current_period_start: new Date().toISOString(),
-    current_period_end: trialEndDate.toISOString(),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
-
-  console.log("Subscription data to insert:", subscriptionData);
-
+  // Use the database function to create trial subscription (bypasses RLS)
   const { data, error } = await supabase
-    .from('user_subscriptions')
-    .insert(subscriptionData)
-    .select();
+    .rpc('create_trial_subscription', { target_user_id: userId });
 
-  console.log("Subscription insert result:", { data, error });
+  console.log("Trial subscription creation result:", { data, error });
 
   if (error) {
     console.error("Failed to create trial subscription:", error);
-    console.error("Error details:", error.message, error.details, error.hint);
     throw error;
+  }
+
+  if (data && !data.success) {
+    console.error("Trial subscription creation failed:", data.message);
+    throw new Error(data.message);
   }
 
   console.log("Trial subscription created successfully:", data);
