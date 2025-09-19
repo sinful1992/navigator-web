@@ -594,6 +594,18 @@ export function useCloudSync(): UseCloudSync {
       setError(err.message);
       throw err;
     }
+
+    // CRITICAL: Clear all local data when signing out to prevent data leakage
+    try {
+      const { clear } = await import('idb-keyval');
+      await clear(); // Clear IndexedDB
+      localStorage.clear(); // Clear localStorage
+      sessionStorage.clear(); // Clear sessionStorage
+      console.log("Cleared all local data on signout");
+    } catch (clearError) {
+      console.warn("Error clearing local data:", clearError);
+    }
+
     setUser(null);
     setLastSyncTime(null);
     syncMetadata.current = {
