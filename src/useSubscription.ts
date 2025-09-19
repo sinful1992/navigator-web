@@ -118,9 +118,20 @@ export function useSubscription(user: User | null): UseSubscription {
   // Owner bypass: Owners always have access regardless of subscription
   const hasAccess = isOwner || (isActive && !isExpired);
 
+  // Debug access calculation
+  console.log("Access check:", {
+    isOwner,
+    isActive,
+    isExpired,
+    hasAccess,
+    subscription,
+    user: user?.email
+  });
+
   // Load subscription data from Supabase
   const refreshSubscription = useCallback(async () => {
     if (!user || !supabase) {
+      console.log("No user or supabase in refreshSubscription");
       setSubscription(null);
       setIsLoading(false);
       return;
@@ -130,12 +141,15 @@ export function useSubscription(user: User | null): UseSubscription {
       setIsLoading(true);
       clearError();
 
+      console.log("Loading subscription for user:", user.id);
       const { data, error: fetchError } = await supabase
         .from('user_subscriptions')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .maybeSingle();
+
+      console.log("Subscription query result:", { data, error: fetchError });
 
       if (fetchError) {
         throw fetchError;
@@ -159,11 +173,13 @@ export function useSubscription(user: User | null): UseSubscription {
       } : null;
 
       setSubscription(sub);
+      console.log("Subscription set:", sub);
 
     } catch (e: any) {
       logger.error('Failed to load subscription:', e);
       setError(e?.message || 'Failed to load subscription');
       setSubscription(null);
+      console.log("Subscription error:", e);
     } finally {
       setIsLoading(false);
     }
