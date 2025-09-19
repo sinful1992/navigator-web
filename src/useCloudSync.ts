@@ -496,6 +496,11 @@ export function useCloudSync(): UseCloudSync {
         setError(err.message);
         throw err;
       }
+
+      // Clear trial access flags when user properly signs in
+      localStorage.removeItem('navigator_trial_created');
+      localStorage.removeItem('navigator_trial_user_id');
+
       setUser(data.user);
       return { user: data.user! };
     },
@@ -570,6 +575,12 @@ export function useCloudSync(): UseCloudSync {
         try {
           await initializeNewUser(data.user.id);
           console.log("Successfully initialized new user with trial subscription");
+
+          // Set trial access flags for unconfirmed users
+          localStorage.setItem('navigator_trial_created', Date.now().toString());
+          localStorage.setItem('navigator_trial_user_id', data.user.id);
+          console.log("Set trial access flags for unconfirmed user");
+
         } catch (initError) {
           console.error("Failed to initialize new user:", initError);
           // Don't throw - user is created, just missing subscription setup

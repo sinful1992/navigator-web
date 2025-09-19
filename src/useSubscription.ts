@@ -115,8 +115,27 @@ export function useSubscription(user: User | null): UseSubscription {
   const isExpired = isSubscriptionExpired(subscription);
   const daysRemaining = subscription ? calculateDaysRemaining(subscription.currentPeriodEnd) : 0;
   
-  // Owner bypass: Owners always have access regardless of subscription
-  const hasAccess = isOwner || (isActive && !isExpired);
+  // Access logic: Owner bypass OR active subscription OR unconfirmed trial user
+  const hasAccess = isOwner || (isActive && !isExpired) || isUnconfirmedTrialUser();
+
+  // Check if this is an unconfirmed trial user (has subscription but no session due to email confirmation)
+  function isUnconfirmedTrialUser(): boolean {
+    // If we have no user session but we know a trial subscription was just created
+    // (this happens when email confirmation is required)
+    const justCreatedTrial = localStorage.getItem('navigator_trial_created');
+    const trialUserId = localStorage.getItem('navigator_trial_user_id');
+
+    if (justCreatedTrial && trialUserId) {
+      // Give 24 hours of trial access even without email confirmation
+      const createdTime = parseInt(justCreatedTrial);
+      const now = Date.now();
+      const hoursSinceCreation = (now - createdTime) / (1000 * 60 * 60);
+
+      return hoursSinceCreation < 24; // 24 hour grace period
+    }
+
+    return false;
+  }
 
   // Debug access calculation
   console.log("Access check:", {
