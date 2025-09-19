@@ -84,6 +84,7 @@ export function useSubscription(user: User | null): UseSubscription {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState<boolean>(false);
+  const [serverTrialAccess, setServerTrialAccess] = useState<boolean>(false);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -115,27 +116,8 @@ export function useSubscription(user: User | null): UseSubscription {
   const isExpired = isSubscriptionExpired(subscription);
   const daysRemaining = subscription ? calculateDaysRemaining(subscription.currentPeriodEnd) : 0;
   
-  // Access logic: Owner bypass OR active subscription OR unconfirmed trial user
-  const hasAccess = isOwner || (isActive && !isExpired) || isUnconfirmedTrialUser();
-
-  // Check if this is an unconfirmed trial user (has subscription but no session due to email confirmation)
-  function isUnconfirmedTrialUser(): boolean {
-    // If we have no user session but we know a trial subscription was just created
-    // (this happens when email confirmation is required)
-    const justCreatedTrial = localStorage.getItem('navigator_trial_created');
-    const trialUserId = localStorage.getItem('navigator_trial_user_id');
-
-    if (justCreatedTrial && trialUserId) {
-      // Give 24 hours of trial access even without email confirmation
-      const createdTime = parseInt(justCreatedTrial);
-      const now = Date.now();
-      const hoursSinceCreation = (now - createdTime) / (1000 * 60 * 60);
-
-      return hoursSinceCreation < 24; // 24 hour grace period
-    }
-
-    return false;
-  }
+  // Access logic: Owner bypass OR active subscription OR server-validated trial access
+  const hasAccess = isOwner || (isActive && !isExpired) || serverTrialAccess;
 
   // Debug access calculation
   console.log("Access check:", {
@@ -143,6 +125,7 @@ export function useSubscription(user: User | null): UseSubscription {
     isActive,
     isExpired,
     hasAccess,
+    serverTrialAccess,
     subscription,
     user: user?.email
   });
@@ -204,10 +187,53 @@ export function useSubscription(user: User | null): UseSubscription {
     }
   }, [user, clearError]);
 
+  // Check server-side trial access for unconfirmed users
+  const checkServerTrialAccess = useCallback(async () => {
+    if (!supabase) {
+      setServerTrialAccess(false);
+      return;
+    }
+
+    try {
+      // Check if we have trial flags indicating unconfirmed user
+      const trialCreated = localStorage.getItem('navigator_trial_created');
+      const trialUserId = localStorage.getItem('navigator_trial_user_id');
+
+      if (!trialCreated || !trialUserId) {
+        setServerTrialAccess(false);
+        return;
+      }
+
+      // Call secure server-side function to validate trial access
+      const { data, error } = await supabase
+        .rpc('check_trial_access', { target_user_id: trialUserId });
+
+      if (error) {
+        console.warn('Server trial access check failed:', error);
+        setServerTrialAccess(false);
+        return;
+      }
+
+      console.log('Server trial access result:', data);
+      setServerTrialAccess(data?.hasAccess || false);
+
+      // Clean up localStorage if server says no access
+      if (!data?.hasAccess) {
+        localStorage.removeItem('navigator_trial_created');
+        localStorage.removeItem('navigator_trial_user_id');
+      }
+
+    } catch (err) {
+      console.warn('Server trial access check error:', err);
+      setServerTrialAccess(false);
+    }
+  }, []);
+
   // Load subscription on mount and user change
   useEffect(() => {
     refreshSubscription();
-  }, [refreshSubscription]);
+    checkServerTrialAccess();
+  }, [refreshSubscription, checkServerTrialAccess]);
 
   // Start free trial
   const startTrial = useCallback(async () => {
