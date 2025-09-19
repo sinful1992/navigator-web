@@ -632,9 +632,22 @@ export function useCloudSync(): UseCloudSync {
     try {
       const { clear } = await import('idb-keyval');
       await clear(); // Clear IndexedDB
-      localStorage.clear(); // Clear localStorage
+
+      // Clear specific navigator data while preserving other app localStorage
+      const keysToRemove = [
+        'navigator_trial_created',
+        'navigator_trial_user_id',
+        'navigator_last_user_id',
+        'navigator_supabase_url',
+        'navigator_supabase_key',
+        'navigator_supabase_skipped',
+        'navigator_data_counts',
+        'last_backup_time'
+      ];
+
+      keysToRemove.forEach(key => localStorage.removeItem(key));
       sessionStorage.clear(); // Clear sessionStorage
-      console.log("Cleared all local data on signout");
+      console.log("Cleared all navigator data on signout");
     } catch (clearError) {
       console.warn("Error clearing local data:", clearError);
     }

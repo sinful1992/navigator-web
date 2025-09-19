@@ -432,13 +432,35 @@ function AuthedApp() {
             daySessions.length > 0;
             
           if (localHasData) {
-            logger.sync("Pushing local data to cloud...");
-            await cloudSync.syncData(safeState);
-            if (!cancelled) {
-              lastFromCloudRef.current = JSON.stringify(safeState);
-              setHydrated(true);
+            // CRITICAL: Only sync local data if it belongs to current user
+            // Check if this data was created by the current user
+            const lastUserId = localStorage.getItem('navigator_last_user_id');
+            const currentUserId = cloudSync.user!.id;
+
+            if (lastUserId === currentUserId) {
+              logger.sync("Pushing local data to cloud...");
+              await cloudSync.syncData(safeState);
+              if (!cancelled) {
+                lastFromCloudRef.current = JSON.stringify(safeState);
+                setHydrated(true);
+              }
+            } else {
+              // Different user - clear local data to prevent contamination
+              logger.warn("Local data belongs to different user, clearing...");
+              setState({
+                addresses: [],
+                completions: [],
+                arrangements: [],
+                daySessions: [],
+                activeIndex: null,
+                currentListVersion: 1
+              });
+              localStorage.setItem('navigator_last_user_id', currentUserId);
+              if (!cancelled) setHydrated(true);
             }
           } else {
+            // Store current user ID for future checks
+            localStorage.setItem('navigator_last_user_id', cloudSync.user!.id);
             if (!cancelled) setHydrated(true);
           }
         }

@@ -204,6 +204,19 @@ export function useSubscription(user: User | null): UseSubscription {
         return;
       }
 
+      // SECURITY: Validate trial user ID matches current session or is recent
+      const trialTime = parseInt(trialCreated);
+      const hoursSinceCreation = (Date.now() - trialTime) / (1000 * 60 * 60);
+
+      // Only check server access if trial is recent (within 25 hours to allow for clock drift)
+      if (hoursSinceCreation > 25) {
+        console.log('Trial too old, clearing localStorage');
+        localStorage.removeItem('navigator_trial_created');
+        localStorage.removeItem('navigator_trial_user_id');
+        setServerTrialAccess(false);
+        return;
+      }
+
       // Call secure server-side function to validate trial access
       const { data, error } = await supabase
         .rpc('check_trial_access', { target_user_id: trialUserId });
@@ -231,9 +244,17 @@ export function useSubscription(user: User | null): UseSubscription {
 
   // Load subscription on mount and user change
   useEffect(() => {
-    refreshSubscription();
+    // Only run if we have a user
+    if (user) {
+      refreshSubscription();
+    } else {
+      setSubscription(null);
+      setIsLoading(false);
+    }
+
+    // Always check server trial access (handles unconfirmed users)
     checkServerTrialAccess();
-  }, [refreshSubscription, checkServerTrialAccess]);
+  }, [user, refreshSubscription, checkServerTrialAccess]);
 
   // Start free trial
   const startTrial = useCallback(async () => {
