@@ -142,94 +142,26 @@ class GeocodingService {
           };
           this.saveCache().catch(console.warn);
           return result;
+        } else {
+          // Cache negative results too to avoid repeated SDK calls
+          this.cache[normalizedAddress] = {
+            result,
+            timestamp: Date.now(),
+          };
+          this.saveCache().catch(console.warn);
         }
       }
     } catch (sdkError) {
-      console.warn('JavaScript SDK geocoding failed, trying HTTP API:', sdkError);
+      console.warn('JavaScript SDK geocoding failed, falling back to Supabase Edge Function:', sdkError);
     }
 
-    // Fallback to HTTP API (may fail with referer restrictions)
-    try {
-      console.log(`Geocoding with Google Maps HTTP API: "${address}"`);
-
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${this.apiKey}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.status === 'OK' && data.results?.length > 0) {
-        const result = data.results[0];
-        const geocodeResult: GeocodingResult = {
-          success: true,
-          address,
-          originalAddress: address,
-          lat: result.geometry.location.lat,
-          lng: result.geometry.location.lng,
-          confidence: 1.0, // Google Maps doesn't provide confidence, assume high
-          formattedAddress: result.formatted_address,
-        };
-
-        // Cache the result
-        this.cache[normalizedAddress] = {
-          result: geocodeResult,
-          timestamp: Date.now(),
-        };
-
-        // Save cache asynchronously
-        this.saveCache().catch(console.warn);
-
-        return geocodeResult;
-      } else if (data.status === 'ZERO_RESULTS') {
-        const failureResult: GeocodingResult = {
-          success: false,
-          address,
-          originalAddress: address,
-          error: 'No geocoding results found'
-        };
-
-        // Cache negative results too to avoid repeated API calls
-        this.cache[normalizedAddress] = {
-          result: failureResult,
-          timestamp: Date.now(),
-        };
-        this.saveCache().catch(console.warn);
-        return failureResult;
-      } else {
-        const error = `Geocoding failed: ${data.status}${data.error_message ? ` - ${data.error_message}` : ''}`;
-        console.warn(error);
-
-        // Special handling for API key restrictions
-        if (data.status === 'REQUEST_DENIED') {
-          if (data.error_message?.includes('referer restrictions')) {
-            console.warn('Google Maps API key has referer restrictions. Please configure the API key to allow this domain.');
-            console.warn('Falling back to Supabase Edge Function for geocoding...');
-          } else if (data.error_message?.includes('API key')) {
-            console.warn('Google Maps API key issue:', data.error_message);
-            console.warn('Falling back to Supabase Edge Function for geocoding...');
-          }
-        }
-
-        return {
-          success: false,
-          address,
-          originalAddress: address,
-          error
-        };
-      }
-    } catch (error) {
-      console.error('Geocoding request failed:', error);
-      return {
-        success: false,
-        address,
-        originalAddress: address,
-        error: error instanceof Error ? error.message : 'Geocoding failed'
-      };
-    }
+    // Return failure - fallback to Supabase Edge Function will be handled in the calling function
+    return {
+      success: false,
+      address,
+      originalAddress: address,
+      error: 'Google Maps direct geocoding not available'
+    };
   }
 
   getCacheStats(): { totalEntries: number; validEntries: number; expiredEntries: number } {
