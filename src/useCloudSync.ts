@@ -15,24 +15,36 @@ async function initializeNewUser(userId: string): Promise<void> {
   const trialEndDate = new Date();
   trialEndDate.setDate(trialEndDate.getDate() + 14); // 14-day trial
 
-  const { error } = await supabase
+  console.log("Creating trial subscription for user:", userId);
+
+  const subscriptionData = {
+    user_id: userId,
+    plan_id: 'trial',
+    status: 'trialing',
+    trial_start: new Date().toISOString(),
+    trial_end: trialEndDate.toISOString(),
+    current_period_start: new Date().toISOString(),
+    current_period_end: trialEndDate.toISOString(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  console.log("Subscription data to insert:", subscriptionData);
+
+  const { data, error } = await supabase
     .from('user_subscriptions')
-    .insert({
-      user_id: userId,
-      plan_id: 'trial',
-      status: 'trialing',
-      trial_start: new Date().toISOString(),
-      trial_end: trialEndDate.toISOString(),
-      current_period_start: new Date().toISOString(),
-      current_period_end: trialEndDate.toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    });
+    .insert(subscriptionData)
+    .select();
+
+  console.log("Subscription insert result:", { data, error });
 
   if (error) {
     console.error("Failed to create trial subscription:", error);
+    console.error("Error details:", error.message, error.details, error.hint);
     throw error;
   }
+
+  console.log("Trial subscription created successfully:", data);
 }
 
 type SyncOperation = {
@@ -508,20 +520,53 @@ export function useCloudSync(): UseCloudSync {
 
       // First, ensure we're signed out completely to prevent session conflicts
       try {
+        console.log("Pre-signup: clearing all sessions and storage...");
+
+        // Clear all auth storage manually
+        localStorage.removeItem('navigator-supabase-auth-token');
+        localStorage.removeItem('supabase.auth.token');
+        sessionStorage.clear();
+
+        // Sign out from Supabase
         await supabase.auth.signOut();
+
         // Clear any cached user state
         setUser(null);
-        // Wait a moment for the signout to complete
-        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Wait longer for cleanup
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Verify we're signed out
+        const { data: sessionCheck } = await supabase.auth.getSession();
+        console.log("Session after cleanup:", sessionCheck.session);
+
+        if (sessionCheck.session) {
+          console.warn("Session still exists after cleanup, forcing removal...");
+          await supabase.auth.signOut();
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
       } catch (signOutError) {
         console.warn("Error during pre-signup signout:", signOutError);
       }
 
       console.log("Attempting signup for email:", email);
-      const { data, error: err } = await supabase.auth.signUp({ email, password });
+      console.log("Supabase configured:", !!supabase);
+
+      const { data, error: err } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            signup_source: 'navigator_web'
+          }
+        }
+      });
 
       console.log("Signup response data:", data);
       console.log("Signup error:", err);
+      console.log("User created:", data.user?.id, data.user?.email);
+      console.log("Session created:", data.session?.access_token ? "YES" : "NO");
 
       if (err) {
         setError(err.message);
