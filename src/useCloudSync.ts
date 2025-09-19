@@ -5,6 +5,36 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
 import type { AppState } from "./types";
 
+// Initialize a new user with default subscription
+async function initializeNewUser(userId: string): Promise<void> {
+  if (!supabase) {
+    throw new Error("Supabase not configured");
+  }
+
+  // Create a trial subscription for the new user
+  const trialEndDate = new Date();
+  trialEndDate.setDate(trialEndDate.getDate() + 14); // 14-day trial
+
+  const { error } = await supabase
+    .from('user_subscriptions')
+    .insert({
+      user_id: userId,
+      plan_id: 'trial',
+      status: 'trialing',
+      trial_start: new Date().toISOString(),
+      trial_end: trialEndDate.toISOString(),
+      current_period_start: new Date().toISOString(),
+      current_period_end: trialEndDate.toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+
+  if (error) {
+    console.error("Failed to create trial subscription:", error);
+    throw error;
+  }
+}
+
 type SyncOperation = {
   id: string;
   type: 'create' | 'update' | 'delete';
@@ -475,12 +505,44 @@ export function useCloudSync(): UseCloudSync {
     async (email: string, password: string) => {
       clearError();
       if (!supabase) throw new Error("Supabase not configured");
+
+      // First, ensure we're signed out completely to prevent session conflicts
+      try {
+        await supabase.auth.signOut();
+        // Clear any cached user state
+        setUser(null);
+        // Wait a moment for the signout to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (signOutError) {
+        console.warn("Error during pre-signup signout:", signOutError);
+      }
+
+      console.log("Attempting signup for email:", email);
       const { data, error: err } = await supabase.auth.signUp({ email, password });
+
+      console.log("Signup response data:", data);
+      console.log("Signup error:", err);
+
       if (err) {
         setError(err.message);
         throw err;
       }
-      if (data.user) setUser(data.user);
+
+      if (data.user) {
+        console.log("New user created:", data.user.email, "ID:", data.user.id);
+
+        // Initialize new user with trial subscription
+        try {
+          await initializeNewUser(data.user.id);
+          console.log("Successfully initialized new user with trial subscription");
+        } catch (initError) {
+          console.error("Failed to initialize new user:", initError);
+          // Don't throw - user is created, just missing subscription setup
+        }
+
+        setUser(data.user);
+      }
+
       return { user: data.user! };
     },
     [clearError]

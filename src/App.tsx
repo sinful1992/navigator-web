@@ -209,6 +209,9 @@ export default function App() {
           onSignUp={async (email, password) => {
             await cloudSync.signUp(email, password);
           }}
+          onForceSignOut={async () => {
+            await cloudSync.signOut();
+          }}
           isLoading={cloudSync.isLoading}
           error={cloudSync.error}
           onClearError={cloudSync.clearError}

@@ -12,7 +12,14 @@ if (!url || !key) {
 
 export const supabase = url && key
   ? createClient(url, key, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: window.localStorage,
+        storageKey: 'navigator-supabase-auth-token',
+        debug: process.env.NODE_ENV === 'development'
+      },
       realtime: { params: { eventsPerSecond: 5 } },
     })
   : null;

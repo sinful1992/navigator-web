@@ -4,12 +4,13 @@ import * as React from "react";
 type Props = {
   onSignIn: (email: string, password: string) => Promise<void>;
   onSignUp: (email: string, password: string) => Promise<void>;
+  onForceSignOut: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
   onClearError: () => void;
 };
 
-export function Auth({ onSignIn, onSignUp, isLoading, error, onClearError }: Props) {
+export function Auth({ onSignIn, onSignUp, onForceSignOut, isLoading, error, onClearError }: Props) {
   const [mode, setMode] = React.useState<"signin" | "signup">("signin");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -108,6 +109,38 @@ export function Auth({ onSignIn, onSignUp, isLoading, error, onClearError }: Pro
           textAlign: "center"
         }}>
           🧪 <strong>Demo Mode:</strong> Use any email/password (6+ chars). Data syncs across browser tabs.
+        </div>
+
+        {/* Clear Session Button for Troubleshooting */}
+        <div style={{
+          marginBottom: "1rem",
+          textAlign: "center"
+        }}>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await onForceSignOut();
+                onClearError();
+                setEmail("");
+                setPassword("");
+                setConfirmPassword("");
+              } catch (err) {
+                console.error("Force signout error:", err);
+              }
+            }}
+            style={{
+              background: "none",
+              border: "1px solid var(--border-light)",
+              borderRadius: "var(--radius)",
+              padding: "0.5rem 1rem",
+              fontSize: "0.75rem",
+              color: "var(--text-secondary)",
+              cursor: "pointer"
+            }}
+          >
+            🔄 Clear Session
+          </button>
         </div>
 
         {/* Form */}
