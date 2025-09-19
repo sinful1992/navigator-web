@@ -129,6 +129,71 @@ export async function getPlaceDetails(
 }
 
 /**
+ * Geocode an address using Google Maps JavaScript SDK
+ * This bypasses referer restrictions unlike HTTP API calls
+ */
+export async function geocodeAddressSDK(address: string): Promise<{
+  success: boolean;
+  address: string;
+  originalAddress: string;
+  lat?: number;
+  lng?: number;
+  confidence?: number;
+  formattedAddress?: string;
+  error?: string;
+}> {
+  try {
+    await loadGoogleMapsSDK();
+
+    if (!window.google?.maps) {
+      throw new Error('Google Maps SDK not loaded');
+    }
+
+    return new Promise((resolve) => {
+      const geocoder = new window.google.maps.Geocoder();
+
+      geocoder.geocode({ address }, (results, status) => {
+        if (status === window.google.maps.GeocoderStatus.OK && results && results.length > 0) {
+          const result = results[0];
+          resolve({
+            success: true,
+            address,
+            originalAddress: address,
+            lat: result.geometry.location.lat(),
+            lng: result.geometry.location.lng(),
+            confidence: 1.0, // Google Maps doesn't provide confidence scores
+            formattedAddress: result.formatted_address
+          });
+        } else if (status === window.google.maps.GeocoderStatus.ZERO_RESULTS) {
+          resolve({
+            success: false,
+            address,
+            originalAddress: address,
+            error: 'No geocoding results found'
+          });
+        } else {
+          console.warn(`Geocoding failed with status: ${status}`);
+          resolve({
+            success: false,
+            address,
+            originalAddress: address,
+            error: `Geocoding failed: ${status}`
+          });
+        }
+      });
+    });
+  } catch (error) {
+    console.error('SDK geocoding error:', error);
+    return {
+      success: false,
+      address,
+      originalAddress: address,
+      error: error instanceof Error ? error.message : 'SDK geocoding failed'
+    };
+  }
+}
+
+/**
  * Check if Google Maps SDK is available
  */
 export function isGoogleMapsSDKAvailable(): boolean {

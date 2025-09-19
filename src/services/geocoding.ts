@@ -126,8 +126,31 @@ class GeocodingService {
       return cached.result;
     }
 
+    // Try JavaScript SDK first (bypasses referer restrictions)
     try {
-      console.log(`Geocoding with Google Maps: "${address}"`);
+      console.log(`Geocoding with Google Maps SDK: "${address}"`);
+      const { geocodeAddressSDK, isGoogleMapsSDKAvailable } = await import('./googleMapsSDK');
+
+      if (isGoogleMapsSDKAvailable()) {
+        const result = await geocodeAddressSDK(address);
+
+        if (result.success) {
+          // Cache the successful result
+          this.cache[normalizedAddress] = {
+            result,
+            timestamp: Date.now(),
+          };
+          this.saveCache().catch(console.warn);
+          return result;
+        }
+      }
+    } catch (sdkError) {
+      console.warn('JavaScript SDK geocoding failed, trying HTTP API:', sdkError);
+    }
+
+    // Fallback to HTTP API (may fail with referer restrictions)
+    try {
+      console.log(`Geocoding with Google Maps HTTP API: "${address}"`);
 
       const response = await fetch(
         `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${this.apiKey}`
@@ -181,8 +204,14 @@ class GeocodingService {
         console.warn(error);
 
         // Special handling for API key restrictions
-        if (data.status === 'REQUEST_DENIED' && data.error_message?.includes('referer restrictions')) {
-          console.warn('Google Maps API key has referer restrictions. Please configure the API key to allow this domain.');
+        if (data.status === 'REQUEST_DENIED') {
+          if (data.error_message?.includes('referer restrictions')) {
+            console.warn('Google Maps API key has referer restrictions. Please configure the API key to allow this domain.');
+            console.warn('Falling back to Supabase Edge Function for geocoding...');
+          } else if (data.error_message?.includes('API key')) {
+            console.warn('Google Maps API key issue:', data.error_message);
+            console.warn('Falling back to Supabase Edge Function for geocoding...');
+          }
         }
 
         return {

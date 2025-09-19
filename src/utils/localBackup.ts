@@ -23,9 +23,18 @@ export class LocalBackupManager {
       // Trigger download
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
 
-      // Clean up
+      // Clean up - use try/catch to handle potential DOM errors
+      try {
+        if (link.parentNode === document.body) {
+          document.body.removeChild(link);
+        }
+      } catch (error) {
+        // Ignore DOM removal errors - the link may have been removed already
+        logger.warn('Non-critical DOM cleanup error during backup download:', error);
+      }
+
+      // Clean up URL
       URL.revokeObjectURL(url);
 
       logger.info(`Backup downloaded: ${name} (${blob.size} bytes)`);
