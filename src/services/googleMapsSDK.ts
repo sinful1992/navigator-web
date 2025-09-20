@@ -147,37 +147,51 @@ export async function getPlaceDetails(
       sessionToken: sessionToken ? new window.google.maps.places.AutocompleteSessionToken() : undefined
     };
 
-    try {
-      service.getDetails(request, (place: google.maps.places.PlaceResult | null, status: google.maps.places.PlacesServiceStatus) => {
-        // Defer cleanup until after Google Maps SDK finishes its own teardown
-        setTimeout(() => {
-          try {
-            if (tempDiv.parentNode) {
-              tempDiv.parentNode.removeChild(tempDiv);
-            }
-          } catch (error) {
-            // Ignore cleanup errors - div might already be removed by SDK
-            console.debug('Deferred temp div cleanup error (ignoring):', error);
-          }
-        }, 0);
+    let cleanupAttempted = false;
+    const cleanupTempDiv = () => {
+      if (cleanupAttempted) {
+        return;
+      }
+      cleanupAttempted = true;
 
-        if (status === window.google.maps.places.PlacesServiceStatus.OK && place) {
-          resolve(place);
-        } else {
-          reject(new Error(`Place details error: ${status}`));
+      if (tempDiv.parentNode) {
+        tempDiv.parentNode.removeChild(tempDiv);
+      }
+    };
+
+    const deferCleanup = () => {
+      const runCleanup = () => {
+        try {
+          cleanupTempDiv();
+        } catch (error) {
+          // Ignore cleanup errors - div might already be removed by SDK
+          console.debug('Deferred temp div cleanup error (ignoring):', error);
         }
-      });
+      };
+
+      if (typeof queueMicrotask === 'function') {
+        queueMicrotask(runCleanup);
+      } else {
+        setTimeout(runCleanup, 0);
+      }
+    };
+
+    try {
+      service.getDetails(
+        request,
+        (place: google.maps.places.PlaceResult | null, status: google.maps.places.PlacesServiceStatus) => {
+          deferCleanup();
+
+          if (status === window.google.maps.places.PlacesServiceStatus.OK && place) {
+            resolve(place);
+          } else {
+            reject(new Error(`Place details error: ${status}`));
+          }
+        }
+      );
     } catch (error) {
       // Clean up on immediate error, but still defer it
-      setTimeout(() => {
-        try {
-          if (tempDiv.parentNode) {
-            tempDiv.parentNode.removeChild(tempDiv);
-          }
-        } catch (cleanupError) {
-          console.debug('Error cleanup deferred removal error (ignoring):', cleanupError);
-        }
-      }, 0);
+      deferCleanup();
       reject(error);
     }
   });
