@@ -200,7 +200,7 @@ export function InteractiveMap({
         }
       });
     }
-  }, [map, addresses, startingPointIndex, onAddressesUpdate, onStartingPointChange, createPins, markers]);
+  }, [map, addresses, startingPointIndex, onAddressesUpdate, onStartingPointChange, createPins]);
 
   // Handle manual geocoding for addresses without coordinates
   const handleGeocodeAddress = async (index: number) => {
