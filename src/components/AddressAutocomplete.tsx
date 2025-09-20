@@ -142,19 +142,31 @@ export function AddressAutocomplete({
   // Hide suggestions when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        inputRef.current && 
-        !inputRef.current.contains(event.target as Node) &&
-        suggestionsRef.current && 
-        !suggestionsRef.current.contains(event.target as Node)
-      ) {
-        setShowSuggestions(false);
-        setSelectedIndex(-1);
+      try {
+        if (
+          inputRef.current &&
+          !inputRef.current.contains(event.target as Node) &&
+          suggestionsRef.current &&
+          !suggestionsRef.current.contains(event.target as Node)
+        ) {
+          setShowSuggestions(false);
+          setSelectedIndex(-1);
+        }
+      } catch (error) {
+        // Ignore DOM errors during click outside detection
+        console.debug('Click outside detection error (ignoring):', error);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      try {
+        document.removeEventListener('mousedown', handleClickOutside);
+      } catch (error) {
+        // Ignore cleanup errors
+        console.debug('Event listener cleanup error (ignoring):', error);
+      }
+    };
   }, []);
 
   // Clean up timeout on unmount
@@ -217,6 +229,10 @@ export function AddressAutocomplete({
       {showSuggestions && suggestions.length > 0 && (
         <div
           ref={suggestionsRef}
+          onMouseDown={(e) => {
+            // Prevent this from causing click outside detection issues
+            e.preventDefault();
+          }}
           style={{
             position: 'absolute',
             top: '100%',

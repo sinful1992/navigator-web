@@ -42,6 +42,8 @@ export function InteractiveMap({
     if (!mapRef.current || map || !isGoogleMapsSDKAvailable()) return;
 
     const initializeMap = async () => {
+      // Add small delay to prevent conflicts with autocomplete and ensure DOM is ready
+      await new Promise(resolve => setTimeout(resolve, 200));
       try {
         setIsLoadingMap(true);
         setMapError(null);
