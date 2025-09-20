@@ -159,9 +159,27 @@ export async function getPlaceDetails(
         return;
       }
 
-      const parent = tempDiv.parentNode as Node | null;
-      if (parent && parent instanceof Node && parent.contains(tempDiv)) {
+      const parent = tempDiv.parentNode;
+      if (!(parent instanceof Node)) {
+        return;
+      }
+
+      const shouldAttemptRemoval =
+        typeof (tempDiv as { isConnected?: boolean }).isConnected === 'boolean'
+          ? (tempDiv as { isConnected: boolean }).isConnected
+          : parent.contains(tempDiv);
+
+      if (!shouldAttemptRemoval && !parent.contains(tempDiv)) {
+        return;
+      }
+
+      try {
         parent.removeChild(tempDiv);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'NotFoundError') {
+          return;
+        }
+        console.debug('Temp div cleanup encountered an unexpected error:', error);
       }
     };
 
