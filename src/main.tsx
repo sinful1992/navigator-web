@@ -40,26 +40,27 @@ window.addEventListener('unhandledrejection', (event) => {
  */
 if (typeof Node !== 'undefined' && Node.prototype.removeChild) {
   const originalRemoveChild = Node.prototype.removeChild;
-  Node.prototype.removeChild = function(child) {
+  Node.prototype.removeChild = function<T extends Node>(child: T): T {
     try {
       // Log the operation attempt
       console.debug('🔧 removeChild called:', {
-        parent: this.nodeName || this.constructor.name,
-        child: child.nodeName || child.constructor.name,
+        parent: (this as any).nodeName || this.constructor.name,
+        child: (child as any).nodeName || child.constructor.name,
         parentContainsChild: this.contains(child),
         childParentNode: child.parentNode === this ? 'matches' : 'different',
         timestamp: new Date().toISOString()
       });
 
-      return originalRemoveChild.call(this, child);
+      return originalRemoveChild.call(this, child) as T;
     } catch (error) {
+      const err = error as Error;
       console.error('🔴 removeChild failed:', {
-        error: error.message,
-        parent: this.nodeName || this.constructor.name,
-        child: child.nodeName || child.constructor.name,
+        error: err.message,
+        parent: (this as any).nodeName || this.constructor.name,
+        child: (child as any).nodeName || child.constructor.name,
         parentContainsChild: this.contains ? this.contains(child) : 'unknown',
         childParentNode: child.parentNode === this ? 'matches' : 'different',
-        stack: error.stack,
+        stack: err.stack,
         timestamp: new Date().toISOString()
       });
       throw error;
