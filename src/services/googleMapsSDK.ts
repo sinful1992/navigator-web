@@ -182,20 +182,18 @@ export async function getPlaceDetails(
         return;
       }
 
-      const currentParent = tempDiv.parentNode;
-
-      if (!(currentParent instanceof Node)) {
+      if (!(parent instanceof Node)) {
         console.debug('[GoogleMapsSDK] Current parent is not a Node, aborting fallback removal');
         return;
       }
 
-      if (!currentParent.contains(tempDiv)) {
+      if (!parent.contains(tempDiv)) {
         console.debug('[GoogleMapsSDK] Current parent no longer contains temp div, aborting fallback removal');
         return;
       }
 
       try {
-        currentParent.removeChild(tempDiv);
+        parent.removeChild(tempDiv);
         console.debug('[GoogleMapsSDK] Fallback removal via removeChild() succeeded');
       } catch (error) {
         if (error instanceof DOMException && error.name === 'NotFoundError') {
