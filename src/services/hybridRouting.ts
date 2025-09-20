@@ -164,20 +164,35 @@ export async function optimizeRoute(
 
     console.log(`Optimizing route for ${validAddresses.length} addresses via OpenRouteService (hybrid service)`);
 
+    const requestBody = {
+      addresses: validAddresses.map(addr => ({
+        address: addr.address,
+        lat: addr.lat!,
+        lng: addr.lng!
+      })),
+      startLocation,
+      endLocation
+    };
+
+    console.log('Route optimization request:', {
+      addressCount: requestBody.addresses.length,
+      hasStartLocation: !!startLocation,
+      hasEndLocation: !!endLocation,
+      firstAddress: requestBody.addresses[0]
+    });
+
     const { data, error } = await supabase.functions.invoke('optimize-route', {
-      body: {
-        addresses: validAddresses.map(addr => ({
-          address: addr.address,
-          lat: addr.lat!,
-          lng: addr.lng!
-        })),
-        startLocation,
-        endLocation
-      }
+      body: requestBody
     });
 
     if (error) {
-      console.error('Route optimization error:', error);
+      console.error('Route optimization error details:', {
+        error,
+        errorMessage: error.message,
+        errorName: error.name,
+        errorStack: error.stack,
+        data: data // Sometimes data contains error details even when error is present
+      });
 
       // Provide user-friendly error messages
       let userError = 'Route optimization service error';
@@ -185,6 +200,10 @@ export async function optimizeRoute(
         userError = 'Route optimization service not configured. Please contact support.';
       } else if (error.message?.includes('non-2xx status code')) {
         userError = 'Route optimization service is temporarily unavailable. Please try again later.';
+      } else if (error.message?.includes('Unauthorized')) {
+        userError = 'Authentication required. Please log in again.';
+      } else if (error.message?.includes('Subscription required')) {
+        userError = 'Route optimization requires an active subscription.';
       }
 
       return {
@@ -197,7 +216,14 @@ export async function optimizeRoute(
       };
     }
 
+    console.log('Route optimization response received:', {
+      hasData: !!data,
+      dataKeys: data ? Object.keys(data) : null,
+      success: data?.success
+    });
+
     if (!data) {
+      console.error('Route optimization: No data received from Edge Function');
       return {
         success: false,
         optimizedOrder: [],
