@@ -8,7 +8,7 @@
 declare global {
   interface Window {
     google: typeof google;
-    initGoogleMaps: () => void;
+    [key: string]: any; // For dynamic callback names
   }
 }
 
@@ -33,18 +33,44 @@ export async function loadGoogleMapsSDK(): Promise<void> {
   }
 
   googleMapsPromise = new Promise((resolve, reject) => {
-    // Set up global callback
-    window.initGoogleMaps = () => {
+    // Check if script already exists in the DOM
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+    if (existingScript) {
+      // Script already exists, check if Google Maps is loaded
+      if (window.google?.maps) {
+        googleMapsLoaded = true;
+        resolve();
+        return;
+      }
+    }
+
+    // Set up global callback with unique name to avoid conflicts
+    const callbackName = `initGoogleMaps_${Date.now()}`;
+    (window as any)[callbackName] = () => {
       googleMapsLoaded = true;
+      // Clean up callback
+      try {
+        delete (window as any)[callbackName];
+      } catch (error) {
+        // Ignore cleanup errors
+      }
       resolve();
     };
 
     // Create script tag
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMaps`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${callbackName}`;
     script.async = true;
     script.defer = true;
-    script.onerror = () => reject(new Error('Failed to load Google Maps SDK'));
+    script.onerror = () => {
+      // Clean up on error
+      try {
+        delete (window as any)[callbackName];
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+      reject(new Error('Failed to load Google Maps SDK'));
+    };
 
     document.head.appendChild(script);
   });
@@ -119,6 +145,16 @@ export async function getPlaceDetails(
     };
 
     service.getDetails(request, (place: google.maps.places.PlaceResult | null, status: google.maps.places.PlacesServiceStatus) => {
+      // Clean up temporary DOM element immediately
+      try {
+        if (tempDiv.parentNode) {
+          tempDiv.parentNode.removeChild(tempDiv);
+        }
+      } catch (error) {
+        // Ignore cleanup errors
+        console.debug('Temp div cleanup error (ignoring):', error);
+      }
+
       if (status === window.google.maps.places.PlacesServiceStatus.OK && place) {
         resolve(place);
       } else {
