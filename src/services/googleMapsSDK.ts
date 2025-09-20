@@ -154,8 +154,14 @@ export async function getPlaceDetails(
       }
       cleanupAttempted = true;
 
-      if (tempDiv.parentNode) {
-        tempDiv.parentNode.removeChild(tempDiv);
+      if (typeof tempDiv.remove === 'function') {
+        tempDiv.remove();
+        return;
+      }
+
+      const parent = tempDiv.parentNode as Node | null;
+      if (parent && parent instanceof Node && parent.contains(tempDiv)) {
+        parent.removeChild(tempDiv);
       }
     };
 
