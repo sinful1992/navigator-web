@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, startTransition } from "react";
 import type { AddressRow } from "../types";
 import { geocodeAddresses } from "../services/hybridRouting";
 import { loadGoogleMapsSDK, isGoogleMapsSDKAvailable } from "../services/googleMapsSDK";
@@ -225,12 +225,10 @@ export function InteractiveMap({
     }
     };
 
-    // Use requestAnimationFrame to avoid DOM conflicts
-    const rafId = requestAnimationFrame(updateMarkers);
-
-    return () => {
-      cancelAnimationFrame(rafId);
-    };
+    // Use startTransition to batch marker updates with React's reconciliation
+    startTransition(() => {
+      updateMarkers();
+    });
   }, [map, addresses, startingPointIndex]);
 
   // Cleanup markers on unmount
