@@ -171,12 +171,12 @@ serve(async (req) => {
 
     console.log('Sending optimization request to OpenRouteService')
 
-    const response = await fetch('https://api.openrouteservice.org/v2/optimization', {
+    const response = await fetch('https://api.openrouteservice.org/optimization', {
       method: 'POST',
       headers: {
         'Authorization': ORS_API_KEY,
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
       },
       body: JSON.stringify(requestBody)
     })
