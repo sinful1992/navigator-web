@@ -149,7 +149,18 @@ export async function getPlaceDetails(
 
     try {
       service.getDetails(request, (place: google.maps.places.PlaceResult | null, status: google.maps.places.PlacesServiceStatus) => {
-        // Let Google Maps SDK handle its own cleanup - don't interfere!
+        // Defer cleanup until after Google Maps SDK finishes its own teardown
+        setTimeout(() => {
+          try {
+            if (tempDiv.parentNode) {
+              tempDiv.parentNode.removeChild(tempDiv);
+            }
+          } catch (error) {
+            // Ignore cleanup errors - div might already be removed by SDK
+            console.debug('Deferred temp div cleanup error (ignoring):', error);
+          }
+        }, 0);
+
         if (status === window.google.maps.places.PlacesServiceStatus.OK && place) {
           resolve(place);
         } else {
@@ -157,7 +168,16 @@ export async function getPlaceDetails(
         }
       });
     } catch (error) {
-      // Even on error, let SDK handle cleanup
+      // Clean up on immediate error, but still defer it
+      setTimeout(() => {
+        try {
+          if (tempDiv.parentNode) {
+            tempDiv.parentNode.removeChild(tempDiv);
+          }
+        } catch (cleanupError) {
+          console.debug('Error cleanup deferred removal error (ignoring):', cleanupError);
+        }
+      }, 0);
       reject(error);
     }
   });
