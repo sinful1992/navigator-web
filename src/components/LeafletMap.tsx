@@ -98,7 +98,18 @@ export function LeafletMap({
   // Load route directions when optimized order changes
   useEffect(() => {
     async function loadRouteDirections() {
+      console.log('Route directions effect triggered:', {
+        showRouteLines,
+        optimizedOrder,
+        optimizedOrderLength: optimizedOrder?.length
+      });
+
       if (!showRouteLines || !optimizedOrder || optimizedOrder.length < 2) {
+        console.log('Route directions skipped:', {
+          showRouteLines,
+          hasOptimizedOrder: !!optimizedOrder,
+          orderLength: optimizedOrder?.length
+        });
         setRouteSegments([]);
         return;
       }
