@@ -149,37 +149,57 @@ export async function getPlaceDetails(
 
     let cleanupAttempted = false;
     const cleanupTempDiv = () => {
+      console.debug('[GoogleMapsSDK] Attempting temp div cleanup');
+
       if (cleanupAttempted) {
+        console.debug('[GoogleMapsSDK] Cleanup already attempted, skipping');
         return;
       }
       cleanupAttempted = true;
 
+      const parent = tempDiv.parentNode;
+      const { isConnected } = tempDiv as { isConnected?: boolean };
+      const isAttached =
+        typeof isConnected === 'boolean'
+          ? isConnected
+          : parent instanceof Node
+            ? parent.contains(tempDiv)
+            : false;
+
+      console.debug('[GoogleMapsSDK] Temp div attachment status:', {
+        hasParentNode: parent instanceof Node,
+        isAttached
+      });
+
+      if (!isAttached) {
+        console.debug('[GoogleMapsSDK] Temp div already detached, nothing to clean up');
+        return;
+      }
+
       if (typeof tempDiv.remove === 'function') {
+        console.debug('[GoogleMapsSDK] Removing temp div via Element.remove()');
         tempDiv.remove();
         return;
       }
 
-      const parent = tempDiv.parentNode;
-      if (!(parent instanceof Node)) {
+      const currentParent = tempDiv.parentNode;
+
+      if (!(currentParent instanceof Node)) {
+        console.debug('[GoogleMapsSDK] Current parent is not a Node, aborting fallback removal');
         return;
       }
 
-      const { isConnected } = tempDiv as { isConnected?: boolean };
-      const isAttached =
-        typeof isConnected === 'boolean' ? isConnected : parent.contains(tempDiv);
-
-      if (!isAttached) {
-        return;
-      }
-
-      if (!parent.contains(tempDiv)) {
+      if (!currentParent.contains(tempDiv)) {
+        console.debug('[GoogleMapsSDK] Current parent no longer contains temp div, aborting fallback removal');
         return;
       }
 
       try {
-        parent.removeChild(tempDiv);
+        currentParent.removeChild(tempDiv);
+        console.debug('[GoogleMapsSDK] Fallback removal via removeChild() succeeded');
       } catch (error) {
         if (error instanceof DOMException && error.name === 'NotFoundError') {
+          console.debug('[GoogleMapsSDK] Fallback removal skipped: temp div already detached');
           return;
         }
         console.debug('Temp div cleanup encountered an unexpected error:', error);
@@ -187,7 +207,9 @@ export async function getPlaceDetails(
     };
 
     const deferCleanup = () => {
+      console.debug('[GoogleMapsSDK] Scheduling deferred temp div cleanup');
       const runCleanup = () => {
+        console.debug('[GoogleMapsSDK] Running deferred temp div cleanup');
         try {
           cleanupTempDiv();
         } catch (error) {
