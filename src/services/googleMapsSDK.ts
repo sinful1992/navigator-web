@@ -136,7 +136,35 @@ export async function getPlaceDetails(
   return new Promise((resolve, reject) => {
     // Create a temporary div for PlacesService (required by Google)
     const tempDiv = document.createElement('div');
+    tempDiv.style.display = 'none';
+    document.body.appendChild(tempDiv);
     const service = new window.google.maps.places.PlacesService(tempDiv);
+
+    let cleanupAttempted = false;
+    const cleanupTempDiv = () => {
+      if (cleanupAttempted) {
+        return;
+      }
+      cleanupAttempted = true;
+
+      try {
+        if (typeof tempDiv.remove === 'function') {
+          tempDiv.remove();
+          return;
+        }
+      } catch (error) {
+        console.debug('Temp div remove() failed (ignoring):', error);
+      }
+
+      const parent = tempDiv.parentNode;
+      if (parent && parent.contains(tempDiv)) {
+        try {
+          parent.removeChild(tempDiv);
+        } catch (error) {
+          console.debug('Temp div parent removal failed (ignoring):', error);
+        }
+      }
+    };
 
     const request: google.maps.places.PlaceDetailsRequest = {
       placeId,
@@ -144,23 +172,21 @@ export async function getPlaceDetails(
       sessionToken: sessionToken ? new window.google.maps.places.AutocompleteSessionToken() : undefined
     };
 
-    service.getDetails(request, (place: google.maps.places.PlaceResult | null, status: google.maps.places.PlacesServiceStatus) => {
-      // Clean up temporary DOM element immediately
-      try {
-        if (tempDiv.parentNode) {
-          tempDiv.parentNode.removeChild(tempDiv);
-        }
-      } catch (error) {
-        // Ignore cleanup errors
-        console.debug('Temp div cleanup error (ignoring):', error);
-      }
+    try {
+      service.getDetails(request, (place: google.maps.places.PlaceResult | null, status: google.maps.places.PlacesServiceStatus) => {
+        // Clean up temporary DOM element immediately
+        cleanupTempDiv();
 
-      if (status === window.google.maps.places.PlacesServiceStatus.OK && place) {
-        resolve(place);
-      } else {
-        reject(new Error(`Place details error: ${status}`));
-      }
-    });
+        if (status === window.google.maps.places.PlacesServiceStatus.OK && place) {
+          resolve(place);
+        } else {
+          reject(new Error(`Place details error: ${status}`));
+        }
+      });
+    } catch (error) {
+      cleanupTempDiv();
+      reject(error);
+    }
   });
 }
 
