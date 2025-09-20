@@ -164,12 +164,15 @@ export async function getPlaceDetails(
         return;
       }
 
-      const shouldAttemptRemoval =
-        typeof (tempDiv as { isConnected?: boolean }).isConnected === 'boolean'
-          ? (tempDiv as { isConnected: boolean }).isConnected
-          : parent.contains(tempDiv);
+      const { isConnected } = tempDiv as { isConnected?: boolean };
+      const isAttached =
+        typeof isConnected === 'boolean' ? isConnected : parent.contains(tempDiv);
 
-      if (!shouldAttemptRemoval && !parent.contains(tempDiv)) {
+      if (!isAttached) {
+        return;
+      }
+
+      if (!parent.contains(tempDiv)) {
         return;
       }
 
