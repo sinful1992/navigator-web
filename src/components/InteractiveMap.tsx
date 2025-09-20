@@ -28,7 +28,7 @@ export function InteractiveMap({
 }: InteractiveMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
-  const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
+  const markersRef = useRef<google.maps.Marker[]>([]);
   const [editingAddress, setEditingAddress] = useState<{
     index: number;
     marker: google.maps.Marker;
@@ -92,14 +92,21 @@ export function InteractiveMap({
   useEffect(() => {
     if (!map) return;
 
-    // Clear existing markers
-    markers.forEach(marker => marker.setMap(null));
+    // Clear existing markers using ref (more reliable)
+    markersRef.current.forEach(marker => {
+      try {
+        marker.setMap(null);
+      } catch (error) {
+        // Ignore errors if marker was already removed
+        console.debug('Marker cleanup error (ignoring):', error);
+      }
+    });
+    markersRef.current = [];
 
     const pins = createPins();
     const geocodedPins = pins.filter(pin => pin.isGeocoded);
 
     if (geocodedPins.length === 0) {
-      setMarkers([]);
       return;
     }
 
@@ -180,7 +187,7 @@ export function InteractiveMap({
       return marker;
     });
 
-    setMarkers(newMarkers);
+    markersRef.current = newMarkers;
 
     // Fit map to show all markers
     if (newMarkers.length > 0) {
@@ -201,6 +208,21 @@ export function InteractiveMap({
       });
     }
   }, [map, addresses, startingPointIndex, onAddressesUpdate, onStartingPointChange, createPins]);
+
+  // Cleanup markers on unmount
+  useEffect(() => {
+    return () => {
+      markersRef.current.forEach(marker => {
+        try {
+          marker.setMap(null);
+        } catch (error) {
+          // Ignore cleanup errors
+          console.debug('Marker cleanup on unmount error (ignoring):', error);
+        }
+      });
+      markersRef.current = [];
+    };
+  }, []);
 
   // Handle manual geocoding for addresses without coordinates
   const handleGeocodeAddress = async (index: number) => {
