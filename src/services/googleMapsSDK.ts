@@ -147,7 +147,9 @@ export async function getPlaceDetails(
     service.getDetails(request, (place: google.maps.places.PlaceResult | null, status: google.maps.places.PlacesServiceStatus) => {
       // Clean up temporary DOM element immediately
       try {
-        if (tempDiv.parentNode) {
+        if (tempDiv.isConnected) {
+          tempDiv.remove();
+        } else if (tempDiv.parentNode?.contains(tempDiv)) {
           tempDiv.parentNode.removeChild(tempDiv);
         }
       } catch (error) {
