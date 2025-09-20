@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, startTransition } from "react";
 import type { AddressRow } from "./types";
 import { SubscriptionGuard } from "./SubscriptionGuard";
 import { AddressAutocomplete } from "./components/AddressAutocomplete";
@@ -78,9 +78,12 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
       error: "Not geocoded yet"
     };
 
-    setAddresses(prev => [...prev, newResult]);
-    setNewAddress("");
-    setOptimizationResult(null);
+    // Use startTransition to batch updates and prevent DOM conflicts
+    startTransition(() => {
+      setAddresses(prev => [...prev, newResult]);
+      setNewAddress("");
+      setOptimizationResult(null);
+    });
   };
 
   // Add address from autocomplete
@@ -95,31 +98,40 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
       formattedAddress: address
     };
 
-    setAddresses(prev => [...prev, newResult]);
-    setNewAddress("");
-    setOptimizationResult(null);
+    // Use startTransition to batch updates and prevent DOM conflicts
+    startTransition(() => {
+      setAddresses(prev => [...prev, newResult]);
+      setNewAddress("");
+      setOptimizationResult(null);
+    });
   };
 
   // Remove address
   const handleRemoveAddress = (index: number) => {
-    setAddresses(prev => prev.filter((_, i) => i !== index));
-    setOptimizationResult(null);
-    // Adjust starting point index if needed
-    if (startingPointIndex === index) {
-      setStartingPointIndex(null);
-    } else if (startingPointIndex !== null && startingPointIndex > index) {
-      setStartingPointIndex(startingPointIndex - 1);
-    }
+    // Use startTransition to batch updates and prevent DOM conflicts
+    startTransition(() => {
+      setAddresses(prev => prev.filter((_, i) => i !== index));
+      setOptimizationResult(null);
+      // Adjust starting point index if needed
+      if (startingPointIndex === index) {
+        setStartingPointIndex(null);
+      } else if (startingPointIndex !== null && startingPointIndex > index) {
+        setStartingPointIndex(startingPointIndex - 1);
+      }
+    });
   };
 
   // Edit address inline
   const handleEditAddress = (index: number, newAddressText: string) => {
-    setAddresses(prev => prev.map((addr, i) => 
-      i === index 
-        ? { ...addr, address: newAddressText, success: false, error: "Modified - needs geocoding" }
-        : addr
-    ));
-    setOptimizationResult(null);
+    // Use startTransition to batch updates and prevent DOM conflicts
+    startTransition(() => {
+      setAddresses(prev => prev.map((addr, i) =>
+        i === index
+          ? { ...addr, address: newAddressText, success: false, error: "Modified - needs geocoding" }
+          : addr
+      ));
+      setOptimizationResult(null);
+    });
   };
 
   // Geocode all addresses that need it
