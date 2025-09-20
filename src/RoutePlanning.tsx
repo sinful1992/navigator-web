@@ -683,6 +683,8 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                   onAddressesUpdate={handleMapAddressesUpdate}
                   startingPointIndex={startingPointIndex ?? undefined}
                   onStartingPointChange={setStartingPointIndex}
+                  optimizedOrder={optimizationResult?.optimizedOrder}
+                  showRouteLines={!!optimizationResult?.success}
                 />
               </div>
             )}

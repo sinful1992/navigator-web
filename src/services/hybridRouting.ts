@@ -318,6 +318,91 @@ export async function optimizeRoute(
 }
 
 /**
+ * Get route directions for an optimized route
+ * Returns polyline geometry for each segment of the route
+ */
+export async function getOptimizedRouteDirections(
+  addresses: AddressRow[],
+  optimizedOrder: number[],
+  startLocation?: [number, number]
+): Promise<{
+  success: boolean;
+  routeSegments: Array<{
+    from: number;
+    to: number;
+    geometry: [number, number][];
+    distance: number;
+    duration: number;
+  }>;
+  error?: string;
+}> {
+  if (!supabase) {
+    return {
+      success: false,
+      routeSegments: [],
+      error: 'Supabase client not available'
+    };
+  }
+
+  try {
+    // Build coordinates in optimized order
+    const waypoints: [number, number][] = [];
+
+    // Add start location if provided
+    if (startLocation) {
+      waypoints.push(startLocation);
+    }
+
+    // Add addresses in optimized order
+    for (const index of optimizedOrder) {
+      const address = addresses[index];
+      if (address.lat && address.lng) {
+        waypoints.push([address.lng, address.lat]);
+      }
+    }
+
+    if (waypoints.length < 2) {
+      return {
+        success: false,
+        routeSegments: [],
+        error: 'Need at least 2 waypoints to generate route'
+      };
+    }
+
+    // Get directions from OpenRouteService
+    const { data, error } = await supabase.functions.invoke('get-route-directions', {
+      body: {
+        coordinates: waypoints,
+        profile: 'driving-car'
+      }
+    });
+
+    if (error) {
+      console.error('Route directions error:', error);
+      return {
+        success: false,
+        routeSegments: [],
+        error: error.message || 'Failed to get route directions'
+      };
+    }
+
+    return {
+      success: true,
+      routeSegments: data?.segments || [],
+      error: undefined
+    };
+
+  } catch (error) {
+    console.error('Failed to get route directions:', error);
+    return {
+      success: false,
+      routeSegments: [],
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+}
+
+/**
  * Check if the hybrid routing service is available
  */
 export function isHybridRoutingAvailable(): boolean {

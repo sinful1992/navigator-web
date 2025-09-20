@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { AddressRow } from "../types";
-import { geocodeAddresses } from "../services/hybridRouting";
+import { geocodeAddresses, getOptimizedRouteDirections } from "../services/hybridRouting";
 
 // Fix for default markers in Leaflet with Webpack
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -27,11 +27,21 @@ interface MapPin {
   confidence?: number;
 }
 
+interface RouteSegment {
+  from: number;
+  to: number;
+  geometry: [number, number][];
+  distance: number;
+  duration: number;
+}
+
 interface LeafletMapProps {
   addresses: AddressRow[];
   onAddressesUpdate: (addresses: AddressRow[]) => void;
   startingPointIndex?: number;
   onStartingPointChange: (index: number | null) => void;
+  optimizedOrder?: number[];
+  showRouteLines?: boolean;
 }
 
 // Component to fit map bounds to markers
@@ -61,9 +71,13 @@ export function LeafletMap({
   addresses,
   onAddressesUpdate,
   startingPointIndex,
-  onStartingPointChange
+  onStartingPointChange,
+  optimizedOrder,
+  showRouteLines = false
 }: LeafletMapProps) {
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
+  const [isLoadingRoute, setIsLoadingRoute] = useState(false);
 
   // Create pins from addresses
   const createPins = (): MapPin[] => {
@@ -80,6 +94,39 @@ export function LeafletMap({
 
   const pins = createPins();
   const geocodedPins = pins.filter(pin => pin.isGeocoded);
+
+  // Load route directions when optimized order changes
+  useEffect(() => {
+    async function loadRouteDirections() {
+      if (!showRouteLines || !optimizedOrder || optimizedOrder.length < 2) {
+        setRouteSegments([]);
+        return;
+      }
+
+      setIsLoadingRoute(true);
+      try {
+        const startLocation = startingPointIndex !== undefined && addresses[startingPointIndex]
+          ? [addresses[startingPointIndex].lng!, addresses[startingPointIndex].lat!] as [number, number]
+          : undefined;
+
+        const result = await getOptimizedRouteDirections(addresses, optimizedOrder, startLocation);
+
+        if (result.success) {
+          setRouteSegments(result.routeSegments);
+        } else {
+          console.error('Failed to load route directions:', result.error);
+          setRouteSegments([]);
+        }
+      } catch (error) {
+        console.error('Error loading route directions:', error);
+        setRouteSegments([]);
+      } finally {
+        setIsLoadingRoute(false);
+      }
+    }
+
+    loadRouteDirections();
+  }, [showRouteLines, optimizedOrder, addresses, startingPointIndex]);
 
   // Handle manual geocoding for addresses without coordinates
   const handleGeocodeAddress = async (index: number) => {
@@ -146,6 +193,16 @@ export function LeafletMap({
       popupAnchor: [1, -34],
       className: `marker-${color.replace('#', '')}`
     });
+  };
+
+  // Generate color for route segment based on order
+  const getSegmentColor = (segmentIndex: number, totalSegments: number): string => {
+    if (totalSegments <= 1) return '#3388ff';
+
+    // Create a gradient from green to red
+    const ratio = segmentIndex / (totalSegments - 1);
+    const hue = (1 - ratio) * 120; // 120 = green, 0 = red
+    return `hsl(${hue}, 70%, 50%)`;
   };
 
   // Default center (UK)
@@ -226,6 +283,35 @@ export function LeafletMap({
             </Marker>
           );
         })}
+
+        {/* Render route polylines */}
+        {showRouteLines && routeSegments.map((segment, index) => {
+          // Convert geometry to Leaflet format [lat, lng]
+          const positions: [number, number][] = segment.geometry.map(coord => [coord[1], coord[0]]);
+
+          return (
+            <Polyline
+              key={`route-segment-${index}`}
+              positions={positions}
+              color={getSegmentColor(index, routeSegments.length)}
+              weight={4}
+              opacity={0.8}
+              dashArray={index === 0 ? undefined : "5, 5"} // First segment solid, others dashed
+            >
+              <Popup>
+                <div>
+                  <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                    Route Segment {index + 1}
+                  </div>
+                  <div style={{ fontSize: '0.875rem' }}>
+                    Distance: {(segment.distance / 1000).toFixed(1)} km<br/>
+                    Duration: {Math.round(segment.duration / 60)} min
+                  </div>
+                </div>
+              </Popup>
+            </Polyline>
+          );
+        })}
       </MapContainer>
 
       {/* Geocoding status */}
@@ -242,6 +328,23 @@ export function LeafletMap({
           zIndex: 1000
         }}>
           🔄 Geocoding address...
+        </div>
+      )}
+
+      {/* Route loading status */}
+      {isLoadingRoute && (
+        <div style={{
+          position: 'absolute',
+          top: '10px',
+          right: '10px',
+          background: 'var(--surface)',
+          padding: '0.5rem 1rem',
+          borderRadius: 'var(--radius)',
+          boxShadow: 'var(--shadow)',
+          fontSize: '0.875rem',
+          zIndex: 1000
+        }}>
+          🗺️ Loading route directions...
         </div>
       )}
 
