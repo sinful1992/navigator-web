@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, startTransition } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { AddressRow } from "../types";
 import { geocodeAddresses } from "../services/hybridRouting";
 import { loadGoogleMapsSDK, isGoogleMapsSDKAvailable } from "../services/googleMapsSDK";
@@ -96,10 +96,13 @@ export function InteractiveMap({
 
     // Use requestAnimationFrame to ensure DOM is stable
     const updateMarkers = () => {
+      console.debug('🗺️ InteractiveMap: Starting marker update');
+
       // Clear existing markers using ref (more reliable)
-      markersRef.current.forEach(marker => {
+      markersRef.current.forEach((marker, index) => {
         try {
           if (marker && typeof marker.setMap === 'function') {
+            console.debug(`🗺️ InteractiveMap: Removing marker ${index}`);
             marker.setMap(null);
           }
         } catch (error) {
@@ -108,6 +111,7 @@ export function InteractiveMap({
         }
       });
       markersRef.current = [];
+      console.debug('🗺️ InteractiveMap: Cleared all existing markers');
 
       const pins = createPins();
       const geocodedPins = pins.filter(pin => pin.isGeocoded);
@@ -119,6 +123,8 @@ export function InteractiveMap({
       // Create new markers with additional safety checks
       const newMarkers = geocodedPins.map((pin, index) => {
         try {
+          console.debug(`🗺️ InteractiveMap: Creating marker ${index} for ${pin.address}`);
+
           if (!window.google?.maps?.Marker) {
             console.warn('Google Maps Marker not available');
             return null;
@@ -225,10 +231,15 @@ export function InteractiveMap({
     }
     };
 
-    // Use startTransition to batch marker updates with React's reconciliation
-    startTransition(() => {
-      updateMarkers();
-    });
+    // Use double setTimeout to ensure markers update well after React reconciliation
+    const timeoutId1 = setTimeout(() => {
+      const timeoutId2 = setTimeout(() => {
+        updateMarkers();
+      }, 0);
+      return () => clearTimeout(timeoutId2);
+    }, 0);
+
+    return () => clearTimeout(timeoutId1);
   }, [map, addresses, startingPointIndex]);
 
   // Cleanup markers on unmount
