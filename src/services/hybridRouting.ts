@@ -178,13 +178,22 @@ export async function optimizeRoute(
 
     if (error) {
       console.error('Route optimization error:', error);
+
+      // Provide user-friendly error messages
+      let userError = 'Route optimization service error';
+      if (error.message?.includes('OpenRouteService API key')) {
+        userError = 'Route optimization service not configured. Please contact support.';
+      } else if (error.message?.includes('non-2xx status code')) {
+        userError = 'Route optimization service is temporarily unavailable. Please try again later.';
+      }
+
       return {
         success: false,
         optimizedOrder: [],
         totalDistance: 0,
         totalDuration: 0,
         unassigned: addresses.map((_, i) => i),
-        error: error.message || 'Route optimization service error'
+        error: userError
       };
     }
 
