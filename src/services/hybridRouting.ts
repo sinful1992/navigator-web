@@ -181,9 +181,76 @@ export async function optimizeRoute(
       firstAddress: requestBody.addresses[0]
     });
 
-    const { data, error } = await supabase.functions.invoke('optimize-route', {
-      body: requestBody
-    });
+    // Try direct HTTP request to get better error details
+    let data = null;
+    let error = null;
+
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error('Supabase configuration missing');
+      }
+
+      const functionUrl = `${supabaseUrl}/functions/v1/optimize-route`;
+      const userToken = (await supabase.auth.getSession()).data.session?.access_token;
+
+      console.log('Making direct request to Edge Function:', {
+        url: functionUrl,
+        hasAuthToken: !!userToken,
+        requestBodySize: JSON.stringify(requestBody).length
+      });
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey
+      };
+
+      if (userToken) {
+        headers['Authorization'] = `Bearer ${userToken}`;
+      }
+
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody)
+      });
+
+      console.log('Edge Function response status:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Edge Function error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+
+        // Try to parse as JSON for structured error
+        try {
+          const errorData = JSON.parse(errorText);
+          error = new Error(`Edge Function error (${response.status}): ${errorData.error || errorText}`);
+        } catch {
+          error = new Error(`Edge Function error (${response.status}): ${errorText}`);
+        }
+      } else {
+        data = await response.json();
+      }
+    } catch (fetchError) {
+      console.error('Failed to make direct request to Edge Function:', fetchError);
+      // Fallback to original Supabase method
+      const result = await supabase.functions.invoke('optimize-route', {
+        body: requestBody
+      });
+      data = result.data;
+      error = result.error;
+    }
 
     if (error) {
       console.error('Route optimization error details:', {
