@@ -160,6 +160,7 @@ serve(async (req) => {
     // Prepare vehicle (enforcement agent)
     const vehicles = [{
       id: 1,
+      profile: 'driving-car',
       start: defaultStart,
       end: endLocation || defaultStart
     }]
