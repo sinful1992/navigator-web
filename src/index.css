@@ -1,3 +1,6 @@
+/* Leaflet CSS */
+@import 'leaflet/dist/leaflet.css';
+
 /* Base styles that don't conflict with App.css */
 * {
   box-sizing: border-box;

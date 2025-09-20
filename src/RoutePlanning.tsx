@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, startTransition } from "react";
 import type { AddressRow } from "./types";
 import { SubscriptionGuard } from "./SubscriptionGuard";
 import { AddressAutocomplete } from "./components/AddressAutocomplete";
-import { InteractiveMap } from "./components/InteractiveMap";
+import { LeafletMap } from "./components/LeafletMap";
 import { ImportExcel } from "./ImportExcel";
 import {
   geocodeAddresses,
@@ -678,7 +678,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                 flex: '1',
                 minWidth: '400px'
               }}>
-                <InteractiveMap
+                <LeafletMap
                   addresses={addresses.map(geocodingResultToAddressRow)}
                   onAddressesUpdate={handleMapAddressesUpdate}
                   startingPointIndex={startingPointIndex ?? undefined}
