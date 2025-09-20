@@ -154,21 +154,25 @@ export async function getPlaceDetails(
       }
       cleanupAttempted = true;
 
+      const parent = tempDiv.parentNode;
+      const { isConnected } = tempDiv as { isConnected?: boolean };
+      const isAttached =
+        typeof isConnected === 'boolean'
+          ? isConnected
+          : parent instanceof Node
+            ? parent.contains(tempDiv)
+            : false;
+
+      if (!isAttached) {
+        return;
+      }
+
       if (typeof tempDiv.remove === 'function') {
         tempDiv.remove();
         return;
       }
 
-      const parent = tempDiv.parentNode;
       if (!(parent instanceof Node)) {
-        return;
-      }
-
-      const { isConnected } = tempDiv as { isConnected?: boolean };
-      const isAttached =
-        typeof isConnected === 'boolean' ? isConnected : parent.contains(tempDiv);
-
-      if (!isAttached) {
         return;
       }
 
