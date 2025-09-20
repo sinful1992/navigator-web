@@ -229,10 +229,6 @@ export function AddressAutocomplete({
       {showSuggestions && suggestions.length > 0 && (
         <div
           ref={suggestionsRef}
-          onMouseDown={(e) => {
-            // Prevent this from causing click outside detection issues
-            e.preventDefault();
-          }}
           style={{
             position: 'absolute',
             top: '100%',
@@ -251,7 +247,10 @@ export function AddressAutocomplete({
           {suggestions.map((suggestion, index) => (
             <button
               key={`${suggestion.label}-${index}`}
-              onClick={() => handleSelectSuggestion(suggestion)}
+              onClick={() => {
+                // Defer the callback to avoid DOM conflicts
+                setTimeout(() => handleSelectSuggestion(suggestion), 0);
+              }}
               style={{
                 width: '100%',
                 padding: '0.75rem 1rem',
