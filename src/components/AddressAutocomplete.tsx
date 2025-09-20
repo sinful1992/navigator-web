@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, startTransition } from "react";
 import { searchAddresses, isHybridRoutingAvailable } from "../services/hybridRouting";
 import { resolveSelectedPlace } from "../services/geocoding";
 import type { AddressAutocompleteResult } from "../services/hybridRouting";
@@ -34,21 +34,27 @@ export function AddressAutocomplete({
   // Debounced search function
   const debouncedSearch = useCallback(async (query: string) => {
     if (!isHybridRoutingAvailable() || !query.trim() || query.length < 3) {
-      setSuggestions([]);
-      setShowSuggestions(false);
+      startTransition(() => {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      });
       return;
     }
 
     setIsLoading(true);
     try {
       const results = await searchAddresses(query);
-      setSuggestions(results);
-      setShowSuggestions(results.length > 0);
-      setSelectedIndex(-1);
+      startTransition(() => {
+        setSuggestions(results);
+        setShowSuggestions(results.length > 0);
+        setSelectedIndex(-1);
+      });
     } catch (error) {
       console.error('Address search failed:', error);
-      setSuggestions([]);
-      setShowSuggestions(false);
+      startTransition(() => {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      });
     } finally {
       setIsLoading(false);
     }
@@ -99,10 +105,17 @@ export function AddressAutocomplete({
       onSelect(suggestion.label, lat, lng);
     }
 
-    setShowSuggestions(false);
-    setSelectedIndex(-1);
-    setSuggestions([]);
-    inputRef.current?.blur();
+    // Batch all autocomplete cleanup with React reconciliation
+    startTransition(() => {
+      setShowSuggestions(false);
+      setSelectedIndex(-1);
+      setSuggestions([]);
+    });
+
+    // Defer blur to avoid focus conflicts
+    setTimeout(() => {
+      inputRef.current?.blur();
+    }, 0);
   };
 
   // Keyboard navigation
@@ -132,9 +145,13 @@ export function AddressAutocomplete({
         break;
       
       case 'Escape':
-        setShowSuggestions(false);
-        setSelectedIndex(-1);
-        inputRef.current?.blur();
+        startTransition(() => {
+          setShowSuggestions(false);
+          setSelectedIndex(-1);
+        });
+        setTimeout(() => {
+          inputRef.current?.blur();
+        }, 0);
         break;
     }
   };
@@ -149,8 +166,10 @@ export function AddressAutocomplete({
           suggestionsRef.current &&
           !suggestionsRef.current.contains(event.target as Node)
         ) {
-          setShowSuggestions(false);
-          setSelectedIndex(-1);
+          startTransition(() => {
+            setShowSuggestions(false);
+            setSelectedIndex(-1);
+          });
         }
       } catch (error) {
         // Ignore DOM errors during click outside detection
