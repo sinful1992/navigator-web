@@ -94,27 +94,37 @@ export function InteractiveMap({
   useEffect(() => {
     if (!map) return;
 
-    // Clear existing markers using ref (more reliable)
-    markersRef.current.forEach(marker => {
-      try {
-        marker.setMap(null);
-      } catch (error) {
-        // Ignore errors if marker was already removed
-        console.debug('Marker cleanup error (ignoring):', error);
+    // Use requestAnimationFrame to ensure DOM is stable
+    const updateMarkers = () => {
+      // Clear existing markers using ref (more reliable)
+      markersRef.current.forEach(marker => {
+        try {
+          if (marker && typeof marker.setMap === 'function') {
+            marker.setMap(null);
+          }
+        } catch (error) {
+          // Ignore errors if marker was already removed
+          console.debug('Marker cleanup error (ignoring):', error);
+        }
+      });
+      markersRef.current = [];
+
+      const pins = createPins();
+      const geocodedPins = pins.filter(pin => pin.isGeocoded);
+
+      if (geocodedPins.length === 0) {
+        return;
       }
-    });
-    markersRef.current = [];
 
-    const pins = createPins();
-    const geocodedPins = pins.filter(pin => pin.isGeocoded);
+      // Create new markers with additional safety checks
+      const newMarkers = geocodedPins.map((pin, index) => {
+        try {
+          if (!window.google?.maps?.Marker) {
+            console.warn('Google Maps Marker not available');
+            return null;
+          }
 
-    if (geocodedPins.length === 0) {
-      return;
-    }
-
-    // Create new markers
-    const newMarkers = geocodedPins.map((pin, index) => {
-      const marker = new google.maps.Marker({
+          const marker = new google.maps.Marker({
         position: { lat: pin.lat, lng: pin.lng },
         map: map,
         title: pin.address,
@@ -186,10 +196,14 @@ export function InteractiveMap({
         }
       });
 
-      return marker;
-    });
+          return marker;
+        } catch (error) {
+          console.error('Error creating marker:', error);
+          return null;
+        }
+      }).filter((marker): marker is google.maps.Marker => marker !== null);
 
-    markersRef.current = newMarkers;
+      markersRef.current = newMarkers;
 
     // Fit map to show all markers
     if (newMarkers.length > 0) {
@@ -209,7 +223,15 @@ export function InteractiveMap({
         }
       });
     }
-  }, [map, addresses, startingPointIndex, onAddressesUpdate, onStartingPointChange, createPins]);
+    };
+
+    // Use requestAnimationFrame to avoid DOM conflicts
+    const rafId = requestAnimationFrame(updateMarkers);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+    };
+  }, [map, addresses, startingPointIndex]);
 
   // Cleanup markers on unmount
   useEffect(() => {
