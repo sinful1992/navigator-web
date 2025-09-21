@@ -507,173 +507,169 @@ const adminStyles = `
 .admin-dashboard {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem;
-  background: var(--gray-50);
+  padding: 1rem;
+  background: var(--background);
   min-height: 100vh;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .admin-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
-  background: white;
-  padding: 1.5rem;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--gray-200);
+  margin-bottom: 1rem;
+  background: var(--surface);
+  padding: 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-light);
 }
 
 .admin-header h2 {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  color: var(--gray-800);
+  color: var(--text);
   margin: 0;
-  background: var(--primary-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .admin-info {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  color: var(--gray-600);
-  font-size: 0.875rem;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .close-button {
-  background: var(--gray-100);
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius-md);
-  width: 36px;
-  height: 36px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: var(--transition-normal);
-  color: var(--gray-600);
+  transition: all 0.2s ease;
+  color: var(--text-muted);
 }
 
 .close-button:hover {
-  background: var(--gray-200);
-  color: var(--gray-800);
+  background: var(--background);
+  color: var(--text);
 }
 
 .admin-tabs {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 2rem;
-  background: white;
-  padding: 0.5rem;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--gray-200);
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  background: var(--surface);
+  padding: 0.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-light);
 }
 
 .admin-tabs button {
   flex: 1;
-  padding: 0.75rem 1.5rem;
+  padding: 0.5rem 0.75rem;
   border: none;
   background: transparent;
   cursor: pointer;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
   font-weight: 500;
-  color: var(--gray-600);
-  transition: var(--transition-normal);
+  color: var(--text-muted);
+  transition: all 0.2s ease;
   position: relative;
+  font-size: 0.75rem;
+  text-align: center;
 }
 
 .admin-tabs button:hover {
-  background: var(--gray-50);
-  color: var(--gray-800);
+  background: var(--background);
+  color: var(--text);
 }
 
 .admin-tabs button.active {
   background: var(--primary);
   color: white;
-  box-shadow: var(--shadow-sm);
 }
 
 .stats-bar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .stat {
-  background: white;
-  padding: 1.5rem;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--gray-200);
+  background: var(--surface);
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-light);
   text-align: center;
-  transition: var(--transition-normal);
+  transition: all 0.2s ease;
 }
 
 .stat:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .stat strong {
   display: block;
-  font-size: 2rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--primary);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .stat span {
-  font-size: 0.875rem;
-  color: var(--gray-500);
+  font-size: 0.625rem;
+  color: var(--text-muted);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  line-height: 1.2;
 }
 
 .admin-actions-panel {
-  background: white;
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  margin-bottom: 2rem;
-  box-shadow: var(--shadow-sm);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
 }
 
 .admin-actions-panel h3 {
-  margin: 0 0 1.5rem 0;
-  font-size: 1.125rem;
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
   font-weight: 600;
-  color: var(--gray-800);
+  color: var(--text);
 }
 
 .admin-form .form-row {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .admin-form label {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
-  color: var(--gray-700);
-  font-size: 0.875rem;
+  color: var(--text);
+  font-size: 0.75rem;
 }
 
 .admin-form select,
 .admin-form input,
 .admin-form textarea {
   width: 100%;
-  padding: 0.75rem;
-  border: 1px solid var(--gray-300);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  transition: var(--transition-normal);
-  background: white;
-  color: var(--gray-800);
+  padding: 0.5rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  transition: all 0.2s ease;
+  background: var(--background);
+  color: var(--text);
+  box-sizing: border-box;
 }
 
 .admin-form select:focus,
@@ -681,44 +677,48 @@ const adminStyles = `
 .admin-form textarea:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 .form-row .action-group {
   display: flex;
-  gap: 1.5rem;
+  gap: 0.5rem;
   align-items: end;
+  flex-wrap: wrap;
 }
 
 .input-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
   flex: 1;
+  min-width: 0;
 }
 
 .input-group label {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: 0.625rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--gray-500);
+  color: var(--text-muted);
 }
 
 .input-group input {
-  width: 100px;
+  width: 80px;
+  min-width: 60px;
 }
 
 .input-group button {
   background: var(--primary);
   color: white;
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-md);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
   cursor: pointer;
   font-weight: 600;
-  transition: var(--transition-normal);
+  transition: all 0.2s ease;
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
 .input-group button:hover {
@@ -733,127 +733,137 @@ const adminStyles = `
 }
 
 .subscriptions-table {
-  background: white;
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .subscriptions-table h3 {
   margin: 0;
-  padding: 1rem 1.5rem;
-  background: var(--gray-50);
-  border-bottom: 1px solid var(--gray-200);
-  font-size: 1.125rem;
+  padding: 0.75rem 1rem;
+  background: var(--background);
+  border-bottom: 1px solid var(--border-light);
+  font-size: 1rem;
   font-weight: 600;
-  color: var(--gray-800);
+  color: var(--text);
 }
 
 .subscriptions-table table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 600px;
 }
 
 .subscriptions-table th,
 .subscriptions-table td {
-  padding: 1rem 1.5rem;
+  padding: 0.5rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid var(--gray-100);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .subscriptions-table th {
-  background: var(--gray-50);
+  background: var(--background);
   font-weight: 600;
-  font-size: 0.75rem;
-  color: var(--gray-500);
+  font-size: 0.625rem;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .subscriptions-table td {
-  font-size: 0.875rem;
-  color: var(--gray-700);
+  font-size: 0.75rem;
+  color: var(--text);
+  white-space: nowrap;
 }
 
 .actions-list {
-  max-height: 600px;
+  max-height: 400px;
   overflow-y: auto;
-  padding-right: 0.5rem;
+  -webkit-overflow-scrolling: touch;
 }
 
 .action-item {
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius-lg);
-  margin-bottom: 1rem;
-  padding: 1.5rem;
-  background: white;
-  box-shadow: var(--shadow-sm);
-  transition: var(--transition-normal);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  margin-bottom: 0.5rem;
+  padding: 1rem;
+  background: var(--surface);
+  transition: all 0.2s ease;
 }
 
 .action-item:hover {
-  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .action-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+  gap: 0.5rem;
 }
 
 .action-header strong {
   color: var(--primary);
   font-weight: 600;
+  font-size: 0.75rem;
+  flex: 1;
 }
 
 .action-date {
-  color: var(--gray-500);
-  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.625rem;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .action-details p {
-  margin: 0.5rem 0;
-  font-size: 0.875rem;
-  color: var(--gray-600);
+  margin: 0.25rem 0;
+  font-size: 0.75rem;
+  color: var(--text);
 }
 
 .action-notes {
-  margin-top: 1rem;
+  margin-top: 0.75rem;
 }
 
 .action-notes pre {
-  background: var(--gray-50);
-  padding: 1rem;
-  border-radius: var(--radius-md);
-  font-size: 0.75rem;
+  background: var(--background);
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  font-size: 0.625rem;
   overflow-x: auto;
-  border: 1px solid var(--gray-200);
-  color: var(--gray-700);
+  border: 1px solid var(--border-light);
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .settings-info,
 .quick-stats {
-  background: white;
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  box-shadow: var(--shadow-sm);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
 }
 
 .settings-info h4,
 .quick-stats h4 {
-  margin: 0 0 1rem 0;
-  color: var(--gray-800);
+  margin: 0 0 0.75rem 0;
+  color: var(--text);
   font-weight: 600;
+  font-size: 1rem;
 }
 
 .settings-info p {
-  margin: 0.75rem 0;
-  color: var(--gray-600);
+  margin: 0.5rem 0;
+  color: var(--text);
+  font-size: 0.75rem;
 }
 
 .quick-stats ul {
@@ -863,11 +873,13 @@ const adminStyles = `
 }
 
 .quick-stats li {
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--gray-100);
-  color: var(--gray-600);
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text);
   display: flex;
   justify-content: space-between;
+  font-size: 0.75rem;
+  gap: 1rem;
 }
 
 .quick-stats li:last-child {
@@ -877,168 +889,203 @@ const adminStyles = `
 .loading,
 .error {
   text-align: center;
-  padding: 3rem;
-  background: white;
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  padding: 2rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  margin: 1rem;
 }
 
 .error h3 {
   color: var(--danger);
   margin-bottom: 1rem;
+  font-size: 1rem;
 }
 
 .loading {
-  color: var(--gray-600);
+  color: var(--text-muted);
+  font-size: 0.875rem;
 }
 
-/* ==== Dark Mode Support ==== */
-.dark-mode .admin-dashboard {
-  background: var(--gray-50);
-}
+/* CSS Variables handle dark mode automatically through the app's theme system */
 
-.dark-mode .admin-header {
-  background: var(--gray-100);
-  border-color: var(--gray-200);
-}
-
-.dark-mode .admin-header h2 {
-  color: var(--gray-800);
-}
-
-.dark-mode .admin-info {
-  color: var(--gray-600);
-}
-
-.dark-mode .close-button {
-  background: var(--gray-200);
-  border-color: var(--gray-300);
-  color: var(--gray-700);
-}
-
-.dark-mode .close-button:hover {
-  background: var(--gray-300);
-  color: var(--gray-800);
-}
-
-.dark-mode .admin-tabs {
-  background: var(--gray-100);
-  border-color: var(--gray-200);
-}
-
-.dark-mode .admin-tabs button {
-  color: var(--gray-600);
-}
-
-.dark-mode .admin-tabs button:hover {
-  background: var(--gray-200);
-  color: var(--gray-800);
-}
-
-.dark-mode .stat {
-  background: var(--gray-100);
-  border-color: var(--gray-200);
-}
-
-.dark-mode .stat span {
-  color: var(--gray-500);
-}
-
-.dark-mode .admin-actions-panel,
-.dark-mode .subscriptions-table,
-.dark-mode .action-item,
-.dark-mode .settings-info,
-.dark-mode .quick-stats,
-.dark-mode .loading,
-.dark-mode .error {
-  background: var(--gray-100);
-  border-color: var(--gray-200);
-}
-
-.dark-mode .admin-actions-panel h3,
-.dark-mode .subscriptions-table h3 {
-  color: var(--gray-800);
-}
-
-.dark-mode .admin-form label {
-  color: var(--gray-700);
-}
-
-.dark-mode .admin-form select,
-.dark-mode .admin-form input,
-.dark-mode .admin-form textarea {
-  background: var(--gray-200);
-  border-color: var(--gray-300);
-  color: var(--gray-800);
-}
-
-.dark-mode .subscriptions-table th {
-  background: var(--gray-200);
-  color: var(--gray-600);
-}
-
-.dark-mode .subscriptions-table td {
-  color: var(--gray-700);
-}
-
-.dark-mode .action-notes pre {
-  background: var(--gray-200);
-  border-color: var(--gray-300);
-  color: var(--gray-700);
-}
-
-.dark-mode .settings-info p,
-.dark-mode .quick-stats li {
-  color: var(--gray-600);
-}
-
-.dark-mode .quick-stats li {
-  border-bottom-color: var(--gray-200);
-}
-
-/* ==== Responsive Design ==== */
-@media (max-width: 768px) {
+/* ==== Responsive Design - Mobile First ==== */
+@media (max-width: 480px) {
   .admin-dashboard {
-    padding: 1rem;
+    padding: 0.5rem;
+    margin: 0;
   }
 
   .admin-header {
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.5rem;
     text-align: center;
+    padding: 0.75rem;
+  }
+
+  .admin-header h2 {
+    font-size: 1.125rem;
+  }
+
+  .admin-info {
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.625rem;
   }
 
   .admin-tabs {
     flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .admin-tabs button {
+    padding: 0.5rem;
+    font-size: 0.75rem;
   }
 
   .stats-bar {
     grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
+    gap: 0.25rem;
+  }
+
+  .stat {
+    padding: 0.5rem;
+  }
+
+  .stat strong {
+    font-size: 1rem;
+    margin-bottom: 0.125rem;
+  }
+
+  .stat span {
+    font-size: 0.5rem;
+  }
+
+  .admin-actions-panel {
+    padding: 0.75rem;
   }
 
   .form-row .action-group {
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.5rem;
+    align-items: stretch;
   }
 
-  .subscriptions-table {
-    overflow-x: auto;
+  .input-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
   }
 
-  .subscriptions-table table {
-    min-width: 600px;
+  .input-group label {
+    margin: 0;
+    min-width: 60px;
+    text-align: left;
+    font-size: 0.5rem;
+  }
+
+  .input-group input {
+    width: 60px;
+    min-width: 60px;
+  }
+
+  .input-group button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.625rem;
+  }
+
+  .subscriptions-table h3 {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .subscriptions-table th,
+  .subscriptions-table td {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.625rem;
+  }
+
+  .action-item {
+    padding: 0.75rem;
+  }
+
+  .action-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  .action-header strong {
+    font-size: 0.625rem;
+  }
+
+  .action-date {
+    font-size: 0.5rem;
+  }
+
+  .action-details p {
+    font-size: 0.625rem;
+    margin: 0.125rem 0;
+  }
+
+  .action-notes pre {
+    padding: 0.5rem;
+    font-size: 0.5rem;
+  }
+
+  .settings-info,
+  .quick-stats {
+    padding: 0.75rem;
+  }
+
+  .settings-info h4,
+  .quick-stats h4 {
+    font-size: 0.875rem;
+  }
+
+  .settings-info p,
+  .quick-stats li {
+    font-size: 0.625rem;
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 360px) {
+  .admin-dashboard {
+    padding: 0.25rem;
+  }
+
   .stats-bar {
     grid-template-columns: 1fr;
+    gap: 0.25rem;
   }
 
   .stat strong {
-    font-size: 1.5rem;
+    font-size: 0.875rem;
+  }
+
+  .stat span {
+    font-size: 0.5rem;
+  }
+
+  .admin-tabs button {
+    padding: 0.375rem;
+    font-size: 0.625rem;
+  }
+}
+
+/* Tablet optimizations */
+@media (min-width: 481px) and (max-width: 768px) {
+  .admin-dashboard {
+    padding: 0.75rem;
+  }
+
+  .stats-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .form-row .action-group {
+    flex-wrap: wrap;
+    gap: 0.75rem;
   }
 }
 `;

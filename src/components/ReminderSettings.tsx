@@ -695,6 +695,15 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
           flex-direction: column;
         }
 
+        @media (max-width: 480px) {
+          .modal-content {
+            width: 98vw;
+            max-height: 98vh;
+            border-radius: var(--radius-md, 8px);
+            margin: 0 0.5rem;
+          }
+        }
+
         /* Modal Header */
         .modal-header {
           display: flex;
@@ -703,6 +712,16 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
           padding: 1.5rem 2rem;
           border-bottom: 1px solid var(--gray-200, #e5e7eb);
           flex-shrink: 0;
+        }
+
+        @media (max-width: 480px) {
+          .modal-header {
+            padding: 1rem 1.5rem;
+          }
+
+          .modal-header h2 {
+            font-size: 1.25rem;
+          }
         }
 
         .modal-header h2 {
@@ -739,6 +758,23 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
           justify-content: flex-end;
           gap: 1rem;
           flex-shrink: 0;
+        }
+
+        @media (max-width: 480px) {
+          .modal-body {
+            padding: 1.5rem;
+          }
+
+          .modal-footer {
+            padding: 1rem 1.5rem;
+            flex-direction: column-reverse;
+            gap: 0.75rem;
+          }
+
+          .modal-footer .btn {
+            width: 100%;
+            justify-content: center;
+          }
         }
 
         /* Template Editor Layout */
@@ -863,6 +899,35 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
         .btn-group .btn {
           flex: 1;
           text-align: center;
+          font-size: 0.875rem;
+          padding: 0.75rem 0.5rem;
+        }
+
+        /* Mobile-specific tab optimizations */
+        @media (max-width: 480px) {
+          .btn-group {
+            gap: 0.25rem;
+            margin-bottom: 1.5rem;
+          }
+
+          .btn-group .btn {
+            font-size: 0.75rem;
+            padding: 0.625rem 0.375rem;
+            line-height: 1.2;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .btn-group {
+            flex-direction: column;
+            gap: 0.5rem;
+          }
+
+          .btn-group .btn {
+            flex: none;
+            font-size: 0.875rem;
+            padding: 0.75rem 1rem;
+          }
         }
 
         /* Templates List */
