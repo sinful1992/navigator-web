@@ -56,6 +56,15 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
       return acc;
     }, {} as Record<string, { date: string; pifs: number; total: number; fees: number }>);
 
+    // Calculate bonus for each day: (PIFs × £100) - £100 daily deduction
+    const dailyStatsWithBonus = Object.values(dailyStats).map(day => ({
+      ...day,
+      bonus: Math.max(0, (day.pifs * 100) - 100)
+    }));
+
+    // Calculate total bonus for the range
+    const totalBonus = dailyStatsWithBonus.reduce((sum, day) => sum + day.bonus, 0);
+
     return {
       totalPifFees,
       totalAddresses,
@@ -63,7 +72,8 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
       doneCount,
       daCount,
       arrCount,
-      dailyStats: Object.values(dailyStats).sort((a, b) => b.date.localeCompare(a.date))
+      totalBonus,
+      dailyStats: dailyStatsWithBonus.sort((a, b) => b.date.localeCompare(a.date))
     };
   }, [state.completions, selectedStartDate, selectedEndDate]);
 
@@ -168,6 +178,24 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
             padding: '1rem',
             textAlign: 'center'
           }}>
+            <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--primary)' }}>
+              Potential Bonus
+            </h3>
+            <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+              {formatCurrency(rangeStats.totalBonus)}
+            </div>
+            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+              £100/PIF - £100/day
+            </div>
+          </div>
+
+          <div className="summary-card" style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border-light)',
+            borderRadius: 'var(--radius)',
+            padding: '1rem',
+            textAlign: 'center'
+          }}>
             <h3 style={{ margin: '0 0 0.5rem 0' }}>Breakdown</h3>
             <div style={{ fontSize: '0.875rem' }}>
               <div>PIF: {rangeStats.pifCount}</div>
@@ -212,6 +240,9 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
                     <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)' }}>
                       PIF Fees
                     </th>
+                    <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)' }}>
+                      Bonus
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -232,6 +263,9 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
                       </td>
                       <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)', fontWeight: 'bold' }}>
                         {formatCurrency(day.fees)}
+                      </td>
+                      <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)', fontWeight: 'bold', color: day.bonus > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
+                        {formatCurrency(day.bonus)}
                       </td>
                     </tr>
                   ))}
