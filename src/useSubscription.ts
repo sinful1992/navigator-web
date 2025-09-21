@@ -120,20 +120,24 @@ export function useSubscription(user: User | null): UseSubscription {
   const hasAccess = isOwner || (isActive && !isExpired) || serverTrialAccess;
 
   // Debug access calculation
-  console.log("Access check:", {
-    isOwner,
-    isActive,
-    isExpired,
-    hasAccess,
-    serverTrialAccess,
-    subscription,
-    user: user?.email
-  });
+  if (import.meta.env.DEV) {
+    console.log("Access check:", {
+      isOwner,
+      isActive,
+      isExpired,
+      hasAccess,
+      serverTrialAccess,
+      subscription,
+      user: user?.email
+    });
+  }
 
   // Load subscription data from Supabase
   const refreshSubscription = useCallback(async () => {
     if (!user || !supabase) {
-      console.log("No user or supabase in refreshSubscription");
+      if (import.meta.env.DEV) {
+        console.log("No user or supabase in refreshSubscription");
+      }
       setSubscription(null);
       setIsLoading(false);
       return;
@@ -143,7 +147,9 @@ export function useSubscription(user: User | null): UseSubscription {
       setIsLoading(true);
       clearError();
 
-      console.log("Loading subscription for user:", user.id);
+      if (import.meta.env.DEV) {
+        console.log("Loading subscription for user:", user.id);
+      }
       const { data, error: fetchError } = await supabase
         .from('user_subscriptions')
         .select('*')

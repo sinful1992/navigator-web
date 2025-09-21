@@ -97,10 +97,7 @@ async function uploadBackupToStorage(
     .toLocaleTimeString("en-GB", { timeZone: tz, hour12: false })
     .replace(/:/g, "");
 
-  const bucket =
-    (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_BUCKET
-      ? (import.meta as any).env.VITE_SUPABASE_BUCKET
-      : "navigator-backups";
+  const bucket = import.meta.env.VITE_SUPABASE_BUCKET || "navigator-backups";
   const name = `backup_${dayKey}_${time}_${label}_retry${retryCount}.json`;
   const objectPath = `${userId}/${dayKey}/${name}`;
 
@@ -116,9 +113,9 @@ async function uploadBackupToStorage(
       .from(bucket)
       .upload(objectPath, blob, { upsert: true, contentType: "application/json" }); // Changed to upsert: true for reliability
 
-    if ((uploadRes as any).error) {
-      logger.error("Backup upload failed:", (uploadRes as any).error);
-      throw new Error((uploadRes as any).error.message);
+    if (uploadRes.error) {
+      logger.error("Backup upload failed:", uploadRes.error);
+      throw new Error(uploadRes.error.message);
     }
 
     logger.info("Backup upload successful:", objectPath);
@@ -133,7 +130,7 @@ async function uploadBackupToStorage(
       });
       logger.info("Backup database record created");
     } catch (dbError) {
-      logger.warn("Backups table insert failed (non-critical):", (dbError as any)?.message || dbError);
+      logger.warn("Backups table insert failed (non-critical):", dbError instanceof Error ? dbError.message : dbError);
     }
 
     return { objectPath, size: blob.size };
@@ -333,9 +330,9 @@ function AuthedApp() {
         .order("day_key", { ascending: false })
         .order("created_at", { ascending: false });
 
-      if ((q as any).error) throw (q as any).error;
+      if (q.error) throw q.error;
 
-      const data = ((q as any).data ?? []) as CloudBackupRow[];
+      const data = (q.data ?? []) as CloudBackupRow[];
       setCloudBackups(data);
     } catch (e: any) {
       setCloudErr(e?.message || String(e));
@@ -368,10 +365,10 @@ function AuthedApp() {
       setCloudBusy(true);
       setCloudErr(null);
       try {
-        const bucket = (import.meta as any).env?.VITE_SUPABASE_BUCKET || "navigator-backups";
+        const bucket = import.meta.env.VITE_SUPABASE_BUCKET || "navigator-backups";
         const dl = await supabase.storage.from(bucket).download(objectPath);
-        if ((dl as any).error) throw (dl as any).error;
-        const blob: Blob = (dl as any).data as Blob;
+        if (dl.error) throw dl.error;
+        const blob: Blob = dl.data as Blob;
         const text = await blob.text();
         const raw = JSON.parse(text);
         const data = normalizeState(raw);
@@ -414,7 +411,7 @@ function AuthedApp() {
           .eq("user_id", cloudSync.user!.id)
           .maybeSingle();
 
-        const row: any = (sel as any)?.data ?? null;
+        const row = sel.data;
 
         if (row && row.data) {
           const normalized = normalizeState(row.data);

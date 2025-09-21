@@ -12,7 +12,9 @@ async function initializeNewUser(userId: string): Promise<void> {
     throw new Error("Supabase not configured");
   }
 
-  console.log("Creating trial subscription for user:", userId);
+  if (import.meta.env.DEV) {
+    console.log("Creating trial subscription for user:", userId);
+  }
 
   // Use the database function to create trial subscription (bypasses RLS)
   const { data, error } = await supabase
@@ -501,7 +503,9 @@ export function useCloudSync(): UseCloudSync {
 
       // First, ensure we're signed out completely to prevent session conflicts
       try {
-        console.log("Pre-signup: clearing all sessions and storage...");
+        if (import.meta.env.DEV) {
+          console.log("Pre-signup: clearing all sessions and storage...");
+        }
 
         // Clear all auth storage manually
         localStorage.removeItem('navigator-supabase-auth-token');
@@ -519,7 +523,9 @@ export function useCloudSync(): UseCloudSync {
 
         // Verify we're signed out
         const { data: sessionCheck } = await supabase.auth.getSession();
-        console.log("Session after cleanup:", sessionCheck.session);
+        if (import.meta.env.DEV) {
+          console.log("Session after cleanup:", sessionCheck.session ? "EXISTS" : "NULL");
+        }
 
         if (sessionCheck.session) {
           console.warn("Session still exists after cleanup, forcing removal...");
@@ -531,8 +537,10 @@ export function useCloudSync(): UseCloudSync {
         console.warn("Error during pre-signup signout:", signOutError);
       }
 
-      console.log("Attempting signup for email:", email);
-      console.log("Supabase configured:", !!supabase);
+      if (import.meta.env.DEV) {
+        console.log("Attempting signup for email:", email);
+        console.log("Supabase configured:", !!supabase);
+      }
 
       const { data, error: err } = await supabase.auth.signUp({
         email,
@@ -545,10 +553,12 @@ export function useCloudSync(): UseCloudSync {
         }
       });
 
-      console.log("Signup response data:", data);
-      console.log("Signup error:", err);
-      console.log("User created:", data.user?.id, data.user?.email);
-      console.log("Session created:", data.session?.access_token ? "YES" : "NO");
+      if (import.meta.env.DEV) {
+        console.log("Signup response data:", data);
+        console.log("Signup error:", err);
+        console.log("User created:", data.user?.id, data.user?.email);
+        console.log("Session created:", data.session?.access_token ? "YES" : "NO");
+      }
 
       if (err) {
         setError(err.message);
@@ -556,17 +566,23 @@ export function useCloudSync(): UseCloudSync {
       }
 
       if (data.user) {
-        console.log("New user created:", data.user.email, "ID:", data.user.id);
+        if (import.meta.env.DEV) {
+          console.log("New user created:", data.user.email, "ID:", data.user.id);
+        }
 
         // Initialize new user with trial subscription
         try {
           await initializeNewUser(data.user.id);
-          console.log("Successfully initialized new user with trial subscription");
+          if (import.meta.env.DEV) {
+            console.log("Successfully initialized new user with trial subscription");
+          }
 
           // Set trial access flags for unconfirmed users
           localStorage.setItem('navigator_trial_created', Date.now().toString());
           localStorage.setItem('navigator_trial_user_id', data.user.id);
-          console.log("Set trial access flags for unconfirmed user");
+          if (import.meta.env.DEV) {
+            console.log("Set trial access flags for unconfirmed user");
+          }
 
         } catch (initError) {
           console.error("Failed to initialize new user:", initError);
@@ -575,7 +591,9 @@ export function useCloudSync(): UseCloudSync {
 
         // If no session was created, try to sign in immediately to create one
         if (!data.session) {
-          console.log("No session created during signup, attempting immediate signin...");
+          if (import.meta.env.DEV) {
+            console.log("No session created during signup, attempting immediate signin...");
+          }
           try {
             const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
               email,
@@ -585,7 +603,9 @@ export function useCloudSync(): UseCloudSync {
             if (signInError) {
               console.warn("Immediate signin failed:", signInError);
             } else {
-              console.log("Immediate signin successful, session created");
+              if (import.meta.env.DEV) {
+                console.log("Immediate signin successful, session created");
+              }
               setUser(signInData.user);
               return { user: signInData.user! };
             }
