@@ -1,5 +1,17 @@
 export function generateChecksum(data: any): string {
-  const str = JSON.stringify(data, Object.keys(data).sort());
+  // Use a replacer function to sort keys at every level for deterministic output
+  const str = JSON.stringify(data, (_key, value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      // Sort object keys for consistent serialization
+      const sorted: any = {};
+      Object.keys(value).sort().forEach(k => {
+        sorted[k] = value[k];
+      });
+      return sorted;
+    }
+    return value;
+  });
+
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
