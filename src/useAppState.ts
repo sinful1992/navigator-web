@@ -130,7 +130,9 @@ function stampCompletionsWithVersion(
 // Generate a deterministic ID for operations
 function generateOperationId(type: string, entity: string, data: any): string {
   const key = `${type}_${entity}_${JSON.stringify(data).slice(0, 50)}_${Date.now()}`;
-  return btoa(key).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
+  // Use encodeURIComponent to handle Unicode characters before base64 encoding
+  const unicodeSafeKey = encodeURIComponent(key);
+  return btoa(unicodeSafeKey).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
 }
 
 // ---- device id helper ----
