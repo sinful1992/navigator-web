@@ -475,6 +475,12 @@ const styles = `
   font-size: 12px;
 }
 
+.dark-mode .trial-badge {
+  background: var(--dark-secondary-bg, #2a4a5c);
+  color: var(--dark-secondary-text, #87ceeb);
+  border: 1px solid var(--dark-border-color, #444);
+}
+
 .plan-header {
   display: flex;
   justify-content: space-between;
