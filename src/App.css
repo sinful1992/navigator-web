@@ -60,6 +60,20 @@ body {
   --text-secondary: var(--gray-500);
   --border: var(--gray-200);
   --border-light: var(--gray-200);
+
+  /* Subscription Manager variables */
+  --text-color: #000;
+  --border-color: #e1e5e9;
+  --card-bg: #fff;
+  --hover-bg: #f5f5f5;
+  --secondary-text: #6c757d;
+  --secondary-bg: #f8f9fa;
+  --error-bg: #fee;
+  --error-border: #fcc;
+  --error-text: #721c24;
+  --warning-bg: #fff3cd;
+  --warning-border: #ffeaa7;
+  --warning-text: #856404;
   
   /* Neutral Colors */
   --gray-50: #f9fafb;
@@ -1371,6 +1385,20 @@ body {
   --text-secondary: var(--gray-500);
   --border: var(--gray-300);
   --border-light: var(--gray-300);
+
+  /* Dark mode Subscription Manager variables */
+  --text-color: #fff;
+  --border-color: #444;
+  --card-bg: var(--gray-100);
+  --hover-bg: #333;
+  --secondary-text: #aaa;
+  --secondary-bg: #333;
+  --error-bg: #4a1a1a;
+  --error-border: #8b2635;
+  --error-text: #ff6b6b;
+  --warning-bg: #4a3c1a;
+  --warning-border: #8b7355;
+  --warning-text: #ffc107;
 }
 
 .dark-mode .app-wrapper {

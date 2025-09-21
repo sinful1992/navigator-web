@@ -333,6 +333,7 @@ const styles = `
   margin: 0 auto;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text-color, #000);
 }
 
 .subscription-header {
@@ -340,8 +341,13 @@ const styles = `
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
-  border-bottom: 1px solid #e1e5e9;
+  border-bottom: 1px solid var(--border-color, #e1e5e9);
   padding-bottom: 16px;
+}
+
+.subscription-header h2 {
+  color: var(--text-color, #000);
+  margin: 0;
 }
 
 .close-button {
@@ -351,21 +357,27 @@ const styles = `
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px;
+  color: var(--text-color, #000);
 }
 
 .close-button:hover {
-  background-color: #f5f5f5;
+  background-color: var(--hover-bg, #f5f5f5);
+}
+
+.dark-mode .close-button:hover {
+  background-color: var(--dark-hover-bg, #333);
 }
 
 .subscription-loading {
   text-align: center;
   padding: 40px;
+  color: var(--text-color, #000);
 }
 
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #f3f3f3;
+  border: 4px solid var(--border-color, #f3f3f3);
   border-top: 4px solid #007bff;
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -378,25 +390,45 @@ const styles = `
 }
 
 .error-banner {
-  background-color: #fee;
-  border: 1px solid #fcc;
+  background-color: var(--error-bg, #fee);
+  border: 1px solid var(--error-border, #fcc);
   border-radius: 4px;
   padding: 12px;
   margin-bottom: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  color: var(--error-text, #721c24);
+}
+
+.dark-mode .error-banner {
+  background-color: var(--dark-error-bg, #4a1a1a);
+  border-color: var(--dark-error-border, #8b2635);
+  color: var(--dark-error-text, #ff6b6b);
 }
 
 .current-subscription, .available-plans {
   margin-bottom: 24px;
 }
 
+.current-subscription h3, .available-plans h3 {
+  color: var(--text-color, #000);
+  margin-bottom: 16px;
+}
+
 .subscription-card, .plan-card {
-  border: 1px solid #e1e5e9;
+  border: 1px solid var(--border-color, #e1e5e9);
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 16px;
+  background-color: var(--card-bg, #fff);
+  color: var(--text-color, #000);
+}
+
+.dark-mode .subscription-card,
+.dark-mode .plan-card {
+  background-color: var(--dark-card-bg, #2a2a2a);
+  border-color: var(--dark-border-color, #444);
 }
 
 .plan-card.featured {
@@ -450,6 +482,11 @@ const styles = `
   margin-bottom: 16px;
 }
 
+.plan-header h4 {
+  color: var(--text-color, #000);
+  margin: 0;
+}
+
 .plan-price .price {
   font-size: 24px;
   font-weight: bold;
@@ -457,8 +494,12 @@ const styles = `
 }
 
 .plan-price .period {
-  color: #6c757d;
+  color: var(--secondary-text, #6c757d);
   font-size: 14px;
+}
+
+.dark-mode .plan-price .period {
+  color: var(--dark-secondary-text, #aaa);
 }
 
 .plan-features ul {
@@ -470,6 +511,32 @@ const styles = `
 .plan-features li {
   padding: 4px 0;
   color: #28a745;
+}
+
+.subscription-info .plan-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-color, #000);
+  margin-bottom: 8px;
+}
+
+.subscription-details {
+  margin: 16px 0;
+  color: var(--text-color, #000);
+}
+
+.subscription-details p {
+  margin: 8px 0;
+  color: var(--text-color, #000);
+}
+
+.subscription-details strong {
+  color: var(--text-color, #000);
+}
+
+.subscription-features h4 {
+  color: var(--text-color, #000);
+  margin: 16px 0 8px 0;
 }
 
 .subscription-actions, .plan-actions {
@@ -516,16 +583,25 @@ const styles = `
 
 .trial-note {
   text-align: center;
-  color: #6c757d;
+  color: var(--secondary-text, #6c757d);
   font-size: 14px;
   margin-top: 8px;
 }
 
+.dark-mode .trial-note {
+  color: var(--dark-secondary-text, #aaa);
+}
+
 .comparison {
-  background: #f8f9fa;
+  background: var(--secondary-bg, #f8f9fa);
   padding: 16px;
   border-radius: 6px;
   margin-top: 12px;
+  color: var(--text-color, #000);
+}
+
+.dark-mode .comparison {
+  background: var(--dark-secondary-bg, #333);
 }
 
 .comparison-item {
@@ -535,8 +611,12 @@ const styles = `
 }
 
 .old-cost {
-  color: #6c757d;
+  color: var(--secondary-text, #6c757d);
   text-decoration: line-through;
+}
+
+.dark-mode .old-cost {
+  color: var(--dark-secondary-text, #aaa);
 }
 
 .new-cost {
@@ -547,17 +627,47 @@ const styles = `
 .total-savings {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid var(--border-color, #dee2e6);
   text-align: center;
   color: #007bff;
 }
 
+.dark-mode .total-savings {
+  border-top-color: var(--dark-border-color, #555);
+}
+
 .access-warning {
-  background: #fff3cd;
-  border: 1px solid #ffeaa7;
+  background: var(--warning-bg, #fff3cd);
+  border: 1px solid var(--warning-border, #ffeaa7);
   border-radius: 6px;
   padding: 16px;
   text-align: center;
+  color: var(--warning-text, #856404);
+}
+
+.dark-mode .access-warning {
+  background: var(--dark-warning-bg, #4a3c1a);
+  border-color: var(--dark-warning-border, #8b7355);
+  color: var(--dark-warning-text, #ffc107);
+}
+
+.access-warning h4 {
+  color: var(--warning-text, #856404);
+  margin: 0 0 8px 0;
+}
+
+.dark-mode .access-warning h4 {
+  color: var(--dark-warning-text, #ffc107);
+}
+
+.value-proposition h4 {
+  color: var(--text-color, #000);
+  margin: 16px 0 12px 0;
+}
+
+.plans-intro {
+  color: var(--text-color, #000);
+  margin-bottom: 20px;
 }
 
 .owner-status {
@@ -604,11 +714,17 @@ const styles = `
 }
 
 .owner-info {
-  background: white;
+  background: var(--card-bg, white);
   border-radius: 8px;
   padding: 16px;
   margin: 20px 0;
   border: 1px solid #d4edda;
+  color: var(--text-color, #000);
+}
+
+.dark-mode .owner-info {
+  background: var(--dark-card-bg, #2a2a2a);
+  border-color: var(--dark-border-color, #444);
 }
 
 .owner-info h4 {
@@ -619,6 +735,7 @@ const styles = `
 .owner-info p {
   margin: 8px 0;
   text-align: left;
+  color: var(--text-color, #000);
 }
 
 .status-active {
@@ -633,6 +750,20 @@ const styles = `
 .owner-actions p {
   margin-bottom: 16px;
   font-weight: 500;
+  color: var(--text-color, #000);
+}
+
+.owner-card h3 {
+  color: var(--text-color, #000);
+  margin: 0 0 16px 0;
+}
+
+.owner-card p {
+  color: var(--text-color, #000);
+}
+
+.dark-mode .owner-card {
+  background: linear-gradient(135deg, #2a4a2a 0%, #1a3a1a 100%);
 }
 `;
 
