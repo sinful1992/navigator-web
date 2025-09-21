@@ -1,4 +1,5 @@
 import { logger } from './logger';
+import { generateChecksum } from './checksum';
 
 // Enhanced local backup system to prevent data loss
 export class LocalBackupManager {
@@ -127,30 +128,19 @@ export class LocalBackupManager {
         version: '1.0.0',
       },
       data,
-      checksum: this.generateChecksum(data),
+      checksum: generateChecksum(data),
     };
 
     return backup;
   }
 
-  // Generate simple checksum for data integrity
-  private static generateChecksum(data: any): string {
-    const str = JSON.stringify(data);
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return hash.toString(16);
-  }
 
   // Verify backup integrity
   static verifyBackup(backup: any): boolean {
     try {
       if (!backup.data || !backup.checksum) return false;
 
-      const calculatedChecksum = this.generateChecksum(backup.data);
+      const calculatedChecksum = generateChecksum(backup.data);
       return calculatedChecksum === backup.checksum;
     } catch (error) {
       logger.error('Backup verification failed:', error);

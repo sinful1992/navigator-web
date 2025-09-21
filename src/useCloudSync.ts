@@ -4,16 +4,13 @@ import type { Dispatch, SetStateAction } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
 import type { AppState } from "./types";
+import { generateChecksum } from "./utils/checksum";
 
 // Initialize a new user with default subscription
 async function initializeNewUser(userId: string): Promise<void> {
   if (!supabase) {
     throw new Error("Supabase not configured");
   }
-
-  // Create a trial subscription for the new user
-  const trialEndDate = new Date();
-  trialEndDate.setDate(trialEndDate.getDate() + 14); // 14-day trial
 
   console.log("Creating trial subscription for user:", userId);
 
@@ -91,17 +88,6 @@ function getDeviceId(): string {
   return deviceId;
 }
 
-// Simple checksum for data integrity
-function generateChecksum(data: any): string {
-  const str = JSON.stringify(data, Object.keys(data).sort());
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return hash.toString();
-}
 
 export function mergeStatePreservingActiveIndex(
   current: AppState,
@@ -281,6 +267,7 @@ export function useCloudSync(): UseCloudSync {
   // Operation queue for offline/failed operations
   const syncQueue = useRef<SyncQueueEntry[]>([]);
   const isProcessingQueue = useRef<boolean>(false);
+  const syncTimeoutId = useRef<NodeJS.Timeout | null>(null);
 
   // Track last successful state to avoid unnecessary syncs
   const lastSyncedState = useRef<string>('');
@@ -365,7 +352,7 @@ export function useCloudSync(): UseCloudSync {
       
       // Continue processing if there are more items
       if (syncQueue.current.length > 0) {
-        setTimeout(processSyncQueue, 1000);
+        syncTimeoutId.current = setTimeout(processSyncQueue, 1000);
       }
     }
   }, [user, isOnline]);
@@ -470,7 +457,7 @@ export function useCloudSync(): UseCloudSync {
     const handleOnline = () => {
       setIsOnline(true);
       // Process queued operations when coming back online
-      setTimeout(processSyncQueue, 100);
+      syncTimeoutId.current = setTimeout(processSyncQueue, 100);
     };
     
     const handleOffline = () => {
@@ -660,6 +647,14 @@ export function useCloudSync(): UseCloudSync {
       version: 0,
       checksum: ''
     };
+
+    // Clear sync queue and cancel any pending timeouts to prevent data leakage
+    syncQueue.current = [];
+    isProcessingQueue.current = false;
+    if (syncTimeoutId.current) {
+      clearTimeout(syncTimeoutId.current);
+      syncTimeoutId.current = null;
+    }
   }, [clearError]);
 
   // ---- Improved cloud sync with conflict resolution ----
