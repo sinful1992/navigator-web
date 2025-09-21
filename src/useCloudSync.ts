@@ -671,6 +671,7 @@ export function useCloudSync(): UseCloudSync {
     // Clear sync queue and cancel any pending timeouts to prevent data leakage
     syncQueue.current = [];
     isProcessingQueue.current = false;
+    lastSyncedState.current = ''; // Clear previous user's state snapshot
     if (syncTimeoutId.current) {
       clearTimeout(syncTimeoutId.current);
       syncTimeoutId.current = null;
