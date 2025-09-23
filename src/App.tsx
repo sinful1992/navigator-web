@@ -1146,7 +1146,10 @@ function AuthedApp() {
             timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
             restoreTime: new Date(restoreTime).toISOString()
           });
-          alert('Restore in progress - please wait 30 seconds before manual sync');
+          await alert({
+            title: "Restore in Progress",
+            message: "Please wait 30 seconds before manual sync to prevent data loss"
+          });
           return;
         } else {
           // Clear the flag after timeout
