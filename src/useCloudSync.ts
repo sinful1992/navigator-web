@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
 import type { AppState } from "./types";
 import { generateChecksum } from "./utils/checksum";
+import { coerceListVersion } from "./useAppState";
 
 // Initialize a new user with default subscription
 async function initializeNewUser(userId: string): Promise<void> {
@@ -95,14 +96,8 @@ export function mergeStatePreservingActiveIndex(
   current: AppState,
   incoming: AppState
 ): AppState {
-  const currentListVersion =
-    typeof current.currentListVersion === "number"
-      ? current.currentListVersion
-      : 1;
-  const incomingListVersion =
-    typeof incoming.currentListVersion === "number"
-      ? incoming.currentListVersion
-      : 1;
+  const currentListVersion = coerceListVersion(current.currentListVersion);
+  const incomingListVersion = coerceListVersion(incoming.currentListVersion);
 
   const ensureListVersion = (listVersion?: number) =>
     typeof listVersion === "number"
@@ -822,7 +817,10 @@ export function useCloudSync(): UseCloudSync {
     // For addresses, prefer the longer list (assume it's more complete)
     if (serverState.addresses.length > localState.addresses.length) {
       resolved.addresses = serverState.addresses;
-      resolved.currentListVersion = Math.max(localState.currentListVersion, serverState.currentListVersion);
+      resolved.currentListVersion = Math.max(
+        coerceListVersion(localState.currentListVersion),
+        coerceListVersion(serverState.currentListVersion)
+      );
     }
 
     resolved.activeIndex =
