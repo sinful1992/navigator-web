@@ -187,7 +187,7 @@ function sanitizeSessionsForDate(
   const closedSessions: DaySession[] = [];
 
   for (const session of sessions) {
-    if (!session.end && session.date !== today) {
+    if (!session.end && session.date < today) {
       const closed = autoCloseStaleSession(session, now);
       sanitizedSessions.push(closed);
       closedSessions.push(closed);
