@@ -35,6 +35,22 @@ type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 async function reconcileSessionState(cloudSync: any, setState: any, supabase: any) {
   if (!cloudSync.user || !supabase) return;
 
+  // 🔧 CRITICAL FIX: Check if restore is in progress before reconciling
+  const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
+  if (restoreInProgress) {
+    const restoreTime = parseInt(restoreInProgress);
+    const timeSinceRestore = Date.now() - restoreTime;
+
+    // If restore was within the last 30 seconds, skip reconciliation
+    if (timeSinceRestore < 30000) {
+      logger.info('Restore in progress, skipping session reconciliation to prevent data loss');
+      return;
+    } else {
+      // Clear the flag after timeout
+      localStorage.removeItem('navigator_restore_in_progress');
+    }
+  }
+
   try {
     logger.info('Post-restore: Reconciling session state with cloud...');
 
@@ -406,8 +422,12 @@ function AuthedApp() {
         };
 
         restoreState(data);
-        await cloudSync.syncData(data);
-        lastFromCloudRef.current = JSON.stringify(data);
+
+        // 🔧 CRITICAL FIX: Wait for restore protection window before syncing
+        setTimeout(async () => {
+          await cloudSync.syncData(data);
+          lastFromCloudRef.current = JSON.stringify(data);
+        }, 31000); // Wait 31 seconds (after protection window expires)
 
         // ARCHITECTURAL FIX: Post-restore session reconciliation
         await reconcileSessionState(cloudSync, setState, supabase);
@@ -569,6 +589,22 @@ function AuthedApp() {
           // CRITICAL FIX: Handle both React updater functions and direct state objects
           if (!updaterOrState) return;
 
+          // 🔧 CRITICAL FIX: Check if restore is in progress before applying any cloud updates
+          const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
+          if (restoreInProgress) {
+            const restoreTime = parseInt(restoreInProgress);
+            const timeSinceRestore = Date.now() - restoreTime;
+
+            // If restore was within the last 30 seconds, skip ALL cloud updates
+            if (timeSinceRestore < 30000) {
+              logger.sync('App.tsx: Restore in progress, skipping cloud state update to prevent data loss');
+              return;
+            } else {
+              // Clear the flag after timeout
+              localStorage.removeItem('navigator_restore_in_progress');
+            }
+          }
+
           if (typeof updaterOrState === 'function') {
             // This is a React state updater function - call setState directly
             logger.sync("Received cloud update (React updater)");
@@ -619,6 +655,22 @@ function AuthedApp() {
 
     const t = setTimeout(async () => {
       try {
+        // 🔧 CRITICAL FIX: Check if restore is in progress before syncing
+        const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
+        if (restoreInProgress) {
+          const restoreTime = parseInt(restoreInProgress);
+          const timeSinceRestore = Date.now() - restoreTime;
+
+          // If restore was within the last 30 seconds, skip sync to prevent override
+          if (timeSinceRestore < 30000) {
+            logger.sync('Debounced sync: Restore in progress, skipping sync to prevent data loss');
+            return;
+          } else {
+            // Clear the flag after timeout
+            localStorage.removeItem('navigator_restore_in_progress');
+          }
+        }
+
         logger.sync("Syncing changes to cloud...");
 
         // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition
@@ -996,8 +1048,12 @@ function AuthedApp() {
       };
 
       restoreState(data);
-      await cloudSync.syncData(data);
-      lastFromCloudRef.current = JSON.stringify(data);
+
+      // 🔧 CRITICAL FIX: Wait for restore protection window before syncing
+      setTimeout(async () => {
+        await cloudSync.syncData(data);
+        lastFromCloudRef.current = JSON.stringify(data);
+      }, 31000); // Wait 31 seconds (after protection window expires)
 
       // ARCHITECTURAL FIX: Post-restore session reconciliation
       await reconcileSessionState(cloudSync, setState, supabase);
@@ -1065,6 +1121,23 @@ function AuthedApp() {
     try {
       logger.sync("Manual sync initiated...");
       const stateStr = JSON.stringify(safeState);
+
+      // 🔧 CRITICAL FIX: Check if restore is in progress before manual sync
+      const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
+      if (restoreInProgress) {
+        const restoreTime = parseInt(restoreInProgress);
+        const timeSinceRestore = Date.now() - restoreTime;
+
+        // If restore was within the last 30 seconds, warn and skip
+        if (timeSinceRestore < 30000) {
+          logger.sync('Manual sync: Restore in progress, skipping sync to prevent data loss');
+          alert('Restore in progress - please wait 30 seconds before manual sync');
+          return;
+        } else {
+          // Clear the flag after timeout
+          localStorage.removeItem('navigator_restore_in_progress');
+        }
+      }
 
       // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition
       lastFromCloudRef.current = stateStr;
@@ -1234,7 +1307,11 @@ function AuthedApp() {
 
           restoreState(mergedData);
           if (cloudSync.user && supabase) {
-            cloudSync.syncData(mergedData);
+            // 🔧 CRITICAL FIX: Wait for restore protection window before syncing
+            setTimeout(async () => {
+              await cloudSync.syncData(mergedData);
+            }, 31000); // Wait 31 seconds (after protection window expires)
+
             // ARCHITECTURAL FIX: Post-restore session reconciliation
             reconcileSessionState(cloudSync, setState, supabase);
           }
