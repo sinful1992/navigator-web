@@ -41,12 +41,16 @@ async function reconcileSessionState(cloudSync: any, setState: any, supabase: an
     const restoreTime = parseInt(restoreInProgress);
     const timeSinceRestore = Date.now() - restoreTime;
 
-    // If restore was within the last 30 seconds, skip reconciliation
-    if (timeSinceRestore < 30000) {
-      logger.info('Restore in progress, skipping session reconciliation to prevent data loss');
+    // If restore was within the last 10 minutes, skip reconciliation
+    if (timeSinceRestore < 600000) {
+      logger.info('🛡️ RESTORE PROTECTION: Skipping session reconciliation to prevent data loss', {
+        timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
+        restoreTime: new Date(restoreTime).toISOString()
+      });
       return;
     } else {
       // Clear the flag after timeout
+      logger.info('🛡️ RESTORE PROTECTION: Session reconciliation timeout reached, clearing flag');
       localStorage.removeItem('navigator_restore_in_progress');
     }
   }
@@ -595,12 +599,16 @@ function AuthedApp() {
             const restoreTime = parseInt(restoreInProgress);
             const timeSinceRestore = Date.now() - restoreTime;
 
-            // If restore was within the last 30 seconds, skip ALL cloud updates
-            if (timeSinceRestore < 30000) {
-              logger.sync('App.tsx: Restore in progress, skipping cloud state update to prevent data loss');
+            // If restore was within the last 10 minutes, skip ALL cloud updates
+            if (timeSinceRestore < 600000) {
+              logger.sync('🛡️ RESTORE PROTECTION: App.tsx subscription skipping cloud state update to prevent data loss', {
+                timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
+                restoreTime: new Date(restoreTime).toISOString()
+              });
               return;
             } else {
               // Clear the flag after timeout
+              logger.sync('🛡️ RESTORE PROTECTION: App.tsx subscription timeout reached, clearing flag');
               localStorage.removeItem('navigator_restore_in_progress');
             }
           }
@@ -661,12 +669,16 @@ function AuthedApp() {
           const restoreTime = parseInt(restoreInProgress);
           const timeSinceRestore = Date.now() - restoreTime;
 
-          // If restore was within the last 30 seconds, skip sync to prevent override
-          if (timeSinceRestore < 30000) {
-            logger.sync('Debounced sync: Restore in progress, skipping sync to prevent data loss');
+          // If restore was within the last 10 minutes, skip sync to prevent override
+          if (timeSinceRestore < 600000) {
+            logger.sync('🛡️ RESTORE PROTECTION: Debounced sync skipping to prevent data loss', {
+              timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
+              restoreTime: new Date(restoreTime).toISOString()
+            });
             return;
           } else {
             // Clear the flag after timeout
+            logger.sync('🛡️ RESTORE PROTECTION: Debounced sync timeout reached, clearing flag');
             localStorage.removeItem('navigator_restore_in_progress');
           }
         }
@@ -1128,10 +1140,13 @@ function AuthedApp() {
         const restoreTime = parseInt(restoreInProgress);
         const timeSinceRestore = Date.now() - restoreTime;
 
-        // If restore was within the last 30 seconds, warn and skip
-        if (timeSinceRestore < 30000) {
-          logger.sync('Manual sync: Restore in progress, skipping sync to prevent data loss');
-          alert('Restore in progress - please wait 30 seconds before manual sync');
+        // If restore was within the last 10 minutes, warn and skip
+        if (timeSinceRestore < 600000) {
+          logger.sync('🛡️ RESTORE PROTECTION: Manual sync blocked to prevent data loss', {
+            timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
+            restoreTime: new Date(restoreTime).toISOString()
+          });
+          alert('Restore in progress - please wait 10 minutes before manual sync');
           return;
         } else {
           // Clear the flag after timeout

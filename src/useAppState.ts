@@ -1125,9 +1125,30 @@ export function useAppState() {
 
   const restoreState = React.useCallback(
     async (obj: unknown, mergeStrategy: "replace" | "merge" = "replace") => {
-      if (!isValidState(obj)) throw new Error("Invalid backup file format");
+      if (!isValidState(obj)) {
+        console.error('🚨 RESTORE VALIDATION FAILED:', {
+          hasObj: !!obj,
+          type: typeof obj,
+          hasAddresses: obj && Array.isArray((obj as any).addresses),
+          hasCompletions: obj && Array.isArray((obj as any).completions),
+          hasActiveIndex: obj && "activeIndex" in (obj as any),
+          hasDaySessions: obj && Array.isArray((obj as any).daySessions),
+          objKeys: obj ? Object.keys(obj as any) : null
+        });
+        throw new Error("Invalid backup file format");
+      }
 
       const version = coerceListVersion((obj as any).currentListVersion);
+
+      console.log('📁 RESTORE DATA ANALYSIS:', {
+        addressCount: obj.addresses.length,
+        completionCount: obj.completions.length,
+        arrangementCount: obj.arrangements?.length || 0,
+        daySessionCount: obj.daySessions?.length || 0,
+        activeIndex: obj.activeIndex,
+        listVersion: version,
+        mergeStrategy
+      });
 
       const restoredState: AppState = {
         addresses: obj.addresses,
@@ -1137,6 +1158,15 @@ export function useAppState() {
         arrangements: obj.arrangements ?? [],
         currentListVersion: version,
       };
+
+      console.log('📁 RESTORED STATE PREPARED:', {
+        addressCount: restoredState.addresses.length,
+        completionCount: restoredState.completions.length,
+        arrangementCount: restoredState.arrangements.length,
+        daySessionCount: restoredState.daySessions.length,
+        activeIndex: restoredState.activeIndex,
+        listVersion: restoredState.currentListVersion
+      });
 
       if (mergeStrategy === "merge") {
         // Merge with existing state
@@ -1218,10 +1248,37 @@ export function useAppState() {
       // Persist immediately with proper error handling
       try {
         const stateToSave = { ...restoredState, _schemaVersion: CURRENT_SCHEMA_VERSION };
+
+        console.log('💾 PERSISTING RESTORED STATE:', {
+          addressCount: stateToSave.addresses.length,
+          completionCount: stateToSave.completions.length,
+          arrangementCount: stateToSave.arrangements.length,
+          daySessionCount: stateToSave.daySessions.length,
+          activeIndex: stateToSave.activeIndex,
+          listVersion: stateToSave.currentListVersion,
+          schemaVersion: stateToSave._schemaVersion
+        });
+
         await storageManager.queuedSet(STORAGE_KEY, stateToSave);
+        console.log('✅ RESTORED STATE PERSISTED TO INDEXEDDB');
+
+        // Verify the state was actually saved
+        const verifyState = await storageManager.queuedGet(STORAGE_KEY);
+        console.log('🔍 VERIFICATION READ FROM INDEXEDDB:', {
+          success: !!verifyState,
+          addressCount: verifyState?.addresses?.length || 0,
+          completionCount: verifyState?.completions?.length || 0,
+          arrangementCount: verifyState?.arrangements?.length || 0
+        });
 
         // 🔧 CRITICAL FIX: Set restore flag to prevent cloud sync override
-        localStorage.setItem('navigator_restore_in_progress', Date.now().toString());
+        // Use a much longer protection window (10 minutes) and add logging
+        const restoreTime = Date.now();
+        localStorage.setItem('navigator_restore_in_progress', restoreTime.toString());
+        console.log('🛡️ RESTORE PROTECTION ACTIVATED:', new Date(restoreTime).toISOString());
+
+        // Also set a backup protection flag that lasts longer
+        localStorage.setItem('navigator_last_restore', restoreTime.toString());
 
       } catch (persistError: any) {
         logger.error('Failed to persist restored state:', persistError);
@@ -1234,6 +1291,19 @@ export function useAppState() {
   // Enhanced setState for cloud sync with conflict detection
   const setState = React.useCallback(
     (newState: AppState | ((prev: AppState) => AppState)) => {
+      // Check if we recently restored data and log any state changes
+      const lastRestore = localStorage.getItem('navigator_last_restore');
+      if (lastRestore) {
+        const timeSinceRestore = Date.now() - parseInt(lastRestore);
+        if (timeSinceRestore < 3600000) { // Log for 1 hour after restore
+          console.log('⚠️ STATE CHANGE AFTER RESTORE:', {
+            timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
+            newStateType: typeof newState,
+            isFunction: typeof newState === 'function',
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
       setBaseState((currentState) => {
         const nextState =
           typeof newState === "function"
