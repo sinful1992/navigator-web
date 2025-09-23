@@ -163,11 +163,26 @@ export function mergeStatePreservingActiveIndex(
       ? incoming.addresses
       : [];
 
-    // Respect list versions - prefer higher version regardless of length
+    const hasMeaningfulData = (addresses: AppState['addresses']) =>
+      addresses.some(
+        (entry) => typeof entry?.address === 'string' && entry.address.trim().length > 0
+      );
+
+    const incomingHasData = hasMeaningfulData(incomingAddresses);
+    const currentHasData = hasMeaningfulData(currentAddresses);
+
+    // Respect list versions - prefer higher version only when it carries meaningful data
     if (incomingListVersion > currentListVersion) {
-      return incomingAddresses;
+      if (!incomingHasData && currentHasData) {
+        return currentAddresses;
+      }
+      return incomingHasData ? incomingAddresses : currentAddresses;
     } else if (currentListVersion > incomingListVersion) {
       return currentAddresses;
+    }
+
+    if (incomingHasData && !currentHasData) {
+      return incomingAddresses;
     }
 
     // Same version - use length as tiebreaker
