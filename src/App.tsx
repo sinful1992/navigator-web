@@ -477,13 +477,19 @@ function AuthedApp() {
     const currentStr = JSON.stringify(safeState);
     if (currentStr === lastFromCloudRef.current) return;
 
+    // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition
+    // This prevents subscribeToData from overwriting our local changes
+    lastFromCloudRef.current = currentStr;
+
     const t = setTimeout(async () => {
       try {
         logger.sync("Syncing changes to cloud...");
         await cloudSync.syncData(safeState);
-        lastFromCloudRef.current = currentStr;
+        // lastFromCloudRef is already set above to prevent race condition
       } catch (err) {
         logger.error("Sync failed:", err);
+        // Reset on error so we can retry
+        lastFromCloudRef.current = JSON.stringify(safeState);
       }
     }, 150);
 
@@ -684,10 +690,19 @@ function AuthedApp() {
   );
 
   const ensureDayStarted = React.useCallback(() => {
+    // CRITICAL FIX: Add safety guard to prevent aggressive auto-start after cloud operations
+    if (cloudSync.isSyncing) {
+      logger.info('Skipping auto day start - sync in progress');
+      return;
+    }
+
     const today = new Date().toISOString().slice(0, 10);
     const hasToday = daySessions.some((d) => d.date === today);
-    if (!hasToday) startDay();
-  }, [daySessions, startDay]);
+    if (!hasToday) {
+      logger.info('Auto-starting day session for today');
+      startDay();
+    }
+  }, [daySessions, startDay, cloudSync.isSyncing]);
 
   // Restore the missing edit functions for day sessions
   const handleEditStart = React.useCallback(
@@ -891,8 +906,10 @@ function AuthedApp() {
   const handleManualSync = React.useCallback(async () => {
     try {
       logger.sync("Manual sync initiated...");
+      // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition
+      const stateStr = JSON.stringify(safeState);
+      lastFromCloudRef.current = stateStr;
       await cloudSync.syncData(safeState);
-      lastFromCloudRef.current = JSON.stringify(safeState);
 
       // Also create a safety backup after manual sync
       try {
