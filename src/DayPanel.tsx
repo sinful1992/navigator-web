@@ -86,7 +86,7 @@ export function DayPanel({
   onBackup,
 }: Props) {
   const { settings } = useSettings();
-  const { isLoading, executeBackup } = useBackupLoading();
+  const { isLoading, executeBackup, forceReset } = useBackupLoading();
   const todayStr = new Date().toISOString().slice(0, 10);
 
   // Prefer an active session; else the most recent for today
@@ -102,7 +102,7 @@ export function DayPanel({
 
   const isActive = !!active;
 
-  // Enhanced end day function with backup functionality
+  // Enhanced end day function with backup functionality and timeout protection
   const handleEndDay = async () => {
     try {
       if (settings.backupOnEndOfDay && onBackup) {
@@ -111,7 +111,8 @@ export function DayPanel({
       endDay();
     } catch (error) {
       console.error('Failed to complete backup during end day:', error);
-      // Still end the day even if backup fails
+      // CRITICAL FIX: Always end the day even if backup fails/times out
+      // This prevents permanent button disable on backup failure
       endDay();
     }
   };
@@ -316,23 +317,35 @@ export function DayPanel({
         </div>
       </div>
 
-      {/* Loading Modal for Backup */}
+      {/* Loading Modal for Backup with Emergency Escape */}
       <Modal
         isOpen={isLoading}
-        onClose={() => {}} // Prevent closing during backup
+        onClose={() => {
+          // CRITICAL FIX: Allow emergency escape - graceful reset instead of page reload
+          console.warn('Emergency backup escape triggered by user');
+          forceReset(); // Graceful reset of loading state
+        }}
         title="Backing up data"
-        showCloseButton={false}
+        showCloseButton={true} // CRITICAL FIX: Allow escape mechanism
         size="sm"
       >
         <div className="backup-loading-modal">
           <div className="backup-loading-content">
             <LoadingSpinner size="lg" />
             <h3 className="backup-loading-title">
-              Downloading backup, please wait...
+              Backing up data, please wait...
             </h3>
             <p className="backup-loading-message">
-              Do not close the app or press the button again. This may take a few moments.
+              This usually takes 5-15 seconds. If stuck for more than 20 seconds, you can close this dialog to continue.
             </p>
+            <div className="backup-loading-warning" style={{
+              marginTop: '1rem',
+              fontSize: '0.9rem',
+              color: 'var(--warning)',
+              textAlign: 'center'
+            }}>
+              ⚠️ If backup appears stuck, click the ✕ button to escape
+            </div>
           </div>
         </div>
       </Modal>

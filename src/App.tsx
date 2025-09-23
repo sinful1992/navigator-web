@@ -1357,15 +1357,32 @@ function AuthedApp() {
                 onBackup={async () => {
                   const snap = backupState();
 
-                  // Cloud backup if available
-                  if (supabase) {
-                    await uploadBackupToStorage(snap, "finish");
-                    logger.info("Cloud backup at day end successful");
-                  }
+                  // CRITICAL FIX: Add timeouts to prevent indefinite hangs
+                  const timeoutPromise = (ms: number) => new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Backup timeout')), ms)
+                  );
 
-                  // Critical local backup with download (day-end is important)
-                  await LocalBackupManager.performCriticalBackup(snap, "day-end");
-                  logger.info("Local backup at day end successful");
+                  try {
+                    // Cloud backup with 30 second timeout
+                    if (supabase) {
+                      await Promise.race([
+                        uploadBackupToStorage(snap, "finish"),
+                        timeoutPromise(30000)
+                      ]);
+                      logger.info("Cloud backup at day end successful");
+                    }
+
+                    // Local backup with 15 second timeout
+                    await Promise.race([
+                      LocalBackupManager.performCriticalBackup(snap, "day-end"),
+                      timeoutPromise(15000)
+                    ]);
+                    logger.info("Local backup at day end successful");
+                  } catch (error) {
+                    logger.error("Backup failed or timed out:", error);
+                    // Re-throw to trigger error handling in useBackupLoading
+                    throw error;
+                  }
                 }}
               />
 
