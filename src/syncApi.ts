@@ -13,7 +13,7 @@ export async function applyOps(ops: SyncOp[]): Promise<ApplyOpsResult> {
     if (!ops || ops.length === 0) return { ok: true };
 
     // Cast through `any` because we don't have generated Database typings.
-    const { data, error } = await (supabase as any).rpc(
+    const { data, error } = await supabase!.rpc(
       "apply_ops",
       { ops } as any
     );

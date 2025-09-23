@@ -311,8 +311,8 @@ export default function Completed({ state, onChangeOutcome }: Props) {
     totalSeconds += secondsByDay.get(k) || 0;
     const idxs = completionIdxByDay.get(k) || [];
     totalCompleted += idxs.length;
-    totalPIF += idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "PIF").length;
-    totalDA += idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "DA").length;
+    totalPIF += idxs.map((i) => completions[i]).filter((c) => c.outcome === "PIF").length;
+    totalDA += idxs.map((i) => completions[i]).filter((c) => c.outcome === "DA").length;
   });
 
   // Per-day expand/collapse (when details are open)
@@ -378,9 +378,9 @@ export default function Completed({ state, onChangeOutcome }: Props) {
           {dayKeys.map((k) => {
             const seconds = secondsByDay.get(k) || 0;
             const idxs = completionIdxByDay.get(k) || [];
-            const pif = idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "PIF").length;
-            const da = idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "DA").length;
-            const arrCount = idxs.map((i) => completions[i]).filter((c) => (c as any).outcome === "ARR").length;
+            const pif = idxs.map((i) => completions[i]).filter((c) => c.outcome === "PIF").length;
+            const da = idxs.map((i) => completions[i]).filter((c) => c.outcome === "DA").length;
+            const arrCount = idxs.map((i) => completions[i]).filter((c) => c.outcome === "ARR").length;
             const total = idxs.length;
 
             return (
@@ -426,7 +426,7 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                           const comp = completions[compIndex] as any;
                           const addr = addresses[comp.index] as AddressRow | undefined;
                           const line =
-                            (addr && (addr as any).address) ||
+                            (addr && addr.address) ||
                             (addr && (addr as any).name) ||
                             (typeof comp.index === "number" ? "Address #" + comp.index : "Address");
                           const currentOutcome: Outcome | string | undefined = comp.outcome;
