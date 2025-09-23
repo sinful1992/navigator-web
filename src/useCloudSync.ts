@@ -832,8 +832,8 @@ export function useCloudSync(): UseCloudSync {
       const restoreTime = parseInt(restoreInProgress);
       const timeSinceRestore = Date.now() - restoreTime;
 
-      // If restore was within the last 10 minutes, prefer local state
-      if (timeSinceRestore < 600000) {
+      // If restore was within the last 30 seconds, prefer local state
+      if (timeSinceRestore < 30000) {
         console.log('🛡️ RESTORE PROTECTION: Preferring local state to prevent data loss', {
           timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
           restoreTime: new Date(restoreTime).toISOString()
@@ -967,8 +967,8 @@ export function useCloudSync(): UseCloudSync {
               const restoreTime = parseInt(restoreInProgress);
               const timeSinceRestore = Date.now() - restoreTime;
 
-              // If restore was within the last 10 minutes, skip cloud updates
-              if (timeSinceRestore < 600000) {
+              // If restore was within the last 30 seconds, skip cloud updates
+              if (timeSinceRestore < 30000) {
                 console.log('🛡️ RESTORE PROTECTION: Skipping cloud state update to prevent data loss', {
                   timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
                   restoreTime: new Date(restoreTime).toISOString()

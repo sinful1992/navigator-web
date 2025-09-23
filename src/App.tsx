@@ -41,8 +41,8 @@ async function reconcileSessionState(cloudSync: any, setState: any, supabase: an
     const restoreTime = parseInt(restoreInProgress);
     const timeSinceRestore = Date.now() - restoreTime;
 
-    // If restore was within the last 10 minutes, skip reconciliation
-    if (timeSinceRestore < 600000) {
+    // If restore was within the last 30 seconds, skip reconciliation
+    if (timeSinceRestore < 30000) {
       logger.info('🛡️ RESTORE PROTECTION: Skipping session reconciliation to prevent data loss', {
         timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
         restoreTime: new Date(restoreTime).toISOString()
@@ -599,8 +599,8 @@ function AuthedApp() {
             const restoreTime = parseInt(restoreInProgress);
             const timeSinceRestore = Date.now() - restoreTime;
 
-            // If restore was within the last 10 minutes, skip ALL cloud updates
-            if (timeSinceRestore < 600000) {
+            // If restore was within the last 30 seconds, skip ALL cloud updates
+            if (timeSinceRestore < 30000) {
               logger.sync('🛡️ RESTORE PROTECTION: App.tsx subscription skipping cloud state update to prevent data loss', {
                 timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
                 restoreTime: new Date(restoreTime).toISOString()
@@ -669,8 +669,8 @@ function AuthedApp() {
           const restoreTime = parseInt(restoreInProgress);
           const timeSinceRestore = Date.now() - restoreTime;
 
-          // If restore was within the last 10 minutes, skip sync to prevent override
-          if (timeSinceRestore < 600000) {
+          // If restore was within the last 30 seconds, skip sync to prevent override
+          if (timeSinceRestore < 30000) {
             logger.sync('🛡️ RESTORE PROTECTION: Debounced sync skipping to prevent data loss', {
               timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
               restoreTime: new Date(restoreTime).toISOString()
@@ -1140,13 +1140,13 @@ function AuthedApp() {
         const restoreTime = parseInt(restoreInProgress);
         const timeSinceRestore = Date.now() - restoreTime;
 
-        // If restore was within the last 10 minutes, warn and skip
-        if (timeSinceRestore < 600000) {
+        // If restore was within the last 30 seconds, warn and skip
+        if (timeSinceRestore < 30000) {
           logger.sync('🛡️ RESTORE PROTECTION: Manual sync blocked to prevent data loss', {
             timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
             restoreTime: new Date(restoreTime).toISOString()
           });
-          alert('Restore in progress - please wait 10 minutes before manual sync');
+          alert('Restore in progress - please wait 30 seconds before manual sync');
           return;
         } else {
           // Clear the flag after timeout

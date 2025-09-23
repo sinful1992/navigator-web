@@ -1272,7 +1272,7 @@ export function useAppState() {
         });
 
         // 🔧 CRITICAL FIX: Set restore flag to prevent cloud sync override
-        // Use a much longer protection window (10 minutes) and add logging
+        // Use 30 second protection window for testing
         const restoreTime = Date.now();
         localStorage.setItem('navigator_restore_in_progress', restoreTime.toString());
         console.log('🛡️ RESTORE PROTECTION ACTIVATED:', new Date(restoreTime).toISOString());
