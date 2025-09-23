@@ -3,7 +3,7 @@ import * as React from "react";
 import "./App.css"; // Use the updated modern CSS
 import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
-import { normalizeState } from "./utils/normalizeState";
+import { normalizeState, normalizeBackupData } from "./utils/normalizeState";
 import { useCloudSync } from "./useCloudSync";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";
@@ -29,19 +29,6 @@ import { SettingsDropdown } from "./components/SettingsDropdown";
 
 type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
-// ARCHITECTURAL FIX: Separate data from session state for backups
-function normalizeBackupData(raw: any) {
-  const r = raw ?? {};
-  return {
-    addresses: Array.isArray(r.addresses) ? r.addresses : [],
-    completions: Array.isArray(r.completions) ? r.completions : [],
-    arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
-    // NOTE: daySessions deliberately excluded from backups - they're temporal state
-    activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
-    currentListVersion:
-      typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
-  };
-}
 
 // ARCHITECTURAL FIX: Post-restore session reconciliation
 async function reconcileSessionState(cloudSync: any, setState: any, supabase: any) {
@@ -305,6 +292,11 @@ function AuthedApp() {
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
+  // CRITICAL FIX: Page visibility tracking to prevent sync conflicts during screen lock
+  const [isPageVisible, setIsPageVisible] = React.useState(
+    typeof document !== 'undefined' ? !document.hidden : true
+  );
+
   // Cloud restore state
   type CloudBackupRow = {
     object_path: string;
@@ -531,9 +523,28 @@ function AuthedApp() {
     };
   }, [cloudSync.user, loading]);
 
-  // Debounced local to cloud sync
+  // CRITICAL FIX: Page visibility change handler to prevent sync conflicts
   React.useEffect(() => {
-    if (!cloudSync.user || loading || !hydrated) return;
+    if (typeof document === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      const visible = !document.hidden;
+      setIsPageVisible(visible);
+
+      if (visible) {
+        logger.info('Page became visible - resuming sync operations');
+      } else {
+        logger.info('Page hidden - pausing sync operations');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  // Debounced local to cloud sync with visibility check
+  React.useEffect(() => {
+    if (!cloudSync.user || loading || !hydrated || !isPageVisible) return;
     const currentStr = JSON.stringify(safeState);
     if (currentStr === lastFromCloudRef.current) return;
 
@@ -542,6 +553,12 @@ function AuthedApp() {
     lastFromCloudRef.current = currentStr;
 
     const t = setTimeout(async () => {
+      // Double-check visibility before syncing
+      if (!isPageVisible) {
+        logger.info('Page not visible, skipping sync');
+        return;
+      }
+
       try {
         logger.sync("Syncing changes to cloud...");
         await cloudSync.syncData(safeState);
@@ -554,7 +571,7 @@ function AuthedApp() {
     }, 150);
 
     return () => clearTimeout(t);
-  }, [safeState, cloudSync, hydrated, loading]);
+  }, [safeState, cloudSync, hydrated, loading, isPageVisible]);
 
   // CRITICAL FIX: Periodic backup to prevent data loss (every 5 minutes when data changes)
   React.useEffect(() => {
