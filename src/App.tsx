@@ -3,6 +3,7 @@ import * as React from "react";
 import "./App.css"; // Use the updated modern CSS
 import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
+import { normalizeState } from "./utils/normalizeState";
 import { useCloudSync } from "./useCloudSync";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";
@@ -27,20 +28,6 @@ import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 
 type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
-
-function normalizeState(raw: any) {
-  const r = raw ?? {};
-  return {
-    ...r,
-    addresses: Array.isArray(r.addresses) ? r.addresses : [],
-    completions: Array.isArray(r.completions) ? r.completions : [],
-    arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
-    daySessions: Array.isArray(r.daySessions) ? r.daySessions : [],
-    activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
-    currentListVersion:
-      typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
-  };
-}
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
