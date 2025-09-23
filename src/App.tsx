@@ -568,15 +568,35 @@ function AuthedApp() {
           }
         }
 
-        cleanup = cloudSync.subscribeToData((newState) => {
-          if (!newState) return;
-          const fromCloudStr = JSON.stringify(newState);
-          if (fromCloudStr === lastFromCloudRef.current) return;
-          const normalized = normalizeState(newState);
-          logger.sync("Received cloud update");
-          setState(normalized);
-          lastFromCloudRef.current = fromCloudStr;
-          setHydrated(true);
+        cleanup = cloudSync.subscribeToData((updaterOrState) => {
+          // CRITICAL FIX: Handle both React updater functions and direct state objects
+          if (!updaterOrState) return;
+
+          if (typeof updaterOrState === 'function') {
+            // This is a React state updater function - call setState directly
+            logger.sync("Received cloud update (React updater)");
+            setState(prevState => {
+              const newState = updaterOrState(prevState);
+              const normalized = normalizeState(newState);
+              const normalizedStr = JSON.stringify(normalized);
+
+              // Update tracking reference
+              lastFromCloudRef.current = normalizedStr;
+              setHydrated(true);
+
+              return normalized;
+            });
+          } else {
+            // This is direct state data - handle normally
+            const fromCloudStr = JSON.stringify(updaterOrState);
+            if (fromCloudStr === lastFromCloudRef.current) return;
+
+            const normalized = normalizeState(updaterOrState);
+            logger.sync("Received cloud update (direct state)");
+            setState(normalized);
+            lastFromCloudRef.current = fromCloudStr;
+            setHydrated(true);
+          }
         });
       } catch (err) {
         logger.error("Bootstrap sync failed:", err);
