@@ -704,6 +704,31 @@ function AuthedApp() {
     }
   }, [daySessions, startDay, cloudSync.isSyncing]);
 
+  // CRITICAL FIX: Force start day to resolve cloud conflicts after backup restore
+  const forceStartDay = React.useCallback(() => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+
+    logger.warn('FORCE starting day session - this will override any existing sessions for today');
+
+    setBaseState((s) => {
+      // Remove any existing session for today and close any active sessions
+      const filteredSessions = s.daySessions
+        .filter((d) => d.date !== today) // Remove today's sessions
+        .map((d) => d.end ? d : { ...d, end: now.toISOString() }); // Close any active sessions
+
+      const sess = {
+        date: today,
+        start: now.toISOString(),
+      };
+
+      return {
+        ...s,
+        daySessions: [...filteredSessions, sess]
+      };
+    });
+  }, [setBaseState]);
+
   // Restore the missing edit functions for day sessions
   const handleEditStart = React.useCallback(
     (newStartISO: string | Date) => {
@@ -1175,6 +1200,7 @@ function AuthedApp() {
                 sessions={daySessions}
                 completions={completions}
                 startDay={startDay}
+                forceStartDay={forceStartDay}
                 endDay={endDay}
                 onEditStart={handleEditStart}
                 onEditEnd={handleEditEnd}

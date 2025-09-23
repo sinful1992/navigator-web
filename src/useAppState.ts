@@ -871,32 +871,21 @@ export function useAppState() {
     const today = now.toISOString().slice(0, 10);
 
     setBaseState((s) => {
-      const {
-        updatedSessions,
-        newSession,
-        closedSessions,
-        alreadyActive,
-      } = prepareStartDaySessions(s.daySessions, today, now);
-
-      closedSessions.forEach((session) =>
-        logger.info("Auto-closing stale day session before starting a new one", session)
-      );
-
-      if (alreadyActive) {
-        logger.info("Day already active for today, skipping start");
-        if (closedSessions.length > 0) {
-          return { ...s, daySessions: updatedSessions };
-        }
+      // Check if there's already an active session (any session without end time)
+      if (s.daySessions.some((d) => !d.end)) {
+        logger.info('Day already active, skipping start');
         return s;
       }
 
-      if (newSession) {
-        logger.info("Starting new day session:", newSession);
-      }
+      const sess: DaySession = {
+        date: today,
+        start: now.toISOString(),
+      };
 
+      logger.info('Starting new day session:', sess);
       return {
         ...s,
-        daySessions: updatedSessions,
+        daySessions: [...s.daySessions, sess]
       };
     });
   }, []);

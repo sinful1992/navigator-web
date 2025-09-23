@@ -10,6 +10,7 @@ type Props = {
   sessions: DaySession[];
   completions: Completion[];
   startDay: () => void;
+  forceStartDay?: () => void;
   endDay: () => void;
   /** Called with a Date or ISO string. App will update (or create) today's session start. */
   onEditStart: (newStart: string | Date) => void;
@@ -80,6 +81,7 @@ export function DayPanel({
   sessions,
   completions,
   startDay,
+  forceStartDay,
   endDay,
   onEditStart,
   onEditEnd,
@@ -237,10 +239,23 @@ export function DayPanel({
       <div className="day-panel-actions">
         <div className="primary-actions">
           {!isActive ? (
-            <button className="btn btn-primary btn-modern" onClick={startDay}>
-              <span className="btn-icon">▶️</span>
-              Start Day
-            </button>
+            <>
+              <button className="btn btn-primary btn-modern" onClick={startDay}>
+                <span className="btn-icon">▶️</span>
+                Start Day
+              </button>
+              {forceStartDay && todaySessions.length > 0 && (
+                <button
+                  className="btn btn-warning btn-modern"
+                  onClick={forceStartDay}
+                  style={{ marginLeft: '8px' }}
+                  title="Force start new session (overrides existing today session)"
+                >
+                  <span className="btn-icon">🔄</span>
+                  Force Start
+                </button>
+              )}
+            </>
           ) : (
             <button
               className="btn btn-danger btn-modern"
