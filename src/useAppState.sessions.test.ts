@@ -49,6 +49,31 @@ describe("prepareStartDaySessions", () => {
     expect(result.updatedSessions).toHaveLength(2);
     expect(result.updatedSessions[1]).toBe(todaySession);
   });
+
+  it("keeps future-dated sessions open when starting today", () => {
+    const today = "2024-03-10";
+    const now = new Date(`${today}T09:00:00.000Z`);
+    const tomorrow = "2024-03-11";
+
+    const futureSession: DaySession = {
+      date: tomorrow,
+      start: `${tomorrow}T08:00:00.000Z`,
+    };
+
+    const sessions: DaySession[] = [futureSession];
+
+    const result = prepareStartDaySessions(sessions, today, now);
+
+    expect(result.alreadyActive).toBe(false);
+    expect(result.closedSessions).toHaveLength(0);
+    expect(result.newSession).toBeDefined();
+    expect(result.updatedSessions).toHaveLength(2);
+    expect(result.updatedSessions[0]).toBe(futureSession);
+    expect(result.updatedSessions[0].end).toBeUndefined();
+    expect(result.updatedSessions[1]).toBe(result.newSession);
+    expect(result.newSession?.date).toBe(today);
+    expect(result.newSession?.start).toBe(now.toISOString());
+  });
 });
 
 describe("prepareEndDaySessions", () => {
