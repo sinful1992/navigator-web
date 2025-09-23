@@ -37,6 +37,19 @@ type OptimisticState = {
   pendingOperations: Set<string>;
 };
 
+export function coerceListVersion(value: unknown, fallback = 1): number {
+  if (typeof value === "number") {
+    return Number.isNaN(value) ? fallback : value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? fallback : parsed;
+  }
+
+  return fallback;
+}
+
 const initial: AppState = {
   addresses: [],
   activeIndex: null,
@@ -111,7 +124,7 @@ function validateAppState(state: any): state is AppState {
     Array.isArray(state.daySessions) &&
     Array.isArray(state.arrangements) &&
     (state.activeIndex === null || typeof state.activeIndex === 'number') &&
-    typeof state.currentListVersion === 'number';
+    (typeof state.currentListVersion === 'number' || typeof state.currentListVersion === 'string');
 }
 
 function stampCompletionsWithVersion(
@@ -398,7 +411,8 @@ function applyOptimisticUpdates(
                   : result.addresses; // 🔧 FIX: Preserve existing if invalid
                   
                 if (update.data.bumpVersion) {
-                  result.currentListVersion = (result.currentListVersion || 1) + 1;
+                  const currentVersion = coerceListVersion(result.currentListVersion);
+                  result.currentListVersion = currentVersion + 1;
                   // Only reset completions if not preserving them
                   if (!update.data.preserveCompletions) {
                     result.completions = [];
@@ -493,7 +507,7 @@ export function useAppState() {
             return;
           }
 
-          const version = saved.currentListVersion || 1;
+          const version = coerceListVersion(saved.currentListVersion);
           const next: AppState = {
             addresses: saved.addresses.filter(validateAddressRow),
             activeIndex: (typeof saved.activeIndex === "number") ? saved.activeIndex : null,
@@ -679,7 +693,7 @@ export function useAppState() {
         ...s,
         addresses: validRows,
         activeIndex: null,
-        currentListVersion: (s.currentListVersion || 1) + 1,
+        currentListVersion: coerceListVersion(s.currentListVersion) + 1,
         completions: preserveCompletions ? s.completions : [],
       }));
 
@@ -1108,10 +1122,7 @@ export function useAppState() {
     async (obj: unknown, mergeStrategy: "replace" | "merge" = "replace") => {
       if (!isValidState(obj)) throw new Error("Invalid backup file format");
 
-      const version =
-        typeof (obj as any).currentListVersion === "number"
-          ? (obj as any).currentListVersion
-          : 1;
+      const version = coerceListVersion((obj as any).currentListVersion);
 
       const restoredState: AppState = {
         addresses: obj.addresses,
