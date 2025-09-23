@@ -950,14 +950,46 @@ export function useCloudSync(): UseCloudSync {
             // Check page visibility to prevent overwrites during screen lock
             if (typeof document !== 'undefined' && document.hidden) {
               console.log('Page hidden, deferring cloud update until visible');
+
+              // CRITICAL FIX: Prevent memory leaks and race conditions with proper cleanup
+              let timeoutId: NodeJS.Timeout | null = null;
               const visibilityHandler = () => {
                 if (!document.hidden) {
                   document.removeEventListener('visibilitychange', visibilityHandler);
+                  // Clear any pending timeout to prevent double execution
+                  if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                  }
                   // Small delay to ensure local sync operations complete first
-                  setTimeout(applyUpdate, 100);
+                  timeoutId = setTimeout(() => {
+                    timeoutId = null;
+                    applyUpdate();
+                  }, 100);
                 }
               };
+
               document.addEventListener('visibilitychange', visibilityHandler);
+
+              // CRITICAL FIX: Add cleanup timeout to prevent indefinite waiting
+              const cleanupTimeout = setTimeout(() => {
+                document.removeEventListener('visibilitychange', visibilityHandler);
+                if (timeoutId) {
+                  clearTimeout(timeoutId);
+                  timeoutId = null;
+                }
+                console.warn('Visibility handler timed out, applying update anyway');
+                applyUpdate();
+              }, 30000); // 30 second max wait
+
+              // Store cleanup function for potential early cleanup
+              (visibilityHandler as any)._cleanup = () => {
+                clearTimeout(cleanupTimeout);
+                if (timeoutId) {
+                  clearTimeout(timeoutId);
+                  timeoutId = null;
+                }
+              };
             } else {
               applyUpdate();
             }

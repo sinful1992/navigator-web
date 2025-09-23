@@ -580,12 +580,14 @@ function AuthedApp() {
               const normalized = normalizeState(newState);
               const normalizedStr = JSON.stringify(normalized);
 
-              // Update tracking reference
+              // Update tracking reference (safe to do in updater)
               lastFromCloudRef.current = normalizedStr;
-              setHydrated(true);
 
               return normalized;
             });
+
+            // CRITICAL FIX: Move side effects outside setState updater to prevent React warnings
+            setHydrated(true);
           } else {
             // This is direct state data - handle normally
             const fromCloudStr = JSON.stringify(updaterOrState);
@@ -635,10 +637,6 @@ function AuthedApp() {
     const currentStr = JSON.stringify(safeState);
     if (currentStr === lastFromCloudRef.current) return;
 
-    // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition
-    // This prevents subscribeToData from overwriting our local changes
-    lastFromCloudRef.current = currentStr;
-
     const t = setTimeout(async () => {
       // Double-check visibility before syncing
       if (!isPageVisible) {
@@ -648,12 +646,21 @@ function AuthedApp() {
 
       try {
         logger.sync("Syncing changes to cloud...");
+
+        // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition
+        // This prevents subscribeToData from overwriting our local changes
+        lastFromCloudRef.current = currentStr;
+
         await cloudSync.syncData(safeState);
-        // lastFromCloudRef is already set above to prevent race condition
+
+        // Success - lastFromCloudRef is already set above
+        logger.sync("Sync completed successfully");
       } catch (err) {
         logger.error("Sync failed:", err);
-        // Reset on error so we can retry
-        lastFromCloudRef.current = JSON.stringify(safeState);
+
+        // CRITICAL FIX: On failure, don't update lastFromCloudRef so we can retry
+        // Reset it to trigger retry on next state change
+        lastFromCloudRef.current = '';
       }
     }, 150);
 
@@ -1083,10 +1090,14 @@ function AuthedApp() {
   const handleManualSync = React.useCallback(async () => {
     try {
       logger.sync("Manual sync initiated...");
-      // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition
       const stateStr = JSON.stringify(safeState);
+
+      // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition
       lastFromCloudRef.current = stateStr;
+
       await cloudSync.syncData(safeState);
+
+      logger.sync("Manual sync completed successfully");
 
       // Also create a safety backup after manual sync
       try {
@@ -1097,6 +1108,9 @@ function AuthedApp() {
       }
     } catch (err) {
       logger.error("Manual sync failed:", err);
+
+      // CRITICAL FIX: On failure, reset lastFromCloudRef to allow retry
+      lastFromCloudRef.current = '';
     }
   }, [cloudSync, safeState]);
 
