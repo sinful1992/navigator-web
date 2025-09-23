@@ -1,6 +1,6 @@
 // src/useAppState.ts - FIXED VERSION - Prevent state corruption
 import * as React from "react";
-import { get, set } from "idb-keyval";
+import { storageManager } from "./utils/storageManager";
 import { logger } from "./utils/logger";
 import type {
   AddressRow,
@@ -496,7 +496,7 @@ export function useAppState() {
     let alive = true;
     (async () => {
       try {
-        const saved = (await get(STORAGE_KEY)) as any;
+        const saved = (await storageManager.queuedGet(STORAGE_KEY)) as any;
         if (!alive) return;
 
         if (saved) {
@@ -545,7 +545,7 @@ export function useAppState() {
       try {
         // Add schema version before saving
         const stateToSave = { ...baseState, _schemaVersion: CURRENT_SCHEMA_VERSION };
-        await set(STORAGE_KEY, stateToSave);
+        await storageManager.queuedSet(STORAGE_KEY, stateToSave);
         
       } catch (error: any) {
         logger.error('Failed to persist state to IndexedDB:', error);
@@ -1202,7 +1202,7 @@ export function useAppState() {
       // Persist immediately with proper error handling
       try {
         const stateToSave = { ...restoredState, _schemaVersion: CURRENT_SCHEMA_VERSION };
-        await set(STORAGE_KEY, stateToSave);
+        await storageManager.queuedSet(STORAGE_KEY, stateToSave);
       } catch (persistError: any) {
         logger.error('Failed to persist restored state:', persistError);
         throw new Error('Restore failed: Could not save data');

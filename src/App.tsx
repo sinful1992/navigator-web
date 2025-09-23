@@ -468,21 +468,52 @@ function AuthedApp() {
             daySessions.length > 0;
             
           if (localHasData) {
-            // CRITICAL: Only sync local data if it belongs to current user
-            // Check if this data was created by the current user
+            // CRITICAL: Conservative user detection to prevent accidental data loss
             const lastUserId = localStorage.getItem('navigator_last_user_id');
             const currentUserId = cloudSync.user!.id;
 
-            if (lastUserId === currentUserId) {
+            // SAFETY: Only clear data if we're absolutely certain it belongs to different user
+            const isCertainlyDifferentUser = lastUserId &&
+                                           currentUserId &&
+                                           lastUserId !== currentUserId &&
+                                           lastUserId.length > 10 && // Valid UUID-like format
+                                           currentUserId.length > 10;
+
+            if (!lastUserId || lastUserId === currentUserId) {
+              // Safe to sync - either no previous user or same user
               logger.sync("Pushing local data to cloud...");
               await cloudSync.syncData(safeState);
               if (!cancelled) {
                 lastFromCloudRef.current = JSON.stringify(safeState);
                 setHydrated(true);
               }
-            } else {
-              // Different user - clear local data to prevent contamination
-              logger.warn("Local data belongs to different user, clearing...");
+            } else if (isCertainlyDifferentUser) {
+              // SAFETY: Create backup before clearing, and allow user to recover
+              logger.warn("Detected different user. Creating safety backup before clearing...");
+
+              try {
+                // Create safety backup in localStorage
+                const backupKey = `navigator_safety_backup_${Date.now()}`;
+                const backupData = {
+                  ...safeState,
+                  _backup_timestamp: new Date().toISOString(),
+                  _previous_user: lastUserId,
+                  _current_user: currentUserId
+                };
+                localStorage.setItem(backupKey, JSON.stringify(backupData));
+                logger.info(`Safety backup created: ${backupKey}`);
+              } catch (backupError) {
+                logger.error("Failed to create safety backup:", backupError);
+                // If we can't backup, don't clear data!
+                logger.warn("SAFETY: Keeping local data due to backup failure");
+                await cloudSync.syncData(safeState);
+                if (!cancelled) {
+                  lastFromCloudRef.current = JSON.stringify(safeState);
+                  setHydrated(true);
+                }
+                return; // Exit early to preserve data
+              }
+
               setState({
                 addresses: [],
                 completions: [],
@@ -493,6 +524,18 @@ function AuthedApp() {
               });
               localStorage.setItem('navigator_last_user_id', currentUserId);
               if (!cancelled) setHydrated(true);
+            } else {
+              // SAFETY: Uncertain user detection - preserve data and sync anyway
+              logger.warn("Uncertain user detection - preserving local data for safety");
+              logger.info(`lastUserId: "${lastUserId}", currentUserId: "${currentUserId}"`);
+
+              // Sync existing data and let user decide later
+              await cloudSync.syncData(safeState);
+              localStorage.setItem('navigator_last_user_id', currentUserId);
+              if (!cancelled) {
+                lastFromCloudRef.current = JSON.stringify(safeState);
+                setHydrated(true);
+              }
             }
           } else {
             // Store current user ID for future checks
