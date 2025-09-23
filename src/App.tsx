@@ -4,6 +4,7 @@ import "./App.css"; // Use the updated modern CSS
 import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
 import { normalizeState, normalizeBackupData } from "./utils/normalizeState";
+import { SmartUserDetection } from "./utils/userDetection";
 import { useCloudSync } from "./useCloudSync";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";
@@ -468,78 +469,101 @@ function AuthedApp() {
             daySessions.length > 0;
             
           if (localHasData) {
-            // CRITICAL: Conservative user detection to prevent accidental data loss
-            const lastUserId = localStorage.getItem('navigator_last_user_id');
-            const currentUserId = cloudSync.user!.id;
+            // SMART USER DETECTION: Cloud-based analysis instead of localStorage comparison
+            logger.info("Analyzing data ownership for current user...");
 
-            // SAFETY: Only clear data if we're absolutely certain it belongs to different user
-            const isCertainlyDifferentUser = lastUserId &&
-                                           currentUserId &&
-                                           lastUserId !== currentUserId &&
-                                           lastUserId.length > 10 && // Valid UUID-like format
-                                           currentUserId.length > 10;
-
-            if (!lastUserId || lastUserId === currentUserId) {
-              // Safe to sync - either no previous user or same user
-              logger.sync("Pushing local data to cloud...");
-              await cloudSync.syncData(safeState);
-              if (!cancelled) {
-                lastFromCloudRef.current = JSON.stringify(safeState);
-                setHydrated(true);
-              }
-            } else if (isCertainlyDifferentUser) {
-              // SAFETY: Create backup before clearing, and allow user to recover
-              logger.warn("Detected different user. Creating safety backup before clearing...");
-
+            try {
+              // Get cloud data to help with ownership analysis
+              let cloudData: any = null;
               try {
-                // Create safety backup in localStorage
-                const backupKey = `navigator_safety_backup_${Date.now()}`;
-                const backupData = {
-                  ...safeState,
-                  _backup_timestamp: new Date().toISOString(),
-                  _previous_user: lastUserId,
-                  _current_user: currentUserId
-                };
-                localStorage.setItem(backupKey, JSON.stringify(backupData));
-                logger.info(`Safety backup created: ${backupKey}`);
-              } catch (backupError) {
-                logger.error("Failed to create safety backup:", backupError);
-                // If we can't backup, don't clear data!
-                logger.warn("SAFETY: Keeping local data due to backup failure");
-                await cloudSync.syncData(safeState);
-                if (!cancelled) {
-                  lastFromCloudRef.current = JSON.stringify(safeState);
-                  setHydrated(true);
-                }
-                return; // Exit early to preserve data
+                const { data: cloudStateData } = await supabase!
+                  .from("navigator_state")
+                  .select("data")
+                  .eq("user_id", cloudSync.user!.id)
+                  .maybeSingle();
+                cloudData = cloudStateData?.data;
+              } catch (cloudError) {
+                logger.warn("Could not fetch cloud data for analysis:", cloudError);
               }
 
-              setState({
-                addresses: [],
-                completions: [],
-                arrangements: [],
-                daySessions: [],
-                activeIndex: null,
-                currentListVersion: 1
-              });
-              localStorage.setItem('navigator_last_user_id', currentUserId);
-              if (!cancelled) setHydrated(true);
-            } else {
-              // SAFETY: Uncertain user detection - preserve data and sync anyway
-              logger.warn("Uncertain user detection - preserving local data for safety");
-              logger.info(`lastUserId: "${lastUserId}", currentUserId: "${currentUserId}"`);
+              // Analyze ownership using multiple signals
+              const ownership = SmartUserDetection.analyzeDataOwnership(
+                safeState,
+                cloudSync.user!,
+                cloudData
+              );
 
-              // Sync existing data and let user decide later
+              logger.info("Data ownership analysis:", ownership);
+
+              switch (ownership.action) {
+                case 'sync':
+                  logger.sync("Syncing local data to cloud (ownership confirmed)");
+                  await cloudSync.syncData(safeState);
+                  SmartUserDetection.storeDeviceContext(cloudSync.user!);
+                  if (!cancelled) {
+                    lastFromCloudRef.current = JSON.stringify(safeState);
+                    setHydrated(true);
+                  }
+                  break;
+
+                case 'backup_and_clear':
+                  logger.warn("Creating safety backup before clearing (different user detected)");
+
+                  try {
+                    const backupKey = `navigator_safety_backup_${Date.now()}_user_switch`;
+                    const backupData = {
+                      ...safeState,
+                      _backup_timestamp: new Date().toISOString(),
+                      _backup_reason: 'user_switch',
+                      _ownership_analysis: ownership
+                    };
+                    localStorage.setItem(backupKey, JSON.stringify(backupData));
+                    logger.info(`Safety backup created: ${backupKey}`);
+
+                    setState({
+                      addresses: [],
+                      completions: [],
+                      arrangements: [],
+                      daySessions: [],
+                      activeIndex: null,
+                      currentListVersion: 1
+                    });
+                    SmartUserDetection.storeDeviceContext(cloudSync.user!);
+                    if (!cancelled) setHydrated(true);
+                  } catch (backupError) {
+                    logger.error("Backup failed - preserving data for safety:", backupError);
+                    await cloudSync.syncData(safeState);
+                    SmartUserDetection.storeDeviceContext(cloudSync.user!);
+                    if (!cancelled) {
+                      lastFromCloudRef.current = JSON.stringify(safeState);
+                      setHydrated(true);
+                    }
+                  }
+                  break;
+
+                case 'preserve_and_ask':
+                default:
+                  logger.info("Preserving local data (uncertain ownership) - user can decide later");
+                  await cloudSync.syncData(safeState);
+                  SmartUserDetection.storeDeviceContext(cloudSync.user!);
+                  if (!cancelled) {
+                    lastFromCloudRef.current = JSON.stringify(safeState);
+                    setHydrated(true);
+                  }
+                  break;
+              }
+            } catch (analysisError) {
+              logger.error("User detection analysis failed - preserving data for safety:", analysisError);
               await cloudSync.syncData(safeState);
-              localStorage.setItem('navigator_last_user_id', currentUserId);
+              SmartUserDetection.storeDeviceContext(cloudSync.user!);
               if (!cancelled) {
                 lastFromCloudRef.current = JSON.stringify(safeState);
                 setHydrated(true);
               }
             }
           } else {
-            // Store current user ID for future checks
-            localStorage.setItem('navigator_last_user_id', cloudSync.user!.id);
+            // No local data - store device context for future use
+            SmartUserDetection.storeDeviceContext(cloudSync.user!);
             if (!cancelled) setHydrated(true);
           }
         }

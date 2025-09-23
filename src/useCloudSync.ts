@@ -532,6 +532,10 @@ export function useCloudSync(): UseCloudSync {
       localStorage.removeItem('navigator_trial_created');
       localStorage.removeItem('navigator_trial_user_id');
 
+      // Store device context for smart user detection
+      const { SmartUserDetection } = await import('./utils/userDetection');
+      SmartUserDetection.storeDeviceContext(data.user);
+
       setUser(data.user);
       return { user: data.user! };
     },
@@ -687,6 +691,8 @@ export function useCloudSync(): UseCloudSync {
         'navigator_trial_created',
         'navigator_trial_user_id',
         'navigator_last_user_id',
+        'navigator_device_context',
+        'navigator_device_context_checksum',
         'navigator_supabase_url',
         'navigator_supabase_key',
         'navigator_supabase_skipped',
