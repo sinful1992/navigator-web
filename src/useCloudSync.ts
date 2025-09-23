@@ -825,6 +825,30 @@ export function useCloudSync(): UseCloudSync {
   // Enhanced conflict resolution strategy
   const resolveConflicts = useCallback(async (localState: AppState, serverState: AppState): Promise<AppState> => {
     console.log('Resolving conflicts between local and server state');
+
+    // 🔧 CRITICAL FIX: Check if restore is in progress
+    const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
+    if (restoreInProgress) {
+      const restoreTime = parseInt(restoreInProgress);
+      const timeSinceRestore = Date.now() - restoreTime;
+
+      // If restore was within the last 30 seconds, prefer local state
+      if (timeSinceRestore < 30000) {
+        console.log('Restore in progress, preferring local state to prevent data loss');
+        return {
+          ...localState,
+          // Force bump version to ensure this state takes precedence
+          currentListVersion: Math.max(
+            coerceListVersion(localState.currentListVersion),
+            coerceListVersion(serverState.currentListVersion)
+          ) + 1
+        };
+      } else {
+        // Clear the flag after timeout
+        localStorage.removeItem('navigator_restore_in_progress');
+      }
+    }
+
     const resolved: AppState = { ...localState };
 
     // Merge completions (keep both, dedupe by timestamp + index + outcome)
@@ -846,7 +870,7 @@ export function useCloudSync(): UseCloudSync {
     // Merge arrangements (prefer local for recent changes, server for older)
     const allArrangements = [...localState.arrangements, ...serverState.arrangements];
     const arrangementsMap = new Map();
-    
+
     allArrangements.forEach(arr => {
       const existing = arrangementsMap.get(arr.id);
       if (!existing || new Date(arr.updatedAt) > new Date(existing.updatedAt)) {
@@ -858,7 +882,7 @@ export function useCloudSync(): UseCloudSync {
     // Merge day sessions (keep all unique dates)
     const allSessions = [...localState.daySessions, ...serverState.daySessions];
     const sessionsMap = new Map();
-    
+
     allSessions.forEach(session => {
       const existing = sessionsMap.get(session.date);
       if (!existing || (session.end && !existing.end)) {
@@ -933,6 +957,22 @@ export function useCloudSync(): UseCloudSync {
             syncMetadata.current.lastSyncAt = updatedAt;
             syncMetadata.current.version = serverVersion;
             syncMetadata.current.checksum = serverChecksum;
+
+            // 🔧 CRITICAL FIX: Check if restore is in progress before applying cloud updates
+            const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
+            if (restoreInProgress) {
+              const restoreTime = parseInt(restoreInProgress);
+              const timeSinceRestore = Date.now() - restoreTime;
+
+              // If restore was within the last 30 seconds, skip cloud updates
+              if (timeSinceRestore < 30000) {
+                console.log('Restore in progress, skipping cloud state update to prevent data loss');
+                return;
+              } else {
+                // Clear the flag after timeout
+                localStorage.removeItem('navigator_restore_in_progress');
+              }
+            }
 
             // SIMPLIFIED: Apply cloud updates immediately - React subscription bug is fixed
             if (typeof onChange === "function") {

@@ -871,11 +871,26 @@ export function useAppState() {
     const today = now.toISOString().slice(0, 10);
 
     setBaseState((s) => {
-      // Check if there's already an active session (any session without end time)
-      if (s.daySessions.some((d) => !d.end)) {
-        logger.info('Day already active, skipping start');
+      // 🔧 IMPROVED: More specific check - only block if there's an active session TODAY
+      const activeTodaySession = s.daySessions.find((d) => d.date === today && !d.end);
+
+      if (activeTodaySession) {
+        logger.info('Day already active for today, skipping start');
         return s;
       }
+
+      // 🔧 IMPROVED: Auto-close any stale sessions from previous days
+      const updatedSessions = s.daySessions.map((session) => {
+        if (session.date < today && !session.end) {
+          logger.info('Auto-closing stale session from previous day:', session);
+          return {
+            ...session,
+            end: new Date(session.date + 'T23:59:59.999Z').toISOString(),
+            durationSeconds: Math.floor((new Date(session.date + 'T23:59:59.999Z').getTime() - new Date(session.start).getTime()) / 1000)
+          };
+        }
+        return session;
+      });
 
       const sess: DaySession = {
         date: today,
@@ -885,10 +900,11 @@ export function useAppState() {
       logger.info('Starting new day session:', sess);
       return {
         ...s,
-        daySessions: [...s.daySessions, sess]
+        daySessions: [...updatedSessions, sess]
       };
     });
   }, []);
+
 
   const endDay = React.useCallback(() => {
     const now = new Date();
@@ -1203,6 +1219,10 @@ export function useAppState() {
       try {
         const stateToSave = { ...restoredState, _schemaVersion: CURRENT_SCHEMA_VERSION };
         await storageManager.queuedSet(STORAGE_KEY, stateToSave);
+
+        // 🔧 CRITICAL FIX: Set restore flag to prevent cloud sync override
+        localStorage.setItem('navigator_restore_in_progress', Date.now().toString());
+
       } catch (persistError: any) {
         logger.error('Failed to persist restored state:', persistError);
         throw new Error('Restore failed: Could not save data');
