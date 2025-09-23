@@ -135,6 +135,158 @@ function generateOperationId(type: string, entity: string, data: any): string {
   return btoa(unicodeSafeKey).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
 }
 
+function closeSession(session: DaySession, endTime: Date): DaySession {
+  const closed: DaySession = {
+    ...session,
+    end: endTime.toISOString(),
+  };
+
+  const startMs = Date.parse(session.start);
+  const endMs = endTime.getTime();
+
+  if (!Number.isNaN(startMs) && !Number.isNaN(endMs)) {
+    const diff = endMs - startMs;
+    closed.durationSeconds = diff >= 0 ? Math.floor(diff / 1000) : undefined;
+  } else {
+    closed.durationSeconds = undefined;
+  }
+
+  return closed;
+}
+
+function autoCloseStaleSession(session: DaySession, now: Date): DaySession {
+  const nowMs = now.getTime();
+  const startMs = Date.parse(session.start);
+  let endMs = Date.parse(`${session.date}T23:59:59.999Z`);
+
+  if (Number.isNaN(endMs)) {
+    endMs = nowMs;
+  }
+
+  if (!Number.isNaN(startMs) && endMs < startMs) {
+    endMs = startMs;
+  }
+
+  if (endMs > nowMs) {
+    endMs = nowMs;
+  }
+
+  if (Number.isNaN(endMs)) {
+    endMs = Number.isNaN(startMs) ? nowMs : startMs;
+  }
+
+  return closeSession(session, new Date(endMs));
+}
+
+function sanitizeSessionsForDate(
+  sessions: DaySession[],
+  today: string,
+  now: Date
+): { sanitizedSessions: DaySession[]; closedSessions: DaySession[] } {
+  const sanitizedSessions: DaySession[] = [];
+  const closedSessions: DaySession[] = [];
+
+  for (const session of sessions) {
+    if (!session.end && session.date !== today) {
+      const closed = autoCloseStaleSession(session, now);
+      sanitizedSessions.push(closed);
+      closedSessions.push(closed);
+    } else {
+      sanitizedSessions.push(session);
+    }
+  }
+
+  return { sanitizedSessions, closedSessions };
+}
+
+function findLatestOpenSessionIndex(
+  sessions: DaySession[],
+  today: string
+): number {
+  for (let i = sessions.length - 1; i >= 0; i -= 1) {
+    const session = sessions[i];
+    if (session.date === today && !session.end) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+export function prepareStartDaySessions(
+  sessions: DaySession[],
+  today: string,
+  now: Date
+): {
+  updatedSessions: DaySession[];
+  newSession?: DaySession;
+  closedSessions: DaySession[];
+  alreadyActive: boolean;
+} {
+  const { sanitizedSessions, closedSessions } = sanitizeSessionsForDate(
+    sessions,
+    today,
+    now
+  );
+
+  const hasActiveToday = sanitizedSessions.some(
+    (session) => session.date === today && !session.end
+  );
+
+  if (hasActiveToday) {
+    return {
+      updatedSessions: sanitizedSessions,
+      closedSessions,
+      alreadyActive: true,
+    };
+  }
+
+  const newSession: DaySession = {
+    date: today,
+    start: now.toISOString(),
+  };
+
+  return {
+    updatedSessions: [...sanitizedSessions, newSession],
+    newSession,
+    closedSessions,
+    alreadyActive: false,
+  };
+}
+
+export function prepareEndDaySessions(
+  sessions: DaySession[],
+  today: string,
+  now: Date
+): {
+  updatedSessions: DaySession[];
+  closedSessions: DaySession[];
+  endedSession?: DaySession;
+} {
+  const { sanitizedSessions, closedSessions } = sanitizeSessionsForDate(
+    sessions,
+    today,
+    now
+  );
+
+  const activeIndex = findLatestOpenSessionIndex(sanitizedSessions, today);
+  if (activeIndex === -1) {
+    return {
+      updatedSessions: sanitizedSessions,
+      closedSessions,
+    };
+  }
+
+  const updatedSessions = sanitizedSessions.slice();
+  const endedSession = closeSession(updatedSessions[activeIndex], now);
+  updatedSessions[activeIndex] = endedSession;
+
+  return {
+    updatedSessions,
+    closedSessions,
+    endedSession,
+  };
+}
+
 // ---- device id helper ----
 const DEVICE_ID_KEY = "navigator_device_id";
 function getOrCreateDeviceId(): string {
@@ -705,54 +857,61 @@ export function useAppState() {
     const today = now.toISOString().slice(0, 10);
 
     setBaseState((s) => {
-      // Check if there's already an active session
-      if (s.daySessions.some((d) => !d.end)) {
-        logger.info('Day already active, skipping start');
+      const {
+        updatedSessions,
+        newSession,
+        closedSessions,
+        alreadyActive,
+      } = prepareStartDaySessions(s.daySessions, today, now);
+
+      closedSessions.forEach((session) =>
+        logger.info("Auto-closing stale day session before starting a new one", session)
+      );
+
+      if (alreadyActive) {
+        logger.info("Day already active for today, skipping start");
+        if (closedSessions.length > 0) {
+          return { ...s, daySessions: updatedSessions };
+        }
         return s;
       }
 
-      const sess: DaySession = {
-        date: today,
-        start: now.toISOString(),
-      };
+      if (newSession) {
+        logger.info("Starting new day session:", newSession);
+      }
 
-      // 🔧 FIX: Don't use optimistic updates for simple local operations
-      // This was causing the state corruption
-      logger.info('Starting new day session:', sess);
-
-      return { 
-        ...s, 
-        daySessions: [...s.daySessions, sess] 
+      return {
+        ...s,
+        daySessions: updatedSessions,
       };
     });
   }, []);
 
   const endDay = React.useCallback(() => {
     const now = new Date();
+    const today = now.toISOString().slice(0, 10);
 
     setBaseState((s) => {
-      const i = s.daySessions.findIndex((d) => !d.end);
-      if (i === -1) {
-        logger.info('No active session to end');
+      const {
+        updatedSessions,
+        closedSessions,
+        endedSession,
+      } = prepareEndDaySessions(s.daySessions, today, now);
+
+      closedSessions.forEach((session) =>
+        logger.info("Auto-closing stale day session before ending today", session)
+      );
+
+      if (!endedSession) {
+        logger.info("No active session to end for today");
+        if (closedSessions.length > 0) {
+          return { ...s, daySessions: updatedSessions };
+        }
         return s;
       }
 
-      const arr = s.daySessions.slice();
-      const act = { ...arr[i] };
-      act.end = now.toISOString();
-
-      try {
-        const start = new Date(act.start).getTime();
-        const end = now.getTime();
-        if (end > start) act.durationSeconds = Math.floor((end - start) / 1000);
-      } catch (error) {
-        logger.warn('Failed to calculate session duration:', error);
-      }
-
-      arr[i] = act;
-      logger.info('Ending day session:', act);
-
-      return { ...s, daySessions: arr };
+      logger.info("Ending day session:", endedSession);
+      return { ...s, daySessions: updatedSessions };
     });
   }, []);
 
