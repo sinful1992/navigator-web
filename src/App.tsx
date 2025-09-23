@@ -29,6 +29,54 @@ import { SettingsDropdown } from "./components/SettingsDropdown";
 
 type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
+// ARCHITECTURAL FIX: Separate data from session state for backups
+function normalizeBackupData(raw: any) {
+  const r = raw ?? {};
+  return {
+    addresses: Array.isArray(r.addresses) ? r.addresses : [],
+    completions: Array.isArray(r.completions) ? r.completions : [],
+    arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
+    // NOTE: daySessions deliberately excluded from backups - they're temporal state
+    activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
+    currentListVersion:
+      typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
+  };
+}
+
+// ARCHITECTURAL FIX: Post-restore session reconciliation
+async function reconcileSessionState(cloudSync: any, setState: any, supabase: any) {
+  if (!cloudSync.user || !supabase) return;
+
+  try {
+    logger.info('Post-restore: Reconciling session state with cloud...');
+
+    // Fetch latest state from cloud to get current session info
+    const { data: cloudState, error } = await supabase
+      .from("navigator_state")
+      .select("data")
+      .eq("user_id", cloudSync.user.id)
+      .maybeSingle();
+
+    if (error || !cloudState?.data) {
+      logger.warn('No cloud state found for session reconciliation');
+      return;
+    }
+
+    const normalized = normalizeState(cloudState.data);
+    const cloudSessions = normalized.daySessions || [];
+
+    // Update local state with cloud session data only
+    setState((currentState: any) => ({
+      ...currentState,
+      daySessions: cloudSessions
+    }));
+
+    logger.info('Session state reconciled with cloud successfully');
+  } catch (error) {
+    logger.error('Failed to reconcile session state:', error);
+    // Don't throw - this is a nice-to-have, not critical
+  }
+}
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -358,10 +406,22 @@ function AuthedApp() {
         const blob: Blob = dl.data as Blob;
         const text = await blob.text();
         const raw = JSON.parse(text);
-        const data = normalizeState(raw);
+        // ARCHITECTURAL FIX: Restore data but preserve current session state
+        const backupData = normalizeBackupData(raw);
+        const currentSessions = safeState.daySessions; // Preserve current session state
+
+        const data = {
+          ...backupData,
+          daySessions: currentSessions // Keep current sessions, don't restore from backup
+        };
+
         restoreState(data);
         await cloudSync.syncData(data);
         lastFromCloudRef.current = JSON.stringify(data);
+
+        // ARCHITECTURAL FIX: Post-restore session reconciliation
+        await reconcileSessionState(cloudSync, setState, supabase);
+
         setHydrated(true);
         await alert({
           title: "Success",
@@ -704,30 +764,6 @@ function AuthedApp() {
     }
   }, [daySessions, startDay, cloudSync.isSyncing]);
 
-  // CRITICAL FIX: Force start day to resolve cloud conflicts after backup restore
-  const forceStartDay = React.useCallback(() => {
-    const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-
-    logger.warn('FORCE starting day session - this will override any existing sessions for today');
-
-    setBaseState((s) => {
-      // Remove any existing session for today and close any active sessions
-      const filteredSessions = s.daySessions
-        .filter((d) => d.date !== today) // Remove today's sessions
-        .map((d) => d.end ? d : { ...d, end: now.toISOString() }); // Close any active sessions
-
-      const sess = {
-        date: today,
-        start: now.toISOString(),
-      };
-
-      return {
-        ...s,
-        daySessions: [...filteredSessions, sess]
-      };
-    });
-  }, [setBaseState]);
 
   // Restore the missing edit functions for day sessions
   const handleEditStart = React.useCallback(
@@ -865,13 +901,25 @@ function AuthedApp() {
     if (!file) return;
     try {
       const raw = await readJsonFile(file);
-      const data = normalizeState(raw);
+      // ARCHITECTURAL FIX: File restore also preserves current session state
+      const backupData = normalizeBackupData(raw);
+      const currentSessions = safeState.daySessions; // Preserve current session state
+
+      const data = {
+        ...backupData,
+        daySessions: currentSessions // Keep current sessions, don't restore from backup
+      };
+
       restoreState(data);
       await cloudSync.syncData(data);
       lastFromCloudRef.current = JSON.stringify(data);
+
+      // ARCHITECTURAL FIX: Post-restore session reconciliation
+      await reconcileSessionState(cloudSync, setState, supabase);
+
       setHydrated(true);
       await alert({
-        title: "Success", 
+        title: "Success",
         message: "Restore completed successfully!",
         type: "success"
       });
@@ -1083,9 +1131,20 @@ function AuthedApp() {
         onClose={() => setShowBackupManager(false)}
         currentData={safeState}
         onRestore={(data) => {
-          restoreState(data);
+          // ARCHITECTURAL FIX: BackupManager restore also preserves current session state
+          const backupData = normalizeBackupData(data);
+          const currentSessions = safeState.daySessions; // Preserve current session state
+
+          const mergedData = {
+            ...backupData,
+            daySessions: currentSessions // Keep current sessions, don't restore from backup
+          };
+
+          restoreState(mergedData);
           if (cloudSync.user && supabase) {
-            cloudSync.syncData(data);
+            cloudSync.syncData(mergedData);
+            // ARCHITECTURAL FIX: Post-restore session reconciliation
+            reconcileSessionState(cloudSync, setState, supabase);
           }
         }}
       />
@@ -1200,7 +1259,6 @@ function AuthedApp() {
                 sessions={daySessions}
                 completions={completions}
                 startDay={startDay}
-                forceStartDay={forceStartDay}
                 endDay={endDay}
                 onEditStart={handleEditStart}
                 onEditEnd={handleEditEnd}
