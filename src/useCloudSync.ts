@@ -163,18 +163,65 @@ export function mergeStatePreservingActiveIndex(
       ? incoming.addresses
       : [];
 
-    // Respect list versions - prefer higher version regardless of length
+    const hasMeaningfulAddresses = (addresses: AppState["addresses"]) =>
+      addresses.some(address => address.address?.trim());
+
+    const incomingHasMeaningful = hasMeaningfulAddresses(incomingAddresses);
+    const currentHasMeaningful = hasMeaningfulAddresses(currentAddresses);
+
+    // Respect list versions - prefer higher version unless it would drop real data
     if (incomingListVersion > currentListVersion) {
-      return incomingAddresses;
-    } else if (currentListVersion > incomingListVersion) {
-      return currentAddresses;
+      if (!incomingHasMeaningful && currentHasMeaningful) {
+        return {
+          addresses: currentAddresses,
+          listVersion: currentListVersion,
+        };
+      }
+
+      return {
+        addresses: incomingAddresses,
+        listVersion: incomingListVersion,
+      };
     }
 
-    // Same version - use length as tiebreaker
-    return incomingAddresses.length >= currentAddresses.length
-      ? incomingAddresses
-      : currentAddresses;
+    if (currentListVersion > incomingListVersion) {
+      if (!currentHasMeaningful && incomingHasMeaningful) {
+        return {
+          addresses: incomingAddresses,
+          listVersion: currentListVersion,
+        };
+      }
+
+      return {
+        addresses: currentAddresses,
+        listVersion: currentListVersion,
+      };
+    }
+
+    if (incomingHasMeaningful && !currentHasMeaningful) {
+      return {
+        addresses: incomingAddresses,
+        listVersion: incomingListVersion,
+      };
+    }
+
+    if (!incomingHasMeaningful && currentHasMeaningful) {
+      return {
+        addresses: currentAddresses,
+        listVersion: currentListVersion,
+      };
+    }
+
+    const useIncoming = incomingAddresses.length >= currentAddresses.length;
+
+    return {
+      addresses: useIncoming ? incomingAddresses : currentAddresses,
+      listVersion: incomingListVersion,
+    };
   };
+
+  const { addresses: mergedAddresses, listVersion: resolvedListVersion } =
+    selectAddresses();
 
   const mergedArrangementsMap = new Map<string, AppState["arrangements"][number]>();
   const pushArrangement = (
@@ -234,11 +281,11 @@ export function mergeStatePreservingActiveIndex(
 
   return {
     ...incoming,
-    addresses: selectAddresses(),
+    addresses: mergedAddresses,
     completions: mergedCompletions,
     arrangements: mergedArrangements,
     daySessions: mergedDaySessions,
-    currentListVersion: Math.max(currentListVersion, incomingListVersion),
+    currentListVersion: resolvedListVersion,
     activeIndex: incoming.activeIndex ?? current.activeIndex ?? null,
   };
 }
