@@ -1140,6 +1140,10 @@ export function useAppState() {
 
       const version = coerceListVersion((obj as any).currentListVersion);
 
+      // Mobile browser detection
+      const isMobile = /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
       console.log('📁 RESTORE DATA ANALYSIS:', {
         addressCount: obj.addresses.length,
         completionCount: obj.completions.length,
@@ -1147,7 +1151,10 @@ export function useAppState() {
         daySessionCount: obj.daySessions?.length || 0,
         activeIndex: obj.activeIndex,
         listVersion: version,
-        mergeStrategy
+        mergeStrategy,
+        isMobile,
+        isTouch,
+        userAgent: navigator.userAgent.substring(0, 50)
       });
 
       const restoredState: AppState = {
@@ -1259,8 +1266,35 @@ export function useAppState() {
           schemaVersion: stateToSave._schemaVersion
         });
 
+        // 🔧 MOBILE FIX: Request persistent storage on mobile browsers
+        if ('storage' in navigator && 'persist' in navigator.storage) {
+          try {
+            const isPersistent = await navigator.storage.persist();
+            console.log('📱 PERSISTENT STORAGE:', isPersistent ? 'GRANTED' : 'DENIED');
+          } catch (error) {
+            console.warn('📱 PERSISTENT STORAGE REQUEST FAILED:', error);
+          }
+        }
+
         await storageManager.queuedSet(STORAGE_KEY, stateToSave);
         console.log('✅ RESTORED STATE PERSISTED TO INDEXEDDB');
+
+        // Check storage quota (mobile issue detection)
+        if ('storage' in navigator && 'estimate' in navigator.storage) {
+          try {
+            const estimate = await navigator.storage.estimate();
+            const percentUsed = estimate.usage && estimate.quota
+              ? Math.round((estimate.usage / estimate.quota) * 100)
+              : 'unknown';
+            console.log('📊 STORAGE QUOTA:', {
+              used: estimate.usage ? `${Math.round(estimate.usage / 1024 / 1024)}MB` : 'unknown',
+              total: estimate.quota ? `${Math.round(estimate.quota / 1024 / 1024)}MB` : 'unknown',
+              percentUsed: `${percentUsed}%`
+            });
+          } catch (error) {
+            console.warn('📊 STORAGE QUOTA CHECK FAILED:', error);
+          }
+        }
 
         // Verify the state was actually saved
         const verifyState = await storageManager.queuedGet(STORAGE_KEY);
