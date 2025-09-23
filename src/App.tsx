@@ -293,10 +293,7 @@ function AuthedApp() {
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
 
-  // CRITICAL FIX: Page visibility tracking to prevent sync conflicts during screen lock
-  const [isPageVisible, setIsPageVisible] = React.useState(
-    typeof document !== 'undefined' ? !document.hidden : true
-  );
+  // REMOVED: Page visibility tracking - was over-engineering after fixing React subscription bug
 
   // Cloud restore state
   type CloudBackupRow = {
@@ -612,38 +609,15 @@ function AuthedApp() {
     };
   }, [cloudSync.user, loading]);
 
-  // CRITICAL FIX: Page visibility change handler to prevent sync conflicts
+  // REMOVED: Visibility change handler - was over-engineering after fixing React subscription bug
+
+  // Debounced local to cloud sync (simplified - no visibility blocking)
   React.useEffect(() => {
-    if (typeof document === 'undefined') return;
-
-    const handleVisibilityChange = () => {
-      const visible = !document.hidden;
-      setIsPageVisible(visible);
-
-      if (visible) {
-        logger.info('Page became visible - resuming sync operations');
-      } else {
-        logger.info('Page hidden - pausing sync operations');
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
-
-  // Debounced local to cloud sync with visibility check
-  React.useEffect(() => {
-    if (!cloudSync.user || loading || !hydrated || !isPageVisible) return;
+    if (!cloudSync.user || loading || !hydrated) return;
     const currentStr = JSON.stringify(safeState);
     if (currentStr === lastFromCloudRef.current) return;
 
     const t = setTimeout(async () => {
-      // Double-check visibility before syncing
-      if (!isPageVisible) {
-        logger.info('Page not visible, skipping sync');
-        return;
-      }
-
       try {
         logger.sync("Syncing changes to cloud...");
 
@@ -665,7 +639,7 @@ function AuthedApp() {
     }, 150);
 
     return () => clearTimeout(t);
-  }, [safeState, cloudSync, hydrated, loading, isPageVisible]);
+  }, [safeState, cloudSync, hydrated, loading]);
 
   // CRITICAL FIX: Periodic backup to prevent data loss (every 5 minutes when data changes)
   React.useEffect(() => {

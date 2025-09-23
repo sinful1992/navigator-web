@@ -934,64 +934,15 @@ export function useCloudSync(): UseCloudSync {
             syncMetadata.current.version = serverVersion;
             syncMetadata.current.checksum = serverChecksum;
 
-            // CRITICAL FIX: Delay cloud updates when page is not visible to prevent data loss
-            const applyUpdate = () => {
-              if (typeof onChange === "function") {
-                onChange(prev => {
-                  const merged = mergeStatePreservingActiveIndex(prev, dataObj);
-                  lastSyncedState.current = JSON.stringify(merged);
-                  return merged;
-                });
-              } else {
-                lastSyncedState.current = JSON.stringify(dataObj);
-              }
-            };
-
-            // Check page visibility to prevent overwrites during screen lock
-            if (typeof document !== 'undefined' && document.hidden) {
-              console.log('Page hidden, deferring cloud update until visible');
-
-              // CRITICAL FIX: Prevent memory leaks and race conditions with proper cleanup
-              let timeoutId: NodeJS.Timeout | null = null;
-              const visibilityHandler = () => {
-                if (!document.hidden) {
-                  document.removeEventListener('visibilitychange', visibilityHandler);
-                  // Clear any pending timeout to prevent double execution
-                  if (timeoutId) {
-                    clearTimeout(timeoutId);
-                    timeoutId = null;
-                  }
-                  // Small delay to ensure local sync operations complete first
-                  timeoutId = setTimeout(() => {
-                    timeoutId = null;
-                    applyUpdate();
-                  }, 100);
-                }
-              };
-
-              document.addEventListener('visibilitychange', visibilityHandler);
-
-              // CRITICAL FIX: Add cleanup timeout to prevent indefinite waiting
-              const cleanupTimeout = setTimeout(() => {
-                document.removeEventListener('visibilitychange', visibilityHandler);
-                if (timeoutId) {
-                  clearTimeout(timeoutId);
-                  timeoutId = null;
-                }
-                console.warn('Visibility handler timed out, applying update anyway');
-                applyUpdate();
-              }, 30000); // 30 second max wait
-
-              // Store cleanup function for potential early cleanup
-              (visibilityHandler as any)._cleanup = () => {
-                clearTimeout(cleanupTimeout);
-                if (timeoutId) {
-                  clearTimeout(timeoutId);
-                  timeoutId = null;
-                }
-              };
+            // SIMPLIFIED: Apply cloud updates immediately - React subscription bug is fixed
+            if (typeof onChange === "function") {
+              onChange(prev => {
+                const merged = mergeStatePreservingActiveIndex(prev, dataObj);
+                lastSyncedState.current = JSON.stringify(merged);
+                return merged;
+              });
             } else {
-              applyUpdate();
+              lastSyncedState.current = JSON.stringify(dataObj);
             }
             setLastSyncTime(new Date(updatedAt));
           } catch (e: any) {
