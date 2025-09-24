@@ -747,20 +747,23 @@ export function useAppState() {
   const pendingCompletionsRef = React.useRef<Set<number>>(new Set());
   
   /** ATOMIC: Enhanced completion with proper transaction handling */
+  // Track recent completions to protect against cloud sync rollbacks
+  const recentCompletionsRef = React.useRef<Map<string, { timestamp: number; completion: Completion }>>(new Map());
+
   const complete = React.useCallback(
     async (index: number, outcome: Outcome, amount?: string, arrangementId?: string): Promise<string> => {
       // Check if completion is already pending for this index
       if (pendingCompletionsRef.current.has(index)) {
         throw new Error(`Completion already pending for index ${index}`);
       }
-      
+
       // Check if address exists
       const currentState = baseState;
       const address = currentState.addresses[index];
       if (!address) {
         throw new Error(`Address at index ${index} not found`);
       }
-      
+
       // Check if already completed
       const existingCompletion = currentState.completions.find(
         (c) => c.index === index && c.listVersion === currentState.currentListVersion
@@ -768,7 +771,7 @@ export function useAppState() {
       if (existingCompletion) {
         throw new Error(`Address at index ${index} is already completed`);
       }
-      
+
       const nowISO = new Date().toISOString();
       const completion: Completion = {
         index,
@@ -781,21 +784,36 @@ export function useAppState() {
         listVersion: currentState.currentListVersion,
         arrangementId,
       };
-      
+
       const operationId = generateOperationId(
         "create",
         "completion",
         completion
       );
-      
+
       try {
         // Mark as pending
         pendingCompletionsRef.current.add(index);
         setPendingCompletions(new Set(pendingCompletionsRef.current));
-        
+
+        // 🔧 CRITICAL FIX: Track recent completion to protect against sync rollbacks
+        const completionKey = `${index}_${outcome}_${currentState.currentListVersion}`;
+        recentCompletionsRef.current.set(completionKey, {
+          timestamp: Date.now(),
+          completion
+        });
+
+        // Clean up old recent completions (older than 30 seconds)
+        const cutoffTime = Date.now() - 30000;
+        for (const [key, value] of recentCompletionsRef.current.entries()) {
+          if (value.timestamp < cutoffTime) {
+            recentCompletionsRef.current.delete(key);
+          }
+        }
+
         // Apply optimistic update first
         addOptimisticUpdate("create", "completion", completion, operationId);
-        
+
         // Then update base state atomically
         await new Promise<void>((resolve) => {
           setBaseState((s) => {
@@ -808,7 +826,7 @@ export function useAppState() {
             return next;
           });
         });
-        
+
         return operationId;
       } finally {
         // Always clear pending state
@@ -1322,7 +1340,7 @@ export function useAppState() {
     [clearOptimisticUpdates]
   );
 
-  // Enhanced setState for cloud sync with conflict detection
+  // Enhanced setState for cloud sync with conflict detection and completion protection
   const setState = React.useCallback(
     (newState: AppState | ((prev: AppState) => AppState)) => {
       // Check if we recently restored data and log any state changes
@@ -1338,16 +1356,48 @@ export function useAppState() {
           });
         }
       }
+
       setBaseState((currentState) => {
         const nextState =
           typeof newState === "function"
             ? (newState as (prev: AppState) => AppState)(currentState)
             : newState;
 
+        // 🔧 CRITICAL FIX: Protect recent completions from being overwritten by cloud sync
+        const protectedCompletions = [...nextState.completions];
+        let hasProtectedCompletions = false;
+
+        // Add any recent completions that might be missing from cloud data
+        for (const [key, value] of recentCompletionsRef.current.entries()) {
+          const { completion, timestamp } = value;
+
+          // Only protect completions from the last 30 seconds
+          if (Date.now() - timestamp < 30000) {
+            const existsInIncoming = protectedCompletions.some(c =>
+              c.index === completion.index &&
+              c.outcome === completion.outcome &&
+              c.listVersion === completion.listVersion &&
+              Math.abs(new Date(c.timestamp).getTime() - new Date(completion.timestamp).getTime()) < 1000
+            );
+
+            if (!existsInIncoming) {
+              logger.info(`🛡️ PROTECTING RECENT COMPLETION: index=${completion.index}, outcome=${completion.outcome}`);
+              protectedCompletions.unshift(completion);
+              hasProtectedCompletions = true;
+            }
+          }
+        }
+
+        const finalState = hasProtectedCompletions
+          ? { ...nextState, completions: protectedCompletions.sort((a, b) =>
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            )}
+          : nextState;
+
         const conflicts = new Map();
 
         // Check for completion conflicts
-        nextState.completions.forEach((incoming) => {
+        finalState.completions.forEach((incoming) => {
           const existing = currentState.completions.find(
             (c) =>
               c.index === incoming.index &&
@@ -1369,7 +1419,7 @@ export function useAppState() {
         });
 
         // Check for arrangement conflicts
-        nextState.arrangements.forEach((incoming) => {
+        finalState.arrangements.forEach((incoming) => {
           const existing = currentState.arrangements.find(
             (a) => a.id === incoming.id
           );
@@ -1394,7 +1444,7 @@ export function useAppState() {
           setConflicts(conflicts);
         }
 
-        return nextState;
+        return finalState;
       });
 
       // Clear optimistic updates when state is set from external source
