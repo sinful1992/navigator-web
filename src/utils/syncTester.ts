@@ -1,12 +1,11 @@
 // src/utils/syncTester.ts - Race condition testing utilities
-import type { AppState, Completion } from '../types';
+import type { AppState } from '../types';
 import { logger } from './logger';
 
 /**
  * Test utilities for verifying race condition fixes
  */
 export class SyncTester {
-  private completions: Completion[] = [];
   private testResults: Array<{ test: string; passed: boolean; details: string }> = [];
 
   /**
@@ -33,7 +32,7 @@ export class SyncTester {
       const startTime = Date.now();
 
       try {
-        const completionId = await complete(testIndex, 'PIF');
+        await complete(testIndex, 'PIF');
         const endTime = Date.now();
 
         // Wait a moment for any race conditions to manifest
@@ -159,7 +158,7 @@ export class SyncTester {
       Object.defineProperty(navigator, 'onLine', { value: false, writable: true });
 
       // Make completions while "offline"
-      const offlineCompletions = [];
+      const offlineCompletions: string[] = [];
       for (let i = 0; i < 3; i++) {
         if (getCurrentState().addresses[i]) {
           try {
@@ -207,7 +206,7 @@ export class SyncTester {
     setActive: (index: number) => Promise<void>;
     cancelActive: () => Promise<void>;
     state: AppState;
-  }): Promise<{ passed: number; failed: number; results: typeof this.testResults }> {
+  }): Promise<{ passed: number; failed: number; results: Array<{ test: string; passed: boolean; details: string }> }> {
     logger.info('🧪 Running sync race condition tests...');
     this.testResults = [];
 

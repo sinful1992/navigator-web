@@ -1,11 +1,11 @@
 // src/sync/migrationAdapter.ts - Gradual migration from state-based to operation-based sync
+import React from "react";
 import type { User } from "@supabase/supabase-js";
 import type { AppState } from "../types";
 import type { Operation } from "./operations";
-import { createOperation, nextSequence } from "./operations";
+import { createOperation } from "./operations";
 import { useOperationSync } from "./operationSync";
 import { useCloudSync } from "../useCloudSync";
-import { reconstructState } from "./reducer";
 import { logger } from "../utils/logger";
 
 type SyncMode = 'legacy' | 'operations' | 'hybrid';
@@ -164,7 +164,10 @@ export function useUnifiedSync() {
         // Convert state changes to operations and submit them
         const operations = await migrateStateToOperations(state);
         for (const operation of operations) {
-          await operationSync.submitOperation(operation);
+          await operationSync.submitOperation({
+            type: operation.type,
+            payload: operation.payload,
+          });
         }
         break;
 
@@ -173,7 +176,10 @@ export function useUnifiedSync() {
         try {
           const operations = await migrateStateToOperations(state);
           for (const operation of operations) {
-            await operationSync.submitOperation(operation);
+            await operationSync.submitOperation({
+              type: operation.type,
+              payload: operation.payload,
+            });
           }
         } catch (error) {
           logger.warn('Operations sync failed, falling back to legacy:', error);
@@ -183,13 +189,13 @@ export function useUnifiedSync() {
     }
   };
 
-  const subscribeToData = (onChange: (state: AppState) => void): (() => void) => {
+  const subscribeToData = (onChange: React.Dispatch<React.SetStateAction<AppState>>): (() => void) => {
     switch (currentMode) {
       case 'legacy':
         return legacySync.subscribeToData(onChange);
 
       case 'operations':
-        return operationSync.subscribeToOperations((operations) => {
+        return operationSync.subscribeToOperations((_operations) => {
           // Reconstruct state from operations and notify
           const state = operationSync.getStateFromOperations();
           onChange(state);
@@ -198,7 +204,7 @@ export function useUnifiedSync() {
       case 'hybrid':
         // Subscribe to both and merge updates
         const legacyCleanup = legacySync.subscribeToData(onChange);
-        const operationsCleanup = operationSync.subscribeToOperations((operations) => {
+        const operationsCleanup = operationSync.subscribeToOperations((_operations) => {
           const state = operationSync.getStateFromOperations();
           onChange(state);
         });
@@ -234,7 +240,10 @@ export function useUnifiedSync() {
 
       // Submit all operations
       for (const operation of operations) {
-        await operationSync.submitOperation(operation);
+        await operationSync.submitOperation({
+          type: operation.type,
+          payload: operation.payload,
+        });
       }
 
       // Update localStorage to use operations mode

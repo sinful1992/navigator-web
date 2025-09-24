@@ -28,12 +28,12 @@ export type ConflictResolution = {
 export function detectConflicts(
   operation: Operation,
   existingOperations: Operation[],
-  currentState: AppState
+  _currentState: AppState
 ): OperationConflict[] {
   const conflicts: OperationConflict[] = [];
 
   for (const existing of existingOperations) {
-    const conflict = detectConflictBetween(operation, existing, currentState);
+    const conflict = detectConflictBetween(operation, existing, _currentState);
     if (conflict) {
       conflicts.push(conflict);
     }
@@ -48,7 +48,7 @@ export function detectConflicts(
 function detectConflictBetween(
   op1: Operation,
   op2: Operation,
-  currentState: AppState
+  _currentState: AppState
 ): OperationConflict | null {
   // Same operation ID = exact duplicate
   if (op1.id === op2.id) {
@@ -141,14 +141,14 @@ function detectConflictBetween(
  */
 export function resolveConflicts(
   conflicts: OperationConflict[],
-  currentState: AppState
+  _currentState: AppState
 ): ConflictResolution {
   const resolvedOperations: Operation[] = [];
   const rejectedOperations: Operation[] = [];
   const transformedOperations: Operation[] = [];
 
   for (const conflict of conflicts) {
-    const resolution = resolveConflict(conflict, currentState);
+    const resolution = resolveConflict(conflict, _currentState);
 
     resolvedOperations.push(...resolution.resolvedOperations);
     rejectedOperations.push(...resolution.rejectedOperations);
@@ -167,7 +167,7 @@ export function resolveConflicts(
  */
 function resolveConflict(
   conflict: OperationConflict,
-  currentState: AppState
+  _currentState: AppState
 ): ConflictResolution {
   const { operation1: op1, operation2: op2, conflictType } = conflict;
 
@@ -186,10 +186,10 @@ function resolveConflict(
       return resolveRaceCondition(op1, op2);
 
     case 'concurrent_edit':
-      return resolveConcurrentEdit(op1, op2, currentState);
+      return resolveConcurrentEdit(op1, op2, _currentState);
 
     case 'dependency_violation':
-      return resolveDependencyViolation(op1, op2, currentState);
+      return resolveDependencyViolation(op1, op2, _currentState);
 
     default:
       logger.warn('Unknown conflict type, keeping first operation:', conflictType);
@@ -260,7 +260,7 @@ function resolveRaceCondition(op1: Operation, op2: Operation): ConflictResolutio
 function resolveConcurrentEdit(
   op1: Operation,
   op2: Operation,
-  currentState: AppState
+  _currentState: AppState
 ): ConflictResolution {
   // For arrangement updates, try to merge the changes
   if (op1.type === 'ARRANGEMENT_UPDATE' && op2.type === 'ARRANGEMENT_UPDATE') {
@@ -304,7 +304,7 @@ function resolveConcurrentEdit(
 function resolveDependencyViolation(
   op1: Operation,
   op2: Operation,
-  currentState: AppState
+  _currentState: AppState
 ): ConflictResolution {
   // For now, just reject the later operation
   // In a more sophisticated system, we'd try to transform the operation

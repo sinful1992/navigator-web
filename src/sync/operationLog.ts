@@ -65,10 +65,10 @@ export class OperationLogManager {
     }
 
     const sequence = nextSequence();
-    const fullOperation: Operation = {
+    const fullOperation = {
       ...operation,
       sequence,
-    };
+    } as Operation;
 
     this.log.operations.push(fullOperation);
     this.log.lastSequence = sequence;

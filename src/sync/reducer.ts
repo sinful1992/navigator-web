@@ -1,7 +1,6 @@
 // src/sync/reducer.ts - State reconstruction from operations
 import type { AppState } from '../types';
 import type { Operation } from './operations';
-import { coerceListVersion } from '../useAppState';
 import { logger } from '../utils/logger';
 
 /**

@@ -1,6 +1,6 @@
 // src/sync/operationSync.ts - Operation-based cloud sync service
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, SetStateAction, User } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import type { AppState } from "../types";
 import type { Operation } from "./operations";
@@ -39,22 +39,7 @@ const INITIAL_STATE: AppState = {
   arrangements: [],
   currentListVersion: 1,
   subscription: null,
-  reminderSettings: {
-    enabled: false,
-    agentName: 'Navigator Assistant',
-    agentPersonality: 'professional',
-    messageTemplates: {
-      initial: 'Hello {customerName}, this is {agentName} from your service team.',
-      followup: 'Hi {customerName}, following up on our previous arrangement.',
-      reminder: 'Hello {customerName}, just a friendly reminder about your upcoming appointment.',
-      cancellation: 'Hi {customerName}, unfortunately we need to reschedule your appointment.',
-    },
-    scheduleSettings: {
-      reminderMinutes: [60, 1440], // 1 hour and 24 hours before
-      workingHours: { start: '09:00', end: '17:00' },
-      workingDays: [1, 2, 3, 4, 5], // Monday to Friday
-    }
-  },
+  reminderSettings: undefined,
   reminderNotifications: [],
   lastReminderProcessed: undefined,
 };
@@ -190,10 +175,7 @@ export function useOperationSync(): UseOperationSync {
     );
 
     // Add to local log
-    await operationLog.current.append({
-      ...operation,
-      sequence: operation.sequence,
-    });
+    await operationLog.current.append(operation);
 
     // Apply to local state immediately for optimistic update
     const newState = reconstructState(INITIAL_STATE, operationLog.current.getAllOperations());
@@ -287,7 +269,7 @@ export function useOperationSync(): UseOperationSync {
 
         if (newOperations.length > 0) {
           // Apply conflict resolution
-          const { validOperations, conflictsResolved } = processOperationsWithConflictResolution(
+          const { conflictsResolved } = processOperationsWithConflictResolution(
             newOperations,
             currentState
           );
@@ -361,7 +343,9 @@ export function useOperationSync(): UseOperationSync {
 
       const cleanup = () => {
         try {
-          supabase.removeChannel(channel);
+          if (supabase) {
+            supabase.removeChannel(channel);
+          }
         } catch {
           // ignore
         }

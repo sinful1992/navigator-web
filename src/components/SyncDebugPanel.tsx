@@ -145,7 +145,7 @@ export function SyncDebugPanel({
         <div style={sectionStyle}>
           <div><strong>Migration</strong></div>
           <div>Current: {appState.currentSyncMode}</div>
-          {appState.canMigrate && (
+          {appState.canMigrate?.() && (
             <button
               style={buttonStyle}
               onClick={() => appState.performMigration?.()}
