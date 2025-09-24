@@ -9,10 +9,8 @@ import type {
   Arrangement,
   UserSubscription,
   ReminderSettings,
-  ReminderNotification,
 } from "./types";
 import type { Operation } from "./sync/operations";
-import { createOperation, nextSequence } from "./sync/operations";
 import { useUnifiedSync } from "./sync/migrationAdapter";
 import { logger } from "./utils/logger";
 import { coerceListVersion } from "./useAppState";
@@ -58,22 +56,7 @@ export function useAppStateV2() {
       arrangements: [],
       currentListVersion: 1,
       subscription: null,
-      reminderSettings: {
-        enabled: false,
-        agentName: 'Navigator Assistant',
-        agentPersonality: 'professional',
-        messageTemplates: {
-          initial: 'Hello {customerName}, this is {agentName} from your service team.',
-          followup: 'Hi {customerName}, following up on our previous arrangement.',
-          reminder: 'Hello {customerName}, just a friendly reminder about your upcoming appointment.',
-          cancellation: 'Hi {customerName}, unfortunately we need to reschedule your appointment.',
-        },
-        scheduleSettings: {
-          reminderMinutes: [60, 1440],
-          workingHours: { start: '09:00', end: '17:00' },
-          workingDays: [1, 2, 3, 4, 5],
-        }
-      },
+      reminderSettings: undefined,
       reminderNotifications: [],
       lastReminderProcessed: undefined,
     };
@@ -83,9 +66,7 @@ export function useAppStateV2() {
 
   // Subscribe to state changes from unified sync
   React.useEffect(() => {
-    const cleanup = unifiedSync.subscribeToData((newState: AppState) => {
-      setState(newState);
-    });
+    const cleanup = unifiedSync.subscribeToData(setState);
 
     setLoading(false);
     return cleanup;
@@ -101,9 +82,6 @@ export function useAppStateV2() {
       try {
         await unifiedSync.submitOperation({
           type: operationType,
-          id: `op_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-          timestamp: new Date().toISOString(),
-          clientId: deviceId,
           payload,
         });
         // State will be updated via subscription
@@ -459,7 +437,7 @@ export function useAppStateV2() {
 
   /** Restore state */
   const restoreState = React.useCallback(
-    async (obj: unknown, mergeStrategy: "replace" | "merge" = "replace") => {
+    async (obj: unknown, _mergeStrategy: "replace" | "merge" = "replace") => {
       // For operations mode, convert restored state to operations
       if (unifiedSync.currentSyncMode === 'operations') {
         logger.info('Restoring state in operations mode - converting to operations');

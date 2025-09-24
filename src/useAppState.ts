@@ -1368,7 +1368,7 @@ export function useAppState() {
         let hasProtectedCompletions = false;
 
         // Add any recent completions that might be missing from cloud data
-        for (const [key, value] of recentCompletionsRef.current.entries()) {
+        for (const [_key, value] of recentCompletionsRef.current.entries()) {
           const { completion, timestamp } = value;
 
           // Only protect completions from the last 30 seconds
