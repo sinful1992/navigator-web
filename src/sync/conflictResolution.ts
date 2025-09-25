@@ -276,10 +276,12 @@ function resolveConcurrentEdit(
       // No overlapping fields - can merge safely
       const mergedOperation: Operation = {
         ...op1,
-        timestamp: Math.max(
-          new Date(op1.timestamp).getTime(),
-          new Date(op2.timestamp).getTime()
-        ).toString(),
+        timestamp: new Date(
+          Math.max(
+            new Date(op1.timestamp).getTime(),
+            new Date(op2.timestamp).getTime()
+          )
+        ).toISOString(),
         payload: {
           ...op1.payload,
           updates: { ...updates1, ...updates2 },

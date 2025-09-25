@@ -103,8 +103,13 @@ export class OperationLogManager {
   /**
    * Mark operations as synced to cloud up to a specific sequence
    */
-  markSyncedUpTo(sequence: number): void {
-    this.log.lastSyncSequence = Math.max(this.log.lastSyncSequence, sequence);
+  async markSyncedUpTo(sequence: number): Promise<void> {
+    const nextValue = Math.max(this.log.lastSyncSequence, sequence);
+
+    if (nextValue !== this.log.lastSyncSequence) {
+      this.log.lastSyncSequence = nextValue;
+      await this.persist();
+    }
   }
 
   /**

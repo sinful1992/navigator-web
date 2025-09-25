@@ -4,7 +4,6 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import type { AppState } from "../types";
 import type { Operation } from "./operations";
-import { createOperation, nextSequence } from "./operations";
 import { OperationLogManager, getOperationLog } from "./operationLog";
 import { reconstructState } from "./reducer";
 import { processOperationsWithConflictResolution } from "./conflictResolution";
@@ -166,16 +165,17 @@ export function useOperationSync(): UseOperationSync {
       throw new Error('Operation log not initialized');
     }
 
-    // Create full operation
-    const operation = createOperation(
-      operationData.type as any,
-      operationData.payload,
-      deviceId.current,
-      nextSequence()
-    );
+    // Create envelope without sequence - OperationLog will assign it
+    const operationEnvelope = {
+      id: `op_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      timestamp: new Date().toISOString(),
+      clientId: deviceId.current,
+      type: operationData.type,
+      payload: operationData.payload,
+    } as Omit<Operation, 'sequence'>;
 
-    // Add to local log
-    await operationLog.current.append(operation);
+    // Add to local log (assigns sequence internally)
+    const persistedOperation = await operationLog.current.append(operationEnvelope);
 
     // Apply to local state immediately for optimistic update
     const newState = reconstructState(INITIAL_STATE, operationLog.current.getAllOperations());
@@ -192,8 +192,8 @@ export function useOperationSync(): UseOperationSync {
     }
 
     logger.debug('Submitted operation:', {
-      type: operation.type,
-      id: operation.id,
+      type: persistedOperation.type,
+      id: persistedOperation.id,
     });
   }, [isOnline, user]);
 
@@ -230,7 +230,7 @@ export function useOperationSync(): UseOperationSync {
 
       // Mark operations as synced
       const maxSequence = Math.max(...unsyncedOps.map(op => op.sequence));
-      operationLog.current.markSyncedUpTo(maxSequence);
+      await operationLog.current.markSyncedUpTo(maxSequence);
       setLastSyncTime(new Date());
 
       logger.info('Synced operations to cloud:', {
@@ -268,6 +268,12 @@ export function useOperationSync(): UseOperationSync {
         const newOperations = await operationLog.current!.mergeRemoteOperations(remoteOperations);
 
         if (newOperations.length > 0) {
+          const maxRemoteSequence = Math.max(...remoteOperations.map(op => op.sequence));
+
+          if (Number.isFinite(maxRemoteSequence)) {
+            await operationLog.current!.markSyncedUpTo(maxRemoteSequence);
+          }
+
           // Apply conflict resolution
           const { conflictsResolved } = processOperationsWithConflictResolution(
             newOperations,
@@ -326,6 +332,8 @@ export function useOperationSync(): UseOperationSync {
               const newOps = await operationLog.current.mergeRemoteOperations([operation]);
 
               if (newOps.length > 0) {
+                await operationLog.current.markSyncedUpTo(operation.sequence);
+
                 // Reconstruct state and notify
                 const allOperations = operationLog.current.getAllOperations();
                 const newState = reconstructState(INITIAL_STATE, allOperations);
