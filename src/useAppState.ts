@@ -746,12 +746,16 @@ export function useAppState() {
         }
       }
 
+      logger.info(`📍 SETTING ACTIVE: Address #${idx} "${address?.address}" - will auto-sync to all devices`);
       return { ...s, activeIndex: idx };
     });
   }, []);
 
   const cancelActive = React.useCallback(() => {
-    setBaseState((s) => ({ ...s, activeIndex: null }));
+    setBaseState((s) => {
+      logger.info(`📍 CANCELING ACTIVE: Clearing active state - will auto-sync to all devices`);
+      return { ...s, activeIndex: null };
+    });
   }, []);
 
   // Track pending completions to prevent double submissions
