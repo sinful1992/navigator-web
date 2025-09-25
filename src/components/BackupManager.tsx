@@ -96,15 +96,15 @@ export function BackupManager({ currentData, onRestore, isOpen, onClose }: Backu
       <div className="modal-content" style={{ maxWidth: '800px' }}>
         <div className="modal-header">
           <h2>💾 Backup Manager</h2>
-          <p style={{ margin: '0.5rem 0 0', opacity: 0.8, fontSize: '0.9rem' }}>
+          <p style={{ margin: '0.5rem 0 0', opacity: 0.8, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
             Local backups are automatically created and downloaded to prevent data loss
           </p>
         </div>
 
         <div className="modal-body">
           {/* Storage Usage */}
-          <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius-md)' }}>
-            <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem' }}>📊 Storage Usage</h4>
+          <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
+            <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', color: 'var(--text-primary)' }}>📊 Storage Usage</h4>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
               <div style={{ flex: 1, height: '8px', background: 'var(--gray-200)', borderRadius: '4px', overflow: 'hidden' }}>
                 <div
@@ -116,11 +116,11 @@ export function BackupManager({ currentData, onRestore, isOpen, onClose }: Backu
                   }}
                 />
               </div>
-              <span style={{ fontSize: '0.85rem', color: 'var(--gray-600)', minWidth: '60px' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', minWidth: '60px' }}>
                 {storageUsage.percentage.toFixed(1)}%
               </span>
             </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--gray-600)' }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               {formatFileSize(storageUsage.used)} of {formatFileSize(storageUsage.quota)} used
               {storageUsage.percentage > 80 && (
                 <span style={{ color: 'var(--danger)', fontWeight: 500, marginLeft: '0.5rem' }}>
@@ -131,9 +131,9 @@ export function BackupManager({ currentData, onRestore, isOpen, onClose }: Backu
           </div>
 
           {/* Manual Backup */}
-          <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--blue-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--blue-200)' }}>
-            <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', color: 'var(--blue-700)' }}>📁 Create Manual Backup</h4>
-            <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--blue-600)' }}>
+          <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--info-light)', borderRadius: 'var(--radius-md)', border: '1px solid var(--info)' }}>
+            <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', color: 'var(--info-dark)' }}>📁 Create Manual Backup</h4>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--info-dark)' }}>
               Create an immediate backup and download it to your computer for safekeeping.
             </p>
             <button
@@ -147,10 +147,10 @@ export function BackupManager({ currentData, onRestore, isOpen, onClose }: Backu
 
           {/* Local Backups List */}
           <div>
-            <h4 style={{ margin: '0 0 1rem', fontSize: '0.95rem' }}>📚 Local Backups ({localBackups.length})</h4>
+            <h4 style={{ margin: '0 0 1rem', fontSize: '0.95rem', color: 'var(--text-primary)' }}>📚 Local Backups ({localBackups.length})</h4>
 
             {localBackups.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--gray-500)' }}>
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                 No local backups found. Create your first backup above!
               </div>
             ) : (
@@ -160,18 +160,18 @@ export function BackupManager({ currentData, onRestore, isOpen, onClose }: Backu
                     key={index}
                     style={{
                       padding: '1rem',
-                      border: '1px solid var(--border)',
+                      border: '1px solid var(--border-light)',
                       borderRadius: 'var(--radius-md)',
                       marginBottom: '0.5rem',
-                      background: 'white',
+                      background: 'var(--surface)',
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                       <div>
-                        <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>
+                        <div style={{ fontWeight: 500, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
                           {formatDate(backup.timestamp)}
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--gray-600)' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                           Size: {formatFileSize(backup.size || 0)} • Version: {backup.version || 1}
                         </div>
                       </div>
@@ -199,9 +199,9 @@ export function BackupManager({ currentData, onRestore, isOpen, onClose }: Backu
           </div>
 
           {/* Backup Info */}
-          <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--green-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--green-200)' }}>
-            <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.9rem', color: 'var(--green-700)' }}>✅ Data Protection Features</h4>
-            <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.85rem', color: 'var(--green-600)' }}>
+          <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--success-light)', borderRadius: 'var(--radius-md)', border: '1px solid var(--success)' }}>
+            <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.9rem', color: 'var(--success-dark)' }}>✅ Data Protection Features</h4>
+            <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.85rem', color: 'var(--success-dark)' }}>
               <li>Automatic backups every 5 minutes when data changes</li>
               <li>Critical backups downloaded after completions</li>
               <li>Local browser storage with 10 backup rotation</li>
@@ -234,12 +234,12 @@ export function BackupManager({ currentData, onRestore, isOpen, onClose }: Backu
         }
 
         .modal-content {
-          background: white;
+          background: var(--surface);
           border-radius: var(--radius-lg);
           max-height: 90vh;
           overflow-y: auto;
           box-shadow: var(--shadow-2xl);
-          border: 1px solid var(--border);
+          border: 1px solid var(--border-light);
           width: 100%;
         }
 
