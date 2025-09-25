@@ -175,7 +175,7 @@ export function ImportExcel({ onImported }: Props) {
           padding: "0.75rem 1rem",
           border: `2px dashed ${dragActive ? 'var(--primary)' : 'var(--border-light)'}`,
           borderRadius: "var(--radius)",
-          background: dragActive ? 'var(--primary-light)' : 'var(--bg-tertiary)',
+          background: dragActive ? 'var(--primary-light)' : 'var(--bg-secondary)',
           color: dragActive ? 'var(--primary-dark)' : 'var(--text-muted)',
           fontSize: "0.8125rem",
           textAlign: "center",

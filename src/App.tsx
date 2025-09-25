@@ -1396,11 +1396,11 @@ function AuthedApp() {
           {/* Tools Panel (collapsible) */}
           {toolsOpen && tab === "list" && (
             <div style={{
-              background: "white",
+              background: "var(--surface)",
               padding: "1rem",
               borderRadius: "var(--radius-lg)",
               marginBottom: "1.5rem",
-              border: "1px solid var(--gray-200)",
+              border: "1px solid var(--border-light)",
               boxShadow: "var(--shadow-sm)"
             }}>
               <div className="btn-row">
