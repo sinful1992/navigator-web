@@ -5,7 +5,6 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
 import type { AppState } from "./types";
 import { generateChecksum } from "./utils/checksum";
-import { coerceListVersion } from "./useAppState";
 
 // Initialize a new user with default subscription
 async function initializeNewUser(userId: string): Promise<void> {
@@ -96,16 +95,19 @@ export function mergeStatePreservingActiveIndex(
   current: AppState,
   incoming: AppState
 ): AppState {
-  const currentListVersion = coerceListVersion(current.currentListVersion);
-  const incomingListVersion = coerceListVersion(incoming.currentListVersion);
-  const fallbackListVersion = Math.max(
-    currentListVersion,
-    incomingListVersion,
-    1
-  );
+  const currentListVersion =
+    typeof current.currentListVersion === "number"
+      ? current.currentListVersion
+      : 1;
+  const incomingListVersion =
+    typeof incoming.currentListVersion === "number"
+      ? incoming.currentListVersion
+      : 1;
 
-  const ensureListVersion = (listVersion?: number | string) =>
-    coerceListVersion(listVersion, fallbackListVersion);
+  const ensureListVersion = (listVersion?: number) =>
+    typeof listVersion === "number"
+      ? listVersion
+      : Math.max(currentListVersion, incomingListVersion);
 
   const mergedCompletionMap = new Map<string, AppState["completions"][number]>();
   const pushCompletion = (
@@ -841,13 +843,19 @@ export function useCloudSync(): UseCloudSync {
           timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
           restoreTime: new Date(restoreTime).toISOString()
         });
+        const localVersion =
+          typeof localState.currentListVersion === "number"
+            ? localState.currentListVersion
+            : 1;
+        const serverVersion =
+          typeof serverState.currentListVersion === "number"
+            ? serverState.currentListVersion
+            : 1;
+
         return {
           ...localState,
           // Force bump version to ensure this state takes precedence
-          currentListVersion: Math.max(
-            coerceListVersion(localState.currentListVersion),
-            coerceListVersion(serverState.currentListVersion)
-          ) + 1
+          currentListVersion: Math.max(localVersion, serverVersion) + 1
         };
       } else {
         // Clear the flag after timeout
@@ -855,26 +863,11 @@ export function useCloudSync(): UseCloudSync {
       }
     }
 
-    const localListVersion = coerceListVersion(localState.currentListVersion);
-    const serverListVersion = coerceListVersion(serverState.currentListVersion);
-    const fallbackListVersion = Math.max(
-      localListVersion,
-      serverListVersion,
-      1
-    );
-
     const resolved: AppState = { ...localState };
 
     // Merge completions (keep both, dedupe by timestamp + index + outcome)
     // This is the most critical data - completions represent work done
-    const allCompletions = [...localState.completions, ...serverState.completions]
-      .map((completion) => ({
-        ...completion,
-        listVersion: coerceListVersion(
-          (completion as any)?.listVersion,
-          fallbackListVersion
-        ),
-      }));
+    const allCompletions = [...localState.completions, ...serverState.completions];
     const uniqueCompletions = allCompletions.filter((completion, index, arr) => {
       // More comprehensive deduplication key including list version
       const key = `${completion.timestamp}_${completion.index}_${completion.outcome}_${completion.listVersion || 1}`;
@@ -882,18 +875,9 @@ export function useCloudSync(): UseCloudSync {
         `${c.timestamp}_${c.index}_${c.outcome}_${c.listVersion || 1}` === key
       ) === index;
     });
-    resolved.completions = uniqueCompletions
-      .map((completion) => ({
-        ...completion,
-        listVersion: coerceListVersion(
-          (completion as any)?.listVersion,
-          fallbackListVersion
-        ),
-      }))
-      .sort(
-        (a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
+    resolved.completions = uniqueCompletions.sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
 
     console.log(`Merged completions: local=${localState.completions.length}, server=${serverState.completions.length}, resolved=${resolved.completions.length}`);
 
@@ -924,10 +908,15 @@ export function useCloudSync(): UseCloudSync {
     // For addresses, prefer the longer list (assume it's more complete)
     if (serverState.addresses.length > localState.addresses.length) {
       resolved.addresses = serverState.addresses;
-      resolved.currentListVersion = Math.max(
-        coerceListVersion(localState.currentListVersion),
-        coerceListVersion(serverState.currentListVersion)
-      );
+      const localVersion =
+        typeof localState.currentListVersion === "number"
+          ? localState.currentListVersion
+          : 1;
+      const serverVersion =
+        typeof serverState.currentListVersion === "number"
+          ? serverState.currentListVersion
+          : 1;
+      resolved.currentListVersion = Math.max(localVersion, serverVersion);
     }
 
     resolved.activeIndex =
