@@ -731,7 +731,23 @@ export function useAppState() {
   );
 
   const setActive = React.useCallback((idx: number) => {
-    setBaseState((s) => ({ ...s, activeIndex: idx }));
+    setBaseState((s) => {
+      // Check if this address is already completed (cross-device protection)
+      const address = s.addresses[idx];
+      if (address) {
+        const isCompleted = s.completions.some(c =>
+          c.address === address.address &&
+          (c.listVersion || s.currentListVersion) === s.currentListVersion
+        );
+
+        if (isCompleted) {
+          logger.warn(`Cannot set active - address "${address.address}" is already completed`);
+          return s; // Don't change state
+        }
+      }
+
+      return { ...s, activeIndex: idx };
+    });
   }, []);
 
   const cancelActive = React.useCallback(() => {
@@ -1393,11 +1409,27 @@ export function useAppState() {
           }
         }
 
-        const finalState = hasProtectedCompletions
+        let finalState = hasProtectedCompletions
           ? { ...nextState, completions: protectedCompletions.sort((a, b) =>
               new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
             )}
           : nextState;
+
+        // 🔧 CRITICAL FIX: Clear activeIndex if the active address was completed on another device
+        if (finalState.activeIndex !== null && typeof finalState.activeIndex === 'number') {
+          const activeAddress = finalState.addresses[finalState.activeIndex];
+          if (activeAddress) {
+            const activeAddressCompleted = finalState.completions.some(c =>
+              c.address === activeAddress.address &&
+              (c.listVersion || finalState.currentListVersion) === finalState.currentListVersion
+            );
+
+            if (activeAddressCompleted) {
+              logger.info(`🔄 CLEARING ACTIVE INDEX: Address "${activeAddress.address}" was completed on another device`);
+              finalState = { ...finalState, activeIndex: null };
+            }
+          }
+        }
 
         const conflicts = new Map();
 

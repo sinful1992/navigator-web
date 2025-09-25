@@ -953,7 +953,26 @@ export function useCloudSync(): UseCloudSync {
     lastSyncedState.current = '';
     syncMetadata.current.lastSyncAt = '';
     syncMetadata.current.version = 0;
-  }, []);
+
+    // If user is authenticated, immediately fetch latest state
+    if (user && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("navigator_state")
+          .select("data, updated_at, version, checksum")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (!error && data) {
+          console.log('🔄 FORCE SYNC: Fetched latest state from server');
+          return data.data as AppState;
+        }
+      } catch (e) {
+        console.warn('Force sync failed:', e);
+      }
+    }
+    return null;
+  }, [user]);
 
   // ---- Cloud subscribe (pull) with better change detection ----
   const subscribeToData = useCallback(
