@@ -5,7 +5,6 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
 import type { AppState } from "./types";
 import { generateChecksum } from "./utils/checksum";
-import { coerceListVersion } from "./useAppState";
 
 // Initialize a new user with default subscription
 async function initializeNewUser(userId: string): Promise<void> {
@@ -96,8 +95,14 @@ export function mergeStatePreservingActiveIndex(
   current: AppState,
   incoming: AppState
 ): AppState {
-  const currentListVersion = coerceListVersion(current.currentListVersion);
-  const incomingListVersion = coerceListVersion(incoming.currentListVersion);
+  const currentListVersion =
+    typeof current.currentListVersion === "number"
+      ? current.currentListVersion
+      : 1;
+  const incomingListVersion =
+    typeof incoming.currentListVersion === "number"
+      ? incoming.currentListVersion
+      : 1;
 
   const ensureListVersion = (listVersion?: number) =>
     typeof listVersion === "number"
@@ -838,13 +843,19 @@ export function useCloudSync(): UseCloudSync {
           timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
           restoreTime: new Date(restoreTime).toISOString()
         });
+        const localVersion =
+          typeof localState.currentListVersion === "number"
+            ? localState.currentListVersion
+            : 1;
+        const serverVersion =
+          typeof serverState.currentListVersion === "number"
+            ? serverState.currentListVersion
+            : 1;
+
         return {
           ...localState,
           // Keep the higher version but don't bump it
-          currentListVersion: Math.max(
-            coerceListVersion(localState.currentListVersion),
-            coerceListVersion(serverState.currentListVersion)
-          )
+          currentListVersion: Math.max(localVersion, serverVersion)
         };
       } else {
         // Clear the flag after timeout
@@ -913,14 +924,22 @@ export function useCloudSync(): UseCloudSync {
     // For addresses, prefer the longer list but preserve list version logic
     if (serverState.addresses.length > localState.addresses.length) {
       resolved.addresses = serverState.addresses;
-      // Keep the higher version without bumping
-      resolved.currentListVersion = Math.max(
-        coerceListVersion(localState.currentListVersion),
-        coerceListVersion(serverState.currentListVersion)
-      );
+      const localVersion =
+        typeof localState.currentListVersion === "number"
+          ? localState.currentListVersion
+          : 1;
+      const serverVersion =
+        typeof serverState.currentListVersion === "number"
+          ? serverState.currentListVersion
+          : 1;
+      resolved.currentListVersion = Math.max(localVersion, serverVersion);
     } else {
       // Keep local version if local has more/equal addresses
-      resolved.currentListVersion = coerceListVersion(localState.currentListVersion);
+      const localVersion =
+        typeof localState.currentListVersion === "number"
+          ? localState.currentListVersion
+          : 1;
+      resolved.currentListVersion = localVersion;
     }
 
     resolved.activeIndex =

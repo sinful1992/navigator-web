@@ -1,8 +1,7 @@
-import { coerceListVersion } from "../useAppState";
-
 export function normalizeState(raw: any) {
   const r = raw ?? {};
-  const currentListVersion = coerceListVersion(r.currentListVersion);
+  const currentListVersion =
+    typeof r.currentListVersion === "number" ? r.currentListVersion : 1;
 
   return {
     ...r,
@@ -24,6 +23,7 @@ export function normalizeBackupData(raw: any) {
     arrangements: Array.isArray(r.arrangements) ? r.arrangements : [],
     // NOTE: daySessions deliberately excluded from backups - they're temporal state
     activeIndex: typeof r.activeIndex === "number" ? r.activeIndex : null,
-    currentListVersion: coerceListVersion(r.currentListVersion),
+    currentListVersion:
+      typeof r.currentListVersion === "number" ? r.currentListVersion : 1,
   };
 }

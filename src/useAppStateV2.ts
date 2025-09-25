@@ -13,7 +13,6 @@ import type {
 import type { Operation } from "./sync/operations";
 import { useUnifiedSync } from "./sync/migrationAdapter";
 import { logger } from "./utils/logger";
-import { coerceListVersion } from "./useAppState";
 
 const DEVICE_ID_KEY = "navigator_device_id";
 
@@ -114,7 +113,11 @@ export function useAppStateV2() {
         return;
       }
 
-      const newListVersion = coerceListVersion(state.currentListVersion) + 1;
+      const currentVersion =
+        typeof state.currentListVersion === "number"
+          ? state.currentListVersion
+          : 1;
+      const newListVersion = currentVersion + 1;
 
       await submitOperationOrUpdate(
         'ADDRESS_BULK_IMPORT',

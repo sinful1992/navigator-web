@@ -37,19 +37,6 @@ type OptimisticState = {
   pendingOperations: Set<string>;
 };
 
-export function coerceListVersion(value: unknown, fallback = 1): number {
-  if (typeof value === "number") {
-    return Number.isNaN(value) ? fallback : value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number.parseInt(value, 10);
-    return Number.isNaN(parsed) ? fallback : parsed;
-  }
-
-  return fallback;
-}
-
 const initial: AppState = {
   addresses: [],
   activeIndex: null,
@@ -124,7 +111,7 @@ function validateAppState(state: any): state is AppState {
     Array.isArray(state.daySessions) &&
     Array.isArray(state.arrangements) &&
     (state.activeIndex === null || typeof state.activeIndex === 'number') &&
-    (typeof state.currentListVersion === 'number' || typeof state.currentListVersion === 'string');
+    typeof state.currentListVersion === 'number';
 }
 
 function stampCompletionsWithVersion(
@@ -411,7 +398,10 @@ function applyOptimisticUpdates(
                   : result.addresses; // 🔧 FIX: Preserve existing if invalid
                   
                 if (update.data.bumpVersion) {
-                  const currentVersion = coerceListVersion(result.currentListVersion);
+                  const currentVersion =
+                    typeof result.currentListVersion === "number"
+                      ? result.currentListVersion
+                      : 1;
                   result.currentListVersion = currentVersion + 1;
                   // Only reset completions if not preserving them
                   if (!update.data.preserveCompletions) {
@@ -507,7 +497,10 @@ export function useAppState() {
             return;
           }
 
-          const version = coerceListVersion(saved.currentListVersion);
+          const version =
+            typeof saved.currentListVersion === "number"
+              ? saved.currentListVersion
+              : 1;
           const next: AppState = {
             addresses: saved.addresses.filter(validateAddressRow),
             activeIndex: (typeof saved.activeIndex === "number") ? saved.activeIndex : null,
@@ -693,7 +686,10 @@ export function useAppState() {
         ...s,
         addresses: validRows,
         activeIndex: null,
-        currentListVersion: coerceListVersion(s.currentListVersion) + 1,
+        currentListVersion:
+          (typeof s.currentListVersion === "number"
+            ? s.currentListVersion
+            : 1) + 1,
         completions: preserveCompletions ? s.completions : [],
       }));
 
@@ -1154,7 +1150,10 @@ export function useAppState() {
         throw new Error("Invalid backup file format");
       }
 
-      const version = coerceListVersion((obj as any).currentListVersion);
+      const version =
+        typeof (obj as any).currentListVersion === "number"
+          ? (obj as any).currentListVersion
+          : 1;
 
       // Mobile browser detection
       const isMobile = /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
