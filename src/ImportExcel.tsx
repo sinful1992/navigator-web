@@ -141,29 +141,28 @@ export function ImportExcel({ onImported }: Props) {
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+    <div style={{ display: "flex", alignItems: "stretch", gap: "0.75rem", flex: 1 }}>
       {/* File Input Button */}
-      <div className="file-input-wrapper">
-        <input 
-          ref={fileInputRef}
-          type="file" 
-          accept=".xlsx,.xls" 
-          onChange={onFile}
-          className="file-input"
-          id="excel-input"
-          disabled={loading}
-          style={{ display: 'none' }}
-        />
-        <LoadingButton
-          className="file-input-label btn btn-ghost"
-          onClick={() => fileInputRef.current?.click()}
-          isLoading={loading}
-          loadingText="Processing..."
-          disabled={loading}
-        >
-          📊 Load Excel
-        </LoadingButton>
-      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        onChange={onFile}
+        className="file-input"
+        id="excel-input"
+        disabled={loading}
+        style={{ display: 'none' }}
+      />
+      <LoadingButton
+        className="btn btn-primary"
+        onClick={() => fileInputRef.current?.click()}
+        isLoading={loading}
+        loadingText="Processing..."
+        disabled={loading}
+        style={{ whiteSpace: 'nowrap' }}
+      >
+        📊 Import Excel
+      </LoadingButton>
 
       {/* Drag & Drop Zone */}
       <div
@@ -171,25 +170,28 @@ export function ImportExcel({ onImported }: Props) {
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
         onDrop={handleDrop}
+        className="btn btn-ghost"
         style={{
-          padding: "0.75rem 1rem",
           border: `2px dashed ${dragActive ? 'var(--primary)' : 'var(--border-light)'}`,
-          borderRadius: "var(--radius)",
-          background: dragActive ? 'var(--primary-light)' : 'var(--bg-secondary)',
+          background: dragActive ? 'var(--primary-light)' : 'transparent',
           color: dragActive ? 'var(--primary-dark)' : 'var(--text-muted)',
-          fontSize: "0.8125rem",
+          fontSize: "0.875rem",
           textAlign: "center",
           cursor: "pointer",
           transition: "all var(--transition-fast)",
           userSelect: "none",
           minWidth: "140px",
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
         onClick={() => fileInputRef.current?.click()}
       >
         {dragActive ? (
-          <div>📥 Drop Excel file here</div>
+          <span>📥 Drop Excel file here</span>
         ) : (
-          <div>🖱️ Or drag & drop</div>
+          <span>🖱️ Or drag & drop Excel</span>
         )}
       </div>
     </div>

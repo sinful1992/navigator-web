@@ -1403,24 +1403,30 @@ function AuthedApp() {
               border: "1px solid var(--border-light)",
               boxShadow: "var(--shadow-sm)"
             }}>
-              <div className="btn-row">
+              <div className="btn-row" style={{ gap: '0.75rem', flexWrap: 'wrap', alignItems: 'stretch' }}>
                 <ImportExcel onImported={handleImportExcel} />
-                
+
                 <input
                   type="file"
                   accept="application/json"
                   onChange={onRestore}
                   className="file-input"
                   id="restore-input"
+                  style={{ display: 'none' }}
                 />
-                <label htmlFor="restore-input" className="file-input-label">
-                  📂 Restore (file)
-                </label>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => document.getElementById('restore-input')?.click()}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  📂 Restore Backup
+                </button>
 
                 <button
                   className="btn btn-ghost"
                   onClick={handleManualSync}
                   disabled={cloudSync.isSyncing}
+                  style={{ whiteSpace: 'nowrap' }}
                 >
                   {cloudSync.isSyncing ? "⟳ Syncing..." : "🔄 Sync Now"}
                 </button>
