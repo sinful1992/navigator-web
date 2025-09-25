@@ -1,1 +1,38 @@
-{"name":"Address Navigator (web)","short_name":"Navigator","start_url":".","display":"standalone","background_color":"#ffffff","theme_color":"#eaeaea","lang":"en","scope":"/navigator-web/","icons":[{"src":"icons/icon-192.png","sizes":"192x192","type":"image/png"},{"src":"icons/icon-512.png","sizes":"512x512","type":"image/png"},{"src":"icons/maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}]}
+{
+  "name": "Address Navigator – Field Collection App",
+  "short_name": "Navigator",
+  "id": "/navigator-web/",
+  "scope": "/navigator-web/",
+  "start_url": "/navigator-web/?utm_source=pwa",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0ea5e9",
+
+  "lang": "en-GB",
+  "dir": "ltr",
+  "orientation": "portrait-primary",
+  "description": "Professional address navigation and field collection management app with offline support.",
+  "categories": ["productivity", "utilities", "navigation"],
+
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+
+  "shortcuts": [
+    {
+      "name": "Start day",
+      "short_name": "Start day",
+      "url": "/navigator-web/?action=start-day",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "New arrangement",
+      "short_name": "New arrangement",
+      "url": "/navigator-web/?action=new-arrangement",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}
