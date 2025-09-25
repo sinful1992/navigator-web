@@ -12,6 +12,7 @@ export interface ToastMessage {
 class ToastManager {
   private toasts: ToastMessage[] = [];
   private listeners: Array<(toasts: ToastMessage[]) => void> = [];
+  private timeouts = new Map<string, NodeJS.Timeout>();
 
   show(message: string, type: ToastType = 'info', duration = 4000) {
     const toast: ToastMessage = {
@@ -27,20 +28,32 @@ class ToastManager {
 
     // Auto-remove after duration
     if (duration > 0) {
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         this.remove(toast.id);
       }, duration);
+      this.timeouts.set(toast.id, timeoutId);
     }
 
     return toast.id;
   }
 
   remove(id: string) {
+    // Clear timeout to prevent memory leak
+    const timeoutId = this.timeouts.get(id);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      this.timeouts.delete(id);
+    }
+
     this.toasts = this.toasts.filter(toast => toast.id !== id);
     this.notifyListeners();
   }
 
   clear() {
+    // Clear all pending timeouts
+    this.timeouts.forEach(timeoutId => clearTimeout(timeoutId));
+    this.timeouts.clear();
+
     this.toasts = [];
     this.notifyListeners();
   }

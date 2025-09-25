@@ -795,9 +795,8 @@ export function useAppState() {
         const timeDiff = now - existingTime;
 
         if (timeDiff < 30000) { // 30 seconds
-          const errorMessage = `Address "${address.address}" was already completed ${Math.round(timeDiff/1000)} seconds ago`;
-          showWarning(errorMessage);
-          throw new Error(errorMessage);
+          showWarning(`Address "${address.address}" was already completed ${Math.round(timeDiff/1000)} seconds ago`);
+          return Promise.reject(); // Exit early but maintain function signature
         }
 
         console.log(`🔄 RE-COMPLETING: Address "${address.address}" was previously completed ${new Date(existingCompletion.timestamp).toLocaleString()}, allowing new completion`);
