@@ -41,18 +41,26 @@ const AddressListComponent = function AddressList({
   const completions = Array.isArray(state.completions) ? state.completions : [];
   const activeIndex = state.activeIndex;
 
-  // Hide only items completed for the CURRENT list version
+  // Simple timestamp-based filtering: hide any address that has a completion
   const completedIdx = React.useMemo(() => {
     const set = new Set<number>();
-    for (const c of completions) {
-      const lv =
-        typeof c?.listVersion === "number"
-          ? c.listVersion
-          : state.currentListVersion;
-      if (lv === state.currentListVersion) set.add(Number(c.index));
-    }
+
+    addresses.forEach((addr, index) => {
+      if (!addr.address) return;
+
+      // Check if this address has any completion for current list version
+      const hasCompletion = completions.some(c =>
+        c.address === addr.address &&
+        (c.listVersion || state.currentListVersion) === state.currentListVersion
+      );
+
+      if (hasCompletion) {
+        set.add(index);
+      }
+    });
+
     return set;
-  }, [completions, state.currentListVersion]);
+  }, [completions, addresses, state.currentListVersion]);
 
   const lowerQ = (filterText ?? "").trim().toLowerCase();
   const visible = React.useMemo(

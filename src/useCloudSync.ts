@@ -840,11 +840,11 @@ export function useCloudSync(): UseCloudSync {
         });
         return {
           ...localState,
-          // Force bump version to ensure this state takes precedence
+          // Keep the higher version but don't bump it
           currentListVersion: Math.max(
             coerceListVersion(localState.currentListVersion),
             coerceListVersion(serverState.currentListVersion)
-          ) + 1
+          )
         };
       } else {
         // Clear the flag after timeout
@@ -854,17 +854,33 @@ export function useCloudSync(): UseCloudSync {
 
     const resolved: AppState = { ...localState };
 
-    // Merge completions (keep both, dedupe by timestamp + index + outcome)
-    // This is the most critical data - completions represent work done
+    // Simple completion merge for personal use: combine all completions, latest timestamp wins
     const allCompletions = [...localState.completions, ...serverState.completions];
-    const uniqueCompletions = allCompletions.filter((completion, index, arr) => {
-      // More comprehensive deduplication key including list version
-      const key = `${completion.timestamp}_${completion.index}_${completion.outcome}_${completion.listVersion || 1}`;
-      return arr.findIndex(c =>
-        `${c.timestamp}_${c.index}_${c.outcome}_${c.listVersion || 1}` === key
-      ) === index;
+
+    // Remove exact duplicates and keep latest for same address+version
+    const completionMap = new Map<string, any>();
+
+    allCompletions.forEach(completion => {
+      if (!completion.address || !completion.timestamp) return;
+
+      const key = `${completion.address}_v${completion.listVersion || 1}`;
+      const existing = completionMap.get(key);
+
+      if (!existing) {
+        completionMap.set(key, completion);
+        return;
+      }
+
+      // Keep the most recent one
+      const existingTime = new Date(existing.timestamp).getTime();
+      const currentTime = new Date(completion.timestamp).getTime();
+
+      if (!isNaN(currentTime) && (isNaN(existingTime) || currentTime > existingTime)) {
+        completionMap.set(key, completion);
+      }
     });
-    resolved.completions = uniqueCompletions.sort((a, b) =>
+
+    resolved.completions = Array.from(completionMap.values()).sort((a, b) =>
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
@@ -894,13 +910,17 @@ export function useCloudSync(): UseCloudSync {
     });
     resolved.daySessions = Array.from(sessionsMap.values());
 
-    // For addresses, prefer the longer list (assume it's more complete)
+    // For addresses, prefer the longer list but preserve list version logic
     if (serverState.addresses.length > localState.addresses.length) {
       resolved.addresses = serverState.addresses;
+      // Keep the higher version without bumping
       resolved.currentListVersion = Math.max(
         coerceListVersion(localState.currentListVersion),
         coerceListVersion(serverState.currentListVersion)
       );
+    } else {
+      // Keep local version if local has more/equal addresses
+      resolved.currentListVersion = coerceListVersion(localState.currentListVersion);
     }
 
     resolved.activeIndex =
@@ -981,10 +1001,28 @@ export function useCloudSync(): UseCloudSync {
               }
             }
 
-            // SIMPLIFIED: Apply cloud updates immediately - React subscription bug is fixed
+            console.log('🔄 FORCE UPDATE: Applying cloud state update from another device');
+
+            // FORCE UPDATE: Apply cloud updates immediately for personal use case
             if (typeof onChange === "function") {
               onChange(prev => {
                 const merged = mergeStatePreservingActiveIndex(prev, dataObj);
+
+                // Check if there are new completions and log them
+                const newCompletions = merged.completions.filter(comp =>
+                  !prev.completions.some(prevComp =>
+                    prevComp.timestamp === comp.timestamp &&
+                    prevComp.address === comp.address
+                  )
+                );
+
+                if (newCompletions.length > 0) {
+                  console.log(`📱 NEW COMPLETIONS DETECTED: ${newCompletions.length} new completion(s) from other device(s)`);
+                  newCompletions.forEach(comp => {
+                    console.log(`   • "${comp.address}" completed at ${new Date(comp.timestamp).toLocaleString()}`);
+                  });
+                }
+
                 lastSyncedState.current = JSON.stringify(merged);
                 return merged;
               });

@@ -764,12 +764,23 @@ export function useAppState() {
         throw new Error(`Address at index ${index} not found`);
       }
 
-      // Check if already completed
+      // Check if already completed (timestamp-based check)
       const existingCompletion = currentState.completions.find(
-        (c) => c.index === index && c.listVersion === currentState.currentListVersion
+        (c) => c.address === address.address && c.listVersion === currentState.currentListVersion
       );
+
       if (existingCompletion) {
-        throw new Error(`Address at index ${index} is already completed`);
+        // If there's an existing completion, check if it's recent (within last 30 seconds)
+        // This prevents rapid duplicate submissions but allows legitimate re-completion
+        const existingTime = new Date(existingCompletion.timestamp).getTime();
+        const now = Date.now();
+        const timeDiff = now - existingTime;
+
+        if (timeDiff < 30000) { // 30 seconds
+          throw new Error(`Address "${address.address}" was already completed ${Math.round(timeDiff/1000)} seconds ago`);
+        }
+
+        console.log(`🔄 RE-COMPLETING: Address "${address.address}" was previously completed ${new Date(existingCompletion.timestamp).toLocaleString()}, allowing new completion`);
       }
 
       const nowISO = new Date().toISOString();
@@ -796,40 +807,27 @@ export function useAppState() {
         pendingCompletionsRef.current.add(index);
         setPendingCompletions(new Set(pendingCompletionsRef.current));
 
-        // 🔧 CRITICAL FIX: Track recent completion to protect against sync rollbacks
+        // Apply all changes synchronously to avoid race conditions
         const completionKey = `${index}_${outcome}_${currentState.currentListVersion}`;
+
+        // Track recent completion (cleanup happens in setState handler)
         recentCompletionsRef.current.set(completionKey, {
           timestamp: Date.now(),
           completion
         });
 
-        // Clean up old recent completions (older than 30 seconds)
-        const cutoffTime = Date.now() - 30000;
-        for (const [key, value] of recentCompletionsRef.current.entries()) {
-          if (value.timestamp < cutoffTime) {
-            recentCompletionsRef.current.delete(key);
-          }
-        }
-
-        // Apply optimistic update first
+        // Apply both optimistic and base state updates in single transaction
         addOptimisticUpdate("create", "completion", completion, operationId);
 
-        // Then update base state atomically
-        await new Promise<void>((resolve) => {
-          setBaseState((s) => {
-            const next: AppState = {
-              ...s,
-              completions: [completion, ...s.completions],
-              activeIndex: s.activeIndex === index ? null : s.activeIndex,
-            };
-            resolve();
-            return next;
-          });
-        });
+        setBaseState((s) => ({
+          ...s,
+          completions: [completion, ...s.completions],
+          activeIndex: s.activeIndex === index ? null : s.activeIndex,
+        }));
 
         return operationId;
       } finally {
-        // Always clear pending state
+        // Always clear pending state, even if above operations fail
         pendingCompletionsRef.current.delete(index);
         setPendingCompletions(new Set(pendingCompletionsRef.current));
       }
@@ -1367,11 +1365,19 @@ export function useAppState() {
         const protectedCompletions = [...nextState.completions];
         let hasProtectedCompletions = false;
 
+        // Clean up old recent completions first to avoid memory leaks
+        const cutoffTime = Date.now() - 30000;
+        for (const [key, value] of recentCompletionsRef.current.entries()) {
+          if (value.timestamp < cutoffTime) {
+            recentCompletionsRef.current.delete(key);
+          }
+        }
+
         // Add any recent completions that might be missing from cloud data
         for (const [_key, value] of recentCompletionsRef.current.entries()) {
           const { completion, timestamp } = value;
 
-          // Only protect completions from the last 30 seconds
+          // Only protect completions from the last 30 seconds (double check after cleanup)
           if (Date.now() - timestamp < 30000) {
             const existsInIncoming = protectedCompletions.some(c =>
               c.index === completion.index &&
