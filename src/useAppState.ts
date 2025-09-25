@@ -132,11 +132,13 @@ function stampCompletionsWithVersion(
   version: number
 ): Completion[] {
   const src = Array.isArray(completions) ? completions : [];
+  const fallbackVersion = coerceListVersion(version);
+
   return src
     .filter(validateCompletion)
     .map((c: any) => ({
       ...c,
-      listVersion: typeof c?.listVersion === "number" ? c.listVersion : version,
+      listVersion: coerceListVersion(c?.listVersion, fallbackVersion),
     }));
 }
 
@@ -1388,11 +1390,47 @@ export function useAppState() {
           }
         }
 
-        const finalState = hasProtectedCompletions
-          ? { ...nextState, completions: protectedCompletions.sort((a, b) =>
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-            )}
+        let finalState = hasProtectedCompletions
+          ? {
+              ...nextState,
+              completions: protectedCompletions.sort(
+                (a, b) =>
+                  new Date(b.timestamp).getTime() -
+                  new Date(a.timestamp).getTime()
+              ),
+            }
           : nextState;
+
+        // 🔧 Ensure list version stays numeric across all state updates
+        const normalizedListVersion = coerceListVersion(
+          finalState.currentListVersion,
+          coerceListVersion(currentState.currentListVersion)
+        );
+
+        const completionsArray = Array.isArray(finalState.completions)
+          ? finalState.completions
+          : [];
+
+        const needsCompletionNormalization = completionsArray.some(
+          (completion) => typeof completion?.listVersion !== "number"
+        );
+
+        if (
+          normalizedListVersion !== finalState.currentListVersion ||
+          needsCompletionNormalization
+        ) {
+          finalState = {
+            ...finalState,
+            currentListVersion: normalizedListVersion,
+            completions: completionsArray.map((completion) => ({
+              ...completion,
+              listVersion: coerceListVersion(
+                completion?.listVersion,
+                normalizedListVersion
+              ),
+            })),
+          };
+        }
 
         const conflicts = new Map();
 
