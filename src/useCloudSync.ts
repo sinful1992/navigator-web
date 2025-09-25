@@ -3,9 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
-import type { AppState } from "./types";
+import type { AppState, CompletionLedgerEntry } from "./types";
 import { generateChecksum } from "./utils/checksum";
-import { coerceListVersion } from "./useAppState";
+import { applyCompletionLedger, coerceListVersion } from "./useAppState";
 
 // Initialize a new user with default subscription
 async function initializeNewUser(userId: string): Promise<void> {
@@ -96,13 +96,23 @@ export function mergeStatePreservingActiveIndex(
   current: AppState,
   incoming: AppState
 ): AppState {
-  const currentListVersion = coerceListVersion(current.currentListVersion);
-  const incomingListVersion = coerceListVersion(incoming.currentListVersion);
+  const normalizedCurrent = applyCompletionLedger(current);
+  const normalizedIncoming = applyCompletionLedger(incoming);
 
-  const ensureListVersion = (listVersion?: number) =>
-    typeof listVersion === "number"
-      ? listVersion
-      : Math.max(currentListVersion, incomingListVersion);
+  const currentListVersion = coerceListVersion(
+    normalizedCurrent.currentListVersion
+  );
+  const incomingListVersion = coerceListVersion(
+    normalizedIncoming.currentListVersion
+  );
+  const fallbackListVersion = Math.max(
+    currentListVersion,
+    incomingListVersion,
+    1
+  );
+
+  const ensureListVersion = (listVersion?: number | string) =>
+    coerceListVersion(listVersion, fallbackListVersion);
 
   const mergedCompletionMap = new Map<string, AppState["completions"][number]>();
   const pushCompletion = (
@@ -148,19 +158,19 @@ export function mergeStatePreservingActiveIndex(
     });
   };
 
-  incoming.completions?.forEach(pushCompletion);
-  current.completions?.forEach(pushCompletion);
+  normalizedIncoming.completions?.forEach(pushCompletion);
+  normalizedCurrent.completions?.forEach(pushCompletion);
 
   const mergedCompletions = Array.from(mergedCompletionMap.values()).sort(
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
 
   const selectAddresses = () => {
-    const currentAddresses = Array.isArray(current.addresses)
-      ? current.addresses
+    const currentAddresses = Array.isArray(normalizedCurrent.addresses)
+      ? normalizedCurrent.addresses
       : [];
-    const incomingAddresses = Array.isArray(incoming.addresses)
-      ? incoming.addresses
+    const incomingAddresses = Array.isArray(normalizedIncoming.addresses)
+      ? normalizedIncoming.addresses
       : [];
 
     const hasMeaningfulAddresses = (addresses: AppState["addresses"]) =>
@@ -241,8 +251,8 @@ export function mergeStatePreservingActiveIndex(
     }
   };
 
-  current.arrangements?.forEach(pushArrangement);
-  incoming.arrangements?.forEach(pushArrangement);
+  normalizedCurrent.arrangements?.forEach(pushArrangement);
+  normalizedIncoming.arrangements?.forEach(pushArrangement);
 
   const mergedDaySessionsMap = new Map<string, AppState["daySessions"][number]>();
   const pushDaySession = (
@@ -272,22 +282,71 @@ export function mergeStatePreservingActiveIndex(
     }
   };
 
-  current.daySessions?.forEach(pushDaySession);
-  incoming.daySessions?.forEach(pushDaySession);
+  normalizedCurrent.daySessions?.forEach(pushDaySession);
+  normalizedIncoming.daySessions?.forEach(pushDaySession);
 
   const mergedDaySessions = Array.from(mergedDaySessionsMap.values());
 
   const mergedArrangements = Array.from(mergedArrangementsMap.values());
 
-  return {
-    ...incoming,
+  const finalListVersion = Math.max(
+    resolvedListVersion,
+    currentListVersion,
+    incomingListVersion,
+    1
+  );
+
+  const normalizedCompletions = mergedCompletions.map((completion) => ({
+    ...completion,
+    listVersion: coerceListVersion(
+      completion?.listVersion,
+      finalListVersion
+    ),
+  }));
+
+  const ledgerKey = (entry: CompletionLedgerEntry) =>
+    `${entry.listVersion}:${entry.index}`;
+
+  const mergedLedgerMap = new Map<string, CompletionLedgerEntry>();
+  const pushLedger = (entry: CompletionLedgerEntry | undefined) => {
+    if (!entry) return;
+    const key = ledgerKey(entry);
+    const existing = mergedLedgerMap.get(key);
+    if (!existing) {
+      mergedLedgerMap.set(key, entry);
+      return;
+    }
+
+    if (
+      Date.parse(entry.eventTimestamp) >
+      Date.parse(existing.eventTimestamp)
+    ) {
+      mergedLedgerMap.set(key, entry);
+    }
+  };
+
+  normalizedIncoming.completionLedger?.forEach(pushLedger);
+  normalizedCurrent.completionLedger?.forEach(pushLedger);
+
+  const mergedLedger = Array.from(mergedLedgerMap.values()).sort(
+    (a, b) =>
+      new Date(b.eventTimestamp).getTime() -
+      new Date(a.eventTimestamp).getTime()
+  );
+
+  return applyCompletionLedger({
+    ...normalizedIncoming,
     addresses: mergedAddresses,
-    completions: mergedCompletions,
+    completions: normalizedCompletions,
+    completionLedger: mergedLedger,
     arrangements: mergedArrangements,
     daySessions: mergedDaySessions,
-    currentListVersion: resolvedListVersion,
-    activeIndex: incoming.activeIndex ?? current.activeIndex ?? null,
-  };
+    currentListVersion: finalListVersion,
+    activeIndex:
+      normalizedIncoming.activeIndex ??
+      normalizedCurrent.activeIndex ??
+      null,
+  });
 }
 
 export function useCloudSync(): UseCloudSync {
@@ -852,11 +911,26 @@ export function useCloudSync(): UseCloudSync {
       }
     }
 
+    const localListVersion = coerceListVersion(localState.currentListVersion);
+    const serverListVersion = coerceListVersion(serverState.currentListVersion);
+    const fallbackListVersion = Math.max(
+      localListVersion,
+      serverListVersion,
+      1
+    );
+
     const resolved: AppState = { ...localState };
 
     // Merge completions (keep both, dedupe by timestamp + index + outcome)
     // This is the most critical data - completions represent work done
-    const allCompletions = [...localState.completions, ...serverState.completions];
+    const allCompletions = [...localState.completions, ...serverState.completions]
+      .map((completion) => ({
+        ...completion,
+        listVersion: coerceListVersion(
+          (completion as any)?.listVersion,
+          fallbackListVersion
+        ),
+      }));
     const uniqueCompletions = allCompletions.filter((completion, index, arr) => {
       // More comprehensive deduplication key including list version
       const key = `${completion.timestamp}_${completion.index}_${completion.outcome}_${completion.listVersion || 1}`;
@@ -864,9 +938,18 @@ export function useCloudSync(): UseCloudSync {
         `${c.timestamp}_${c.index}_${c.outcome}_${c.listVersion || 1}` === key
       ) === index;
     });
-    resolved.completions = uniqueCompletions.sort((a, b) =>
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+    resolved.completions = uniqueCompletions
+      .map((completion) => ({
+        ...completion,
+        listVersion: coerceListVersion(
+          (completion as any)?.listVersion,
+          fallbackListVersion
+        ),
+      }))
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
 
     console.log(`Merged completions: local=${localState.completions.length}, server=${serverState.completions.length}, resolved=${resolved.completions.length}`);
 

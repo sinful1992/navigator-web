@@ -20,6 +20,18 @@ export type Completion = {
   arrangementId?: string;
 };
 
+export type CompletionLedgerStatus = "completed" | "undone";
+
+export type CompletionLedgerEntry = {
+  index: number;
+  listVersion: number;
+  /** When this status change occurred. */
+  eventTimestamp: string;
+  status: CompletionLedgerStatus;
+  /** Completion payload when status === "completed". */
+  completion?: Completion;
+};
+
 export type DaySession = {
   date: string;             // "YYYY-MM-DD"
   start: string;            // ISO string
@@ -178,6 +190,8 @@ export type AppState = {
   addresses: AddressRow[];
   activeIndex: number | null;
   completions: Completion[];
+  /** Deterministic completion ledger used for conflict resolution across devices. */
+  completionLedger?: CompletionLedgerEntry[];
   daySessions: DaySession[];
   arrangements: Arrangement[];
   /** Increments whenever you import a new Excel list. */

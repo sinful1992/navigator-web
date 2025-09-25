@@ -6,6 +6,8 @@ import type {
   AddressRow,
   AppState,
   Completion,
+  CompletionLedgerEntry,
+  CompletionLedgerStatus,
   Outcome,
   DaySession,
   Arrangement,
@@ -54,6 +56,7 @@ const initial: AppState = {
   addresses: [],
   activeIndex: null,
   completions: [],
+  completionLedger: [],
   daySessions: [],
   arrangements: [],
   currentListVersion: 1,
@@ -91,8 +94,16 @@ function safeDeepCopy<T>(obj: T): T {
         logger.error('Deep copy corrupted completions array, falling back to original');
         parsedState.completions = appState.completions;
       }
+
+      if (
+        Array.isArray((appState as any).completionLedger) &&
+        !Array.isArray((parsedState as any).completionLedger)
+      ) {
+        logger.error('Deep copy corrupted completion ledger, falling back to original');
+        (parsedState as any).completionLedger = (appState as any).completionLedger;
+      }
     }
-    
+
     return parsed;
   } catch (error) {
     logger.error('Deep copy failed, returning original object:', error);
@@ -121,6 +132,7 @@ function validateAppState(state: any): state is AppState {
   return state &&
     Array.isArray(state.addresses) &&
     Array.isArray(state.completions) &&
+    (state.completionLedger === undefined || Array.isArray(state.completionLedger)) &&
     Array.isArray(state.daySessions) &&
     Array.isArray(state.arrangements) &&
     (state.activeIndex === null || typeof state.activeIndex === 'number') &&
@@ -132,12 +144,212 @@ function stampCompletionsWithVersion(
   version: number
 ): Completion[] {
   const src = Array.isArray(completions) ? completions : [];
+  const fallbackVersion = coerceListVersion(version);
+
   return src
     .filter(validateCompletion)
     .map((c: any) => ({
       ...c,
-      listVersion: typeof c?.listVersion === "number" ? c.listVersion : version,
+      listVersion: coerceListVersion(c?.listVersion, fallbackVersion),
     }));
+}
+
+const completionLedgerKey = (listVersion: number, index: number) =>
+  `${listVersion}:${index}`;
+
+function parseEventTimestamp(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const time = Date.parse(value);
+  if (Number.isNaN(time)) {
+    return null;
+  }
+
+  return new Date(time).toISOString();
+}
+
+function sanitizeCompletionLedger(
+  rawLedger: any,
+  completions: Completion[],
+  fallbackListVersion: number
+): CompletionLedgerEntry[] {
+  const entries = Array.isArray(rawLedger) ? rawLedger : [];
+  const ledgerMap = new Map<string, CompletionLedgerEntry>();
+  const fallbackVersion = coerceListVersion(fallbackListVersion);
+
+  const upsert = (entry: CompletionLedgerEntry) => {
+    const key = completionLedgerKey(entry.listVersion, entry.index);
+    const existing = ledgerMap.get(key);
+    if (!existing) {
+      ledgerMap.set(key, entry);
+      return;
+    }
+
+    const existingTime = Date.parse(existing.eventTimestamp);
+    const candidateTime = Date.parse(entry.eventTimestamp);
+
+    if (candidateTime > existingTime) {
+      ledgerMap.set(key, entry);
+    }
+  };
+
+  for (const value of entries) {
+    if (!value || typeof value !== "object") continue;
+
+    const listVersion = coerceListVersion(
+      (value as any).listVersion,
+      fallbackVersion
+    );
+    const index = Number((value as any).index);
+    if (!Number.isFinite(index)) continue;
+
+    const status = (value as any).status as CompletionLedgerStatus;
+    if (status !== "completed" && status !== "undone") continue;
+
+    const eventTimestamp = parseEventTimestamp((value as any).eventTimestamp);
+    if (!eventTimestamp) continue;
+
+    let completion: Completion | undefined;
+
+    if (status === "completed") {
+      const payload = (value as any).completion ?? value;
+      if (
+        payload &&
+        typeof payload === "object" &&
+        typeof payload.index === "number" &&
+        typeof payload.address === "string" &&
+        typeof payload.outcome === "string" &&
+        typeof payload.timestamp === "string"
+      ) {
+        completion = {
+          index,
+          address: payload.address,
+          lat: payload.lat ?? null,
+          lng: payload.lng ?? null,
+          outcome: payload.outcome,
+          amount: payload.amount,
+          timestamp: new Date(payload.timestamp).toISOString(),
+          listVersion,
+          arrangementId: payload.arrangementId,
+        };
+      }
+    } else if ((value as any).completion) {
+      const payload = (value as any).completion;
+      if (
+        payload &&
+        typeof payload === "object" &&
+        typeof payload.address === "string"
+      ) {
+        completion = {
+          index,
+          address: payload.address,
+          lat: payload.lat ?? null,
+          lng: payload.lng ?? null,
+          outcome: payload.outcome ?? "Done",
+          amount: payload.amount,
+          timestamp: new Date(payload.timestamp ?? eventTimestamp).toISOString(),
+          listVersion,
+          arrangementId: payload.arrangementId,
+        };
+      }
+    }
+
+    upsert({
+      index,
+      listVersion,
+      status,
+      eventTimestamp,
+      completion,
+    });
+  }
+
+  for (const completion of completions) {
+    const listVersion = coerceListVersion(
+      completion.listVersion,
+      fallbackVersion
+    );
+    const eventTimestamp = new Date(completion.timestamp).toISOString();
+    upsert({
+      index: completion.index,
+      listVersion,
+      status: "completed",
+      eventTimestamp,
+      completion: {
+        ...completion,
+        listVersion,
+        timestamp: eventTimestamp,
+      },
+    });
+  }
+
+  return Array.from(ledgerMap.values()).sort(
+    (a, b) =>
+      new Date(b.eventTimestamp).getTime() -
+      new Date(a.eventTimestamp).getTime()
+  );
+}
+
+function deriveCompletionsFromLedger(
+  ledger: CompletionLedgerEntry[]
+): Completion[] {
+  return ledger
+    .filter((entry) => entry.status === "completed" && entry.completion)
+    .map((entry) => ({
+      ...entry.completion!,
+      listVersion: coerceListVersion(
+        entry.completion?.listVersion,
+        entry.listVersion
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+}
+
+export function applyCompletionLedger(state: AppState): AppState {
+  const listVersion = coerceListVersion(state.currentListVersion);
+  const ledger = sanitizeCompletionLedger(
+    state.completionLedger,
+    Array.isArray(state.completions) ? state.completions : [],
+    listVersion
+  );
+
+  const completions = deriveCompletionsFromLedger(ledger);
+
+  return {
+    ...state,
+    completionLedger: ledger,
+    completions,
+  };
+}
+
+function upsertCompletionLedgerEntry(
+  ledger: CompletionLedgerEntry[] | undefined,
+  entry: CompletionLedgerEntry
+): CompletionLedgerEntry[] {
+  const map = new Map<string, CompletionLedgerEntry>();
+  const existing = Array.isArray(ledger) ? ledger : [];
+  for (const value of existing) {
+    map.set(
+      completionLedgerKey(value.listVersion, value.index),
+      value
+    );
+  }
+
+  const key = completionLedgerKey(entry.listVersion, entry.index);
+  const current = map.get(key);
+  if (!current || Date.parse(entry.eventTimestamp) >= Date.parse(current.eventTimestamp)) {
+    map.set(key, entry);
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) =>
+      new Date(b.eventTimestamp).getTime() -
+      new Date(a.eventTimestamp).getTime()
+  );
 }
 
 // Generate a deterministic ID for operations
@@ -512,6 +724,9 @@ export function useAppState() {
             addresses: saved.addresses.filter(validateAddressRow),
             activeIndex: (typeof saved.activeIndex === "number") ? saved.activeIndex : null,
             completions: stampCompletionsWithVersion(saved.completions, version),
+            completionLedger: Array.isArray(saved.completionLedger)
+              ? saved.completionLedger
+              : undefined,
             daySessions: Array.isArray(saved.daySessions) ? saved.daySessions : [],
             arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
             currentListVersion: version,
@@ -519,7 +734,7 @@ export function useAppState() {
             _schemaVersion: CURRENT_SCHEMA_VERSION,
           };
 
-          setBaseState(next);
+          setBaseState(applyCompletionLedger(next));
         } else {
           // No saved data, use initial state with current schema version
           setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
@@ -689,13 +904,26 @@ export function useAppState() {
       );
 
       // Apply to base state
-      setBaseState((s) => ({
-        ...s,
-        addresses: validRows,
-        activeIndex: null,
-        currentListVersion: coerceListVersion(s.currentListVersion) + 1,
-        completions: preserveCompletions ? s.completions : [],
-      }));
+      setBaseState((s) => {
+        const nextListVersion = coerceListVersion(s.currentListVersion) + 1;
+        const existingLedger = Array.isArray(s.completionLedger)
+          ? s.completionLedger
+          : [];
+        const nextLedger = preserveCompletions
+          ? existingLedger
+          : [];
+
+        return {
+          ...s,
+          addresses: validRows,
+          activeIndex: null,
+          currentListVersion: nextListVersion,
+          completionLedger: nextLedger,
+          completions: preserveCompletions
+            ? deriveCompletionsFromLedger(nextLedger)
+            : [],
+        };
+      });
 
       // Confirm immediately for local operations
       confirmOptimisticUpdate(operationId);
@@ -817,9 +1045,23 @@ export function useAppState() {
         // Then update base state atomically
         await new Promise<void>((resolve) => {
           setBaseState((s) => {
+            const ledgerEntry: CompletionLedgerEntry = {
+              index,
+              listVersion: currentState.currentListVersion,
+              status: "completed",
+              eventTimestamp: nowISO,
+              completion,
+            };
+
+            const nextLedger = upsertCompletionLedgerEntry(
+              s.completionLedger,
+              ledgerEntry
+            );
+
             const next: AppState = {
               ...s,
-              completions: [completion, ...s.completions],
+              completionLedger: nextLedger,
+              completions: deriveCompletionsFromLedger(nextLedger),
               activeIndex: s.activeIndex === index ? null : s.activeIndex,
             };
             resolve();
@@ -872,11 +1114,33 @@ export function useAppState() {
 
           arr.splice(mostRecentPos, 1);
 
+          const ledgerEntry: CompletionLedgerEntry = {
+            index,
+            listVersion: completion.listVersion ?? s.currentListVersion,
+            status: "undone",
+            eventTimestamp: new Date().toISOString(),
+            completion,
+          };
+
+          const nextLedger = upsertCompletionLedgerEntry(
+            s.completionLedger,
+            ledgerEntry
+          );
+
           // Confirm immediately for local operations
           setTimeout(() => confirmOptimisticUpdate(operationId), 0);
+          return {
+            ...s,
+            completionLedger: nextLedger,
+            completions: deriveCompletionsFromLedger(nextLedger),
+          };
         }
 
-        return { ...s, completions: arr };
+        return {
+          ...s,
+          completions: arr,
+          completionLedger: s.completionLedger,
+        };
       });
     },
     [addOptimisticUpdate, confirmOptimisticUpdate]
@@ -1133,6 +1397,7 @@ export function useAppState() {
     const snap: AppState = {
       addresses: baseState.addresses,
       completions: baseState.completions,
+      completionLedger: baseState.completionLedger,
       activeIndex: baseState.activeIndex,
       daySessions: baseState.daySessions,
       arrangements: baseState.arrangements,
@@ -1178,6 +1443,9 @@ export function useAppState() {
       const restoredState: AppState = {
         addresses: obj.addresses,
         completions: stampCompletionsWithVersion(obj.completions, version),
+        completionLedger: Array.isArray((obj as any).completionLedger)
+          ? (obj as any).completionLedger
+          : undefined,
         activeIndex: obj.activeIndex ?? null,
         daySessions: obj.daySessions ?? [],
         arrangements: obj.arrangements ?? [],
@@ -1260,11 +1528,23 @@ export function useAppState() {
             activeIndex: restoredState.activeIndex ?? currentState.activeIndex,
           };
 
-          return merged;
+          const combinedLedger = [
+            ...(Array.isArray(currentState.completionLedger)
+              ? currentState.completionLedger
+              : []),
+            ...(Array.isArray(restoredState.completionLedger)
+              ? restoredState.completionLedger
+              : []),
+          ];
+
+          return applyCompletionLedger({
+            ...merged,
+            completionLedger: combinedLedger,
+          });
         });
       } else {
         // Complete replacement
-        setBaseState(restoredState);
+        setBaseState(applyCompletionLedger(restoredState));
       }
 
       // Clear optimistic updates after restore
@@ -1272,7 +1552,8 @@ export function useAppState() {
 
       // Persist immediately with proper error handling
       try {
-        const stateToSave = { ...restoredState, _schemaVersion: CURRENT_SCHEMA_VERSION };
+        const persistedState = applyCompletionLedger(restoredState);
+        const stateToSave = { ...persistedState, _schemaVersion: CURRENT_SCHEMA_VERSION };
 
         console.log('💾 PERSISTING RESTORED STATE:', {
           addressCount: stateToSave.addresses.length,
@@ -1388,11 +1669,56 @@ export function useAppState() {
           }
         }
 
-        const finalState = hasProtectedCompletions
-          ? { ...nextState, completions: protectedCompletions.sort((a, b) =>
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-            )}
+        let finalState = hasProtectedCompletions
+          ? {
+              ...nextState,
+              completions: protectedCompletions.sort(
+                (a, b) =>
+                  new Date(b.timestamp).getTime() -
+                  new Date(a.timestamp).getTime()
+              ),
+            }
           : nextState;
+
+        // 🔧 Ensure list version stays numeric across all state updates
+        const incomingListVersion = coerceListVersion(
+          finalState.currentListVersion,
+          coerceListVersion(currentState.currentListVersion)
+        );
+        const previousListVersion = coerceListVersion(
+          currentState.currentListVersion,
+          incomingListVersion
+        );
+        const normalizedListVersion = Math.max(
+          incomingListVersion,
+          previousListVersion,
+          1
+        );
+
+        const completionsArray = Array.isArray(finalState.completions)
+          ? finalState.completions
+          : [];
+
+        const needsCompletionNormalization = completionsArray.some(
+          (completion) => typeof completion?.listVersion !== "number"
+        );
+
+        if (
+          normalizedListVersion !== finalState.currentListVersion ||
+          needsCompletionNormalization
+        ) {
+          finalState = {
+            ...finalState,
+            currentListVersion: normalizedListVersion,
+            completions: completionsArray.map((completion) => ({
+              ...completion,
+              listVersion: coerceListVersion(
+                completion?.listVersion,
+                normalizedListVersion
+              ),
+            })),
+          };
+        }
 
         const conflicts = new Map();
 
@@ -1444,7 +1770,19 @@ export function useAppState() {
           setConflicts(conflicts);
         }
 
-        return finalState;
+        const combinedLedger = [
+          ...(Array.isArray(currentState.completionLedger)
+            ? currentState.completionLedger
+            : []),
+          ...(Array.isArray(finalState.completionLedger)
+            ? finalState.completionLedger
+            : []),
+        ];
+
+        return applyCompletionLedger({
+          ...finalState,
+          completionLedger: combinedLedger,
+        });
       });
 
       // Clear optimistic updates when state is set from external source
