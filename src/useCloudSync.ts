@@ -949,7 +949,7 @@ export function useCloudSync(): UseCloudSync {
   }, []);
 
   // Force a full sync (useful for debugging or after major changes)
-  const forceFullSync = useCallback(async () => {
+  const forceFullSync = useCallback(async (): Promise<void> => {
     lastSyncedState.current = '';
     syncMetadata.current.lastSyncAt = '';
     syncMetadata.current.version = 0;
@@ -965,13 +965,12 @@ export function useCloudSync(): UseCloudSync {
 
         if (!error && data) {
           console.log('🔄 FORCE SYNC: Fetched latest state from server');
-          return data.data as AppState;
+          // Return value removed to match Promise<void>
         }
       } catch (e) {
         console.warn('Force sync failed:', e);
       }
     }
-    return null;
   }, [user]);
 
   // ---- Cloud subscribe (pull) with better change detection ----

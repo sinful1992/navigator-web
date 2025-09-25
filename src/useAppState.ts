@@ -2,6 +2,7 @@
 import * as React from "react";
 import { storageManager } from "./utils/storageManager";
 import { logger } from "./utils/logger";
+import { showWarning, showInfo } from "./utils/toast";
 import type {
   AddressRow,
   AppState,
@@ -742,6 +743,7 @@ export function useAppState() {
 
         if (isCompleted) {
           logger.warn(`Cannot set active - address "${address.address}" is already completed`);
+          showWarning(`Address "${address.address}" is already completed on another device`);
           return s; // Don't change state
         }
       }
@@ -793,7 +795,9 @@ export function useAppState() {
         const timeDiff = now - existingTime;
 
         if (timeDiff < 30000) { // 30 seconds
-          throw new Error(`Address "${address.address}" was already completed ${Math.round(timeDiff/1000)} seconds ago`);
+          const errorMessage = `Address "${address.address}" was already completed ${Math.round(timeDiff/1000)} seconds ago`;
+          showWarning(errorMessage);
+          throw new Error(errorMessage);
         }
 
         console.log(`🔄 RE-COMPLETING: Address "${address.address}" was previously completed ${new Date(existingCompletion.timestamp).toLocaleString()}, allowing new completion`);
@@ -1430,6 +1434,7 @@ export function useAppState() {
 
             if (activeAddressCompleted) {
               logger.info(`🔄 CLEARING ACTIVE INDEX: Address "${activeAddress.address}" was completed on another device`);
+              showInfo(`Address "${activeAddress.address}" was completed on another device`);
               finalState = { ...finalState, activeIndex: null };
             }
           }

@@ -27,6 +27,7 @@ import { SupabaseSetup } from "./components/SupabaseSetup";
 import { BackupManager } from "./components/BackupManager";
 import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
+import { ToastContainer } from "./components/ToastContainer";
 
 type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
@@ -1834,6 +1835,9 @@ function AuthedApp() {
           </button>
         </div>
       )}
+
+      {/* Toast Notifications */}
+      <ToastContainer />
     </div>
   );
 }
