@@ -899,20 +899,8 @@ function AuthedApp() {
     [complete, backupState]
   );
 
-  const ensureDayStarted = React.useCallback(() => {
-    // CRITICAL FIX: Add safety guard to prevent aggressive auto-start after cloud operations
-    if (cloudSync.isSyncing) {
-      logger.info('Skipping auto day start - sync in progress');
-      return;
-    }
-
-    const today = new Date().toISOString().slice(0, 10);
-    const hasToday = daySessions.some((d) => d.date === today);
-    if (!hasToday) {
-      logger.info('Auto-starting day session for today');
-      startDay();
-    }
-  }, [daySessions, startDay, cloudSync.isSyncing]);
+  // REMOVED: Auto day start functionality to prevent random day starts
+  // Users can manually start/edit day times as needed
 
 
   // Restore the missing edit functions for day sessions
@@ -1526,7 +1514,6 @@ function AuthedApp() {
                 onComplete={handleComplete}
                 onAddArrangement={addArrangement}
                 filterText={search}
-                ensureDayStarted={ensureDayStarted}
               />
 
               {/* Bottom Stats */}

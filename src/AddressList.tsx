@@ -10,7 +10,6 @@ type Props = {
   onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void;
   onAddArrangement?: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
   filterText: string;
-  ensureDayStarted: () => void;
 };
 
 function makeMapsHref(row: AddressRow) {
@@ -35,7 +34,6 @@ const AddressListComponent = function AddressList({
   onComplete,
   onAddArrangement,
   filterText,
-  ensureDayStarted,
 }: Props) {
   const addresses = Array.isArray(state.addresses) ? state.addresses : [];
   const completions = Array.isArray(state.completions) ? state.completions : [];
@@ -185,7 +183,7 @@ const AddressListComponent = function AddressList({
                   target="_blank"
                   rel="noreferrer"
                   title="Open in Google Maps"
-                  onClick={() => ensureDayStarted()}
+                  onClick={() => {/* Navigation no longer auto-starts day */}}
                 >
                   <span>🧭</span>
                   <span>Navigate</span>
