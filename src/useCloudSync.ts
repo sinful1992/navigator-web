@@ -556,7 +556,7 @@ export function useCloudSync(): UseCloudSync {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [processSyncQueue, syncData]);
+  }, [processSyncQueue]);
 
   // ---- Auth helpers ----
   const signIn = useCallback(
@@ -826,7 +826,7 @@ export function useCloudSync(): UseCloudSync {
         const finalChecksum = generateChecksum(finalState);
         
         // Update server state with enhanced error handling
-        const { data, error: err } = await supabase
+        const { error: err } = await supabase
           .from("navigator_state")
           .upsert({
             user_id: user.id,
@@ -908,7 +908,7 @@ export function useCloudSync(): UseCloudSync {
           // Store the failed sync state with timestamp
           const offlineKey = `navigator_offline_state_${Date.now()}`;
           const offlineData = {
-            state: finalState,
+            state: state,
             timestamp: new Date().toISOString(),
             reason: 'network_failure',
             error: e?.message || String(e)
