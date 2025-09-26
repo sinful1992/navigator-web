@@ -72,3 +72,4 @@ VITE_SUPABASE_ANON_KEY=your_anon_key
 ```
 
 The app gracefully handles missing environment variables with console warnings.
+- this project is published on git pages , not localy

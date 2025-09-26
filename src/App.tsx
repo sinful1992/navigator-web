@@ -5,7 +5,7 @@ import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
 import { normalizeState, normalizeBackupData } from "./utils/normalizeState";
 import { SmartUserDetection } from "./utils/userDetection";
-import { useCloudSync } from "./useCloudSync";
+import { useCloudSync, mergeStatePreservingActiveIndex } from "./useCloudSync";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";
 import { Auth } from "./Auth";
@@ -232,7 +232,7 @@ export default function App() {
           <div className="content-area">
             <div className="loading">
               <div className="spinner" />
-              Restoring session...
+              Analyzing session data...
             </div>
           </div>
         </div>
@@ -476,12 +476,63 @@ function AuthedApp() {
         const row = sel.data;
 
         if (row && row.data) {
-          const normalized = normalizeState(row.data);
+          const cloudState = normalizeState(row.data);
           if (!cancelled) {
-            setState(normalized);
-            lastFromCloudRef.current = JSON.stringify(normalized);
+            // CRITICAL FIX: Intelligent session restoration with conflict resolution
+            const localHasData = addresses.length > 0 || completions.length > 0 || arrangements.length > 0 || daySessions.length > 0;
+
+            if (localHasData) {
+              // Compare local vs cloud data to prevent data loss
+              const localCompletionCount = completions.length;
+              const cloudCompletionCount = cloudState.completions?.length || 0;
+              const cloudUpdatedAt = row.updated_at ? new Date(row.updated_at) : new Date(0);
+
+              // Check if local data has recent activity (last 2 hours)
+              const recentThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000);
+              const hasRecentLocalActivity = completions.some(comp =>
+                comp.timestamp && new Date(comp.timestamp) > recentThreshold
+              );
+
+              logger.sync("🔍 SESSION RESTORATION ANALYSIS:", {
+                localCompletions: localCompletionCount,
+                cloudCompletions: cloudCompletionCount,
+                cloudLastUpdated: cloudUpdatedAt.toISOString(),
+                hasRecentLocalActivity,
+                willMerge: localCompletionCount > 0 || hasRecentLocalActivity
+              });
+
+              if (localCompletionCount > cloudCompletionCount || hasRecentLocalActivity) {
+                // Local has more/newer data - merge intelligently
+                logger.sync("🛡️ DATA PROTECTION: Local data appears newer, merging states to prevent loss");
+                const currentLocal = safeState;
+                const mergedState = mergeStatePreservingActiveIndex(currentLocal, cloudState);
+                setState(mergedState);
+                lastFromCloudRef.current = JSON.stringify(mergedState);
+
+                // Sync the merged state back to cloud to preserve local changes
+                setTimeout(async () => {
+                  try {
+                    await cloudSync.syncData(mergedState);
+                    logger.sync("✅ Synced merged state back to cloud");
+                  } catch (syncError) {
+                    logger.error("Failed to sync merged state:", syncError);
+                  }
+                }, 1000);
+              } else {
+                // Cloud data is definitively newer/better
+                logger.sync("☁️ Using cloud state (appears more complete)");
+                setState(cloudState);
+                lastFromCloudRef.current = JSON.stringify(cloudState);
+              }
+            } else {
+              // No local data - safe to use cloud state
+              logger.sync("☁️ No local data, using cloud state");
+              setState(cloudState);
+              lastFromCloudRef.current = JSON.stringify(cloudState);
+            }
+
             setHydrated(true);
-            logger.sync("Restored from cloud, version:", row?.version);
+            logger.sync("Session restored, version:", row?.version);
           }
         } else {
           const localHasData =
