@@ -741,11 +741,23 @@ export function useCloudSync(): UseCloudSync {
       }
 
       const stateStr = JSON.stringify(state);
-      
+
       // Skip if state hasn't changed
       if (stateStr === lastSyncedState.current) {
+        console.log('🚫 SYNC SKIPPED: State unchanged since last successful sync', {
+          completions: state.completions?.length || 0,
+          addresses: state.addresses?.length || 0,
+          lastSyncTime: syncMetadata.current.lastSyncAt
+        });
         return;
       }
+
+      console.log('🔄 SYNC STARTING: State changed, syncing to cloud', {
+        completions: state.completions?.length || 0,
+        addresses: state.addresses?.length || 0,
+        hasLastSyncedState: !!lastSyncedState.current,
+        lastSyncTime: syncMetadata.current.lastSyncAt
+      });
 
       try {
         clearError();
@@ -806,16 +818,48 @@ export function useCloudSync(): UseCloudSync {
           throw err;
         }
 
-        // Update sync metadata
+        // CRITICAL FIX: Verify data actually persisted before marking as synced
+        console.log('🔍 Verifying sync actually persisted to database...');
+        const { data: verifyData, error: verifyError } = await supabase
+          .from("navigator_state")
+          .select("data, updated_at, version, checksum")
+          .eq("user_id", user.id)
+          .single();
+
+        if (verifyError) {
+          console.error('Sync verification failed:', verifyError);
+          throw new Error(`Sync verification failed: ${verifyError.message}`);
+        }
+
+        if (!verifyData) {
+          throw new Error('Sync verification failed: No data found after upsert');
+        }
+
+        // Verify the data actually matches what we tried to save
+        const verifyChecksum = generateChecksum(verifyData.data);
+        if (verifyChecksum !== finalChecksum) {
+          console.error('CRITICAL: Data corruption detected!', {
+            expectedChecksum: finalChecksum,
+            actualChecksum: verifyChecksum,
+            expectedCompletions: finalState.completions?.length || 0,
+            actualCompletions: verifyData.data?.completions?.length || 0
+          });
+          throw new Error(`Data corruption detected - checksums don't match (expected: ${finalChecksum}, actual: ${verifyChecksum})`);
+        }
+
+        console.log('✅ Sync verification successful - data actually persisted');
+
+        // Update sync metadata ONLY after verification
         syncMetadata.current = {
-          lastSyncAt: data?.updated_at ?? now,
+          lastSyncAt: verifyData.updated_at ?? now,
           deviceId: syncMetadata.current.deviceId,
-          version: data?.version ?? version,
-          checksum: data?.checksum ?? finalChecksum
+          version: verifyData.version ?? version,
+          checksum: verifyData.checksum ?? finalChecksum
         };
 
+        // CRITICAL FIX: Only update lastSyncedState after confirming data persisted
         lastSyncedState.current = JSON.stringify(finalState);
-        setLastSyncTime(new Date(data?.updated_at ?? now));
+        setLastSyncTime(new Date(verifyData.updated_at ?? now));
 
       } catch (e: any) {
         setError(e?.message || String(e));

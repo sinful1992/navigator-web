@@ -751,6 +751,23 @@ function AuthedApp() {
         // CRITICAL FIX: On failure, don't update lastFromCloudRef so we can retry
         // Reset it to trigger retry on next state change
         lastFromCloudRef.current = '';
+
+        // CRITICAL FIX: Schedule automatic retry for failed syncs
+        const retryDelay = 5000; // 5 seconds
+        logger.sync(`🔄 Scheduling sync retry in ${retryDelay/1000}s...`);
+
+        setTimeout(async () => {
+          try {
+            logger.sync("🔄 Attempting sync retry...");
+            await cloudSync.syncData(safeState);
+            logger.sync("✅ Sync retry successful");
+            lastFromCloudRef.current = JSON.stringify(safeState);
+          } catch (retryError) {
+            logger.error("Sync retry also failed:", retryError);
+            // Don't schedule another retry to avoid infinite loops
+            // User will see error state and can manually retry
+          }
+        }, retryDelay);
       }
     }, 150);
 
