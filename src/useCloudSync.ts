@@ -502,25 +502,61 @@ export function useCloudSync(): UseCloudSync {
   // ---- Online/offline tracking and queue processing ----
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
+
     const handleOnline = () => {
       setIsOnline(true);
+
       // Process queued operations when coming back online
       syncTimeoutId.current = setTimeout(processSyncQueue, 100);
+
+      // 🔧 OFFLINE PROTECTION: Process any queued offline states
+      setTimeout(async () => {
+        console.log('🔌 OFFLINE PROTECTION: Back online, checking for queued states...');
+
+        const offlineKeys = Object.keys(localStorage).filter(key =>
+          key.startsWith('navigator_offline_state_')
+        );
+
+        if (offlineKeys.length > 0) {
+          console.log(`🔌 OFFLINE PROTECTION: Found ${offlineKeys.length} queued offline states, processing...`);
+
+          for (const key of offlineKeys) {
+            try {
+              const offlineData = JSON.parse(localStorage.getItem(key) || '{}');
+              if (offlineData.state) {
+                console.log(`🔌 OFFLINE PROTECTION: Retrying sync for offline state from ${offlineData.timestamp}`);
+
+                // Try to sync the queued state
+                await syncData(offlineData.state);
+
+                // If successful, remove from queue
+                localStorage.removeItem(key);
+                console.log(`🔌 OFFLINE PROTECTION: Successfully synced queued state, removed from queue`);
+              }
+            } catch (retryError) {
+              console.error(`🔌 OFFLINE PROTECTION: Failed to sync queued state ${key}:`, retryError);
+              // Keep in queue for next online session
+            }
+          }
+        } else {
+          console.log('🔌 OFFLINE PROTECTION: No queued offline states found');
+        }
+      }, 2000); // Wait 2 seconds after coming online to ensure connection is stable
     };
-    
+
     const handleOffline = () => {
       setIsOnline(false);
+      console.log('🔌 OFFLINE PROTECTION: Gone offline, future syncs will be queued');
     };
-    
+
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-    
+
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [processSyncQueue]);
+  }, [processSyncQueue, syncData]);
 
   // ---- Auth helpers ----
   const signIn = useCallback(
@@ -864,6 +900,27 @@ export function useCloudSync(): UseCloudSync {
       } catch (e: any) {
         setError(e?.message || String(e));
         console.error('Sync failed:', e);
+
+        // 🔧 OFFLINE PROTECTION: If we're offline, queue this state for later sync
+        if (!isOnline || e?.message?.includes('fetch')) {
+          console.log('🔌 OFFLINE PROTECTION: Network issues detected, queuing state for retry when online');
+
+          // Store the failed sync state with timestamp
+          const offlineKey = `navigator_offline_state_${Date.now()}`;
+          const offlineData = {
+            state: finalState,
+            timestamp: new Date().toISOString(),
+            reason: 'network_failure',
+            error: e?.message || String(e)
+          };
+
+          try {
+            localStorage.setItem(offlineKey, JSON.stringify(offlineData));
+            console.log('🔌 OFFLINE PROTECTION: State queued successfully for when connection returns');
+          } catch (storageError) {
+            console.error('Failed to queue offline state:', storageError);
+          }
+        }
       } finally {
         setIsSyncing(false);
       }
@@ -873,7 +930,7 @@ export function useCloudSync(): UseCloudSync {
 
   // Enhanced conflict resolution strategy
   const resolveConflicts = useCallback(async (localState: AppState, serverState: AppState): Promise<AppState> => {
-    console.log('Resolving conflicts between local and server state');
+    console.log('🔧 OFFLINE PROTECTION: Resolving conflicts between local and server state');
 
     // 🔧 CRITICAL FIX: Check if restore is in progress
     const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
@@ -904,6 +961,37 @@ export function useCloudSync(): UseCloudSync {
       } else {
         // Clear the flag after timeout
         localStorage.removeItem('navigator_restore_in_progress');
+      }
+    }
+
+    // 🔧 OFFLINE PROTECTION: Check if we have recent local work that needs preserving
+    const recentThreshold = new Date(Date.now() - 6 * 60 * 60 * 1000); // 6 hours
+    const hasRecentLocalWork = localState.completions.some(comp =>
+      comp.timestamp && new Date(comp.timestamp) > recentThreshold
+    );
+
+    if (hasRecentLocalWork) {
+      const localCompletions = localState.completions.length;
+      const serverCompletions = serverState.completions.length;
+
+      console.log('🛡️ OFFLINE PROTECTION: Recent local work detected, preserving local completions', {
+        localCompletions,
+        serverCompletions,
+        recentWorkThreshold: recentThreshold.toISOString(),
+        willPreserveLocal: true
+      });
+
+      // If local has more completions and recent work, strongly favor local state
+      if (localCompletions > serverCompletions) {
+        console.log('🛡️ OFFLINE PROTECTION: Local has more completions, preserving local state entirely');
+        return {
+          ...localState,
+          // Still merge arrangements and day sessions from server if they're newer
+          arrangements: serverState.arrangements.length > localState.arrangements.length ? serverState.arrangements : localState.arrangements,
+          daySessions: [...localState.daySessions, ...serverState.daySessions.filter(serverSession =>
+            !localState.daySessions.some(localSession => localSession.date === serverSession.date)
+          )]
+        };
       }
     }
 
