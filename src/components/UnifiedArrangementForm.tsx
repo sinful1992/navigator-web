@@ -2,14 +2,12 @@ import React from 'react';
 import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome } from '../types';
 import { LoadingButton } from './LoadingButton';
 
-type PartialPayment = {
+type PreviousPayment = {
   id: string;
   amount: string;
   date: string;
   notes?: string;
 };
-
-type PaymentMode = 'single' | 'plan';
 
 type Props = {
   state: AppState;
@@ -42,8 +40,6 @@ export default function UnifiedArrangementForm({
     preSelectedAddressIndex !== null && preSelectedAddressIndex !== undefined ? "existing" : "existing"
   );
 
-  const [paymentMode, setPaymentMode] = React.useState<PaymentMode>('single');
-
   const [formData, setFormData] = React.useState({
     // Address
     addressIndex: arrangement?.addressIndex ?? preSelectedAddressIndex ?? 0,
@@ -54,19 +50,20 @@ export default function UnifiedArrangementForm({
     phoneNumber: arrangement?.phoneNumber ?? "",
 
     // Payment details
-    originalAmount: arrangement?.amount ?? "",
+    totalAmount: arrangement?.amount ?? "",
     scheduledDate: arrangement?.scheduledDate ?? new Date().toISOString().slice(0, 10),
     scheduledTime: arrangement?.scheduledTime ?? "",
     notes: arrangement?.notes ?? "",
     status: arrangement?.status ?? "Scheduled" as ArrangementStatus,
 
-    // Payment plan details
-    planType: 'weekly' as 'weekly' | 'monthly',
-    planPayments: 4,
-    planInterval: 1,
+    // Previous payments (made before creating arrangement)
+    previousPayments: [] as PreviousPayment[],
 
-    // Partial payments
-    partialPayments: [] as PartialPayment[],
+    // Optional recurring setup
+    isRecurring: false,
+    recurrenceType: 'weekly' as 'weekly' | 'monthly',
+    recurrenceInterval: 1,
+    totalPayments: 4,
   });
 
   const [formErrors, setFormErrors] = React.useState<{
@@ -75,12 +72,13 @@ export default function UnifiedArrangementForm({
   }>({});
 
   // Calculate derived values
-  const totalPartialPayments = formData.partialPayments.reduce(
+  const totalPreviousPayments = formData.previousPayments.reduce(
     (sum, payment) => sum + parseFloat(payment.amount || '0'), 0
   );
 
-  const remainingAmount = parseFloat(formData.originalAmount || '0') - totalPartialPayments;
-  const hasPartialPayments = formData.partialPayments.length > 0;
+  const totalAmountValue = parseFloat(formData.totalAmount || '0');
+  const remainingAmount = totalAmountValue - totalPreviousPayments;
+  const hasPreviousPayments = formData.previousPayments.length > 0;
 
   // Initialize form data when arrangement changes
   React.useEffect(() => {
@@ -98,7 +96,7 @@ export default function UnifiedArrangementForm({
           manualAddress: originalAddress,
           customerName: arrangement.customerName ?? "",
           phoneNumber: arrangement.phoneNumber ?? "",
-          originalAmount: arrangement.amount ?? "",
+          totalAmount: arrangement.amount ?? "",
           scheduledDate: arrangement.scheduledDate,
           scheduledTime: arrangement.scheduledTime ?? "",
           notes: arrangement.notes ?? "",
@@ -112,7 +110,7 @@ export default function UnifiedArrangementForm({
           manualAddress: "",
           customerName: arrangement.customerName ?? "",
           phoneNumber: arrangement.phoneNumber ?? "",
-          originalAmount: arrangement.amount ?? "",
+          totalAmount: arrangement.amount ?? "",
           scheduledDate: arrangement.scheduledDate,
           scheduledTime: arrangement.scheduledTime ?? "",
           notes: arrangement.notes ?? "",
@@ -120,9 +118,9 @@ export default function UnifiedArrangementForm({
         }));
       }
 
-      // Set payment mode based on existing arrangement
+      // Set recurring flag based on existing arrangement
       if (arrangement.recurrenceType && arrangement.recurrenceType !== "none") {
-        setPaymentMode('plan');
+        setFormData(prev => ({ ...prev, isRecurring: true }));
       }
     }
   }, [arrangement, state.addresses]);
@@ -131,7 +129,7 @@ export default function UnifiedArrangementForm({
   const validateAmount = (value: string) => {
     const amt = parseFloat(value || '0');
     if (!value || Number.isNaN(amt) || amt <= 0) {
-      setFormErrors(prev => ({ ...prev, amount: 'Please enter a valid amount' }));
+      setFormErrors(prev => ({ ...prev, amount: 'Please enter a valid total amount' }));
       return false;
     }
     setFormErrors(prev => ({ ...prev, amount: undefined }));
@@ -141,7 +139,13 @@ export default function UnifiedArrangementForm({
   const validateForm = () => {
     let isValid = true;
 
-    if (!validateAmount(formData.originalAmount)) {
+    if (!validateAmount(formData.totalAmount)) {
+      isValid = false;
+    }
+
+    // Validate that remaining amount is positive
+    if (remainingAmount < 0) {
+      setFormErrors(prev => ({ ...prev, amount: 'Previous payments exceed total amount' }));
       isValid = false;
     }
 
@@ -158,35 +162,35 @@ export default function UnifiedArrangementForm({
     return isValid;
   };
 
-  // Add partial payment
-  const addPartialPayment = () => {
-    const payment: PartialPayment = {
-      id: `partial_${Date.now()}`,
+  // Add previous payment
+  const addPreviousPayment = () => {
+    const payment: PreviousPayment = {
+      id: `previous_${Date.now()}`,
       amount: '',
       date: new Date().toISOString().slice(0, 10),
       notes: ''
     };
     setFormData(prev => ({
       ...prev,
-      partialPayments: [...prev.partialPayments, payment]
+      previousPayments: [...prev.previousPayments, payment]
     }));
   };
 
-  // Update partial payment
-  const updatePartialPayment = (id: string, updates: Partial<PartialPayment>) => {
+  // Update previous payment
+  const updatePreviousPayment = (id: string, updates: Partial<PreviousPayment>) => {
     setFormData(prev => ({
       ...prev,
-      partialPayments: prev.partialPayments.map(payment =>
+      previousPayments: prev.previousPayments.map(payment =>
         payment.id === id ? { ...payment, ...updates } : payment
       )
     }));
   };
 
-  // Remove partial payment
-  const removePartialPayment = (id: string) => {
+  // Remove previous payment
+  const removePreviousPayment = (id: string) => {
     setFormData(prev => ({
       ...prev,
-      partialPayments: prev.partialPayments.filter(payment => payment.id !== id)
+      previousPayments: prev.previousPayments.filter(payment => payment.id !== id)
     }));
   };
 
@@ -249,55 +253,40 @@ export default function UnifiedArrangementForm({
         }
       }
 
-      // Create arrangement data
-      let arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>;
+      // Create arrangement data for remaining amount
+      const arrangementAmount = remainingAmount > 0 ? remainingAmount : totalAmountValue;
+      let actualAmount = arrangementAmount;
 
-      if (paymentMode === 'single') {
-        // Single payment arrangement
-        arrangementData = {
-          addressIndex: finalAddressIndex,
-          address: finalAddress,
-          customerName: formData.customerName,
-          phoneNumber: formData.phoneNumber,
-          scheduledDate: formData.scheduledDate,
-          scheduledTime: formData.scheduledTime,
-          amount: remainingAmount > 0 ? remainingAmount.toFixed(2) : formData.originalAmount,
-          notes: formData.notes,
-          status: formData.status,
-          recurrenceType: "none",
-          totalPayments: 1,
-          paymentsMade: arrangement?.paymentsMade ?? 0,
-        };
-      } else {
-        // Payment plan arrangement
-        const planAmount = remainingAmount > 0 ? remainingAmount / formData.planPayments : parseFloat(formData.originalAmount) / formData.planPayments;
-
-        arrangementData = {
-          addressIndex: finalAddressIndex,
-          address: finalAddress,
-          customerName: formData.customerName,
-          phoneNumber: formData.phoneNumber,
-          scheduledDate: formData.scheduledDate,
-          scheduledTime: formData.scheduledTime,
-          amount: planAmount.toFixed(2),
-          notes: formData.notes,
-          status: formData.status,
-          recurrenceType: formData.planType === 'weekly' ? 'weekly' : 'monthly',
-          recurrenceInterval: formData.planInterval,
-          totalPayments: formData.planPayments,
-          paymentsMade: arrangement?.paymentsMade ?? 0,
-        };
+      // If recurring, split remaining amount across payments
+      if (formData.isRecurring && formData.totalPayments > 1) {
+        actualAmount = arrangementAmount / formData.totalPayments;
       }
+
+      const arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'> = {
+        addressIndex: finalAddressIndex,
+        address: finalAddress,
+        customerName: formData.customerName,
+        phoneNumber: formData.phoneNumber,
+        scheduledDate: formData.scheduledDate,
+        scheduledTime: formData.scheduledTime,
+        amount: actualAmount.toFixed(2),
+        notes: formData.notes,
+        status: formData.status,
+        recurrenceType: formData.isRecurring ? formData.recurrenceType : "none",
+        recurrenceInterval: formData.isRecurring ? formData.recurrenceInterval : undefined,
+        totalPayments: formData.isRecurring ? formData.totalPayments : 1,
+        paymentsMade: arrangement?.paymentsMade ?? 0,
+      };
 
       await onSave(arrangementData);
 
-      // Record partial payments as completions
-      for (const payment of formData.partialPayments) {
+      // Record previous payments as completions
+      for (const payment of formData.previousPayments) {
         if (parseFloat(payment.amount) > 0) {
           try {
             onComplete(finalAddressIndex, "PIF", payment.amount);
           } catch (error) {
-            console.error('Error recording partial payment:', error);
+            console.error('Error recording previous payment:', error);
           }
         }
       }
@@ -434,40 +423,18 @@ export default function UnifiedArrangementForm({
 
       {/* Payment Setup Section */}
       <div className="uaf-section">
-        <h4 className="uaf-section-title">💰 Payment Setup</h4>
-
-        <div className="uaf-field">
-          <label className="uaf-label">Payment Type</label>
-          <div className="uaf-radio-group">
-            <label className="uaf-radio-option">
-              <input
-                type="radio"
-                checked={paymentMode === 'single'}
-                onChange={() => setPaymentMode('single')}
-              />
-              <span>💵 Single Payment</span>
-            </label>
-            <label className="uaf-radio-option">
-              <input
-                type="radio"
-                checked={paymentMode === 'plan'}
-                onChange={() => setPaymentMode('plan')}
-              />
-              <span>📅 Payment Plan</span>
-            </label>
-          </div>
-        </div>
+        <h4 className="uaf-section-title">💰 Payment Details</h4>
 
         <div className="uaf-row">
           <div className="uaf-field">
-            <label className="uaf-label">Total Amount *</label>
+            <label className="uaf-label">Total Amount Owed *</label>
             <input
               type="number"
               step="0.01"
               min="0"
-              value={formData.originalAmount}
+              value={formData.totalAmount}
               onChange={(e) => {
-                setFormData(prev => ({ ...prev, originalAmount: e.target.value }));
+                setFormData(prev => ({ ...prev, totalAmount: e.target.value }));
                 validateAmount(e.target.value);
               }}
               className={`uaf-input ${formErrors.amount ? 'uaf-input-error' : ''}`}
@@ -499,60 +466,28 @@ export default function UnifiedArrangementForm({
             className="uaf-input"
           />
         </div>
-
-        {paymentMode === 'plan' && (
-          <>
-            <div className="uaf-row">
-              <div className="uaf-field">
-                <label className="uaf-label">Plan Type</label>
-                <select
-                  value={formData.planType}
-                  onChange={(e) => setFormData(prev => ({ ...prev, planType: e.target.value as 'weekly' | 'monthly' }))}
-                  className="uaf-input"
-                >
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
-              <div className="uaf-field">
-                <label className="uaf-label">Number of Payments</label>
-                <input
-                  type="number"
-                  min="2"
-                  value={formData.planPayments}
-                  onChange={(e) => setFormData(prev => ({ ...prev, planPayments: parseInt(e.target.value) || 2 }))}
-                  className="uaf-input"
-                />
-              </div>
-            </div>
-
-            <div className="uaf-payment-preview">
-              💡 {formData.planPayments} payments of £{(remainingAmount > 0 ? remainingAmount : parseFloat(formData.originalAmount || '0')) / formData.planPayments || 0} each
-            </div>
-          </>
-        )}
       </div>
 
-      {/* Partial Payments Section */}
+      {/* Previous Payments Section */}
       <div className="uaf-section">
         <div className="uaf-section-header">
-          <h4 className="uaf-section-title">💳 Partial Payments</h4>
+          <h4 className="uaf-section-title">💳 Payments Already Made</h4>
           <button
             type="button"
-            onClick={addPartialPayment}
+            onClick={addPreviousPayment}
             className="uaf-btn uaf-btn-sm uaf-btn-outline"
           >
             + Add Payment
           </button>
         </div>
 
-        {formData.partialPayments.length === 0 ? (
+        {formData.previousPayments.length === 0 ? (
           <div className="uaf-empty">
-            No partial payments recorded yet.
+            No previous payments recorded yet.
           </div>
         ) : (
           <div className="uaf-payments-list">
-            {formData.partialPayments.map((payment) => (
+            {formData.previousPayments.map((payment) => (
               <div key={payment.id} className="uaf-payment-item">
                 <div className="uaf-row">
                   <div className="uaf-field">
@@ -562,24 +497,24 @@ export default function UnifiedArrangementForm({
                       step="0.01"
                       min="0"
                       value={payment.amount}
-                      onChange={(e) => updatePartialPayment(payment.id, { amount: e.target.value })}
+                      onChange={(e) => updatePreviousPayment(payment.id, { amount: e.target.value })}
                       className="uaf-input"
                       placeholder="0.00"
                     />
                   </div>
                   <div className="uaf-field">
-                    <label className="uaf-label">Date</label>
+                    <label className="uaf-label">Date Paid</label>
                     <input
                       type="date"
                       value={payment.date}
-                      onChange={(e) => updatePartialPayment(payment.id, { date: e.target.value })}
+                      onChange={(e) => updatePreviousPayment(payment.id, { date: e.target.value })}
                       className="uaf-input"
                     />
                   </div>
                   <div className="uaf-field uaf-field-actions">
                     <button
                       type="button"
-                      onClick={() => removePartialPayment(payment.id)}
+                      onClick={() => removePreviousPayment(payment.id)}
                       className="uaf-btn uaf-btn-sm uaf-btn-danger"
                       title="Remove payment"
                     >
@@ -591,7 +526,7 @@ export default function UnifiedArrangementForm({
                   <input
                     type="text"
                     value={payment.notes || ''}
-                    onChange={(e) => updatePartialPayment(payment.id, { notes: e.target.value })}
+                    onChange={(e) => updatePreviousPayment(payment.id, { notes: e.target.value })}
                     className="uaf-input"
                     placeholder="Payment notes (optional)"
                   />
@@ -601,23 +536,74 @@ export default function UnifiedArrangementForm({
           </div>
         )}
 
-        {hasPartialPayments && (
+        {hasPreviousPayments && (
           <div className="uaf-payment-summary">
             <div className="uaf-summary-row">
-              <span>Original Amount:</span>
-              <span>£{parseFloat(formData.originalAmount || '0').toFixed(2)}</span>
+              <span>Total Amount Owed:</span>
+              <span>£{parseFloat(formData.totalAmount || '0').toFixed(2)}</span>
             </div>
             <div className="uaf-summary-row">
-              <span>Partial Payments:</span>
-              <span>-£{totalPartialPayments.toFixed(2)}</span>
+              <span>Already Paid:</span>
+              <span>-£{totalPreviousPayments.toFixed(2)}</span>
             </div>
             <div className="uaf-summary-row uaf-summary-total">
-              <span>Remaining Amount:</span>
+              <span>Still Owed:</span>
               <span>£{Math.max(0, remainingAmount).toFixed(2)}</span>
             </div>
           </div>
         )}
       </div>
+
+      {/* Optional Recurring Setup */}
+      {remainingAmount > 0 && (
+        <div className="uaf-section">
+          <h4 className="uaf-section-title">🔄 Optional: Split Remaining Balance</h4>
+
+          <div className="uaf-field">
+            <label className="uaf-radio-option">
+              <input
+                type="checkbox"
+                checked={formData.isRecurring}
+                onChange={(e) => setFormData(prev => ({ ...prev, isRecurring: e.target.checked }))}
+              />
+              <span>Split £{remainingAmount.toFixed(2)} into multiple payments</span>
+            </label>
+          </div>
+
+          {formData.isRecurring && (
+            <>
+              <div className="uaf-row">
+                <div className="uaf-field">
+                  <label className="uaf-label">Frequency</label>
+                  <select
+                    value={formData.recurrenceType}
+                    onChange={(e) => setFormData(prev => ({ ...prev, recurrenceType: e.target.value as 'weekly' | 'monthly' }))}
+                    className="uaf-input"
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                <div className="uaf-field">
+                  <label className="uaf-label">Number of Payments</label>
+                  <input
+                    type="number"
+                    min="2"
+                    max="12"
+                    value={formData.totalPayments}
+                    onChange={(e) => setFormData(prev => ({ ...prev, totalPayments: parseInt(e.target.value) || 2 }))}
+                    className="uaf-input"
+                  />
+                </div>
+              </div>
+
+              <div className="uaf-payment-preview">
+                💡 {formData.totalPayments} payments of £{(remainingAmount / formData.totalPayments).toFixed(2)} each
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Notes Section */}
       <div className="uaf-section">
