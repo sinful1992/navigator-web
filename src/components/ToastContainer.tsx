@@ -47,7 +47,8 @@ export const ToastContainer: React.FC = () => {
 
         .toast {
           pointer-events: auto;
-          background: white;
+          background: var(--card-bg, white);
+          color: var(--text-primary, #374151);
           border-radius: 8px;
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
           border-left: 4px solid;
@@ -95,7 +96,7 @@ export const ToastContainer: React.FC = () => {
         }
 
         .toast-message {
-          color: #374151;
+          color: inherit;
           font-weight: 500;
           flex: 1;
           line-height: 1.4;

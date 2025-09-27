@@ -1,7 +1,7 @@
 // src/AddressList.tsx - Modern Design Update
 import * as React from "react";
 import type { AppState, Outcome, AddressRow, Arrangement } from "./types";
-import FullScreenArrangementForm from "./components/FullScreenArrangementForm";
+import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
 
 type Props = {
   state: AppState;
@@ -312,9 +312,9 @@ const AddressListComponent = function AddressList({
       
       {/* Full-Screen Arrangement Form */}
       {showArrangementForm !== null && onAddArrangement && addresses[showArrangementForm] && (
-        <FullScreenArrangementForm
-          address={addresses[showArrangementForm].address}
-          addressIndex={showArrangementForm}
+        <UnifiedArrangementForm
+          state={state}
+          preSelectedAddressIndex={showArrangementForm}
           onSave={async (arrangementData) => {
             await onAddArrangement(arrangementData);
             // Mark the address as ARR completed
@@ -322,6 +322,8 @@ const AddressListComponent = function AddressList({
             setShowArrangementForm(null);
           }}
           onCancel={() => setShowArrangementForm(null)}
+          onComplete={handleCompletion}
+          fullscreen={true}
         />
       )}
 

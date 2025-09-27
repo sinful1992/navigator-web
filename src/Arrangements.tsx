@@ -3,6 +3,7 @@ import { format, parseISO, isWithinInterval, startOfWeek, endOfWeek, isSameDay, 
 import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome, RecurrenceType } from "./types";
 import { LoadingButton } from "./components/LoadingButton";
 import { generateReminderMessage } from "./services/reminderScheduler";
+import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
 
 type Props = {
   state: AppState;
@@ -53,22 +54,22 @@ const ArrangementsComponent = function Arrangements({
   // Format phone number for SMS (keep original format, just clean it)
   const formatPhoneForSMS = (phone: string): string => {
     if (!phone) return "";
-    
+
     // Remove all non-numeric characters except +
     let cleaned = phone.replace(/[^\d+]/g, "");
-    
+
     // If starts with 0, keep as is (UK local format)
     // If starts with +44, keep as is (international format)
     // Otherwise assume it's a clean UK number
     if (cleaned.startsWith("0") || cleaned.startsWith("+44") || cleaned.startsWith("44")) {
       return cleaned;
     }
-    
+
     // For other formats, assume UK and add leading 0 if it looks like a mobile number
     if (cleaned.length === 10 && cleaned.startsWith("7")) {
       return "0" + cleaned;
     }
-    
+
     return cleaned;
   };
 
@@ -95,16 +96,16 @@ const ArrangementsComponent = function Arrangements({
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      
+
       const message = generateReminderMessage(arrangement, mockNotification, state.reminderSettings);
       const formattedPhone = formatPhoneForSMS(arrangement.phoneNumber);
-      
+
       // Create SMS URL (sms: protocol)
       const smsUrl = `sms:${formattedPhone}?body=${encodeURIComponent(message)}`;
-      
+
       // Open default SMS app
       window.location.href = smsUrl;
-      
+
       // Update arrangement with reminder info
       const now = new Date().toISOString();
       await onUpdateArrangement(arrangement.id, {
@@ -112,10 +113,10 @@ const ArrangementsComponent = function Arrangements({
         reminderCount: (arrangement.reminderCount || 0) + 1,
         updatedAt: now
       });
-      
+
       // Show confirmation
       setReminderSent(prev => new Set([...prev, arrangement.id]));
-      
+
       // Auto-hide confirmation after 3 seconds
       setTimeout(() => {
         setReminderSent(prev => {
@@ -124,7 +125,7 @@ const ArrangementsComponent = function Arrangements({
           return next;
         });
       }, 3000);
-      
+
     } catch (error) {
       console.error("Failed to send reminder:", error);
       alert("Failed to update reminder information. Please try again.");
@@ -155,12 +156,12 @@ const ArrangementsComponent = function Arrangements({
     if (viewMode === "thisWeek") {
       filtered = state.arrangements.filter(arr => {
         const arrDate = parseISO(arr.scheduledDate);
-        return isWithinInterval(arrDate, { start: weekStart, end: weekEnd }) && 
-               arr.status !== "Completed" && 
+        return isWithinInterval(arrDate, { start: weekStart, end: weekEnd }) &&
+               arr.status !== "Completed" &&
                arr.status !== "Cancelled";
       });
     } else {
-      filtered = state.arrangements.filter(arr => 
+      filtered = state.arrangements.filter(arr =>
         arr.status !== "Completed" && arr.status !== "Cancelled"
       );
     }
@@ -228,7 +229,7 @@ const ArrangementsComponent = function Arrangements({
   // Helper to calculate next payment date
   const calculateNextPaymentDate = (currentDate: string, recurrenceType: RecurrenceType, interval: number = 1): string => {
     const current = new Date(currentDate);
-    
+
     switch (recurrenceType) {
       case "weekly":
         current.setDate(current.getDate() + (7 * interval));
@@ -239,7 +240,7 @@ const ArrangementsComponent = function Arrangements({
       default:
         return currentDate;
     }
-    
+
     return current.toISOString().slice(0, 10);
   };
 
@@ -247,13 +248,13 @@ const ArrangementsComponent = function Arrangements({
   const markAsDefaulted = async (id: string) => {
     const arrangement = state.arrangements.find(arr => arr.id === id);
     if (!arrangement) return;
-    
+
     // Update arrangement status to completed (defaulted)
-    onUpdateArrangement(id, { 
+    onUpdateArrangement(id, {
       status: "Completed",
       updatedAt: new Date().toISOString()
     });
-    
+
     // Create completion record with Done outcome for defaulted arrangement
     onComplete(arrangement.addressIndex, "Done", undefined, arrangement.id);
   };
@@ -263,31 +264,31 @@ const ArrangementsComponent = function Arrangements({
     // Find the arrangement to get the address index
     const arrangement = state.arrangements.find(arr => arr.id === id);
     if (!arrangement) return;
-    
+
     // Update payment count
     const paymentsMade = (arrangement.paymentsMade || 0) + 1;
     const isLastPayment = paymentsMade >= (arrangement.totalPayments || 1);
     const isRecurring = arrangement.recurrenceType && arrangement.recurrenceType !== "none";
-    
+
     // Update arrangement status
-    onUpdateArrangement(id, { 
+    onUpdateArrangement(id, {
       status: "Completed",
       amount: amount,
       paymentsMade,
       updatedAt: new Date().toISOString()
     });
-    
+
     // Create completion record with PIF outcome and arrangement reference
     onComplete(arrangement.addressIndex, "PIF", amount, arrangement.id);
-    
+
     // Create next payment arrangement if this is recurring and not the last payment
     if (isRecurring && !isLastPayment) {
       const nextDate = calculateNextPaymentDate(
-        arrangement.scheduledDate, 
-        arrangement.recurrenceType!, 
+        arrangement.scheduledDate,
+        arrangement.recurrenceType!,
         arrangement.recurrenceInterval || 1
       );
-      
+
       const nextPaymentNumber = paymentsMade + 1;
       const nextArrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'> = {
         addressIndex: arrangement.addressIndex,
@@ -305,7 +306,7 @@ const ArrangementsComponent = function Arrangements({
         paymentsMade: paymentsMade,
         parentArrangementId: arrangement.parentArrangementId || arrangement.id,
       };
-      
+
       await onAddArrangement(nextArrangement);
     }
   };
@@ -318,10 +319,10 @@ const ArrangementsComponent = function Arrangements({
       if (arrangementData.addressIndex < 0 || arrangementData.addressIndex >= state.addresses.length) {
         throw new Error('Selected address is no longer valid. Please refresh and try again.');
       }
-      
+
       // First create the arrangement
       await onAddArrangement(arrangementData);
-      
+
       // Then record completion (ARR) - this is synchronous but we should handle any potential errors
       try {
         onComplete(arrangementData.addressIndex, "ARR");
@@ -331,7 +332,7 @@ const ArrangementsComponent = function Arrangements({
         // This is a data consistency issue but not critical enough to rollback the arrangement
         alert('Arrangement created successfully, but there was an issue recording the completion. You may need to manually mark this address as ARR.');
       }
-      
+
       setShowAddForm(false);
       setEditingId(null);
     } catch (error) {
@@ -364,21 +365,21 @@ const ArrangementsComponent = function Arrangements({
           <div className="stat-label">📋 Due</div>
           <div className="stat-value">{stats.total}</div>
         </div>
-        
+
         <div className="stat-item">
           <div className="stat-label">📅 Today</div>
           <div className="stat-value" style={{ color: stats.todayCount > 0 ? "var(--warning)" : "var(--text-primary)" }}>
             {stats.todayCount}
           </div>
         </div>
-        
+
         {stats.overdue > 0 && (
           <div className="stat-item">
             <div className="stat-label">⚠️ Overdue</div>
             <div className="stat-value" style={{ color: "var(--danger)" }}>{stats.overdue}</div>
           </div>
         )}
-        
+
         {stats.totalAmountDue > 0 && (
           <div className="stat-item">
             <div className="stat-label">💰 Total Due</div>
@@ -390,19 +391,19 @@ const ArrangementsComponent = function Arrangements({
 
         <div className="stat-actions">
           <div className="btn-group">
-            <button 
+            <button
               className={`btn ${viewMode === "thisWeek" ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setViewMode("thisWeek")}
             >
               📅 This Week
             </button>
-            <button 
+            <button
               className={`btn ${viewMode === "all" ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setViewMode("all")}
             >
               📋 All Pending
             </button>
-            <button 
+            <button
               className="btn btn-success"
               onClick={() => setShowAddForm(true)}
             >
@@ -414,7 +415,7 @@ const ArrangementsComponent = function Arrangements({
 
       {/* Add/Edit Form */}
       {(showAddForm || editingId) && (
-        <ArrangementForm
+        <UnifiedArrangementForm
           state={state}
           arrangement={editingId ? state.arrangements.find(a => a.id === editingId) : undefined}
           preSelectedAddressIndex={autoCreateForAddress}
@@ -437,8 +438,8 @@ const ArrangementsComponent = function Arrangements({
               📅 No payment arrangements {viewMode === "thisWeek" ? "due this week" : "pending"}
             </div>
             <div style={{ fontSize: "0.875rem", opacity: 0.75 }}>
-              {viewMode === "thisWeek" 
-                ? "No payment arrangements are scheduled for this week" 
+              {viewMode === "thisWeek"
+                ? "No payment arrangements are scheduled for this week"
                 : "No pending payment arrangements found"
               }
             </div>
@@ -559,7 +560,10 @@ const ArrangementsComponent = function Arrangements({
                     </div>
 
                     <div className="arrangement-actions">
-                      {arrangement.status === "Scheduled" && (
+                      {/* Show "Confirm Payment" only for non-recurring or final payments */}
+                      {arrangement.status === "Scheduled" &&
+                       (!arrangement.recurrenceType || arrangement.recurrenceType === "none" ||
+                        (arrangement.paymentsMade && arrangement.totalPayments && arrangement.paymentsMade >= (arrangement.totalPayments - 1))) && (
                         <LoadingButton
                           className="btn btn-sm btn-success"
                           isLoading={loadingStates.markingPaid.has(arrangement.id)}
@@ -588,7 +592,7 @@ const ArrangementsComponent = function Arrangements({
                           ✅ Confirm Payment
                         </LoadingButton>
                       )}
-                      
+
                       {(arrangement.status === "Scheduled" || arrangement.status === "Confirmed") && (
                         <>
                           {/* Send Reminder Button */}
@@ -603,10 +607,10 @@ const ArrangementsComponent = function Arrangements({
                               >
                                 📱 Send SMS
                               </LoadingButton>
-                              
+
                               {/* Confirmation message */}
                               {reminderSent.has(arrangement.id) && (
-                                <div 
+                                <div
                                   className="reminder-confirmation"
                                   style={{
                                     position: 'absolute',
@@ -623,7 +627,7 @@ const ArrangementsComponent = function Arrangements({
                                   ✅ SMS opened!
                                 </div>
                               )}
-                              
+
                               {/* Show reminder history */}
                               {arrangement.reminderCount && arrangement.reminderCount > 0 && (
                                 <div className="reminder-history">
@@ -639,34 +643,38 @@ const ArrangementsComponent = function Arrangements({
                             </div>
                           )}
 
-                          <LoadingButton
-                            className="btn btn-sm btn-success"
-                            isLoading={loadingStates.markingPaid.has(arrangement.id)}
-                            loadingText="Processing..."
-                            onClick={async () => {
-                              const actualAmount = window.prompt(
-                                `Continue with payment plan:\n\nExpected: £${arrangement.amount || '0.00'}\nEnter actual amount received:`,
-                                arrangement.amount || ''
-                              );
-                              if (actualAmount !== null && actualAmount.trim()) {
-                                setLoadingStates(prev => ({
-                                  ...prev,
-                                  markingPaid: new Set([...prev.markingPaid, arrangement.id])
-                                }));
-                                try {
-                                  await markAsPaid(arrangement.id, actualAmount.trim());
-                                } finally {
+                          {/* Show "Continue Plan" only for recurring payments that are not the final payment */}
+                          {arrangement.recurrenceType && arrangement.recurrenceType !== "none" &&
+                           (!arrangement.paymentsMade || !arrangement.totalPayments || arrangement.paymentsMade < (arrangement.totalPayments - 1)) && (
+                            <LoadingButton
+                              className="btn btn-sm btn-success"
+                              isLoading={loadingStates.markingPaid.has(arrangement.id)}
+                              loadingText="Processing..."
+                              onClick={async () => {
+                                const actualAmount = window.prompt(
+                                  `Continue with payment plan:\n\nExpected: £${arrangement.amount || '0.00'}\nEnter actual amount received:`,
+                                  arrangement.amount || ''
+                                );
+                                if (actualAmount !== null && actualAmount.trim()) {
                                   setLoadingStates(prev => ({
                                     ...prev,
-                                    markingPaid: new Set([...prev.markingPaid].filter(id => id !== arrangement.id))
+                                    markingPaid: new Set([...prev.markingPaid, arrangement.id])
                                   }));
+                                  try {
+                                    await markAsPaid(arrangement.id, actualAmount.trim());
+                                  } finally {
+                                    setLoadingStates(prev => ({
+                                      ...prev,
+                                      markingPaid: new Set([...prev.markingPaid].filter(id => id !== arrangement.id))
+                                    }));
+                                  }
                                 }
-                              }
-                            }}
-                          >
-                            ✅ Continue Plan
-                          </LoadingButton>
-                          
+                              }}
+                            >
+                              ✅ Continue Plan
+                            </LoadingButton>
+                          )}
+
                           <LoadingButton
                             className="btn btn-sm btn-warning"
                             isLoading={loadingStates.markingDefaulted.has(arrangement.id)}
@@ -692,7 +700,7 @@ const ArrangementsComponent = function Arrangements({
                           </LoadingButton>
                         </>
                       )}
-                      
+
                       <button
                         className="btn btn-sm btn-ghost"
                         onClick={() => setEditingId(arrangement.id)}
@@ -700,7 +708,7 @@ const ArrangementsComponent = function Arrangements({
                       >
                         ✏️ Edit
                       </button>
-                      
+
                       <LoadingButton
                         className="btn btn-sm btn-danger"
                         isLoading={loadingStates.deleting.has(arrangement.id)}
@@ -1337,696 +1345,3 @@ const ArrangementsComponent = function Arrangements({
 
 // Memoize component to prevent unnecessary re-renders
 export const Arrangements = React.memo(ArrangementsComponent);
-
-// Arrangement Form Component
-type FormProps = {
-  state: AppState;
-  arrangement?: Arrangement;
-  preSelectedAddressIndex?: number | null;
-  onAddAddress?: (address: AddressRow) => Promise<number>;
-  onSave: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void> | void;
-  onCancel: () => void;
-  isLoading?: boolean;
-  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void;
-};
-
-function ArrangementForm({ state, arrangement, preSelectedAddressIndex, onAddAddress, onSave, onCancel, isLoading = false, onComplete }: FormProps) {
-  const [addressMode, setAddressMode] = React.useState<"existing" | "manual">(
-    preSelectedAddressIndex !== null && preSelectedAddressIndex !== undefined ? "existing" : "existing"
-  );
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-  
-  const [formData, setFormData] = React.useState({
-    addressIndex: arrangement?.addressIndex ?? preSelectedAddressIndex ?? 0,
-    manualAddress: "",
-    customerName: arrangement?.customerName ?? "",
-    phoneNumber: arrangement?.phoneNumber ?? "",
-    scheduledDate: arrangement?.scheduledDate ?? new Date().toISOString().slice(0, 10),
-    scheduledTime: arrangement?.scheduledTime ?? "",
-    amount: arrangement?.amount ?? "",
-    notes: arrangement?.notes ?? "",
-    status: arrangement?.status ?? "Scheduled" as ArrangementStatus,
-    recurrenceType: arrangement?.recurrenceType ?? "none" as RecurrenceType,
-    recurrenceInterval: arrangement?.recurrenceInterval ?? 1,
-    totalPayments: arrangement?.totalPayments ?? undefined,
-    // New fields for improved payment handling
-    paymentType: "full_balance" as "full_balance" | "initial_plus_balance",
-    totalBalance: "",
-    initialPayment: "",
-    remainingPaymentSchedule: "single" as "single" | "weekly" | "4weekly" | "monthly",
-  });
-
-  // Update form data when arrangement prop changes (for editing)
-  React.useEffect(() => {
-    if (arrangement) {
-      // Check if the arrangement's addressIndex is valid for the current address list
-      const isValidIndex = arrangement.addressIndex >= 0 && arrangement.addressIndex < state.addresses.length;
-      const currentAddress = isValidIndex ? state.addresses[arrangement.addressIndex]?.address : null;
-      const originalAddress = arrangement.address;
-      const addressMatches = currentAddress === originalAddress;
-      
-      // If address doesn't match current list, use manual mode with original address
-      if (!isValidIndex || !addressMatches) {
-        setAddressMode("manual");
-        setFormData({
-          addressIndex: 0, // Default to first address, but we'll use manual mode
-          manualAddress: originalAddress, // Use the original address from arrangement
-          customerName: arrangement.customerName ?? "",
-          phoneNumber: arrangement.phoneNumber ?? "",
-          scheduledDate: arrangement.scheduledDate,
-          scheduledTime: arrangement.scheduledTime ?? "",
-          amount: arrangement.amount ?? "",
-          notes: arrangement.notes ?? "",
-          status: arrangement.status,
-          recurrenceType: arrangement.recurrenceType ?? "none" as RecurrenceType,
-          recurrenceInterval: arrangement.recurrenceInterval ?? 1,
-          totalPayments: arrangement.totalPayments ?? undefined,
-          // New fields for improved payment handling - default to full balance for existing arrangements
-          paymentType: "full_balance" as "full_balance" | "initial_plus_balance",
-          totalBalance: arrangement.amount ?? "",
-          initialPayment: "",
-          remainingPaymentSchedule: "single" as "single" | "weekly" | "4weekly" | "monthly",
-        });
-      } else {
-        // Address matches, use existing mode
-        setAddressMode("existing");
-        setFormData({
-          addressIndex: arrangement.addressIndex,
-          manualAddress: "",
-          customerName: arrangement.customerName ?? "",
-          phoneNumber: arrangement.phoneNumber ?? "",
-          scheduledDate: arrangement.scheduledDate,
-          scheduledTime: arrangement.scheduledTime ?? "",
-          amount: arrangement.amount ?? "",
-          notes: arrangement.notes ?? "",
-          status: arrangement.status,
-          recurrenceType: arrangement.recurrenceType ?? "none" as RecurrenceType,
-          recurrenceInterval: arrangement.recurrenceInterval ?? 1,
-          totalPayments: arrangement.totalPayments ?? undefined,
-          // New fields for improved payment handling - default to full balance for existing arrangements
-          paymentType: "full_balance" as "full_balance" | "initial_plus_balance",
-          totalBalance: arrangement.amount ?? "",
-          initialPayment: "",
-          remainingPaymentSchedule: "single" as "single" | "weekly" | "4weekly" | "monthly",
-        });
-      }
-    }
-  }, [arrangement, state.addresses]);
-
-  const selectedAddress = addressMode === "existing" ? state.addresses[formData.addressIndex] : null;
-
-  const handleSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    
-    // Prevent double submission
-    if (isSubmitting || isLoading) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    let addedAddressIndex: number | null = null; // Track if we added a new address for rollback
-
-    try {
-      // Validate payment amounts based on payment type
-      if (formData.paymentType === "full_balance") {
-        const amount = parseFloat(formData.amount || '0');
-        if (!formData.amount || isNaN(amount) || amount <= 0) {
-          alert("Please enter a valid payment amount (numbers only, greater than 0)");
-          return;
-        }
-      } else {
-        // Initial + balance mode
-        const totalBalance = parseFloat(formData.totalBalance || '0');
-        const initialPayment = parseFloat(formData.initialPayment || '0');
-
-        if (!formData.totalBalance || isNaN(totalBalance) || totalBalance <= 0) {
-          alert("Please enter a valid total balance amount");
-          return;
-        }
-
-        if (!formData.initialPayment || isNaN(initialPayment) || initialPayment <= 0) {
-          alert("Please enter a valid initial payment amount");
-          return;
-        }
-
-        if (initialPayment >= totalBalance) {
-          alert("Initial payment must be less than the total balance");
-          return;
-        }
-      }
-
-      // Validate payment setup based on type
-      if (formData.paymentType === "full_balance") {
-        // Original validation logic for single payment amounts
-        if (formData.recurrenceType !== "none") {
-          if (!formData.totalPayments || formData.totalPayments < 2) {
-            alert("Please specify the total number of payments (minimum 2) for recurring arrangements");
-            return;
-          }
-        } else {
-          if (!formData.totalPayments || formData.totalPayments < 1) {
-            alert("Please specify the number of payments");
-            return;
-          }
-        }
-      } else {
-        // Initial + balance mode
-        if (formData.remainingPaymentSchedule === "single") {
-          // Single payment for remaining balance - no additional validation needed
-        } else {
-          // Recurring payments for remaining balance
-          if (!formData.totalPayments || formData.totalPayments < 1) {
-            alert("Please specify the total number of remaining payments");
-            return;
-          }
-        }
-      }
-
-      let finalAddressIndex = formData.addressIndex;
-      let finalAddress = "";
-
-      if (addressMode === "existing") {
-        if (!selectedAddress) {
-          alert("Please select a valid address");
-          return;
-        }
-        // Additional validation - ensure the selected address index is still valid
-        if (formData.addressIndex < 0 || formData.addressIndex >= state.addresses.length) {
-          alert("Selected address is no longer valid. Please refresh the page and try again.");
-          return;
-        }
-        finalAddress = selectedAddress.address;
-      } else {
-        // Manual address mode
-        if (!formData.manualAddress.trim()) {
-          alert("Please enter an address");
-          return;
-        }
-
-        // Check if this address already exists in the list
-        const existingIndex = state.addresses.findIndex(
-          addr => (addr.address || "").toLowerCase().trim() === formData.manualAddress.toLowerCase().trim()
-        );
-
-        if (existingIndex >= 0) {
-          finalAddressIndex = existingIndex;
-          finalAddress = state.addresses[existingIndex].address;
-        } else {
-          if (!onAddAddress) {
-            alert("Cannot add new addresses - missing onAddAddress handler");
-            return;
-          }
-
-          try {
-            const newAddressRow: AddressRow = {
-              address: formData.manualAddress.trim(),
-              lat: null,
-              lng: null
-            };
-            
-            finalAddressIndex = await onAddAddress(newAddressRow);
-            addedAddressIndex = finalAddressIndex; // Track for potential rollback
-            finalAddress = newAddressRow.address;
-          } catch (error) {
-            console.error('Error adding address:', error);
-            alert('Failed to add new address. Please try again.');
-            return;
-          }
-        }
-      }
-
-      // Calculate arrangement data based on payment type
-      let arrangementData;
-
-      if (formData.paymentType === "full_balance") {
-        // Original single payment logic
-        arrangementData = {
-          addressIndex: finalAddressIndex,
-          address: finalAddress,
-          customerName: formData.customerName,
-          phoneNumber: formData.phoneNumber,
-          scheduledDate: formData.scheduledDate,
-          scheduledTime: formData.scheduledTime,
-          amount: formData.amount,
-          notes: formData.notes,
-          status: formData.status,
-          recurrenceType: formData.recurrenceType,
-          recurrenceInterval: formData.recurrenceType !== "none" ? formData.recurrenceInterval : undefined,
-          totalPayments: formData.recurrenceType !== "none" ? formData.totalPayments : 1,
-          paymentsMade: arrangement?.paymentsMade ?? 0,
-        };
-      } else {
-        // Initial payment + remaining balance logic
-        const totalBalance = parseFloat(formData.totalBalance);
-        const initialPayment = parseFloat(formData.initialPayment);
-        const remainingBalance = totalBalance - initialPayment;
-
-        // Determine recurrence settings for remaining balance
-        let recurrenceType: RecurrenceType = "none";
-        let recurrenceInterval = 1;
-        let totalPayments = 1;
-
-        if (formData.remainingPaymentSchedule === "weekly") {
-          recurrenceType = "weekly";
-          totalPayments = formData.totalPayments || 1;
-        } else if (formData.remainingPaymentSchedule === "4weekly") {
-          recurrenceType = "weekly";
-          recurrenceInterval = 4;
-          totalPayments = formData.totalPayments || 1;
-        } else if (formData.remainingPaymentSchedule === "monthly") {
-          recurrenceType = "monthly";
-          totalPayments = formData.totalPayments || 1;
-        }
-
-        const perPaymentAmount = totalPayments > 1 ? (remainingBalance / totalPayments).toFixed(2) : remainingBalance.toFixed(2);
-
-        arrangementData = {
-          addressIndex: finalAddressIndex,
-          address: finalAddress,
-          customerName: formData.customerName,
-          phoneNumber: formData.phoneNumber,
-          scheduledDate: formData.scheduledDate,
-          scheduledTime: formData.scheduledTime,
-          amount: perPaymentAmount,
-          notes: `${formData.notes}${formData.notes ? '\n' : ''}Total Balance: £${formData.totalBalance}, Initial Payment: £${formData.initialPayment}, Remaining: £${remainingBalance.toFixed(2)}`,
-          status: formData.status,
-          recurrenceType,
-          recurrenceInterval: recurrenceType !== "none" ? recurrenceInterval : undefined,
-          totalPayments,
-          paymentsMade: arrangement?.paymentsMade ?? 0,
-        };
-      }
-
-      await onSave(arrangementData);
-
-      // If using initial payment mode, automatically record the initial payment as completed
-      if (formData.paymentType === "initial_plus_balance") {
-        try {
-          // Record initial payment as PIF completion
-          onComplete(finalAddressIndex, "PIF", formData.initialPayment);
-        } catch (completionError) {
-          console.error('Error recording initial payment completion:', completionError);
-          // Don't fail the whole process, but warn the user
-          alert('Arrangement created successfully, but there was an issue recording the initial payment. You may need to manually mark this address as PIF.');
-        }
-      }
-    } catch (error) {
-      console.error('Error in form submission:', error);
-      
-      // If we added a new address but arrangement creation failed, we should ideally remove it
-      // However, we don't have a removeAddress function, so we'll just log the issue
-      if (addedAddressIndex !== null) {
-        console.warn(`New address was added at index ${addedAddressIndex} but arrangement creation failed. Manual cleanup may be needed.`);
-      }
-      
-      // Re-throw to let parent handle the error display
-      throw error;
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="card arrangement-form">
-      <div className="card-header">
-        <h3 style={{ margin: 0 }}>
-          {arrangement ? "✏️ Edit Payment Arrangement" : "➕ Create Payment Arrangement"}
-        </h3>
-      </div>
-      
-      <div className="card-body">
-        <form onSubmit={handleSubmit} className="form-grid">
-          {/* Address Mode Toggle */}
-          {!arrangement && (
-            <div className="form-group form-group-full">
-              <div>📍 Address Source</div>
-              <div className="btn-group">
-                <button
-                  type="button"
-                  className={`btn ${addressMode === "existing" ? "btn-primary" : "btn-ghost"}`}
-                  onClick={() => setAddressMode("existing")}
-                >
-                  📋 From List
-                </button>
-                <button
-                  type="button"
-                  className={`btn ${addressMode === "manual" ? "btn-primary" : "btn-ghost"}`}
-                  onClick={() => setAddressMode("manual")}
-                >
-                  ✏️ Enter Manually
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Address Selection */}
-          {addressMode === "existing" ? (
-            <div className="form-group form-group-full">
-              <label htmlFor="address-index">📍 Address *</label>
-              {state.addresses.length === 0 ? (
-                <div style={{ 
-                  padding: "0.75rem", 
-                  backgroundColor: "var(--warning-light)", 
-                  border: "1px solid var(--warning)",
-                  borderRadius: "var(--radius)",
-                  color: "var(--warning)",
-                  fontSize: "0.875rem"
-                }}>
-                  ⚠️ No addresses in your list. Switch to "Enter Manually" to add a new address.
-                </div>
-              ) : (
-                <select
-                  id="address-index"
-                  name="addressIndex"
-                  value={formData.addressIndex}
-                  onChange={(e) => setFormData(prev => ({ ...prev, addressIndex: parseInt(e.target.value) }))}
-                  className="input"
-                  required
-                >
-                  {state.addresses.map((addr, idx) => (
-                    <option key={idx} value={idx}>
-                      #{idx + 1} - {addr.address}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          ) : (
-            <div className="form-group form-group-full">
-              <label htmlFor="manual-address">📍 Address *</label>
-              <input
-                id="manual-address"
-                name="manualAddress"
-                type="text"
-                value={formData.manualAddress}
-                onChange={(e) => setFormData(prev => ({ ...prev, manualAddress: e.target.value }))}
-                className="input"
-                placeholder="Enter full address"
-                required
-                autoComplete="street-address"
-              />
-              <div style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-                💡 If this address doesn't exist in your list, it will be automatically added.
-              </div>
-            </div>
-          )}
-
-          {/* Payment Type Selection */}
-          <div className="form-group form-group-full">
-            <label>💰 Payment Setup</label>
-            <div className="btn-group">
-              <button
-                type="button"
-                className={`btn ${formData.paymentType === "full_balance" ? "btn-primary" : "btn-ghost"}`}
-                onClick={() => setFormData(prev => ({ ...prev, paymentType: "full_balance" }))}
-              >
-                💵 Full Balance Payment
-              </button>
-              <button
-                type="button"
-                className={`btn ${formData.paymentType === "initial_plus_balance" ? "btn-primary" : "btn-ghost"}`}
-                onClick={() => setFormData(prev => ({ ...prev, paymentType: "initial_plus_balance" }))}
-              >
-                🎯 Initial Payment + Schedule
-              </button>
-            </div>
-          </div>
-
-          {/* Payment Amount Fields */}
-          {formData.paymentType === "full_balance" ? (
-            <div className="form-group">
-              <label htmlFor="payment-amount">💰 Payment Amount *</label>
-              <input
-                id="payment-amount"
-                name="paymentAmount"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.amount}
-                onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                className="input"
-                placeholder="0.00"
-                required
-                autoComplete="off"
-              />
-            </div>
-          ) : (
-            <>
-              <div className="form-group">
-                <label htmlFor="total-balance">💰 Total Balance *</label>
-                <input
-                  id="total-balance"
-                  name="totalBalance"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.totalBalance}
-                  onChange={(e) => setFormData(prev => ({ ...prev, totalBalance: e.target.value }))}
-                  className="input"
-                  placeholder="0.00"
-                  required
-                  autoComplete="off"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="initial-payment">🎯 Initial Payment (Today) *</label>
-                <input
-                  id="initial-payment"
-                  name="initialPayment"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.initialPayment}
-                  onChange={(e) => setFormData(prev => ({ ...prev, initialPayment: e.target.value }))}
-                  className="input"
-                  placeholder="0.00"
-                  required
-                  autoComplete="off"
-                />
-                {formData.totalBalance && formData.initialPayment && (
-                  <div style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-                    💡 Remaining balance: £{(parseFloat(formData.totalBalance || '0') - parseFloat(formData.initialPayment || '0')).toFixed(2)}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          <div className="form-group">
-            <label htmlFor="customer-name">👤 Customer Name</label>
-            <input
-              id="customer-name"
-              name="customerName"
-              type="text"
-              value={formData.customerName}
-              onChange={(e) => setFormData(prev => ({ ...prev, customerName: e.target.value }))}
-              className="input"
-              placeholder="Customer name"
-              autoComplete="name"
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="phone-number">📞 Phone Number</label>
-            <input
-              id="phone-number"
-              name="phoneNumber"
-              type="tel"
-              value={formData.phoneNumber}
-              onChange={(e) => setFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
-              className="input"
-              placeholder="Phone number"
-              autoComplete="tel"
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="scheduled-date">📅 Payment Due Date *</label>
-            <input
-              id="scheduled-date"
-              name="scheduledDate"
-              type="date"
-              value={formData.scheduledDate}
-              onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
-              className="input"
-              required
-              autoComplete="off"
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="scheduled-time">🕐 Preferred Time</label>
-            <input
-              id="scheduled-time"
-              name="scheduledTime"
-              type="time"
-              value={formData.scheduledTime}
-              onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
-              className="input"
-              autoComplete="off"
-            />
-          </div>
-
-          {/* Payment Schedule */}
-          {formData.paymentType === "full_balance" ? (
-            <div className="form-group form-group-full">
-              <label htmlFor="recurrence-type">🔄 Payment Schedule</label>
-              <select
-                id="recurrence-type"
-                name="recurrenceType"
-                value={formData.recurrenceType}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  recurrenceType: e.target.value as RecurrenceType,
-                  recurrenceInterval: 1,
-                  totalPayments: undefined
-                }))}
-                className="input"
-              >
-                <option value="none">One-time payment</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
-            </div>
-          ) : (
-            <div className="form-group form-group-full">
-              <label htmlFor="remaining-schedule">🔄 Remaining Balance Schedule</label>
-              <select
-                id="remaining-schedule"
-                name="remainingSchedule"
-                value={formData.remainingPaymentSchedule}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  remainingPaymentSchedule: e.target.value as "single" | "weekly" | "4weekly" | "monthly",
-                  totalPayments: e.target.value === "single" ? 1 : undefined
-                }))}
-                className="input"
-              >
-                <option value="single">Single payment (specific date)</option>
-                <option value="weekly">Weekly payments</option>
-                <option value="4weekly">4-weekly payments</option>
-                <option value="monthly">Monthly payments</option>
-              </select>
-            </div>
-          )}
-
-          {/* Total Payments */}
-          {((formData.paymentType === "full_balance" && formData.recurrenceType !== "none") ||
-            (formData.paymentType === "initial_plus_balance" && formData.remainingPaymentSchedule !== "single")) && (
-            <div className="form-group">
-              <label htmlFor="total-payments">
-                🔢 {formData.paymentType === "initial_plus_balance" ? "Remaining Payments" : "Total Payments"} *
-              </label>
-              <input
-                id="total-payments"
-                name="totalPayments"
-                type="number"
-                min="1"
-                value={formData.totalPayments || ""}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  totalPayments: e.target.value ? parseInt(e.target.value) : undefined
-                }))}
-                className="input"
-                placeholder="Number of payments"
-                required
-                autoComplete="off"
-              />
-              {formData.paymentType === "initial_plus_balance" && formData.totalPayments && formData.totalBalance && formData.initialPayment && (
-                <div style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-                  💡 £{((parseFloat(formData.totalBalance) - parseFloat(formData.initialPayment)) / formData.totalPayments).toFixed(2)} per payment
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Recurrence Interval - only for full balance recurring payments */}
-          {formData.paymentType === "full_balance" && formData.recurrenceType !== "none" && (
-            <div className="form-group">
-              <label htmlFor="recurrence-interval">📅 Interval</label>
-              <select
-                id="recurrence-interval"
-                name="recurrenceInterval"
-                value={formData.recurrenceInterval}
-                onChange={(e) => setFormData(prev => ({ ...prev, recurrenceInterval: parseInt(e.target.value) }))}
-                className="input"
-              >
-                <option value={1}>Every {formData.recurrenceType === "weekly" ? "week" : "month"}</option>
-                <option value={2}>Every 2 {formData.recurrenceType === "weekly" ? "weeks" : "months"}</option>
-                <option value={3}>Every 3 {formData.recurrenceType === "weekly" ? "weeks" : "months"}</option>
-                <option value={4}>Every 4 {formData.recurrenceType === "weekly" ? "weeks" : "months"}</option>
-              </select>
-            </div>
-          )}
-
-          <div className="form-group form-group-full">
-            <label htmlFor="notes">📝 Notes</label>
-            <textarea
-              id="notes"
-              name="notes"
-              value={formData.notes}
-              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-              className="input"
-              rows={3}
-              placeholder="Payment terms, special instructions, etc..."
-            />
-          </div>
-          
-          {/* Payment Summary */}
-          {formData.paymentType === "initial_plus_balance" && formData.totalBalance && formData.initialPayment && (
-            <div className="form-group form-group-full">
-              <div style={{
-                padding: "1rem",
-                backgroundColor: "var(--gray-50)",
-                borderRadius: "var(--radius-md)",
-                border: "1px solid var(--gray-200)"
-              }}>
-                <div style={{ fontWeight: 600, marginBottom: "0.5rem", color: "var(--text-primary)" }}>📊 Payment Summary</div>
-                <div style={{ fontSize: "0.875rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                  <div>💰 Total Balance: £{formData.totalBalance}</div>
-                  <div>🎯 Initial Payment (Today): £{formData.initialPayment}</div>
-                  <div>📅 Remaining Balance: £{(parseFloat(formData.totalBalance) - parseFloat(formData.initialPayment)).toFixed(2)}</div>
-
-                  {/* Payment amount and schedule details */}
-                  {formData.remainingPaymentSchedule === "single" ? (
-                    <div>💳 Single payment: £{(parseFloat(formData.totalBalance) - parseFloat(formData.initialPayment)).toFixed(2)}</div>
-                  ) : formData.totalPayments && formData.totalPayments > 0 ? (
-                    <div>💳 {formData.totalPayments} × £{((parseFloat(formData.totalBalance) - parseFloat(formData.initialPayment)) / formData.totalPayments).toFixed(2)} {
-                      formData.remainingPaymentSchedule === "weekly" ? "weekly" :
-                      formData.remainingPaymentSchedule === "4weekly" ? "every 4 weeks" :
-                      formData.remainingPaymentSchedule === "monthly" ? "monthly" : ""
-                    }</div>
-                  ) : (
-                    <div>💳 Payment amount: Enter number of payments above</div>
-                  )}
-
-                  <div>📋 Schedule: {formData.remainingPaymentSchedule === "single" ? "Single payment" :
-                    formData.remainingPaymentSchedule === "4weekly" ? "Every 4 weeks" :
-                    formData.remainingPaymentSchedule.charAt(0).toUpperCase() + formData.remainingPaymentSchedule.slice(1)}</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="form-group form-group-full">
-            <div className="btn-row btn-row-end" style={{ marginTop: "1rem" }}>
-              <button type="button" className="btn btn-ghost" onClick={onCancel}>
-                Cancel
-              </button>
-              <LoadingButton
-                type="submit" 
-                className="btn btn-primary" 
-                isLoading={isLoading || isSubmitting}
-                loadingText={arrangement ? "Updating..." : "Creating..."}
-                disabled={addressMode === "existing" && state.addresses.length === 0}
-              >
-                {arrangement ? "💾 Update" : "📅 Create"} Arrangement
-              </LoadingButton>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
