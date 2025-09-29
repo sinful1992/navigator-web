@@ -964,6 +964,38 @@ export function useCloudSync(): UseCloudSync {
       }
     }
 
+    // 🔧 CRITICAL FIX: Check if import is in progress
+    const importInProgress = localStorage.getItem('navigator_import_in_progress');
+    if (importInProgress) {
+      const importTime = parseInt(importInProgress);
+      const timeSinceImport = Date.now() - importTime;
+
+      // If import was within the last 2 seconds, prefer local state
+      if (timeSinceImport < 2000) {
+        console.log('🛡️ IMPORT PROTECTION: Preferring local state to prevent import override', {
+          timeSinceImport: `${Math.round(timeSinceImport/1000)}s`,
+          importTime: new Date(importTime).toISOString()
+        });
+        const localVersion =
+          typeof localState.currentListVersion === "number"
+            ? localState.currentListVersion
+            : 1;
+        const serverVersion =
+          typeof serverState.currentListVersion === "number"
+            ? serverState.currentListVersion
+            : 1;
+
+        return {
+          ...localState,
+          // Keep the higher version but don't bump it
+          currentListVersion: Math.max(localVersion, serverVersion)
+        };
+      } else {
+        // Clear the flag after timeout
+        localStorage.removeItem('navigator_import_in_progress');
+      }
+    }
+
     // 🔧 OFFLINE PROTECTION: Check if we have recent local work that needs preserving
     const recentThreshold = new Date(Date.now() - 6 * 60 * 60 * 1000); // 6 hours
     const hasRecentLocalWork = localState.completions.some(comp =>
