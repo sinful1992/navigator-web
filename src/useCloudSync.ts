@@ -1170,6 +1170,26 @@ export function useCloudSync(): UseCloudSync {
               }
             }
 
+            // 🔧 CRITICAL FIX: Check if import is in progress before applying cloud updates
+            const importInProgress = localStorage.getItem('navigator_import_in_progress');
+            if (importInProgress) {
+              const importTime = parseInt(importInProgress);
+              const timeSinceImport = Date.now() - importTime;
+
+              // If import was within the last 2 seconds, skip cloud updates
+              if (timeSinceImport < 2000) {
+                console.log('🛡️ IMPORT PROTECTION: Skipping cloud state update to prevent import override', {
+                  timeSinceImport: `${Math.round(timeSinceImport/1000)}s`,
+                  importTime: new Date(importTime).toISOString()
+                });
+                return;
+              } else {
+                // Clear the flag after timeout
+                console.log('🛡️ IMPORT PROTECTION: Timeout reached, clearing flag');
+                localStorage.removeItem('navigator_import_in_progress');
+              }
+            }
+
             console.log('🔄 FORCE UPDATE: Applying cloud state update from another device');
 
             // FORCE UPDATE: Apply cloud updates immediately for personal use case

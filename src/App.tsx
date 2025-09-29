@@ -665,6 +665,26 @@ function AuthedApp() {
             }
           }
 
+          // 🔧 CRITICAL FIX: Check if import is in progress before applying any cloud updates
+          const importInProgress = localStorage.getItem('navigator_import_in_progress');
+          if (importInProgress) {
+            const importTime = parseInt(importInProgress);
+            const timeSinceImport = Date.now() - importTime;
+
+            // If import was within the last 2 seconds, skip ALL cloud updates
+            if (timeSinceImport < 2000) {
+              logger.sync('🛡️ IMPORT PROTECTION: App.tsx subscription skipping cloud state update to prevent import override', {
+                timeSinceImport: `${Math.round(timeSinceImport/1000)}s`,
+                importTime: new Date(importTime).toISOString()
+              });
+              return;
+            } else {
+              // Clear the flag after timeout
+              logger.sync('🛡️ IMPORT PROTECTION: App.tsx subscription timeout reached, clearing flag');
+              localStorage.removeItem('navigator_import_in_progress');
+            }
+          }
+
           if (typeof updaterOrState === 'function') {
             // This is a React state updater function - call setState directly
             logger.sync("Received cloud update (React updater)");

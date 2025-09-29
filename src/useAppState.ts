@@ -660,6 +660,13 @@ export function useAppState() {
   /** Import a new Excel list: bump list version with option to preserve completions. */
   const setAddresses = React.useCallback(
     (rows: AddressRow[], preserveCompletions = true) => {
+      logger.info(`🔄 IMPORT START: Importing ${rows.length} addresses, preserveCompletions=${preserveCompletions}`);
+
+      // 🔧 CRITICAL FIX: Set import protection flag to prevent cloud sync override
+      const importTime = Date.now();
+      localStorage.setItem('navigator_import_in_progress', importTime.toString());
+      logger.info('🛡️ IMPORT PROTECTION ACTIVATED:', new Date(importTime).toISOString());
+
       const operationId = generateOperationId("update", "address", {
         type: "bulk_import",
         count: rows.length,
@@ -668,7 +675,9 @@ export function useAppState() {
 
       // 🔧 FIX: Validate rows before applying
       const validRows = Array.isArray(rows) ? rows.filter(validateAddressRow) : [];
-      
+
+      logger.info(`🔄 IMPORT VALIDATION: ${validRows.length} valid out of ${rows.length} total`);
+
       if (validRows.length === 0) {
         logger.warn('No valid addresses to import');
         return;
@@ -683,19 +692,30 @@ export function useAppState() {
       );
 
       // Apply to base state
-      setBaseState((s) => ({
-        ...s,
-        addresses: validRows,
-        activeIndex: null,
-        currentListVersion:
-          (typeof s.currentListVersion === "number"
-            ? s.currentListVersion
-            : 1) + 1,
-        completions: preserveCompletions ? s.completions : [],
-      }));
+      setBaseState((s) => {
+        const newListVersion = (typeof s.currentListVersion === "number" ? s.currentListVersion : 1) + 1;
+        logger.info(`🔄 IMPORT BASE STATE UPDATE: addresses=${validRows.length}, preserveCompletions=${preserveCompletions}, oldCompletions=${s.completions.length}, newListVersion=${newListVersion}`);
+
+        const newState = {
+          ...s,
+          addresses: validRows,
+          activeIndex: null,
+          currentListVersion: newListVersion,
+          completions: preserveCompletions ? s.completions : [],
+        };
+
+        logger.info(`🔄 IMPORT RESULT STATE: addresses=${newState.addresses.length}, completions=${newState.completions.length}, listVersion=${newState.currentListVersion}`);
+        return newState;
+      });
 
       // Confirm immediately for local operations
       confirmOptimisticUpdate(operationId);
+
+      // 🔧 CRITICAL FIX: Clear import protection flag after a delay to allow state to settle
+      setTimeout(() => {
+        localStorage.removeItem('navigator_import_in_progress');
+        logger.info('🛡️ IMPORT PROTECTION CLEARED after import completion');
+      }, 2000); // 2 second protection window
     },
     [addOptimisticUpdate, confirmOptimisticUpdate]
   );
