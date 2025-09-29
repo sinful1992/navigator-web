@@ -755,6 +755,24 @@ function AuthedApp() {
           }
         }
 
+        // 🔧 CRITICAL FIX: Allow import to sync to cloud IMMEDIATELY after state settles
+        // Import protection only blocks INCOMING syncs, not outgoing pushes
+        // Wait 300ms after import starts to ensure state is fully updated before pushing
+        const importInProgress = localStorage.getItem('navigator_import_in_progress');
+        if (importInProgress) {
+          const importTime = parseInt(importInProgress);
+          const timeSinceImport = Date.now() - importTime;
+
+          if (timeSinceImport < 300) {
+            logger.sync('🛡️ IMPORT PROTECTION: Waiting 300ms for import state to settle before sync', {
+              timeSinceImport: `${Math.round(timeSinceImport)}ms`
+            });
+            return; // Will retry when state updates again
+          }
+          // After 300ms, proceed with sync to push import to cloud
+          logger.sync('🚀 IMPORT SYNC: Import settled, pushing to cloud');
+        }
+
         logger.sync("Syncing changes to cloud...");
 
         // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition
