@@ -1652,7 +1652,12 @@ function AuthedApp() {
           )}
 
           {tab === "completed" && (
-            <Completed state={safeState} onChangeOutcome={handleChangeOutcome} />
+            <Completed
+              state={safeState}
+              onChangeOutcome={handleChangeOutcome}
+              onAddArrangement={addArrangement}
+              onComplete={handleComplete}
+            />
           )}
 
           {tab === "arrangements" && (

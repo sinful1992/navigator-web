@@ -26,7 +26,11 @@ export async function applyOps(ops: SyncOp[]): Promise<ApplyOpsResult> {
     // Supabase can return JSON already parsed; rarely it may be a string.
     let resp: RpcResponse = data as RpcResponse;
     if (typeof resp === "string") {
-      try { resp = JSON.parse(resp) as RpcResponse; } catch { /* ignore */ }
+      try {
+        resp = JSON.parse(resp) as RpcResponse;
+      } catch (parseError) {
+        console.warn("[applyOps] Failed to parse response string:", parseError);
+      }
     }
 
     const conflicts: ApplyOpsConflict[] | undefined = Array.isArray(resp?.conflicts)

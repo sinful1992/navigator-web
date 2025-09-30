@@ -1,6 +1,7 @@
 // src/Completed.tsx
 import * as React from "react";
-import type { AddressRow, Completion, DaySession, Outcome, Arrangement } from "./types";
+import type { AddressRow, Completion, DaySession, Outcome, Arrangement, AppState } from "./types";
+import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
 
 type AppStateSlice = {
   addresses: AddressRow[];
@@ -10,8 +11,10 @@ type AppStateSlice = {
 };
 
 type Props = {
-  state: AppStateSlice;
+  state: AppStateSlice & AppState;
   onChangeOutcome: (completionArrayIndex: number, outcome: Outcome, amount?: string) => void;
+  onAddArrangement?: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onComplete?: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void;
 };
 
 const TZ = "Europe/London";
@@ -53,7 +56,9 @@ function safeDurationSeconds(s: DaySession): number {
       const st = new Date(s.start).getTime();
       const en = new Date(s.end).getTime();
       if (isFinite(st) && isFinite(en) && en > st) return Math.floor((en - st) / 1000);
-    } catch {}
+    } catch (error) {
+      console.warn("Failed to calculate duration:", error);
+    }
   }
   return 0;
 }
@@ -259,12 +264,18 @@ function getCompletionDateKey(c: Completion, fallbackSessions: DaySession[]): st
   return null;
 }
 
-export default function Completed({ state, onChangeOutcome }: Props) {
+export default function Completed({ state, onChangeOutcome, onAddArrangement, onComplete }: Props) {
   const { addresses, completions, daySessions, arrangements } = state;
-  
+
   // Track which PIF amounts are being edited
   const [editingPifAmount, setEditingPifAmount] = React.useState<number | null>(null);
   const [tempPifAmount, setTempPifAmount] = React.useState<string>("");
+
+  // Track which completion is showing arrangement form for ARR outcome
+  const [showArrangementForm, setShowArrangementForm] = React.useState<{
+    completionIndex: number;
+    addressIndex: number;
+  } | null>(null);
 
   // Initial range: last session day or today
   const lastSessionKey =
@@ -609,7 +620,18 @@ export default function Completed({ state, onChangeOutcome }: Props) {
                                   id={`outcome-${compIndex}`}
                                   name={`outcome-${compIndex}`}
                                   value={(currentOutcome as string) || ""}
-                                  onChange={(e) => onChangeOutcome(compIndex, e.target.value as Outcome, comp.amount)}
+                                  onChange={(e) => {
+                                    const newOutcome = e.target.value as Outcome;
+                                    if (newOutcome === "ARR" && onAddArrangement) {
+                                      // Show arrangement form instead of directly changing outcome
+                                      setShowArrangementForm({
+                                        completionIndex: compIndex,
+                                        addressIndex: comp.index
+                                      });
+                                    } else {
+                                      onChangeOutcome(compIndex, newOutcome, comp.amount);
+                                    }
+                                  }}
                                   className="input"
                                   style={{ padding: "0.25rem 0.5rem", height: 32 }}
                                 >
@@ -635,6 +657,23 @@ export default function Completed({ state, onChangeOutcome }: Props) {
             );
           })}
         </div>
+      )}
+
+      {/* Arrangement Form for ARR outcome */}
+      {showArrangementForm && onAddArrangement && onComplete && (
+        <UnifiedArrangementForm
+          state={state}
+          preSelectedAddressIndex={showArrangementForm.addressIndex}
+          onSave={async (arrangementData) => {
+            await onAddArrangement(arrangementData);
+            // Change the completion outcome to ARR
+            onChangeOutcome(showArrangementForm.completionIndex, "ARR");
+            setShowArrangementForm(null);
+          }}
+          onCancel={() => setShowArrangementForm(null)}
+          onComplete={onComplete}
+          fullscreen={true}
+        />
       )}
     </div>
   );

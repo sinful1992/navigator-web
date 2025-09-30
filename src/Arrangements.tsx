@@ -427,6 +427,7 @@ const ArrangementsComponent = function Arrangements({
           }}
           isLoading={loadingStates.saving || loadingStates.updating}
           onComplete={onComplete}
+          fullscreen={true}
         />
       )}
 
