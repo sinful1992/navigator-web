@@ -306,13 +306,39 @@ function AuthedApp() {
   const [showSupabaseSetup, setShowSupabaseSetup] = React.useState(false);
   const [showBackupManager, setShowBackupManager] = React.useState(false);
 
-  const [tab, setTab] = React.useState<Tab>("list");
+  // Initialize tab from URL hash or default to "list"
+  const getInitialTab = (): Tab => {
+    const hash = window.location.hash.slice(1);
+    const validTabs: Tab[] = ["list", "completed", "arrangements", "earnings", "planning"];
+    return validTabs.includes(hash as Tab) ? (hash as Tab) : "list";
+  };
+
+  const [tab, setTab] = React.useState<Tab>(getInitialTab);
   const [search, setSearch] = React.useState("");
-  const [autoCreateArrangementFor, setAutoCreateArrangementFor] = 
+  const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
     React.useState<number | null>(null);
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
+
+  // Browser back button navigation support
+  React.useEffect(() => {
+    const handlePopState = () => {
+      const newTab = getInitialTab();
+      setTab(newTab);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Function to change tab with history support
+  const navigateToTab = React.useCallback((newTab: Tab) => {
+    if (newTab !== tab) {
+      setTab(newTab);
+      window.history.pushState({ tab: newTab }, '', `#${newTab}`);
+    }
+  }, [tab]);
 
   // REMOVED: Page visibility tracking - was over-engineering after fixing React subscription bug
 
@@ -1708,25 +1734,25 @@ function AuthedApp() {
         <nav className="nav-menu">
           <div className="nav-section">
             <div className="nav-section-title">Main</div>
-            <div 
+            <div
               className={`nav-item ${tab === 'list' ? 'active' : ''}`}
-              onClick={() => { setTab('list'); setSidebarOpen(false); }}
+              onClick={() => { navigateToTab('list'); setSidebarOpen(false); }}
             >
               <span className="nav-icon">📋</span>
               <span>Address List</span>
               <span className="nav-badge">{stats.pending}</span>
             </div>
-            <div 
+            <div
               className={`nav-item ${tab === 'completed' ? 'active' : ''}`}
-              onClick={() => { setTab('completed'); setSidebarOpen(false); }}
+              onClick={() => { navigateToTab('completed'); setSidebarOpen(false); }}
             >
               <span className="nav-icon">✅</span>
               <span>Completed</span>
               <span className="nav-badge">{stats.completed}</span>
             </div>
-            <div 
+            <div
               className={`nav-item ${tab === 'arrangements' ? 'active' : ''}`}
-              onClick={() => { setTab('arrangements'); setSidebarOpen(false); }}
+              onClick={() => { navigateToTab('arrangements'); setSidebarOpen(false); }}
             >
               <span className="nav-icon">📅</span>
               <span>Arrangements</span>
@@ -1736,16 +1762,16 @@ function AuthedApp() {
 
           <div className="nav-section">
             <div className="nav-section-title">Analytics</div>
-            <div 
+            <div
               className={`nav-item ${tab === 'earnings' ? 'active' : ''}`}
-              onClick={() => { setTab('earnings'); setSidebarOpen(false); }}
+              onClick={() => { navigateToTab('earnings'); setSidebarOpen(false); }}
             >
               <span className="nav-icon">💰</span>
               <span>Earnings</span>
             </div>
-            <div 
+            <div
               className={`nav-item ${tab === 'planning' ? 'active' : ''}`}
-              onClick={() => { setTab('planning'); setSidebarOpen(false); }}
+              onClick={() => { navigateToTab('planning'); setSidebarOpen(false); }}
             >
               <span className="nav-icon">🗺️</span>
               <span>Route Planning</span>
