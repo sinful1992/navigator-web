@@ -713,16 +713,23 @@ export default function UnifiedArrangementForm({
         }
 
         .uaf-section {
-          margin-bottom: 2rem;
-          padding: 1.5rem;
-          background: var(--gray-25, #fafafa);
-          border-radius: 8px;
-          border: 1px solid var(--border, #e2e8f0);
+          margin-bottom: 1.5rem;
+          padding: 0;
+          background: transparent;
+          border-radius: 0;
+          border: none;
+          border-bottom: 1px solid var(--border, #e2e8f0);
+          padding-bottom: 1.5rem;
+        }
+
+        .uaf-section:last-of-type {
+          border-bottom: none;
+          padding-bottom: 0;
         }
 
         .uaf-section-title {
           margin: 0 0 1rem 0;
-          font-size: 1rem;
+          font-size: 0.875rem;
           font-weight: 600;
           color: var(--text-primary);
         }
@@ -971,7 +978,7 @@ export default function UnifiedArrangementForm({
         }
 
         .dark-mode .uaf-section {
-          background: var(--gray-200);
+          background: transparent;
           border-color: var(--gray-300);
         }
 
