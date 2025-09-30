@@ -67,6 +67,7 @@ export type Arrangement = {
   status: ArrangementStatus;
   notes?: string;
   amount?: string;
+  initialPaymentAmount?: string;  // Initial payment recorded at arrangement creation
   createdAt: string;
   updatedAt: string;
   // Recurring payment fields

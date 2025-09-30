@@ -7,7 +7,7 @@ import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
 
 type Props = {
   state: AppState;
-  onAddArrangement: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onAddArrangement: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>; // Returns the arrangement ID
   onUpdateArrangement: (id: string, updates: Partial<Arrangement>) => void;
   onDeleteArrangement: (id: string) => void;
   onAddAddress?: (address: AddressRow) => Promise<number>; // Returns the new address index
@@ -311,7 +311,7 @@ const ArrangementsComponent = function Arrangements({
     }
   };
 
-  // Handle arrangement creation (also mark as ARR completion)
+  // Handle arrangement creation (also mark as ARR completion or process initial payment)
   const handleArrangementSave = async (arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => {
     setLoadingStates(prev => ({ ...prev, saving: true }));
     try {
@@ -320,17 +320,38 @@ const ArrangementsComponent = function Arrangements({
         throw new Error('Selected address is no longer valid. Please refresh and try again.');
       }
 
-      // First create the arrangement
-      await onAddArrangement(arrangementData);
+      // Check if there's an initial payment
+      const hasInitialPayment = arrangementData.initialPaymentAmount &&
+                                parseFloat(arrangementData.initialPaymentAmount) > 0;
 
-      // Then record completion (ARR) - this is synchronous but we should handle any potential errors
-      try {
-        onComplete(arrangementData.addressIndex, "ARR");
-      } catch (completionError) {
-        console.error('Error recording ARR completion:', completionError);
-        // Note: Arrangement was already created successfully, so we don't want to fail completely
-        // This is a data consistency issue but not critical enough to rollback the arrangement
-        alert('Arrangement created successfully, but there was an issue recording the completion. You may need to manually mark this address as ARR.');
+      if (hasInitialPayment) {
+        // Create arrangement - this returns the arrangement ID
+        const arrangementId = await onAddArrangement(arrangementData);
+
+        // Give React time to propagate the state update to this component
+        // The addArrangement promise resolves after state is committed, but we need
+        // to wait for the re-render to propagate the updated state prop to this component
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Verify the arrangement exists in our state before processing payment
+        const arrangement = state.arrangements.find(arr => arr.id === arrangementId);
+        if (!arrangement) {
+          throw new Error('Arrangement was created but not yet available. Please refresh and mark the payment manually.');
+        }
+
+        // Process the initial payment using the existing markAsPaid logic
+        await markAsPaid(arrangementId, arrangementData.initialPaymentAmount!);
+      } else {
+        // No initial payment - standard flow
+        await onAddArrangement(arrangementData);
+
+        // Record ARR completion
+        try {
+          onComplete(arrangementData.addressIndex, "ARR");
+        } catch (completionError) {
+          console.error('Error recording ARR completion:', completionError);
+          alert('Arrangement created successfully, but there was an issue recording the completion. You may need to manually mark this address as ARR.');
+        }
       }
 
       setShowAddForm(false);
@@ -338,7 +359,6 @@ const ArrangementsComponent = function Arrangements({
     } catch (error) {
       console.error('Error saving arrangement:', error);
       alert(`Failed to save arrangement: ${error instanceof Error ? error.message : 'Please try again.'}`);
-      // Don't reset form state on error so user can retry
     } finally {
       setLoadingStates(prev => ({ ...prev, saving: false }));
     }
