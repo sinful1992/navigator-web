@@ -637,30 +637,9 @@ export default function UnifiedArrangementForm({
     </form>
   );
 
-  if (fullscreen) {
-    return (
-      <div
-        ref={overlayRef}
-        className="uaf-overlay"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            onCancel();
-          }
-        }}
-      >
-        <div className="uaf-modal">
-          {formContent}
-        </div>
-        {/* Styles included at bottom */}
-      </div>
-    );
-  }
-
-  return (
-    <div className="uaf-container">
-      {formContent}
-
-      <style>{`
+  // Styles component to avoid duplication
+  const styles = (
+    <style>{`
         /* Unified Arrangement Form Styles */
         .uaf-container {
           background: var(--card-bg, white);
@@ -1052,6 +1031,35 @@ export default function UnifiedArrangementForm({
           }
         }
       `}</style>
-    </div>
+  );
+
+  if (fullscreen) {
+    return (
+      <>
+        <div
+          ref={overlayRef}
+          className="uaf-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              onCancel();
+            }
+          }}
+        >
+          <div className="uaf-modal">
+            {formContent}
+          </div>
+        </div>
+        {styles}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="uaf-container">
+        {formContent}
+      </div>
+      {styles}
+    </>
   );
 }
