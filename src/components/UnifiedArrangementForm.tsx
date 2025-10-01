@@ -1,7 +1,7 @@
 import React from 'react';
 import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome } from '../types';
 import { LoadingButton } from './LoadingButton';
-import { addDays, addWeeks, addMonths, format, parseISO } from 'date-fns';
+import { addWeeks, addMonths, format, parseISO } from 'date-fns';
 
 type PreviousPayment = {
   id: string;
