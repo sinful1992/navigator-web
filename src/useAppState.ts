@@ -752,18 +752,22 @@ export function useAppState() {
   );
 
   const setActive = React.useCallback((idx: number) => {
+    // 🔧 CRITICAL FIX: Set protection flag before state change
+    localStorage.setItem('navigator_recent_state_change', Date.now().toString());
+
     setBaseState((s) => {
       // Check if this address is already completed (cross-device protection)
       const address = s.addresses[idx];
       if (address) {
         const isCompleted = s.completions.some(c =>
-          c.address === address.address &&
+          c.index === idx &&
           (c.listVersion || s.currentListVersion) === s.currentListVersion
         );
 
         if (isCompleted) {
-          logger.warn(`Cannot set active - address "${address.address}" is already completed`);
-          showWarning(`Address "${address.address}" is already completed on another device`);
+          logger.warn(`Cannot set active - address at index ${idx} is already completed`);
+          showWarning(`This address is already completed`);
+          localStorage.removeItem('navigator_recent_state_change'); // Clear protection on error
           return s; // Don't change state
         }
       }
@@ -771,13 +775,26 @@ export function useAppState() {
       logger.info(`📍 SETTING ACTIVE: Address #${idx} "${address?.address}" - will auto-sync to all devices`);
       return { ...s, activeIndex: idx };
     });
+
+    // Auto-clear protection flag after 5 seconds
+    setTimeout(() => {
+      localStorage.removeItem('navigator_recent_state_change');
+    }, 5000);
   }, []);
 
   const cancelActive = React.useCallback(() => {
+    // 🔧 CRITICAL FIX: Set protection flag before state change
+    localStorage.setItem('navigator_recent_state_change', Date.now().toString());
+
     setBaseState((s) => {
       logger.info(`📍 CANCELING ACTIVE: Clearing active state - will auto-sync to all devices`);
       return { ...s, activeIndex: null };
     });
+
+    // Auto-clear protection flag after 5 seconds
+    setTimeout(() => {
+      localStorage.removeItem('navigator_recent_state_change');
+    }, 5000);
   }, []);
 
   // Track pending completions to prevent double submissions

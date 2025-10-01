@@ -1173,8 +1173,36 @@ export function useCloudSync(): UseCloudSync {
             // Verify data integrity
             const expectedChecksum = generateChecksum(dataObj);
             if (serverChecksum && serverChecksum !== expectedChecksum) {
-              console.warn('Checksum mismatch, requesting full sync');
+              console.error('❌ CHECKSUM MISMATCH - Data integrity issue detected', {
+                expected: expectedChecksum,
+                actual: serverChecksum,
+                serverVersion,
+                updatedAt
+              });
+              setError('Data sync error detected - please refresh the page');
+              // Force a full sync by resetting metadata
+              syncMetadata.current.lastSyncAt = '';
+              syncMetadata.current.version = 0;
+              syncMetadata.current.checksum = '';
               return;
+            }
+
+            // 🔧 CRITICAL FIX: Check for recent local state changes
+            const recentChangeProtection = localStorage.getItem('navigator_recent_state_change');
+            if (recentChangeProtection) {
+              const changeTime = parseInt(recentChangeProtection);
+              const timeSinceChange = Date.now() - changeTime;
+
+              // Protect local changes for 5 seconds
+              if (timeSinceChange < 5000) {
+                console.log('🛡️ LOCAL CHANGE PROTECTION: Skipping cloud update to preserve recent local action', {
+                  timeSinceChange: `${Math.round(timeSinceChange/1000)}s`,
+                  changeTime: new Date(changeTime).toISOString()
+                });
+                return;
+              } else {
+                localStorage.removeItem('navigator_recent_state_change');
+              }
             }
 
             // Update our sync metadata
