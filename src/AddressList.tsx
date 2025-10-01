@@ -12,6 +12,38 @@ type Props = {
   filterText: string;
 };
 
+// Timer component to show elapsed time
+function ElapsedTimer({ startTime }: { startTime: string | null | undefined }) {
+  const [elapsed, setElapsed] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!startTime) return;
+
+    const updateElapsed = () => {
+      const start = new Date(startTime).getTime();
+      const now = Date.now();
+      setElapsed(Math.floor((now - start) / 1000));
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  if (!startTime) return null;
+
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+
+  return (
+    <div className="elapsed-timer">
+      <span className="timer-icon">⏱️</span>
+      <span className="timer-value">{minutes}:{seconds.toString().padStart(2, '0')}</span>
+    </div>
+  );
+}
+
 function makeMapsHref(row: AddressRow) {
   if (
     typeof row.lat === "number" &&
@@ -170,6 +202,11 @@ const AddressListComponent = function AddressList({
                           <span>Coordinates ready</span>
                         </div>
                       )}
+                      {isActive && state.activeStartTime && (
+                        <div className="address-meta-item">
+                          <ElapsedTimer startTime={state.activeStartTime} />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -199,7 +236,7 @@ const AddressListComponent = function AddressList({
                     onClick={() => setActive(i)}
                   >
                     <span>▶️</span>
-                    <span>Set Active</span>
+                    <span>Start</span>
                   </button>
                 ) : (
                   <>
@@ -422,6 +459,39 @@ const AddressListComponent = function AddressList({
       )}
 
       <style>{`
+        /* Elapsed Timer Styles */
+        .elapsed-timer {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.25rem 0.5rem;
+          background: var(--primary);
+          color: white;
+          border-radius: var(--radius-md);
+          font-weight: 600;
+          font-size: 0.875rem;
+          animation: pulse 2s ease-in-out infinite;
+        }
+
+        .timer-icon {
+          font-size: 1rem;
+        }
+
+        .timer-value {
+          font-variant-numeric: tabular-nums;
+          min-width: 3rem;
+          text-align: center;
+        }
+
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.85;
+          }
+        }
+
         /* Modern Outcome Panel Styles */
         .outcome-panel-modern {
           background: var(--gray-50);

@@ -41,6 +41,7 @@ type OptimisticState = {
 const initial: AppState = {
   addresses: [],
   activeIndex: null,
+  activeStartTime: null,
   completions: [],
   daySessions: [],
   arrangements: [],
@@ -772,8 +773,9 @@ export function useAppState() {
         }
       }
 
-      logger.info(`📍 SETTING ACTIVE: Address #${idx} "${address?.address}" - will auto-sync to all devices`);
-      return { ...s, activeIndex: idx };
+      const now = new Date().toISOString();
+      logger.info(`📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - tracking time`);
+      return { ...s, activeIndex: idx, activeStartTime: now };
     });
 
     // Auto-clear protection flag after 5 seconds
@@ -787,8 +789,8 @@ export function useAppState() {
     localStorage.setItem('navigator_recent_state_change', Date.now().toString());
 
     setBaseState((s) => {
-      logger.info(`📍 CANCELING ACTIVE: Clearing active state - will auto-sync to all devices`);
-      return { ...s, activeIndex: null };
+      logger.info(`📍 CANCELING ACTIVE: Clearing active state and stopping timer - will auto-sync to all devices`);
+      return { ...s, activeIndex: null, activeStartTime: null };
     });
 
     // Auto-clear protection flag after 5 seconds
@@ -840,6 +842,16 @@ export function useAppState() {
       }
 
       const nowISO = new Date().toISOString();
+
+      // Calculate time spent on this case if it was the active one
+      let timeSpentSeconds: number | undefined;
+      if (currentState.activeIndex === index && currentState.activeStartTime) {
+        const startTime = new Date(currentState.activeStartTime).getTime();
+        const endTime = new Date(nowISO).getTime();
+        timeSpentSeconds = Math.floor((endTime - startTime) / 1000);
+        logger.info(`⏱️ CASE TIME TRACKED: ${Math.floor(timeSpentSeconds / 60)}m ${timeSpentSeconds % 60}s on "${address.address}"`);
+      }
+
       const completion: Completion = {
         index,
         address: address.address,
@@ -851,6 +863,7 @@ export function useAppState() {
         listVersion: currentState.currentListVersion,
         arrangementId,
         caseReference,
+        timeSpentSeconds,
       };
 
       const operationId = generateOperationId(
@@ -880,6 +893,7 @@ export function useAppState() {
           ...s,
           completions: [completion, ...s.completions],
           activeIndex: s.activeIndex === index ? null : s.activeIndex,
+          activeStartTime: s.activeIndex === index ? null : s.activeStartTime,
         }));
 
         return operationId;

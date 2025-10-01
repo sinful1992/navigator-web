@@ -596,9 +596,17 @@ export default function Completed({ state, onChangeOutcome, onAddArrangement, on
                                         📅 From arrangement
                                         {arrangement.customerName && ` (${arrangement.customerName})`}
                                         {comp.outcome === "Done" && " • Defaulted"}
-                                        {comp.outcome === "PIF" && arrangement.recurrenceType && arrangement.recurrenceType !== "none" && 
+                                        {comp.outcome === "PIF" && arrangement.recurrenceType && arrangement.recurrenceType !== "none" &&
                                           ` • ${arrangement.recurrenceType === "weekly" ? "Weekly" : "Monthly"} payment`
                                         }
+                                      </span>
+                                    </>
+                                  )}
+                                  {comp.timeSpentSeconds !== undefined && comp.timeSpentSeconds > 0 && (
+                                    <>
+                                      {!arrangement && <br />}
+                                      <span style={{ color: "var(--gray-600)", fontSize: "0.75rem", marginLeft: arrangement ? 8 : 0 }}>
+                                        {arrangement && " • "}⏱️ {Math.floor(comp.timeSpentSeconds / 60)}m {comp.timeSpentSeconds % 60}s
                                       </span>
                                     </>
                                   )}

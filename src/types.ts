@@ -20,6 +20,8 @@ export type Completion = {
   arrangementId?: string;
   /** Case reference number (required for PIF outcomes). */
   caseReference?: string;
+  /** Time spent on this case in seconds. */
+  timeSpentSeconds?: number;
 };
 
 export type DaySession = {
@@ -180,6 +182,7 @@ export type ReminderSettings = {
 export type AppState = {
   addresses: AddressRow[];
   activeIndex: number | null;
+  activeStartTime?: string | null; // ISO timestamp when address became active
   completions: Completion[];
   daySessions: DaySession[];
   arrangements: Arrangement[];
