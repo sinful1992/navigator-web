@@ -47,12 +47,22 @@ function ElapsedTimer({ startTime }: { startTime: string | null | undefined }) {
   );
 }
 
-// Component to auto-fit map bounds
-function FitBounds({ positions }: { positions: [number, number][] }) {
+// Component to auto-fit map bounds (only on initial mount or when reset is triggered)
+function FitBounds({ positions, resetTrigger }: { positions: [number, number][]; resetTrigger?: number }) {
   const map = useMap();
+  const hasfitted = React.useRef(false);
+  const lastResetTrigger = React.useRef(0);
 
   React.useEffect(() => {
     if (positions.length === 0) return;
+
+    // Fit on initial mount or when reset is triggered
+    const shouldFit = !hasfitted.current || (resetTrigger && resetTrigger !== lastResetTrigger.current);
+
+    if (!shouldFit) return;
+
+    hasfitted.current = true;
+    if (resetTrigger) lastResetTrigger.current = resetTrigger;
 
     if (positions.length === 1) {
       map.setView(positions[0], 15);
@@ -60,7 +70,7 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
       const bounds = L.latLngBounds(positions);
       map.fitBounds(bounds.pad(0.1));
     }
-  }, [map, positions]);
+  }, [map, positions, resetTrigger]);
 
   return null;
 }
@@ -110,6 +120,9 @@ const AddressListComponent = function AddressList({
     const saved = localStorage.getItem('navigator_address_view_mode');
     return (saved === 'map' || saved === 'list') ? saved : 'list';
   });
+
+  // Map reset trigger
+  const [mapResetTrigger, setMapResetTrigger] = React.useState(0);
 
   // Persist view mode preference
   React.useEffect(() => {
@@ -248,6 +261,15 @@ const AddressListComponent = function AddressList({
       {/* Map View */}
       {viewMode === 'map' && geocodedVisible.length > 0 && (
         <div className="map-view-container">
+          {/* Reset View Button */}
+          <button
+            className="map-reset-btn"
+            onClick={() => setMapResetTrigger(Date.now())}
+            title="Reset map view to show all addresses"
+          >
+            🎯 Reset View
+          </button>
+
           <MapContainer
             center={[51.5074, -0.1278]}
             zoom={10}
@@ -259,7 +281,10 @@ const AddressListComponent = function AddressList({
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
-            <FitBounds positions={geocodedVisible.map(({ a }) => [a.lat!, a.lng!])} />
+            <FitBounds
+              positions={geocodedVisible.map(({ a }) => [a.lat!, a.lng!])}
+              resetTrigger={mapResetTrigger}
+            />
 
             {geocodedVisible.map(({ a, i }, displayIndex) => {
               const isActive = activeIndex === i;
@@ -636,11 +661,10 @@ const AddressListComponent = function AddressList({
           display: flex;
           gap: 0.5rem;
           padding: 0.75rem;
+          margin-bottom: 1rem;
           background: var(--surface);
-          border-bottom: 1px solid var(--border);
-          position: sticky;
-          top: 0;
-          z-index: 10;
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
         }
 
         .view-toggle-btn {
@@ -684,11 +708,48 @@ const AddressListComponent = function AddressList({
 
         /* Map View Styles */
         .map-view-container {
-          height: calc(100vh - 200px);
-          min-height: 500px;
+          height: 600px;
+          max-height: calc(100vh - 300px);
           position: relative;
           border-radius: var(--radius-lg);
           overflow: hidden;
+          border: 1px solid var(--border);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Ensure Leaflet map respects container */
+        .map-view-container .leaflet-container {
+          border-radius: var(--radius-lg);
+        }
+
+        /* Map Reset Button */
+        .map-reset-btn {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          z-index: 1000;
+          padding: 0.5rem 1rem;
+          background: var(--surface);
+          color: var(--text-primary);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-md);
+          font-weight: 600;
+          font-size: 0.875rem;
+          cursor: pointer;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+          transition: all 0.2s ease;
+        }
+
+        .map-reset-btn:hover {
+          background: var(--primary);
+          color: white;
+          border-color: var(--primary);
+          transform: translateY(-1px);
+          box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .map-reset-btn:active {
+          transform: translateY(0);
         }
 
         /* Custom Numbered Markers */
