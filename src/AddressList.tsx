@@ -2,6 +2,9 @@
 import * as React from "react";
 import type { AppState, Outcome, AddressRow, Arrangement } from "./types";
 import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 type Props = {
   state: AppState;
@@ -44,6 +47,37 @@ function ElapsedTimer({ startTime }: { startTime: string | null | undefined }) {
   );
 }
 
+// Component to auto-fit map bounds
+function FitBounds({ positions }: { positions: [number, number][] }) {
+  const map = useMap();
+
+  React.useEffect(() => {
+    if (positions.length === 0) return;
+
+    if (positions.length === 1) {
+      map.setView(positions[0], 15);
+    } else {
+      const bounds = L.latLngBounds(positions);
+      map.fitBounds(bounds.pad(0.1));
+    }
+  }, [map, positions]);
+
+  return null;
+}
+
+// Create numbered marker icon
+function createNumberedIcon(number: number, isActive: boolean): L.DivIcon {
+  return L.divIcon({
+    className: 'custom-numbered-marker',
+    html: `<div class="marker-pin ${isActive ? 'marker-active' : ''}">
+      <div class="marker-number">${number}</div>
+    </div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 40],
+    popupAnchor: [0, -40]
+  });
+}
+
 function makeMapsHref(row: AddressRow) {
   if (
     typeof row.lat === "number" &&
@@ -70,6 +104,17 @@ const AddressListComponent = function AddressList({
   const addresses = Array.isArray(state.addresses) ? state.addresses : [];
   const completions = Array.isArray(state.completions) ? state.completions : [];
   const activeIndex = state.activeIndex;
+
+  // View mode state (list or map)
+  const [viewMode, setViewMode] = React.useState<'list' | 'map'>(() => {
+    const saved = localStorage.getItem('navigator_address_view_mode');
+    return (saved === 'map' || saved === 'list') ? saved : 'list';
+  });
+
+  // Persist view mode preference
+  React.useEffect(() => {
+    localStorage.setItem('navigator_address_view_mode', viewMode);
+  }, [viewMode]);
 
   // Simple timestamp-based filtering: hide any address that has a completion
   const completedIdx = React.useMemo(() => {
@@ -160,6 +205,12 @@ const AddressListComponent = function AddressList({
     }
   }, [lastSubmission, onComplete]);
 
+  // Filter visible addresses that have coordinates for map view
+  const geocodedVisible = React.useMemo(
+    () => visible.filter(({ a }) => a.lat && a.lng),
+    [visible]
+  );
+
   if (visible.length === 0) {
     return (
       <div className="empty-state">
@@ -174,6 +225,93 @@ const AddressListComponent = function AddressList({
 
   return (
     <>
+      {/* View Toggle */}
+      <div className="view-toggle-container">
+        <button
+          className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
+          onClick={() => setViewMode('list')}
+        >
+          <span>📋</span>
+          <span>List</span>
+        </button>
+        <button
+          className={`view-toggle-btn ${viewMode === 'map' ? 'active' : ''}`}
+          onClick={() => setViewMode('map')}
+          disabled={geocodedVisible.length === 0}
+        >
+          <span>🗺️</span>
+          <span>Map</span>
+          {geocodedVisible.length === 0 && <span className="badge-warning">(No coordinates)</span>}
+        </button>
+      </div>
+
+      {/* Map View */}
+      {viewMode === 'map' && geocodedVisible.length > 0 && (
+        <div className="map-view-container">
+          <MapContainer
+            center={[51.5074, -0.1278]}
+            zoom={10}
+            style={{ height: '100%', width: '100%' }}
+            scrollWheelZoom={true}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+
+            <FitBounds positions={geocodedVisible.map(({ a }) => [a.lat!, a.lng!])} />
+
+            {geocodedVisible.map(({ a, i }, displayIndex) => {
+              const isActive = activeIndex === i;
+
+              return (
+                <Marker
+                  key={i}
+                  position={[a.lat!, a.lng!]}
+                  icon={createNumberedIcon(displayIndex + 1, isActive)}
+                >
+                  <Popup>
+                    <div className="map-popup">
+                      <div className="popup-header">
+                        <span className="popup-number">#{displayIndex + 1}</span>
+                        <span className={`popup-status ${isActive ? 'status-active' : 'status-pending'}`}>
+                          {isActive ? 'Active' : 'Pending'}
+                        </span>
+                      </div>
+                      <div className="popup-address">{a.address}</div>
+                      {!isActive && (
+                        <button
+                          className="popup-btn-start"
+                          onClick={() => setActive(i)}
+                        >
+                          ▶️ Start
+                        </button>
+                      )}
+                      {isActive && (
+                        <div className="popup-active-info">
+                          <ElapsedTimer startTime={state.activeStartTime} />
+                          <button
+                            className="popup-btn-complete"
+                            onClick={() => {
+                              // Switch to list view to complete
+                              setViewMode('list');
+                            }}
+                          >
+                            ✅ Complete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
+          </MapContainer>
+        </div>
+      )}
+
+      {/* List View */}
+      {viewMode === 'list' && (
       <div className="address-list-modern">
         {visible.map(({ a, i }, displayIndex) => {
           const isActive = activeIndex === i;
@@ -362,7 +500,8 @@ const AddressListComponent = function AddressList({
           );
         })}
       </div>
-      
+      )}
+
       {/* Full-Screen Arrangement Form */}
       {showArrangementForm !== null && onAddArrangement && addresses[showArrangementForm] && (
         <UnifiedArrangementForm
@@ -490,6 +629,202 @@ const AddressListComponent = function AddressList({
           50% {
             opacity: 0.85;
           }
+        }
+
+        /* View Toggle Styles */
+        .view-toggle-container {
+          display: flex;
+          gap: 0.5rem;
+          padding: 0.75rem;
+          background: var(--surface);
+          border-bottom: 1px solid var(--border);
+          position: sticky;
+          top: 0;
+          z-index: 10;
+        }
+
+        .view-toggle-btn {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          padding: 0.75rem 1rem;
+          border: 2px solid var(--border);
+          border-radius: var(--radius-md);
+          background: var(--surface);
+          color: var(--text-secondary);
+          font-weight: 600;
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .view-toggle-btn:hover:not(:disabled) {
+          background: var(--gray-50);
+          border-color: var(--primary);
+        }
+
+        .view-toggle-btn.active {
+          background: var(--primary);
+          border-color: var(--primary);
+          color: white;
+        }
+
+        .view-toggle-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .badge-warning {
+          font-size: 0.65rem;
+          color: var(--warning);
+          font-weight: normal;
+        }
+
+        /* Map View Styles */
+        .map-view-container {
+          height: calc(100vh - 200px);
+          min-height: 500px;
+          position: relative;
+          border-radius: var(--radius-lg);
+          overflow: hidden;
+        }
+
+        /* Custom Numbered Markers */
+        .custom-numbered-marker {
+          background: transparent;
+          border: none;
+        }
+
+        .marker-pin {
+          width: 40px;
+          height: 40px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+        }
+
+        .marker-pin::before {
+          content: '';
+          position: absolute;
+          width: 36px;
+          height: 36px;
+          background: var(--primary);
+          border-radius: 50% 50% 50% 0;
+          transform: rotate(-45deg);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          border: 3px solid white;
+        }
+
+        .marker-pin.marker-active::before {
+          background: var(--success);
+          animation: markerPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes markerPulse {
+          0%, 100% {
+            transform: rotate(-45deg) scale(1);
+          }
+          50% {
+            transform: rotate(-45deg) scale(1.1);
+          }
+        }
+
+        .marker-number {
+          position: relative;
+          z-index: 1;
+          color: white;
+          font-weight: bold;
+          font-size: 0.875rem;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+          transform: translateY(-2px);
+        }
+
+        /* Map Popup Styles */
+        .map-popup {
+          min-width: 200px;
+          padding: 0.5rem;
+        }
+
+        .popup-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.5rem;
+          padding-bottom: 0.5rem;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .popup-number {
+          font-weight: bold;
+          color: var(--primary);
+          font-size: 1rem;
+        }
+
+        .popup-status {
+          padding: 0.25rem 0.5rem;
+          border-radius: var(--radius-sm);
+          font-size: 0.75rem;
+          font-weight: 600;
+        }
+
+        .popup-status.status-active {
+          background: var(--success);
+          color: white;
+        }
+
+        .popup-status.status-pending {
+          background: var(--gray-200);
+          color: var(--text-secondary);
+        }
+
+        .popup-address {
+          margin-bottom: 0.75rem;
+          font-weight: 500;
+          color: var(--text-primary);
+        }
+
+        .popup-btn-start,
+        .popup-btn-complete {
+          width: 100%;
+          padding: 0.5rem 1rem;
+          border: none;
+          border-radius: var(--radius-md);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .popup-btn-start {
+          background: var(--primary);
+          color: white;
+        }
+
+        .popup-btn-start:hover {
+          background: var(--primary-dark);
+        }
+
+        .popup-btn-complete {
+          background: var(--success);
+          color: white;
+          margin-top: 0.5rem;
+        }
+
+        .popup-btn-complete:hover {
+          background: var(--success-dark);
+        }
+
+        .popup-active-info {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .popup-active-info .elapsed-timer {
+          justify-content: center;
+          margin-bottom: 0.25rem;
         }
 
         /* Modern Outcome Panel Styles */
