@@ -234,6 +234,9 @@ const ArrangementsComponent = function Arrangements({
       case "weekly":
         current.setDate(current.getDate() + (7 * interval));
         break;
+      case "biweekly":
+        current.setDate(current.getDate() + 14);
+        break;
       case "monthly":
         current.setMonth(current.getMonth() + interval);
         break;
@@ -568,8 +571,10 @@ const ArrangementsComponent = function Arrangements({
                             <div className="detail-content">
                               <span className="detail-label">Recurrence</span>
                               <span className="detail-value">
-                                {arrangement.recurrenceType === "weekly" ? "Weekly" : "Monthly"}
-                                {arrangement.recurrenceInterval && arrangement.recurrenceInterval > 1 && ` (every ${arrangement.recurrenceInterval})`}
+                                {arrangement.recurrenceType === "weekly" ? "Weekly" :
+                                 arrangement.recurrenceType === "biweekly" ? "Bi-weekly" :
+                                 arrangement.recurrenceType === "monthly" ? "Monthly" : arrangement.recurrenceType}
+                                {arrangement.recurrenceInterval && arrangement.recurrenceInterval > 1 && arrangement.recurrenceType !== "biweekly" && ` (every ${arrangement.recurrenceInterval})`}
                                 <div className="recurrence-progress">
                                   Payment {(arrangement.paymentsMade || 0) + 1} of {arrangement.totalPayments || 1}
                                 </div>

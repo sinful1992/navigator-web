@@ -34,7 +34,7 @@ export type ArrangementStatus =
   | "Completed"
   | "Missed";
 
-export type RecurrenceType = "none" | "weekly" | "monthly" | "custom";
+export type RecurrenceType = "none" | "weekly" | "biweekly" | "monthly" | "custom";
 
 export type ReminderSchedule = {
   daysBeforePayment: number[];

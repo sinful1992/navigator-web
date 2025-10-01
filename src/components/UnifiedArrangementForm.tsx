@@ -1,6 +1,7 @@
 import React from 'react';
 import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome } from '../types';
 import { LoadingButton } from './LoadingButton';
+import { addDays, addWeeks, addMonths, format, parseISO } from 'date-fns';
 
 type PreviousPayment = {
   id: string;
@@ -61,7 +62,7 @@ export default function UnifiedArrangementForm({
 
     // Optional recurring setup
     isRecurring: false,
-    recurrenceType: 'weekly' as 'weekly' | 'monthly',
+    recurrenceType: 'weekly' as 'weekly' | 'biweekly' | 'monthly',
     recurrenceInterval: 1,
     totalPayments: 4,
   });
@@ -71,6 +72,35 @@ export default function UnifiedArrangementForm({
     address?: string;
   }>({});
 
+  // Collapsible sections state with localStorage persistence
+  const [collapsed, setCollapsed] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem('uaf-collapsed-sections');
+      return saved ? JSON.parse(saved) : {
+        previousPayments: false,
+        recurringPayments: true
+      };
+    } catch {
+      return { previousPayments: false, recurringPayments: true };
+    }
+  });
+
+  // Confirmation preview state
+  const [showConfirmation, setShowConfirmation] = React.useState(false);
+
+  // Save collapse preferences to localStorage
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('uaf-collapsed-sections', JSON.stringify(collapsed));
+    } catch (e) {
+      console.error('Failed to save collapse preferences:', e);
+    }
+  }, [collapsed]);
+
+  const toggleCollapse = (section: string) => {
+    setCollapsed((prev: any) => ({ ...prev, [section]: !prev[section] }));
+  };
+
   // Calculate derived values
   const totalPreviousPayments = formData.previousPayments.reduce(
     (sum, payment) => sum + parseFloat(payment.amount || '0'), 0
@@ -79,6 +109,47 @@ export default function UnifiedArrangementForm({
   const totalAmountValue = parseFloat(formData.totalAmount || '0');
   const remainingAmount = totalAmountValue - totalPreviousPayments;
   const hasPreviousPayments = formData.previousPayments.length > 0;
+
+  // Sort payments chronologically
+  const sortedPreviousPayments = React.useMemo(() => {
+    return [...formData.previousPayments].sort((a, b) => {
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
+  }, [formData.previousPayments]);
+
+  // Calculate payment timeline for recurring payments
+  const paymentTimeline = React.useMemo(() => {
+    if (!formData.isRecurring || formData.totalPayments < 2) return [];
+
+    const dates: string[] = [];
+    const startDate = parseISO(formData.scheduledDate);
+
+    for (let i = 0; i < formData.totalPayments; i++) {
+      let nextDate = startDate;
+
+      if (formData.recurrenceType === 'weekly') {
+        nextDate = addWeeks(startDate, i * formData.recurrenceInterval);
+      } else if (formData.recurrenceType === 'biweekly') {
+        nextDate = addWeeks(startDate, i * 2);
+      } else if (formData.recurrenceType === 'monthly') {
+        nextDate = addMonths(startDate, i * formData.recurrenceInterval);
+      }
+
+      dates.push(format(nextDate, 'MMM d, yyyy'));
+    }
+
+    return dates;
+  }, [formData.isRecurring, formData.scheduledDate, formData.recurrenceType, formData.recurrenceInterval, formData.totalPayments]);
+
+  // Calculate completion percentage for recurring payments
+  const completionPercentage = React.useMemo(() => {
+    if (!arrangement || !arrangement.recurrenceType || arrangement.recurrenceType === 'none') {
+      return 0;
+    }
+    const made = arrangement.paymentsMade || 0;
+    const total = arrangement.totalPayments || 1;
+    return Math.round((made / total) * 100);
+  }, [arrangement]);
 
   // Initialize form data when arrangement changes
   React.useEffect(() => {
@@ -194,13 +265,21 @@ export default function UnifiedArrangementForm({
     }));
   };
 
-  // Handle form submission
+  // Handle form submission - show confirmation first
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
     if (isSubmitting || isLoading) return;
 
     if (!validateForm()) return;
+
+    // Show confirmation preview
+    setShowConfirmation(true);
+  };
+
+  // Actually submit after confirmation
+  const confirmAndSubmit = async () => {
+    setShowConfirmation(false);
 
     setIsSubmitting(true);
 
@@ -428,19 +507,22 @@ export default function UnifiedArrangementForm({
         <div className="uaf-row">
           <div className="uaf-field">
             <label className="uaf-label">Total Amount Owed *</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.totalAmount}
-              onChange={(e) => {
-                setFormData(prev => ({ ...prev, totalAmount: e.target.value }));
-                validateAmount(e.target.value);
-              }}
-              className={`uaf-input ${formErrors.amount ? 'uaf-input-error' : ''}`}
-              placeholder="0.00"
-              required
-            />
+            <div className="uaf-amount-input-wrapper">
+              <span className="uaf-amount-symbol">£</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.totalAmount}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, totalAmount: e.target.value }));
+                  validateAmount(e.target.value);
+                }}
+                className={`uaf-input uaf-amount-input ${formErrors.amount ? 'uaf-input-error' : ''}`}
+                placeholder="0.00"
+                required
+              />
+            </div>
             {formErrors.amount && (
               <div className="uaf-error">{formErrors.amount}</div>
             )}
@@ -468,26 +550,34 @@ export default function UnifiedArrangementForm({
         </div>
       </div>
 
-      {/* Previous Payments Section */}
+      {/* Previous Payments Section - Collapsible */}
       <div className="uaf-section">
-        <div className="uaf-section-header">
-          <h4 className="uaf-section-title">💳 Payments Already Made</h4>
+        <div className="uaf-section-header uaf-section-header-collapsible" onClick={() => toggleCollapse('previousPayments')}>
+          <h4 className="uaf-section-title">
+            <span className="uaf-collapse-icon">{collapsed.previousPayments ? '▶' : '▼'}</span>
+            💳 Payments Already Made {hasPreviousPayments && `(${formData.previousPayments.length})`}
+          </h4>
           <button
             type="button"
-            onClick={addPreviousPayment}
+            onClick={(e) => {
+              e.stopPropagation();
+              addPreviousPayment();
+            }}
             className="uaf-btn uaf-btn-sm uaf-btn-outline"
           >
             + Add Payment
           </button>
         </div>
 
-        {formData.previousPayments.length === 0 ? (
-          <div className="uaf-empty">
-            No previous payments recorded yet.
-          </div>
-        ) : (
-          <div className="uaf-payments-list">
-            {formData.previousPayments.map((payment) => (
+        {!collapsed.previousPayments && (
+          <>
+            {formData.previousPayments.length === 0 ? (
+              <div className="uaf-empty">
+                No previous payments recorded yet.
+              </div>
+            ) : (
+              <div className="uaf-payments-list">
+                {sortedPreviousPayments.map((payment) => (
               <div key={payment.id} className="uaf-payment-item">
                 <div className="uaf-row">
                   <div className="uaf-field">
@@ -533,10 +623,10 @@ export default function UnifiedArrangementForm({
                 </div>
               </div>
             ))}
-          </div>
-        )}
+              </div>
+            )}
 
-        {hasPreviousPayments && (
+            {hasPreviousPayments && (
           <div className="uaf-payment-summary">
             <div className="uaf-summary-row">
               <span>Total Amount Owed:</span>
@@ -546,60 +636,106 @@ export default function UnifiedArrangementForm({
               <span>Already Paid:</span>
               <span>-£{totalPreviousPayments.toFixed(2)}</span>
             </div>
-            <div className="uaf-summary-row uaf-summary-total">
-              <span>Still Owed:</span>
-              <span>£{Math.max(0, remainingAmount).toFixed(2)}</span>
+              <div className="uaf-summary-row uaf-summary-total">
+                <span>Still Owed:</span>
+                <span>£{Math.max(0, remainingAmount).toFixed(2)}</span>
+              </div>
             </div>
-          </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Optional Recurring Setup */}
+      {/* Optional Recurring Setup - Collapsible */}
       {remainingAmount > 0 && (
         <div className="uaf-section">
-          <h4 className="uaf-section-title">🔄 Optional: Split Remaining Balance</h4>
-
-          <div className="uaf-field">
-            <label className="uaf-radio-option">
-              <input
-                type="checkbox"
-                checked={formData.isRecurring}
-                onChange={(e) => setFormData(prev => ({ ...prev, isRecurring: e.target.checked }))}
-              />
-              <span>Split £{remainingAmount.toFixed(2)} into multiple payments</span>
-            </label>
+          <div className="uaf-section-header uaf-section-header-collapsible" onClick={() => toggleCollapse('recurringPayments')}>
+            <h4 className="uaf-section-title">
+              <span className="uaf-collapse-icon">{collapsed.recurringPayments ? '▶' : '▼'}</span>
+              🔄 Optional: Split Remaining Balance
+            </h4>
           </div>
 
-          {formData.isRecurring && (
+          {!collapsed.recurringPayments && (
             <>
-              <div className="uaf-row">
-                <div className="uaf-field">
-                  <label className="uaf-label">Frequency</label>
-                  <select
-                    value={formData.recurrenceType}
-                    onChange={(e) => setFormData(prev => ({ ...prev, recurrenceType: e.target.value as 'weekly' | 'monthly' }))}
-                    className="uaf-input"
-                  >
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                </div>
-                <div className="uaf-field">
-                  <label className="uaf-label">Number of Payments</label>
+              <div className="uaf-field">
+                <label className="uaf-radio-option">
                   <input
-                    type="number"
-                    min="2"
-                    max="12"
-                    value={formData.totalPayments}
-                    onChange={(e) => setFormData(prev => ({ ...prev, totalPayments: parseInt(e.target.value) || 2 }))}
-                    className="uaf-input"
+                    type="checkbox"
+                    checked={formData.isRecurring}
+                    onChange={(e) => setFormData(prev => ({ ...prev, isRecurring: e.target.checked }))}
                   />
-                </div>
+                  <span>Split £{remainingAmount.toFixed(2)} into multiple payments</span>
+                </label>
               </div>
 
-              <div className="uaf-payment-preview">
-                💡 {formData.totalPayments} payments of £{(remainingAmount / formData.totalPayments).toFixed(2)} each
-              </div>
+              {formData.isRecurring && (
+                <>
+                  <div className="uaf-row">
+                    <div className="uaf-field">
+                      <label className="uaf-label">Frequency</label>
+                      <select
+                        value={formData.recurrenceType}
+                        onChange={(e) => setFormData(prev => ({ ...prev, recurrenceType: e.target.value as 'weekly' | 'biweekly' | 'monthly' }))}
+                        className="uaf-input"
+                      >
+                        <option value="weekly">Weekly</option>
+                        <option value="biweekly">Bi-weekly (Every 2 weeks)</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div className="uaf-field">
+                      <label className="uaf-label">Number of Payments</label>
+                      <input
+                        type="number"
+                        min="2"
+                        max="12"
+                        value={formData.totalPayments}
+                        onChange={(e) => setFormData(prev => ({ ...prev, totalPayments: parseInt(e.target.value) || 2 }))}
+                        className="uaf-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="uaf-payment-preview">
+                    💡 {formData.totalPayments} payments of £{(remainingAmount / formData.totalPayments).toFixed(2)} each
+                  </div>
+
+                  {/* Visual Timeline */}
+                  {paymentTimeline.length > 0 && (
+                    <div className="uaf-timeline">
+                      <div className="uaf-timeline-title">📅 Payment Schedule:</div>
+                      <div className="uaf-timeline-dates">
+                        {paymentTimeline.map((date, index) => (
+                          <div key={index} className="uaf-timeline-item">
+                            <span className="uaf-timeline-number">{index + 1}</span>
+                            <span className="uaf-timeline-date">{date}</span>
+                            <span className="uaf-timeline-amount">£{(remainingAmount / formData.totalPayments).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Completion Percentage for Editing Existing Arrangements */}
+                  {arrangement && arrangement.recurrenceType && arrangement.recurrenceType !== 'none' && (
+                    <div className="uaf-completion-progress">
+                      <div className="uaf-completion-header">
+                        <span>Payment Progress</span>
+                        <span className="uaf-completion-text">
+                          {arrangement.paymentsMade || 0} of {arrangement.totalPayments || 1} ({completionPercentage}%)
+                        </span>
+                      </div>
+                      <div className="uaf-completion-bar">
+                        <div
+                          className="uaf-completion-fill"
+                          style={{ width: `${completionPercentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </>
           )}
         </div>
@@ -631,9 +767,116 @@ export default function UnifiedArrangementForm({
           loadingText={arrangement ? "Updating..." : "Creating..."}
           disabled={addressMode === "existing" && state.addresses.length === 0}
         >
-          {arrangement ? "💾 Update" : "📅 Create"} Arrangement
+          {arrangement ? "💾 Update" : "📅 Review & Create"} Arrangement
         </LoadingButton>
       </div>
+
+      {/* Confirmation Preview Modal */}
+      {showConfirmation && (
+        <div className="uaf-confirmation-overlay" onClick={() => setShowConfirmation(false)}>
+          <div className="uaf-confirmation-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="uaf-confirmation-header">
+              <h3>✅ Confirm Arrangement Details</h3>
+            </div>
+
+            <div className="uaf-confirmation-body">
+              <div className="uaf-confirmation-section">
+                <div className="uaf-confirmation-label">📍 Address</div>
+                <div className="uaf-confirmation-value">
+                  {addressMode === "existing"
+                    ? state.addresses[formData.addressIndex]?.address
+                    : formData.manualAddress}
+                </div>
+              </div>
+
+              {formData.customerName && (
+                <div className="uaf-confirmation-section">
+                  <div className="uaf-confirmation-label">👤 Customer</div>
+                  <div className="uaf-confirmation-value">{formData.customerName}</div>
+                </div>
+              )}
+
+              <div className="uaf-confirmation-section">
+                <div className="uaf-confirmation-label">💰 Total Amount</div>
+                <div className="uaf-confirmation-value uaf-confirmation-amount">
+                  £{parseFloat(formData.totalAmount || '0').toFixed(2)}
+                </div>
+              </div>
+
+              {hasPreviousPayments && (
+                <>
+                  <div className="uaf-confirmation-section">
+                    <div className="uaf-confirmation-label">💳 Previous Payments</div>
+                    <div className="uaf-confirmation-value">
+                      £{totalPreviousPayments.toFixed(2)} ({formData.previousPayments.length} payment{formData.previousPayments.length > 1 ? 's' : ''})
+                    </div>
+                  </div>
+                  <div className="uaf-confirmation-section">
+                    <div className="uaf-confirmation-label">📊 Remaining Balance</div>
+                    <div className="uaf-confirmation-value uaf-confirmation-highlight">
+                      £{remainingAmount.toFixed(2)}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="uaf-confirmation-section">
+                <div className="uaf-confirmation-label">📅 Payment Due</div>
+                <div className="uaf-confirmation-value">
+                  {format(parseISO(formData.scheduledDate), 'MMMM d, yyyy')}
+                  {formData.scheduledTime && ` at ${formData.scheduledTime}`}
+                </div>
+              </div>
+
+              {formData.isRecurring && (
+                <>
+                  <div className="uaf-confirmation-section">
+                    <div className="uaf-confirmation-label">🔄 Payment Plan</div>
+                    <div className="uaf-confirmation-value">
+                      {formData.totalPayments} {formData.recurrenceType} payments of £{(remainingAmount / formData.totalPayments).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="uaf-confirmation-timeline">
+                    <div className="uaf-confirmation-label">📅 Schedule:</div>
+                    <div className="uaf-confirmation-dates">
+                      {paymentTimeline.slice(0, 3).map((date, i) => (
+                        <span key={i}>{date}</span>
+                      ))}
+                      {paymentTimeline.length > 3 && <span>+ {paymentTimeline.length - 3} more...</span>}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {formData.notes && (
+                <div className="uaf-confirmation-section">
+                  <div className="uaf-confirmation-label">📝 Notes</div>
+                  <div className="uaf-confirmation-value">{formData.notes}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="uaf-confirmation-actions">
+              <button
+                type="button"
+                className="uaf-btn uaf-btn-ghost"
+                onClick={() => setShowConfirmation(false)}
+              >
+                ← Back to Edit
+              </button>
+              <LoadingButton
+                type="button"
+                className="uaf-btn uaf-btn-success"
+                isLoading={isSubmitting}
+                loadingText="Creating..."
+                onClick={confirmAndSubmit}
+              >
+                ✅ Confirm & Create
+              </LoadingButton>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 
@@ -970,6 +1213,293 @@ export default function UnifiedArrangementForm({
           cursor: not-allowed;
         }
 
+        .uaf-btn-success {
+          background: var(--success, #10b981);
+          color: white;
+          border-color: var(--success, #10b981);
+        }
+
+        .uaf-btn-success:hover {
+          background: var(--success-dark, #059669);
+        }
+
+        /* Collapsible Section Styles */
+        .uaf-section-header-collapsible {
+          cursor: pointer;
+          user-select: none;
+        }
+
+        .uaf-section-header-collapsible:hover {
+          background: var(--gray-50, #f9fafb);
+          border-radius: 6px;
+          margin: -0.5rem;
+          padding: 0.5rem;
+        }
+
+        .uaf-collapse-icon {
+          display: inline-block;
+          margin-right: 0.5rem;
+          font-size: 0.75rem;
+          transition: transform 0.2s ease;
+        }
+
+        /* Amount Input with £ Symbol */
+        .uaf-amount-input-wrapper {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+
+        .uaf-amount-symbol {
+          position: absolute;
+          left: 0.75rem;
+          font-size: 1.1rem;
+          font-weight: 600;
+          color: var(--success, #10b981);
+          z-index: 1;
+          pointer-events: none;
+        }
+
+        .uaf-amount-input {
+          padding-left: 2rem !important;
+          font-weight: 600;
+          color: var(--success-dark, #059669);
+          border-color: var(--success-light, #a7f3d0) !important;
+          background: var(--success-lighter, #f0fdf4) !important;
+        }
+
+        .uaf-amount-input:focus {
+          border-color: var(--success, #10b981) !important;
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1) !important;
+        }
+
+        /* Timeline Styles */
+        .uaf-timeline {
+          margin-top: 1rem;
+          padding: 1rem;
+          background: var(--gray-50, #f9fafb);
+          border: 1px solid var(--border, #e2e8f0);
+          border-radius: 6px;
+        }
+
+        .uaf-timeline-title {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: var(--text-secondary);
+          margin-bottom: 0.75rem;
+        }
+
+        .uaf-timeline-dates {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .uaf-timeline-item {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.5rem;
+          background: white;
+          border-radius: 4px;
+          border-left: 3px solid var(--primary, #0ea5e9);
+        }
+
+        .uaf-timeline-number {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 1.5rem;
+          height: 1.5rem;
+          background: var(--primary, #0ea5e9);
+          color: white;
+          border-radius: 50%;
+          font-size: 0.75rem;
+          font-weight: 600;
+          flex-shrink: 0;
+        }
+
+        .uaf-timeline-date {
+          flex: 1;
+          font-size: 0.875rem;
+          color: var(--text-primary);
+        }
+
+        .uaf-timeline-amount {
+          font-weight: 600;
+          color: var(--success-dark, #059669);
+          font-size: 0.875rem;
+        }
+
+        /* Completion Progress Bar */
+        .uaf-completion-progress {
+          margin-top: 1rem;
+          padding: 1rem;
+          background: var(--blue-50, #eff6ff);
+          border: 1px solid var(--blue-200, #bfdbfe);
+          border-radius: 6px;
+        }
+
+        .uaf-completion-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.5rem;
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: var(--blue-700, #1d4ed8);
+        }
+
+        .uaf-completion-text {
+          font-size: 0.8125rem;
+        }
+
+        .uaf-completion-bar {
+          width: 100%;
+          height: 0.5rem;
+          background: var(--blue-100, #dbeafe);
+          border-radius: 1rem;
+          overflow: hidden;
+        }
+
+        .uaf-completion-fill {
+          height: 100%;
+          background: linear-gradient(90deg, var(--success, #10b981), var(--primary, #0ea5e9));
+          transition: width 0.3s ease;
+          border-radius: 1rem;
+        }
+
+        /* Confirmation Modal Styles */
+        .uaf-confirmation-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.6);
+          z-index: 5000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 1rem;
+          backdrop-filter: blur(4px);
+          animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        .uaf-confirmation-modal {
+          background: var(--card-bg, white);
+          border-radius: 16px;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+          width: 100%;
+          max-width: 550px;
+          max-height: 85vh;
+          overflow-y: auto;
+          animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .uaf-confirmation-header {
+          padding: 1.5rem;
+          border-bottom: 1px solid var(--border, #e2e8f0);
+          background: var(--gray-50, #f9fafb);
+        }
+
+        .uaf-confirmation-header h3 {
+          margin: 0;
+          font-size: 1.25rem;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+
+        .uaf-confirmation-body {
+          padding: 1.5rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .uaf-confirmation-section {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .uaf-confirmation-label {
+          font-size: 0.8125rem;
+          font-weight: 600;
+          color: var(--text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .uaf-confirmation-value {
+          font-size: 1rem;
+          color: var(--text-primary);
+          font-weight: 500;
+        }
+
+        .uaf-confirmation-amount {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: var(--success-dark, #059669);
+        }
+
+        .uaf-confirmation-highlight {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: var(--primary, #0ea5e9);
+        }
+
+        .uaf-confirmation-timeline {
+          padding: 1rem;
+          background: var(--gray-50, #f9fafb);
+          border-radius: 6px;
+          border: 1px solid var(--border, #e2e8f0);
+        }
+
+        .uaf-confirmation-dates {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          margin-top: 0.5rem;
+        }
+
+        .uaf-confirmation-dates span {
+          padding: 0.25rem 0.75rem;
+          background: var(--primary-light, #e0f2fe);
+          color: var(--primary-dark, #0369a1);
+          border-radius: 4px;
+          font-size: 0.8125rem;
+          font-weight: 500;
+        }
+
+        .uaf-confirmation-actions {
+          display: flex;
+          gap: 0.75rem;
+          padding: 1.5rem;
+          border-top: 1px solid var(--border, #e2e8f0);
+          background: var(--gray-50, #f9fafb);
+        }
+
+        .uaf-confirmation-actions .uaf-btn {
+          flex: 1;
+        }
+
         /* Dark mode styles */
         .dark-mode .uaf-container,
         .dark-mode .uaf-modal {
@@ -1013,6 +1543,65 @@ export default function UnifiedArrangementForm({
           background: var(--yellow-100);
           border-color: var(--yellow-400);
           color: var(--yellow-800);
+        }
+
+        /* Dark mode for new components */
+        .dark-mode .uaf-amount-input {
+          background: var(--success-lighter, #ecfdf5) !important;
+          color: var(--success-dark, #065f46);
+        }
+
+        .dark-mode .uaf-amount-symbol {
+          color: var(--success-dark, #065f46);
+        }
+
+        .dark-mode .uaf-timeline {
+          background: var(--gray-200);
+          border-color: var(--gray-300);
+        }
+
+        .dark-mode .uaf-timeline-item {
+          background: var(--gray-100);
+        }
+
+        .dark-mode .uaf-completion-progress {
+          background: var(--blue-100);
+          border-color: var(--blue-300);
+        }
+
+        .dark-mode .uaf-confirmation-overlay {
+          background: rgba(0, 0, 0, 0.75);
+        }
+
+        .dark-mode .uaf-confirmation-modal {
+          background: var(--gray-100);
+        }
+
+        .dark-mode .uaf-confirmation-header {
+          background: var(--gray-200);
+          border-color: var(--gray-300);
+        }
+
+        .dark-mode .uaf-confirmation-header h3 {
+          color: var(--gray-800);
+        }
+
+        .dark-mode .uaf-confirmation-label {
+          color: var(--gray-600);
+        }
+
+        .dark-mode .uaf-confirmation-value {
+          color: var(--gray-800);
+        }
+
+        .dark-mode .uaf-confirmation-timeline {
+          background: var(--gray-200);
+          border-color: var(--gray-300);
+        }
+
+        .dark-mode .uaf-confirmation-actions {
+          background: var(--gray-200);
+          border-color: var(--gray-300);
         }
 
         @media (max-width: 768px) {
