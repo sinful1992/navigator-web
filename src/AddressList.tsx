@@ -742,6 +742,27 @@ const AddressListComponent = function AddressList({
           transform: translateY(-2px);
         }
 
+        /* Leaflet Popup Override for Dark Mode */
+        .leaflet-popup-content-wrapper {
+          background: var(--surface) !important;
+          color: var(--text-primary) !important;
+          border: 1px solid var(--border) !important;
+          box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4) !important;
+        }
+
+        .leaflet-popup-tip {
+          background: var(--surface) !important;
+          border: 1px solid var(--border) !important;
+        }
+
+        .leaflet-popup-close-button {
+          color: var(--text-primary) !important;
+        }
+
+        .leaflet-popup-close-button:hover {
+          color: var(--primary) !important;
+        }
+
         /* Map Popup Styles */
         .map-popup {
           min-width: 200px;
@@ -776,8 +797,8 @@ const AddressListComponent = function AddressList({
         }
 
         .popup-status.status-pending {
-          background: var(--gray-200);
-          color: var(--text-secondary);
+          background: var(--gray-700);
+          color: var(--gray-100);
         }
 
         .popup-address {
