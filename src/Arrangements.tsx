@@ -11,7 +11,7 @@ type Props = {
   onUpdateArrangement: (id: string, updates: Partial<Arrangement>) => void;
   onDeleteArrangement: (id: string) => void;
   onAddAddress?: (address: AddressRow) => Promise<number>; // Returns the new address index
-  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void; // ✅ mark as completed (ARR)
+  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string) => void; // ✅ mark as completed (ARR)
   autoCreateForAddress?: number | null;
   onAutoCreateHandled?: () => void;
 };

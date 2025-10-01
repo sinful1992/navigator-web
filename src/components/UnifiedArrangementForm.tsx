@@ -18,7 +18,7 @@ type Props = {
   onSave: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void> | void;
   onCancel: () => void;
   isLoading?: boolean;
-  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void;
+  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string) => void;
   fullscreen?: boolean;
 };
 

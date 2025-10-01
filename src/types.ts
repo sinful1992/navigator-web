@@ -18,6 +18,8 @@ export type Completion = {
   listVersion?: number;
   /** Link to arrangement if this completion came from an arrangement payment. */
   arrangementId?: string;
+  /** Case reference number (required for PIF outcomes). */
+  caseReference?: string;
 };
 
 export type DaySession = {

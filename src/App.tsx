@@ -1003,9 +1003,9 @@ function AuthedApp() {
   }, [setAddresses]);
 
   const handleComplete = React.useCallback(
-    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => {
+    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string) => {
       try {
-        await complete(index, outcome, amount, arrangementId);
+        await complete(index, outcome, amount, arrangementId, caseReference);
 
         // FIXED: Reduced backup - only cloud backup + local storage (no file downloads)
         try {

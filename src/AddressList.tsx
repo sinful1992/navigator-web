@@ -7,7 +7,7 @@ type Props = {
   state: AppState;
   setActive: (index: number) => void;
   cancelActive: () => void;
-  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void;
+  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string) => void;
   onAddArrangement?: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
   filterText: string;
 };
@@ -46,9 +46,9 @@ const AddressListComponent = function AddressList({
     addresses.forEach((addr, index) => {
       if (!addr.address) return;
 
-      // Check if this address has any completion for current list version
+      // Check if this specific index has a completion for current list version
       const hasCompletion = completions.some(c =>
-        c.address === addr.address &&
+        c.index === index &&
         (c.listVersion || state.currentListVersion) === state.currentListVersion
       );
 
@@ -76,12 +76,14 @@ const AddressListComponent = function AddressList({
   // Local UI state for outcome panel & PIF
   const [outcomeOpenFor, setOutcomeOpenFor] = React.useState<number | null>(null);
   const [pifAmount, setPifAmount] = React.useState<string>("");
+  const [caseReference, setCaseReference] = React.useState<string>("");
+  const [showCaseRefPrompt, setShowCaseRefPrompt] = React.useState<number | null>(null);
 
   // Prevent double submissions
   const [submittingIndex, setSubmittingIndex] = React.useState<number | null>(null);
   const submittingRef = React.useRef<number | null>(null);
   const [lastSubmission, setLastSubmission] = React.useState<{index: number, outcome: string, timestamp: number} | null>(null);
-  
+
   // Arrangement form state
   const [showArrangementForm, setShowArrangementForm] = React.useState<number | null>(null);
 
@@ -90,13 +92,15 @@ const AddressListComponent = function AddressList({
     if (activeIndex === null) {
       setOutcomeOpenFor(null);
       setPifAmount("");
+      setCaseReference("");
+      setShowCaseRefPrompt(null);
       setShowArrangementForm(null);
       setSubmittingIndex(null);
     }
   }, [activeIndex]);
   
   // Debounced completion handler with duplicate protection
-  const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => {
+  const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseRef?: string) => {
     // Check if already submitting this index
     if (submittingRef.current === index) return;
     
@@ -113,8 +117,8 @@ const AddressListComponent = function AddressList({
       submittingRef.current = index;
       setSubmittingIndex(index);
       setLastSubmission({ index, outcome, timestamp: now });
-      
-      await onComplete(index, outcome, amount, arrangementId);
+
+      await onComplete(index, outcome, amount, arrangementId, caseRef);
       setOutcomeOpenFor(null);
     } catch (error) {
       console.error('Completion failed:', error);
@@ -205,6 +209,8 @@ const AddressListComponent = function AddressList({
                         const willOpen = outcomeOpenFor !== i;
                         setOutcomeOpenFor(willOpen ? i : null);
                         setPifAmount("");
+                        setCaseReference("");
+                        setShowCaseRefPrompt(null);
                       }}
                     >
                       <span>✅</span>
@@ -278,6 +284,16 @@ const AddressListComponent = function AddressList({
                         value={pifAmount}
                         onChange={(e) => setPifAmount(e.target.value)}
                         autoComplete="off"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const n = Number(pifAmount);
+                            if (!Number.isFinite(n) || n <= 0) {
+                              alert("Enter a valid PIF amount (e.g. 50)");
+                              return;
+                            }
+                            setShowCaseRefPrompt(i);
+                          }
+                        }}
                       />
                       <button
                         className="outcome-btn outcome-pif"
@@ -288,11 +304,11 @@ const AddressListComponent = function AddressList({
                             alert("Enter a valid PIF amount (e.g. 50)");
                             return;
                           }
-                          handleCompletion(i, "PIF", n.toFixed(2));
+                          setShowCaseRefPrompt(i);
                         }}
                       >
                         <span className="outcome-icon">💷</span>
-                        <span className="outcome-label">Save PIF</span>
+                        <span className="outcome-label">Next</span>
                       </button>
                     </div>
                   </div>
@@ -325,6 +341,84 @@ const AddressListComponent = function AddressList({
           onComplete={handleCompletion}
           fullscreen={true}
         />
+      )}
+
+      {/* Case Reference Prompt Modal */}
+      {showCaseRefPrompt !== null && (
+        <div className="case-ref-modal-overlay" onClick={() => setShowCaseRefPrompt(null)}>
+          <div className="case-ref-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="case-ref-modal-header">
+              <h3>📋 Enter Case Reference</h3>
+              <button className="close-btn" onClick={() => setShowCaseRefPrompt(null)}>✕</button>
+            </div>
+            <div className="case-ref-modal-body">
+              <p>PIF Amount: <strong>£{Number(pifAmount).toFixed(2)}</strong></p>
+              <div className="case-ref-input-wrapper">
+                <label htmlFor="case-ref-input">Case Reference Number</label>
+                <input
+                  id="case-ref-input"
+                  type="number"
+                  inputMode="numeric"
+                  className="case-ref-input"
+                  placeholder="e.g. 123456"
+                  value={caseReference}
+                  onChange={(e) => setCaseReference(e.target.value)}
+                  autoComplete="off"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const caseRefNum = Number(caseReference);
+                      if (!caseReference || !caseReference.trim()) {
+                        alert("Please enter a case reference number");
+                        return;
+                      }
+                      if (!Number.isFinite(caseRefNum) || caseRefNum <= 0 || !Number.isInteger(caseRefNum)) {
+                        alert("Case reference must be a valid whole number");
+                        return;
+                      }
+                      handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim());
+                      setShowCaseRefPrompt(null);
+                      setCaseReference("");
+                      setPifAmount("");
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="case-ref-modal-footer">
+              <button
+                className="modal-btn modal-btn-cancel"
+                onClick={() => {
+                  setShowCaseRefPrompt(null);
+                  setCaseReference("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-btn modal-btn-save"
+                disabled={submittingIndex === showCaseRefPrompt}
+                onClick={() => {
+                  const caseRefNum = Number(caseReference);
+                  if (!caseReference || !caseReference.trim()) {
+                    alert("Please enter a case reference number");
+                    return;
+                  }
+                  if (!Number.isFinite(caseRefNum) || caseRefNum <= 0 || !Number.isInteger(caseRefNum)) {
+                    alert("Case reference must be a valid whole number");
+                    return;
+                  }
+                  handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim());
+                  setShowCaseRefPrompt(null);
+                  setCaseReference("");
+                  setPifAmount("");
+                }}
+              >
+                {submittingIndex === showCaseRefPrompt ? 'Saving...' : 'Save PIF'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <style>{`
@@ -514,6 +608,180 @@ const AddressListComponent = function AddressList({
             flex-direction: row;
             justify-content: center;
             gap: 0.5rem;
+          }
+        }
+
+        /* Case Reference Modal Styles */
+        .case-ref-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        .case-ref-modal {
+          background: white;
+          border-radius: var(--radius-lg);
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+          width: 90%;
+          max-width: 450px;
+          animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .case-ref-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 1.5rem;
+          border-bottom: 1px solid var(--gray-200);
+        }
+
+        .case-ref-modal-header h3 {
+          margin: 0;
+          font-size: 1.25rem;
+          font-weight: 600;
+          color: var(--gray-800);
+        }
+
+        .close-btn {
+          background: none;
+          border: none;
+          font-size: 1.5rem;
+          color: var(--gray-500);
+          cursor: pointer;
+          padding: 0.25rem;
+          line-height: 1;
+          transition: var(--transition-normal);
+        }
+
+        .close-btn:hover {
+          color: var(--gray-700);
+          transform: scale(1.1);
+        }
+
+        .case-ref-modal-body {
+          padding: 1.5rem;
+        }
+
+        .case-ref-modal-body p {
+          margin: 0 0 1.5rem 0;
+          font-size: 1rem;
+          color: var(--gray-600);
+        }
+
+        .case-ref-modal-body strong {
+          color: var(--primary);
+          font-size: 1.125rem;
+        }
+
+        .case-ref-input-wrapper {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .case-ref-input-wrapper label {
+          font-weight: 600;
+          color: var(--gray-700);
+          font-size: 0.875rem;
+        }
+
+        .case-ref-input {
+          padding: 0.875rem 1rem;
+          border: 2px solid var(--gray-300);
+          border-radius: var(--radius-md);
+          font-size: 1rem;
+          font-weight: 600;
+          transition: var(--transition-normal);
+        }
+
+        .case-ref-input:focus {
+          outline: none;
+          border-color: var(--primary);
+          box-shadow: 0 0 0 4px var(--primary-light);
+        }
+
+        .case-ref-modal-footer {
+          display: flex;
+          gap: 0.75rem;
+          padding: 1.5rem;
+          border-top: 1px solid var(--gray-200);
+        }
+
+        .modal-btn {
+          flex: 1;
+          padding: 0.875rem 1.5rem;
+          border: none;
+          border-radius: var(--radius-md);
+          font-weight: 600;
+          font-size: 0.938rem;
+          cursor: pointer;
+          transition: var(--transition-normal);
+        }
+
+        .modal-btn-cancel {
+          background: var(--gray-100);
+          color: var(--gray-700);
+        }
+
+        .modal-btn-cancel:hover {
+          background: var(--gray-200);
+        }
+
+        .modal-btn-save {
+          background: var(--primary);
+          color: white;
+        }
+
+        .modal-btn-save:hover:not(:disabled) {
+          background: var(--primary-dark);
+          transform: translateY(-1px);
+          box-shadow: var(--shadow-md);
+        }
+
+        .modal-btn-save:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        @media (max-width: 768px) {
+          .case-ref-modal {
+            width: 95%;
+            margin: 1rem;
+          }
+
+          .case-ref-modal-header,
+          .case-ref-modal-body,
+          .case-ref-modal-footer {
+            padding: 1rem;
           }
         }
       `}</style>

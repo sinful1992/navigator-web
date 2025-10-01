@@ -14,7 +14,7 @@ type Props = {
   state: AppStateSlice & AppState;
   onChangeOutcome: (completionArrayIndex: number, outcome: Outcome, amount?: string) => void;
   onAddArrangement?: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  onComplete?: (index: number, outcome: Outcome, amount?: string, arrangementId?: string) => void;
+  onComplete?: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string) => void;
 };
 
 const TZ = "Europe/London";
@@ -580,6 +580,11 @@ export default function Completed({ state, onChangeOutcome, onAddArrangement, on
                                           >
                                             ✏️
                                           </button>
+                                          {comp.caseReference && (
+                                            <span style={{ marginLeft: 8 }}>
+                                              · Ref: {comp.caseReference}
+                                            </span>
+                                          )}
                                         </>
                                       )}
                                     </span>

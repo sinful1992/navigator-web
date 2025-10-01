@@ -789,7 +789,7 @@ export function useAppState() {
   const recentCompletionsRef = React.useRef<Map<string, { timestamp: number; completion: Completion }>>(new Map());
 
   const complete = React.useCallback(
-    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string): Promise<string> => {
+    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string): Promise<string> => {
       // Check if completion is already pending for this index
       if (pendingCompletionsRef.current.has(index)) {
         throw new Error(`Completion already pending for index ${index}`);
@@ -833,6 +833,7 @@ export function useAppState() {
         timestamp: nowISO,
         listVersion: currentState.currentListVersion,
         arrangementId,
+        caseReference,
       };
 
       const operationId = generateOperationId(
