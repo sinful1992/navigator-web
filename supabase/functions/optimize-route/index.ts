@@ -141,17 +141,43 @@ serve(async (req) => {
       validAddresses[0].lat
     ]
 
-    // Prepare jobs (delivery locations) - map back to original indices
+    // Prepare jobs (delivery locations) and track mapping to original indices
+    // FIX: Use validIndex as job ID to ensure uniqueness (prevents duplicate ID errors)
+    const originalIndexMap: number[] = [] // Maps validIndex -> originalIndex
     const jobs = validAddresses.map((addr, validIndex) => {
       // Find the original index of this address in the full addresses array
-      const originalIndex = addresses.findIndex(originalAddr => 
-        originalAddr.lat === addr.lat && 
-        originalAddr.lng === addr.lng && 
-        originalAddr.address === addr.address
-      )
-      
+      // Use lastIndexOf with a starting position to handle duplicates correctly
+      let searchStartIndex = 0
+      if (validIndex > 0) {
+        // Start search after the last found index to handle duplicates
+        const lastFoundIndex = originalIndexMap[validIndex - 1] || 0
+        searchStartIndex = lastFoundIndex + 1
+      }
+
+      let originalIndex = -1
+      for (let i = searchStartIndex; i < addresses.length; i++) {
+        const originalAddr = addresses[i]
+        if (originalAddr.lat === addr.lat &&
+            originalAddr.lng === addr.lng &&
+            originalAddr.address === addr.address) {
+          originalIndex = i
+          break
+        }
+      }
+
+      if (originalIndex === -1) {
+        // Fallback: search from beginning
+        originalIndex = addresses.findIndex(originalAddr =>
+          originalAddr.lat === addr.lat &&
+          originalAddr.lng === addr.lng &&
+          originalAddr.address === addr.address
+        )
+      }
+
+      originalIndexMap.push(originalIndex >= 0 ? originalIndex : validIndex)
+
       return {
-        id: originalIndex >= 0 ? originalIndex : validIndex,
+        id: validIndex, // Use validIndex to ensure unique IDs
         location: [addr.lng, addr.lat] as [number, number],
         description: addr.address
       }
@@ -206,7 +232,12 @@ serve(async (req) => {
 
     route.steps.forEach((step: any) => {
       if (step.type === 'job' && step.job !== undefined) {
-        optimizedOrder.push(step.job)
+        // Map validIndex (job ID) back to originalIndex
+        const validIndex = step.job
+        const originalIndex = originalIndexMap[validIndex]
+        if (originalIndex !== undefined) {
+          optimizedOrder.push(originalIndex)
+        }
       }
       if (step.duration) {
         totalDuration += step.duration
@@ -216,8 +247,11 @@ serve(async (req) => {
     // Calculate total distance (rough estimation based on route cost)
     totalDistance = route.cost || 0
 
-    // Handle unassigned addresses
-    const unassigned = data.unassigned ? data.unassigned.map((u: any) => u.id) : []
+    // Handle unassigned addresses - map validIndex back to originalIndex
+    const unassigned = data.unassigned ? data.unassigned.map((u: any) => {
+      const validIndex = u.id
+      return originalIndexMap[validIndex] !== undefined ? originalIndexMap[validIndex] : validIndex
+    }) : []
 
     const result: RouteOptimizationResult = {
       success: true,
