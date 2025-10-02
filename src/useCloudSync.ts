@@ -20,7 +20,9 @@ async function initializeNewUser(userId: string): Promise<void> {
   const { data, error } = await supabase
     .rpc('create_trial_subscription', { target_user_id: userId });
 
-  console.log("Trial subscription creation result:", { data, error });
+  if (import.meta.env.DEV) {
+    console.log("Trial subscription creation result:", { data, error });
+  }
 
   if (error) {
     console.error("Failed to create trial subscription:", error);
@@ -32,7 +34,9 @@ async function initializeNewUser(userId: string): Promise<void> {
     throw new Error(data.message);
   }
 
-  console.log("Trial subscription created successfully:", data);
+  if (import.meta.env.DEV) {
+    console.log("Trial subscription created successfully:", data);
+  }
 }
 
 type SyncOperation = {
@@ -376,7 +380,9 @@ export function useCloudSync(): UseCloudSync {
           
           if (entry.operation.retries < 3) {
             // Keep in queue for retry (don't mark as processed)
-            console.log(`Retrying operation ${entry.operation.id}, attempt ${entry.operation.retries}`);
+            if (import.meta.env.DEV) {
+              console.log(`Retrying operation ${entry.operation.id}, attempt ${entry.operation.retries}`);
+            }
           } else {
             // Max retries exceeded - remove from queue
             console.warn(`Operation ${entry.operation.id} failed after max retries:`, opError);
@@ -423,7 +429,9 @@ export function useCloudSync(): UseCloudSync {
       });
 
       if (isDuplicate) {
-        console.log(`Skipping exact duplicate operation: ${operationKey}`);
+        if (import.meta.env.DEV) {
+          console.log(`Skipping exact duplicate operation: ${operationKey}`);
+        }
         resolve(); // Resolve immediately for exact duplicates
         return;
       }
@@ -511,34 +519,42 @@ export function useCloudSync(): UseCloudSync {
 
       // 🔧 OFFLINE PROTECTION: Process any queued offline states
       setTimeout(async () => {
-        console.log('🔌 OFFLINE PROTECTION: Back online, checking for queued states...');
+        if (import.meta.env.DEV) {
+          console.log('🔌 OFFLINE PROTECTION: Back online, checking for queued states...');
+        }
 
         const offlineKeys = Object.keys(localStorage).filter(key =>
           key.startsWith('navigator_offline_state_')
         );
 
         if (offlineKeys.length > 0) {
-          console.log(`🔌 OFFLINE PROTECTION: Found ${offlineKeys.length} queued offline states, processing...`);
+          if (import.meta.env.DEV) {
+            console.log(`🔌 OFFLINE PROTECTION: Found ${offlineKeys.length} queued offline states, processing...`);
+          }
 
           for (const key of offlineKeys) {
             try {
               const offlineData = JSON.parse(localStorage.getItem(key) || '{}');
               if (offlineData.state) {
-                console.log(`🔌 OFFLINE PROTECTION: Retrying sync for offline state from ${offlineData.timestamp}`);
+                if (import.meta.env.DEV) {
+                  console.log(`🔌 OFFLINE PROTECTION: Retrying sync for offline state from ${offlineData.timestamp}`);
+                }
 
                 // Try to sync the queued state
                 await syncData(offlineData.state);
 
                 // If successful, remove from queue
                 localStorage.removeItem(key);
-                console.log(`🔌 OFFLINE PROTECTION: Successfully synced queued state, removed from queue`);
+                if (import.meta.env.DEV) {
+                  console.log(`🔌 OFFLINE PROTECTION: Successfully synced queued state, removed from queue`);
+                }
               }
             } catch (retryError) {
               console.error(`🔌 OFFLINE PROTECTION: Failed to sync queued state ${key}:`, retryError);
               // Keep in queue for next online session
             }
           }
-        } else {
+        } else if (import.meta.env.DEV) {
           console.log('🔌 OFFLINE PROTECTION: No queued offline states found');
         }
       }, 2000); // Wait 2 seconds after coming online to ensure connection is stable
@@ -546,7 +562,9 @@ export function useCloudSync(): UseCloudSync {
 
     const handleOffline = () => {
       setIsOnline(false);
-      console.log('🔌 OFFLINE PROTECTION: Gone offline, future syncs will be queued');
+      if (import.meta.env.DEV) {
+        console.log('🔌 OFFLINE PROTECTION: Gone offline, future syncs will be queued');
+      }
     };
 
     window.addEventListener("online", handleOnline);
@@ -743,7 +761,9 @@ export function useCloudSync(): UseCloudSync {
 
       keysToRemove.forEach(key => localStorage.removeItem(key));
       sessionStorage.clear(); // Clear sessionStorage
-      console.log("Cleared all navigator data on signout");
+      if (import.meta.env.DEV) {
+        console.log("Cleared all navigator data on signout");
+      }
     } catch (clearError) {
       console.warn("Error clearing local data:", clearError);
     }
@@ -780,20 +800,22 @@ export function useCloudSync(): UseCloudSync {
 
       // Skip if state hasn't changed
       if (stateStr === lastSyncedState.current) {
-        console.log('🚫 SYNC SKIPPED: State unchanged since last successful sync', {
-          completions: state.completions?.length || 0,
-          addresses: state.addresses?.length || 0,
-          lastSyncTime: syncMetadata.current.lastSyncAt
-        });
+        if (import.meta.env.DEV) {
+          console.log('🚫 SYNC SKIPPED: State unchanged since last successful sync', {
+            completions: state.completions?.length || 0,
+            addresses: state.addresses?.length || 0,
+            lastSyncTime: syncMetadata.current.lastSyncAt
+          });
+        }
         return;
       }
 
-      console.log('🔄 SYNC STARTING: State changed, syncing to cloud', {
-        completions: state.completions?.length || 0,
-        addresses: state.addresses?.length || 0,
-        hasLastSyncedState: !!lastSyncedState.current,
-        lastSyncTime: syncMetadata.current.lastSyncAt
-      });
+      if (import.meta.env.DEV) {
+        console.log('🔄 Syncing to cloud:', {
+          completions: state.completions?.length || 0,
+          addresses: state.addresses?.length || 0
+        });
+      }
 
       try {
         clearError();
@@ -815,8 +837,10 @@ export function useCloudSync(): UseCloudSync {
 
         // Conflict resolution if server has newer data
         if (currentData && currentData.updated_at > syncMetadata.current.lastSyncAt) {
-          console.log('Conflict detected, resolving...');
-          
+          if (import.meta.env.DEV) {
+            console.log('Conflict detected, resolving...');
+          }
+
           // Simple merge strategy: prefer local changes for recent items
           const serverState = currentData.data as AppState;
           finalState = await resolveConflicts(state, serverState);
@@ -844,7 +868,9 @@ export function useCloudSync(): UseCloudSync {
 
           // If this is a version conflict, try to refetch and resolve
           if (err.code === '23505' || err.message?.includes('conflict')) {
-            console.log('Detected sync conflict, attempting resolution...');
+            if (import.meta.env.DEV) {
+              console.log('Detected sync conflict, attempting resolution...');
+            }
             // Force a fresh sync on next attempt
             syncMetadata.current.lastSyncAt = '';
             syncMetadata.current.version = 0;
@@ -855,7 +881,6 @@ export function useCloudSync(): UseCloudSync {
         }
 
         // CRITICAL FIX: Verify data actually persisted before marking as synced
-        console.log('🔍 Verifying sync actually persisted to database...');
         const { data: verifyData, error: verifyError } = await supabase
           .from("navigator_state")
           .select("data, updated_at, version, checksum")
@@ -883,8 +908,6 @@ export function useCloudSync(): UseCloudSync {
           throw new Error(`Data corruption detected - checksums don't match (expected: ${finalChecksum}, actual: ${verifyChecksum})`);
         }
 
-        console.log('✅ Sync verification successful - data actually persisted');
-
         // Update sync metadata ONLY after verification
         syncMetadata.current = {
           lastSyncAt: verifyData.updated_at ?? now,
@@ -903,7 +926,9 @@ export function useCloudSync(): UseCloudSync {
 
         // 🔧 OFFLINE PROTECTION: If we're offline, queue this state for later sync
         if (!isOnline || e?.message?.includes('fetch')) {
-          console.log('🔌 OFFLINE PROTECTION: Network issues detected, queuing state for retry when online');
+          if (import.meta.env.DEV) {
+            console.log('🔌 OFFLINE PROTECTION: Network issues detected, queuing state for retry when online');
+          }
 
           // Store the failed sync state with timestamp
           const offlineKey = `navigator_offline_state_${Date.now()}`;
@@ -916,7 +941,9 @@ export function useCloudSync(): UseCloudSync {
 
           try {
             localStorage.setItem(offlineKey, JSON.stringify(offlineData));
-            console.log('🔌 OFFLINE PROTECTION: State queued successfully for when connection returns');
+            if (import.meta.env.DEV) {
+              console.log('🔌 OFFLINE PROTECTION: State queued successfully for when connection returns');
+            }
           } catch (storageError) {
             console.error('Failed to queue offline state:', storageError);
           }
@@ -930,7 +957,9 @@ export function useCloudSync(): UseCloudSync {
 
   // Enhanced conflict resolution strategy
   const resolveConflicts = useCallback(async (localState: AppState, serverState: AppState): Promise<AppState> => {
-    console.log('🔧 OFFLINE PROTECTION: Resolving conflicts between local and server state');
+    if (import.meta.env.DEV) {
+      console.log('🔧 Resolving conflicts between local and server state');
+    }
 
     // 🔧 CRITICAL FIX: Check if restore is in progress
     const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
@@ -1006,16 +1035,20 @@ export function useCloudSync(): UseCloudSync {
       const localCompletions = localState.completions.length;
       const serverCompletions = serverState.completions.length;
 
-      console.log('🛡️ OFFLINE PROTECTION: Recent local work detected, preserving local completions', {
-        localCompletions,
-        serverCompletions,
-        recentWorkThreshold: recentThreshold.toISOString(),
-        willPreserveLocal: true
-      });
+      if (import.meta.env.DEV) {
+        console.log('🛡️ OFFLINE PROTECTION: Recent local work detected, preserving local completions', {
+          localCompletions,
+          serverCompletions,
+          recentWorkThreshold: recentThreshold.toISOString(),
+          willPreserveLocal: true
+        });
+      }
 
       // If local has more completions and recent work, strongly favor local state
       if (localCompletions > serverCompletions) {
-        console.log('🛡️ OFFLINE PROTECTION: Local has more completions, preserving local state entirely');
+        if (import.meta.env.DEV) {
+          console.log('🛡️ OFFLINE PROTECTION: Local has more completions, preserving local state entirely');
+        }
         return {
           ...localState,
           // Still merge arrangements and day sessions from server if they're newer
@@ -1059,7 +1092,9 @@ export function useCloudSync(): UseCloudSync {
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
-    console.log(`Merged completions: local=${localState.completions.length}, server=${serverState.completions.length}, resolved=${resolved.completions.length}`);
+    if (import.meta.env.DEV) {
+      console.log(`Merged completions: local=${localState.completions.length}, server=${serverState.completions.length}, resolved=${resolved.completions.length}`);
+    }
 
     // Merge arrangements (prefer local for recent changes, server for older)
     const allArrangements = [...localState.arrangements, ...serverState.arrangements];
@@ -1128,7 +1163,9 @@ export function useCloudSync(): UseCloudSync {
           .maybeSingle();
 
         if (!error && data) {
-          console.log('🔄 FORCE SYNC: Fetched latest state from server');
+          if (import.meta.env.DEV) {
+            console.log('🔄 FORCE SYNC: Fetched latest state from server');
+          }
           // Return value removed to match Promise<void>
         }
       } catch (e) {
@@ -1216,7 +1253,9 @@ export function useCloudSync(): UseCloudSync {
             // 🔧 CRITICAL FIX: Block ALL cloud updates while actively working on an address
             const activeProtection = localStorage.getItem('navigator_active_protection');
             if (activeProtection) {
-              console.log('🛡️ ACTIVE PROTECTION: Blocking cloud update - user is working on address');
+              if (import.meta.env.DEV) {
+                console.log('🛡️ ACTIVE PROTECTION: Blocking cloud update - user is working on address');
+              }
               return;
             }
 
@@ -1233,14 +1272,18 @@ export function useCloudSync(): UseCloudSync {
 
               // If restore was within the last 30 seconds, skip cloud updates
               if (timeSinceRestore < 30000) {
-                console.log('🛡️ RESTORE PROTECTION: Skipping cloud state update to prevent data loss', {
-                  timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
-                  restoreTime: new Date(restoreTime).toISOString()
-                });
+                if (import.meta.env.DEV) {
+                  console.log('🛡️ RESTORE PROTECTION: Skipping cloud state update to prevent data loss', {
+                    timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
+                    restoreTime: new Date(restoreTime).toISOString()
+                  });
+                }
                 return;
               } else {
                 // Clear the flag after timeout
-                console.log('🛡️ RESTORE PROTECTION: Timeout reached, clearing flag');
+                if (import.meta.env.DEV) {
+                  console.log('🛡️ RESTORE PROTECTION: Timeout reached, clearing flag');
+                }
                 localStorage.removeItem('navigator_restore_in_progress');
               }
             }
@@ -1253,19 +1296,25 @@ export function useCloudSync(): UseCloudSync {
 
               // If import was within the last 2 seconds, skip cloud updates
               if (timeSinceImport < 2000) {
-                console.log('🛡️ IMPORT PROTECTION: Skipping cloud state update to prevent import override', {
-                  timeSinceImport: `${Math.round(timeSinceImport/1000)}s`,
-                  importTime: new Date(importTime).toISOString()
-                });
+                if (import.meta.env.DEV) {
+                  console.log('🛡️ IMPORT PROTECTION: Skipping cloud state update to prevent import override', {
+                    timeSinceImport: `${Math.round(timeSinceImport/1000)}s`,
+                    importTime: new Date(importTime).toISOString()
+                  });
+                }
                 return;
               } else {
                 // Clear the flag after timeout
-                console.log('🛡️ IMPORT PROTECTION: Timeout reached, clearing flag');
+                if (import.meta.env.DEV) {
+                  console.log('🛡️ IMPORT PROTECTION: Timeout reached, clearing flag');
+                }
                 localStorage.removeItem('navigator_import_in_progress');
               }
             }
 
-            console.log('🔄 FORCE UPDATE: Applying cloud state update from another device');
+            if (import.meta.env.DEV) {
+              console.log('🔄 FORCE UPDATE: Applying cloud state update from another device');
+            }
 
             // FORCE UPDATE: Apply cloud updates immediately for personal use case
             if (typeof onChange === "function") {
@@ -1280,7 +1329,7 @@ export function useCloudSync(): UseCloudSync {
                   )
                 );
 
-                if (newCompletions.length > 0) {
+                if (newCompletions.length > 0 && import.meta.env.DEV) {
                   console.log(`📱 NEW COMPLETIONS DETECTED: ${newCompletions.length} new completion(s) from other device(s)`);
                   newCompletions.forEach(comp => {
                     console.log(`   • "${comp.address}" completed at ${new Date(comp.timestamp).toLocaleString()}`);
