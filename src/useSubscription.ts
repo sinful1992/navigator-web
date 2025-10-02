@@ -157,8 +157,6 @@ export function useSubscription(user: User | null): UseSubscription {
         .order('created_at', { ascending: false })
         .maybeSingle();
 
-      console.log("Subscription query result:", { data, error: fetchError });
-
       if (fetchError) {
         throw fetchError;
       }
@@ -181,13 +179,11 @@ export function useSubscription(user: User | null): UseSubscription {
       } : null;
 
       setSubscription(sub);
-      console.log("Subscription set:", sub);
 
     } catch (e: any) {
       logger.error('Failed to load subscription:', e);
       setError(e?.message || 'Failed to load subscription');
       setSubscription(null);
-      console.log("Subscription error:", e);
     } finally {
       setIsLoading(false);
     }
