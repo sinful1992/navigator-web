@@ -77,18 +77,12 @@ serve(async (req) => {
       throw new Error('Maximum 50 waypoints per directions request')
     }
 
-    console.log(`Getting route directions for ${coordinates.length} waypoints for user ${user.email}`)
-
-    // FIX: Make ONE API call with all coordinates instead of multiple calls
+    // Make ONE API call with all coordinates instead of multiple calls
     // This avoids rate limiting and is more efficient
     const directionsBody = {
       coordinates: coordinates,
-      format: 'geojson',
-      instructions: false,
-      geometry_simplify: false  // Get detailed geometry
+      instructions: false
     }
-
-    console.log(`Making single directions request with ${coordinates.length} waypoints`)
 
     const response = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}`, {
       method: 'POST',
@@ -102,7 +96,7 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error(`OpenRouteService directions error:`, errorText)
+      console.error('OpenRouteService directions API error:', response.status, errorText)
 
       // Return error with details
       return new Response(
@@ -119,44 +113,68 @@ serve(async (req) => {
     }
 
     const data = await response.json()
-    console.log('Directions response:', {
-      hasFeatures: !!data.features,
-      featuresCount: data.features?.length
-    })
 
     // Build segments from the complete route
     const segments: RouteSegment[] = []
 
-    if (data.features && data.features.length > 0) {
-      const route = data.features[0]
-      const fullGeometry = route.geometry.coordinates || []
-      const segments_data = route.properties?.segments || []
+    if (data.routes && data.routes.length > 0) {
+      const route = data.routes[0]
+      const encodedGeometry = route.geometry
 
-      console.log('Route data:', {
-        geometryPoints: fullGeometry.length,
-        segmentsCount: segments_data.length
-      })
+      // Decode polyline - ORS uses precision 5 (same as Google's polyline format)
+      const decodePolyline = (encoded: string): [number, number][] => {
+        const coords: [number, number][] = []
+        let index = 0
+        let lat = 0
+        let lng = 0
 
-      // Create segments from the route segments provided by ORS
+        while (index < encoded.length) {
+          let b: number
+          let shift = 0
+          let result = 0
+
+          do {
+            b = encoded.charCodeAt(index++) - 63
+            result |= (b & 0x1f) << shift
+            shift += 5
+          } while (b >= 0x20)
+
+          const dlat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1
+          lat += dlat
+
+          shift = 0
+          result = 0
+
+          do {
+            b = encoded.charCodeAt(index++) - 63
+            result |= (b & 0x1f) << shift
+            shift += 5
+          } while (b >= 0x20)
+
+          const dlng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1
+          lng += dlng
+
+          coords.push([lng / 1e5, lat / 1e5]) // [lng, lat] format
+        }
+
+        return coords
+      }
+
+      const fullGeometry = decodePolyline(encodedGeometry)
+
+      // Create segments - use full geometry for each segment (simplified approach)
       for (let i = 0; i < coordinates.length - 1; i++) {
-        const segment_data = segments_data[i] || {}
-
-        // Extract geometry for this segment
-        // ORS returns one continuous geometry, we need to split it per segment
-        const stepCount = segment_data.steps?.length || 0
-        const segmentGeometry = fullGeometry  // For now, use full geometry for each segment
-
         segments.push({
           from: i,
           to: i + 1,
-          geometry: segmentGeometry,
-          distance: segment_data.distance || 0,
-          duration: segment_data.duration || 0
+          geometry: fullGeometry, // Use full route geometry for all segments
+          distance: route.summary?.distance / (coordinates.length - 1) || 0, // Estimate
+          duration: route.summary?.duration / (coordinates.length - 1) || 0  // Estimate
         })
       }
     } else {
       // Fallback to straight lines for all segments
-      console.warn('No route features returned, using straight line fallback')
+      console.warn('No routes returned, using straight line fallback')
       for (let i = 0; i < coordinates.length - 1; i++) {
         segments.push({
           from: i,

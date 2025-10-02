@@ -582,12 +582,15 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
           <div style={{
             display: 'flex',
             gap: '1rem',
-            flexDirection: isMobile ? 'column' : 'row'
+            flexDirection: isMobile ? 'column' : 'row',
+            minHeight: isMobile ? 'auto' : '600px' // Give proper height
           }}>
             {/* Address List */}
             <div style={{
               flex: showMap ? '1' : '2',
-              minWidth: '300px'
+              minWidth: '300px',
+              display: 'flex',
+              flexDirection: 'column'
             }}>
               <div style={{
                 background: 'var(--gray-100)',
@@ -712,7 +715,13 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
             {showMap && (
               <div style={{
                 flex: '1',
-                minWidth: '400px'
+                minWidth: isMobile ? '100%' : '400px',
+                height: isMobile ? '400px' : '100%',
+                background: 'var(--gray-100)',
+                border: '1px solid var(--gray-200)',
+                borderRadius: 'var(--radius-md)',
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)'
               }}>
                 <LeafletMap
                   addresses={addresses.map(geocodingResultToAddressRow)}

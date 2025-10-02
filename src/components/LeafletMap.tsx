@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { AddressRow } from "../types";
@@ -59,12 +59,20 @@ interface LeafletMapProps {
   confidences?: (number | undefined)[];  // Optional confidence scores for each address
 }
 
-// Component to fit map bounds to markers
+// Component to fit map bounds to markers (only on initial load)
 function FitBounds({ pins }: { pins: MapPin[] }) {
   const map = useMap();
+  const hasSetInitialBounds = useRef(false);
 
   useEffect(() => {
-    if (pins.length === 0) return;
+    // Only auto-fit on initial load or when pins count significantly changes
+    if (pins.length === 0) {
+      hasSetInitialBounds.current = false;
+      return;
+    }
+
+    // Skip if already set bounds and pin count hasn't changed significantly
+    if (hasSetInitialBounds.current) return;
 
     if (pins.length === 1) {
       // Center on single marker
@@ -77,7 +85,9 @@ function FitBounds({ pins }: { pins: MapPin[] }) {
       );
       map.fitBounds(group.getBounds().pad(0.1));
     }
-  }, [map, pins]);
+
+    hasSetInitialBounds.current = true;
+  }, [map, pins.length]); // Only depend on pins.length, not the entire pins array
 
   return null;
 }
@@ -114,55 +124,18 @@ export function LeafletMap({
   // Load route directions when optimized order changes
   useEffect(() => {
     async function loadRouteDirections() {
-      console.log('Route directions effect triggered:', {
-        showRouteLines,
-        optimizedOrder,
-        optimizedOrderLength: optimizedOrder?.length
-      });
-
       if (!showRouteLines || !optimizedOrder || optimizedOrder.length < 2) {
-        console.log('Route directions skipped:', {
-          showRouteLines,
-          hasOptimizedOrder: !!optimizedOrder,
-          orderLength: optimizedOrder?.length
-        });
         setRouteSegments([]);
         return;
       }
 
-      // SAFEGUARD: Validate that optimizedOrder indices are valid for addresses array
+      // Validate that optimizedOrder indices are valid for addresses array
       const invalidIndices = optimizedOrder.filter(idx => idx < 0 || idx >= addresses.length);
-      console.log('Route validation:', {
-        invalidIndices: invalidIndices.length,
-        addressesLength: addresses.length,
-        optimizedOrderLength: optimizedOrder.length
-      });
-
       if (invalidIndices.length > 0) {
-        console.error('Invalid optimizedOrder indices detected:', {
-          invalidIndices,
-          addressesLength: addresses.length,
-          optimizedOrder
-        });
+        console.error('Invalid optimizedOrder indices:', invalidIndices);
         setRouteSegments([]);
         return;
       }
-
-      // SAFEGUARD: Validate that addresses have valid coordinates
-      const addressesWithoutCoords = optimizedOrder.filter(idx => {
-        const addr = addresses[idx];
-        return !addr || !addr.lat || !addr.lng;
-      });
-      if (addressesWithoutCoords.length > 0) {
-        console.warn('Some addresses in optimized order lack coordinates:', addressesWithoutCoords);
-        // Continue anyway, the backend will filter them out
-      }
-
-      console.log('Starting to load route directions...', {
-        addressCount: addresses.length,
-        optimizedOrderCount: optimizedOrder.length,
-        hasStartLocation: startingPointIndex !== undefined
-      });
 
       setIsLoadingRoute(true);
       try {
@@ -170,34 +143,16 @@ export function LeafletMap({
           ? [addresses[startingPointIndex].lng!, addresses[startingPointIndex].lat!] as [number, number]
           : undefined;
 
-        console.log('Calling getOptimizedRouteDirections with:', {
-          addressCount: addresses.length,
-          optimizedOrder,
-          startLocation
-        });
-
         const result = await getOptimizedRouteDirections(addresses, optimizedOrder, startLocation);
 
-        console.log('Route directions result:', {
-          success: result.success,
-          segmentsCount: result.routeSegments?.length,
-          error: result.error
-        });
-
         if (result.success) {
-          console.log('Route segments received:', result.routeSegments.map((seg, i) => ({
-            segmentIndex: i,
-            geometryPoints: seg.geometry.length,
-            distance: seg.distance,
-            duration: seg.duration
-          })));
           setRouteSegments(result.routeSegments);
         } else {
-          console.error('Failed to load route directions:', result.error);
+          console.error('Route directions failed:', result.error);
           setRouteSegments([]);
         }
       } catch (error) {
-        console.error('Error loading route directions:', error);
+        console.error('Route directions error:', error);
         setRouteSegments([]);
       } finally {
         setIsLoadingRoute(false);
