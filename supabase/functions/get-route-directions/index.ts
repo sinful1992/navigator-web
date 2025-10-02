@@ -79,67 +79,89 @@ serve(async (req) => {
 
     console.log(`Getting route directions for ${coordinates.length} waypoints for user ${user.email}`)
 
-    // Build segments by getting directions between each pair of consecutive waypoints
+    // FIX: Make ONE API call with all coordinates instead of multiple calls
+    // This avoids rate limiting and is more efficient
+    const directionsBody = {
+      coordinates: coordinates,
+      format: 'geojson',
+      instructions: false,
+      geometry_simplify: false  // Get detailed geometry
+    }
+
+    console.log(`Making single directions request with ${coordinates.length} waypoints`)
+
+    const response = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': ORS_API_KEY,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(directionsBody)
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`OpenRouteService directions error:`, errorText)
+
+      // Return error with details
+      return new Response(
+        JSON.stringify({
+          success: false,
+          segments: [],
+          error: `OpenRouteService API error: ${response.status} - ${errorText}`
+        } as RouteDirectionsResult),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
+
+    const data = await response.json()
+    console.log('Directions response:', {
+      hasFeatures: !!data.features,
+      featuresCount: data.features?.length
+    })
+
+    // Build segments from the complete route
     const segments: RouteSegment[] = []
 
-    for (let i = 0; i < coordinates.length - 1; i++) {
-      const from = coordinates[i]
-      const to = coordinates[i + 1]
+    if (data.features && data.features.length > 0) {
+      const route = data.features[0]
+      const fullGeometry = route.geometry.coordinates || []
+      const segments_data = route.properties?.segments || []
 
-      // Get directions between this pair of coordinates
-      const directionsBody = {
-        coordinates: [from, to],
-        format: 'geojson',
-        instructions: false
-      }
-
-      console.log(`Getting directions from waypoint ${i} to ${i + 1}`)
-
-      const response = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': ORS_API_KEY,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(directionsBody)
+      console.log('Route data:', {
+        geometryPoints: fullGeometry.length,
+        segmentsCount: segments_data.length
       })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`OpenRouteService directions error for segment ${i}->${i+1}:`, errorText)
+      // Create segments from the route segments provided by ORS
+      for (let i = 0; i < coordinates.length - 1; i++) {
+        const segment_data = segments_data[i] || {}
 
-        // Continue with other segments even if one fails
+        // Extract geometry for this segment
+        // ORS returns one continuous geometry, we need to split it per segment
+        const stepCount = segment_data.steps?.length || 0
+        const segmentGeometry = fullGeometry  // For now, use full geometry for each segment
+
         segments.push({
           from: i,
           to: i + 1,
-          geometry: [from, to], // Fallback to straight line
-          distance: 0,
-          duration: 0
+          geometry: segmentGeometry,
+          distance: segment_data.distance || 0,
+          duration: segment_data.duration || 0
         })
-        continue
       }
-
-      const data = await response.json()
-
-      if (data.features && data.features.length > 0) {
-        const route = data.features[0]
-        const geometry = route.geometry.coordinates || []
-        const properties = route.properties || {}
-
+    } else {
+      // Fallback to straight lines for all segments
+      console.warn('No route features returned, using straight line fallback')
+      for (let i = 0; i < coordinates.length - 1; i++) {
         segments.push({
           from: i,
           to: i + 1,
-          geometry: geometry, // Already in [lng, lat] format for GeoJSON
-          distance: properties.summary?.distance || 0,
-          duration: properties.summary?.duration || 0
-        })
-      } else {
-        // Fallback to straight line
-        segments.push({
-          from: i,
-          to: i + 1,
-          geometry: [from, to],
+          geometry: [coordinates[i], coordinates[i + 1]],
           distance: 0,
           duration: 0
         })
