@@ -121,7 +121,7 @@ serve(async (req) => {
       const route = data.routes[0]
       const encodedGeometry = route.geometry
 
-      // Decode polyline - ORS uses precision 5 (same as Google's polyline format)
+      // Decode polyline - ORS uses precision 5
       const decodePolyline = (encoded: string): [number, number][] => {
         const coords: [number, number][] = []
         let index = 0

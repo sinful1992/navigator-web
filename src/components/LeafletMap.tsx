@@ -122,10 +122,14 @@ export function LeafletMap({
   const geocodedPins = pins.filter(pin => pin.isGeocoded);
 
   // Load route directions when optimized order changes
+  // Track last fetched order to prevent redundant API calls
+  const lastFetchedOrderRef = useRef<string>('');
+
   useEffect(() => {
     async function loadRouteDirections() {
       if (!showRouteLines || !optimizedOrder || optimizedOrder.length < 2) {
         setRouteSegments([]);
+        lastFetchedOrderRef.current = '';
         return;
       }
 
@@ -134,6 +138,14 @@ export function LeafletMap({
       if (invalidIndices.length > 0) {
         console.error('Invalid optimizedOrder indices:', invalidIndices);
         setRouteSegments([]);
+        return;
+      }
+
+      // Create a unique key for this route configuration
+      const routeKey = `${optimizedOrder.join(',')}-${startingPointIndex}`;
+
+      // Skip if we already fetched this exact route
+      if (lastFetchedOrderRef.current === routeKey) {
         return;
       }
 
@@ -147,6 +159,7 @@ export function LeafletMap({
 
         if (result.success) {
           setRouteSegments(result.routeSegments);
+          lastFetchedOrderRef.current = routeKey; // Mark as fetched
         } else {
           console.error('Route directions failed:', result.error);
           setRouteSegments([]);
@@ -160,7 +173,7 @@ export function LeafletMap({
     }
 
     loadRouteDirections();
-  }, [showRouteLines, optimizedOrder, addresses, startingPointIndex]);
+  }, [showRouteLines, optimizedOrder, addresses.length, startingPointIndex]); // Use addresses.length instead of addresses
 
   // Handle manual geocoding for addresses without coordinates
   const handleGeocodeAddress = async (index: number) => {
