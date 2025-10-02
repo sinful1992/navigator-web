@@ -1173,36 +1173,51 @@ export function useCloudSync(): UseCloudSync {
             // Verify data integrity
             const expectedChecksum = generateChecksum(dataObj);
             if (serverChecksum && serverChecksum !== expectedChecksum) {
-              console.error('❌ CHECKSUM MISMATCH - Data integrity issue detected', {
-                expected: expectedChecksum,
-                actual: serverChecksum,
+              // 🔧 FIX: Don't show error immediately - log and track consecutive failures
+              const checksumMismatchKey = 'navigator_checksum_mismatch_count';
+              const lastMismatchKey = 'navigator_last_checksum_mismatch';
+
+              const mismatchCount = parseInt(localStorage.getItem(checksumMismatchKey) || '0');
+              const lastMismatchTime = parseInt(localStorage.getItem(lastMismatchKey) || '0');
+              const timeSinceLastMismatch = Date.now() - lastMismatchTime;
+
+              // Reset counter if it's been more than 5 minutes since last mismatch
+              const newMismatchCount = timeSinceLastMismatch > 300000 ? 1 : mismatchCount + 1;
+              localStorage.setItem(checksumMismatchKey, newMismatchCount.toString());
+              localStorage.setItem(lastMismatchKey, Date.now().toString());
+
+              console.warn(`⚠️ CHECKSUM MISMATCH (${newMismatchCount}) - Data integrity issue detected`, {
+                expected: expectedChecksum.substring(0, 16) + '...',
+                actual: serverChecksum.substring(0, 16) + '...',
                 serverVersion,
-                updatedAt
+                updatedAt,
+                consecutiveMismatches: newMismatchCount
               });
-              setError('Data sync error detected - please refresh the page');
-              // Force a full sync by resetting metadata
-              syncMetadata.current.lastSyncAt = '';
-              syncMetadata.current.version = 0;
-              syncMetadata.current.checksum = '';
+
+              // Only reset after 3 consecutive mismatches (silent recovery)
+              if (newMismatchCount >= 3) {
+                console.error('❌ PERSISTENT CHECKSUM MISMATCH - Forcing full sync (silent recovery)');
+                // 🔧 FIX: Don't show error to user - they can't do anything about it
+                // Just silently force a full sync to recover
+                localStorage.removeItem(checksumMismatchKey);
+                localStorage.removeItem(lastMismatchKey);
+                // Force a full sync by resetting metadata
+                syncMetadata.current.lastSyncAt = '';
+                syncMetadata.current.version = 0;
+                syncMetadata.current.checksum = '';
+              }
               return;
             }
 
-            // 🔧 CRITICAL FIX: Check for recent local state changes
-            const recentChangeProtection = localStorage.getItem('navigator_recent_state_change');
-            if (recentChangeProtection) {
-              const changeTime = parseInt(recentChangeProtection);
-              const timeSinceChange = Date.now() - changeTime;
+            // Clear checksum mismatch counter on successful checksum validation
+            localStorage.removeItem('navigator_checksum_mismatch_count');
+            localStorage.removeItem('navigator_last_checksum_mismatch');
 
-              // Protect local changes for 5 seconds
-              if (timeSinceChange < 5000) {
-                console.log('🛡️ LOCAL CHANGE PROTECTION: Skipping cloud update to preserve recent local action', {
-                  timeSinceChange: `${Math.round(timeSinceChange/1000)}s`,
-                  changeTime: new Date(changeTime).toISOString()
-                });
-                return;
-              } else {
-                localStorage.removeItem('navigator_recent_state_change');
-              }
+            // 🔧 CRITICAL FIX: Block ALL cloud updates while actively working on an address
+            const activeProtection = localStorage.getItem('navigator_active_protection');
+            if (activeProtection) {
+              console.log('🛡️ ACTIVE PROTECTION: Blocking cloud update - user is working on address');
+              return;
             }
 
             // Update our sync metadata

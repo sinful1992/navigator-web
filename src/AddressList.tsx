@@ -419,7 +419,11 @@ const AddressListComponent = function AddressList({
                     <button
                       className="action-btn-modern"
                       style={{ background: 'var(--gray-100)', color: 'var(--gray-600)' }}
-                      onClick={cancelActive}
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to cancel? Any tracked time will be lost.')) {
+                          cancelActive();
+                        }
+                      }}
                     >
                       <span>❎</span>
                       <span>Cancel</span>

@@ -201,6 +201,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
       }
     }
 
+    // Clear previous optimization before starting new one
     setIsOptimizing(true);
     setOptimizationResult(null);
 
@@ -230,6 +231,17 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
         // Reorder addresses based on optimization
         const optimizedAddresses = result.optimizedOrder.map(index => addresses[index]);
         setAddresses(optimizedAddresses);
+
+        // FIX: Reset optimizedOrder to sequential indices since array is now physically reordered
+        // This ensures indices match the new array order for route line drawing
+        setOptimizationResult({
+          optimizedOrder: optimizedAddresses.map((_, i) => i), // [0, 1, 2, 3, ...]
+          totalDistance: result.totalDistance,
+          totalDuration: result.totalDuration,
+          unassigned: result.unassigned,
+          error: result.error
+        });
+
         // Update starting point index to reflect new order
         if (startingPointIndex !== null) {
           const newStartIndex = result.optimizedOrder.indexOf(startingPointIndex);
@@ -286,8 +298,25 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
   return (
     <SubscriptionGuard user={user} fallback={<RoutePlanningLockedView />}>
       <div className="route-planning">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h2>🗺️ Route Planning</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <h2 style={{ margin: 0 }}>🗺️ Route Planning</h2>
+            {optimizationResult && !optimizationResult.error && optimizationResult.optimizedOrder.length > 0 && (
+              <span style={{
+                background: 'var(--success)',
+                color: 'white',
+                padding: '0.5rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}>
+                ✓ Route Optimized
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Service Status */}
@@ -574,9 +603,16 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                   background: 'var(--gray-50)',
                   display: 'flex',
                   justifyContent: 'space-between',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem'
                 }}>
-                  <h3 style={{ margin: 0 }}>Addresses ({addresses.length})</h3>
+                  <h3 style={{ margin: 0 }}>
+                    {optimizationResult && !optimizationResult.error && optimizationResult.optimizedOrder.length > 0
+                      ? '📍 Optimized Route Sequence'
+                      : `Addresses (${addresses.length})`
+                    }
+                  </h3>
                   {startingPointIndex !== null && (
                     <div style={{
                       background: 'var(--primary-light)',
@@ -685,6 +721,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                   onStartingPointChange={setStartingPointIndex}
                   optimizedOrder={optimizationResult?.optimizedOrder}
                   showRouteLines={!!optimizationResult && !optimizationResult.error}
+                  confidences={addresses.map(addr => addr.confidence)}
                 />
               </div>
             )}

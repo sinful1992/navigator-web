@@ -4,18 +4,32 @@ import L from "leaflet";
 import type { AddressRow } from "../types";
 import { geocodeAddresses, getOptimizedRouteDirections } from "../services/hybridRouting";
 
-// Fix for default markers in Leaflet with Webpack
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+// Create numbered marker icon
+function createNumberedIcon(number: number, isStart: boolean, isGeocoded: boolean, confidence?: number): L.DivIcon {
+  let pinClass = 'marker-pin';
 
-// Configure default marker icons
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconUrl: markerIcon,
-  iconRetinaUrl: markerIcon2x,
-  shadowUrl: markerShadow,
-});
+  if (isStart) {
+    pinClass += ' marker-start';
+  } else if (!isGeocoded) {
+    pinClass += ' marker-not-geocoded';
+  } else if (confidence !== undefined) {
+    if (confidence < 0.5) {
+      pinClass += ' marker-low-confidence';
+    } else if (confidence < 0.8) {
+      pinClass += ' marker-medium-confidence';
+    }
+  }
+
+  return L.divIcon({
+    className: 'custom-numbered-marker',
+    html: `<div class="${pinClass}">
+      <div class="marker-number">${isStart ? '🏠' : number}</div>
+    </div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 40],
+    popupAnchor: [0, -40]
+  });
+}
 
 interface MapPin {
   id: string;
@@ -42,6 +56,7 @@ interface LeafletMapProps {
   onStartingPointChange: (index: number | null) => void;
   optimizedOrder?: number[];
   showRouteLines?: boolean;
+  confidences?: (number | undefined)[];  // Optional confidence scores for each address
 }
 
 // Component to fit map bounds to markers
@@ -73,7 +88,8 @@ export function LeafletMap({
   startingPointIndex,
   onStartingPointChange,
   optimizedOrder,
-  showRouteLines = false
+  showRouteLines = false,
+  confidences
 }: LeafletMapProps) {
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
@@ -88,7 +104,7 @@ export function LeafletMap({
       lng: address.lng || 0,
       isStart: index === startingPointIndex,
       isGeocoded: !!(address.lat && address.lng),
-      confidence: 0.8 // Default confidence for AddressRow (already geocoded)
+      confidence: confidences?.[index] // Use confidence from prop if available
     }));
   };
 
@@ -112,6 +128,28 @@ export function LeafletMap({
         });
         setRouteSegments([]);
         return;
+      }
+
+      // SAFEGUARD: Validate that optimizedOrder indices are valid for addresses array
+      const invalidIndices = optimizedOrder.filter(idx => idx < 0 || idx >= addresses.length);
+      if (invalidIndices.length > 0) {
+        console.error('Invalid optimizedOrder indices detected:', {
+          invalidIndices,
+          addressesLength: addresses.length,
+          optimizedOrder
+        });
+        setRouteSegments([]);
+        return;
+      }
+
+      // SAFEGUARD: Validate that addresses have valid coordinates
+      const addressesWithoutCoords = optimizedOrder.filter(idx => {
+        const addr = addresses[idx];
+        return !addr || !addr.lat || !addr.lng;
+      });
+      if (addressesWithoutCoords.length > 0) {
+        console.warn('Some addresses in optimized order lack coordinates:', addressesWithoutCoords);
+        // Continue anyway, the backend will filter them out
       }
 
       setIsLoadingRoute(true);
@@ -182,29 +220,6 @@ export function LeafletMap({
     onStartingPointChange(startingPointIndex === index ? null : index);
   };
 
-  // Get marker color based on type and confidence
-  const getMarkerIcon = (pin: MapPin): L.Icon => {
-    let color = '#3388ff'; // Default blue
-
-    if (pin.isStart) {
-      color = '#28a745'; // Green for starting point
-    } else if (pin.confidence && pin.confidence < 0.5) {
-      color = '#dc3545'; // Red for low confidence
-    } else if (pin.confidence && pin.confidence < 0.8) {
-      color = '#ffc107'; // Yellow for medium confidence
-    }
-
-    // Create colored marker using CSS filter
-    return new L.Icon({
-      iconUrl: markerIcon,
-      iconRetinaUrl: markerIcon2x,
-      shadowUrl: markerShadow,
-      iconSize: [25, 41],
-      iconAnchor: [12, 41],
-      popupAnchor: [1, -34],
-      className: `marker-${color.replace('#', '')}`
-    });
-  };
 
   // Generate color for route segment based on order
   const getSegmentColor = (segmentIndex: number, totalSegments: number): string => {
@@ -237,17 +252,20 @@ export function LeafletMap({
         <FitBounds pins={geocodedPins} />
 
         {/* Render markers */}
-        {geocodedPins.map((pin) => {
+        {geocodedPins.map((pin, displayIndex) => {
           const addressIndex = addresses.findIndex(addr =>
             addr.lat === pin.lat && addr.lng === pin.lng && addr.address === pin.address
           );
+
+          // Geocoded pins are NOT draggable, only non-geocoded ones can be moved
+          const isDraggable = !pin.isGeocoded;
 
           return (
             <Marker
               key={pin.id}
               position={[pin.lat, pin.lng]}
-              icon={getMarkerIcon(pin)}
-              draggable={true}
+              icon={createNumberedIcon(displayIndex + 1, pin.isStart, pin.isGeocoded, pin.confidence)}
+              draggable={isDraggable}
               eventHandlers={{
                 dragend: (e) => handleMarkerDragEnd(addressIndex, e)
               }}
@@ -270,6 +288,17 @@ export function LeafletMap({
                              pin.confidence >= 0.5 ? 'var(--warning)' : 'var(--danger)'
                     }}>
                       Confidence: {Math.round(pin.confidence * 100)}%
+                    </div>
+                  )}
+
+                  {!isDraggable && (
+                    <div style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--text-muted)',
+                      fontStyle: 'italic',
+                      marginBottom: '0.5rem'
+                    }}>
+                      🔒 Geocoded pin (non-movable)
                     </div>
                   )}
 
@@ -409,6 +438,93 @@ export function LeafletMap({
           })}
         </div>
       )}
+
+      {/* Custom Pin Styles */}
+      <style>{`
+        /* Custom Numbered Markers */
+        .custom-numbered-marker {
+          background: transparent;
+          border: none;
+        }
+
+        .marker-pin {
+          width: 40px;
+          height: 40px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+        }
+
+        .marker-pin::before {
+          content: '';
+          position: absolute;
+          width: 36px;
+          height: 36px;
+          background: var(--primary);
+          border-radius: 50% 50% 50% 0;
+          transform: rotate(-45deg);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          border: 3px solid white;
+        }
+
+        .marker-pin.marker-start::before {
+          background: var(--success);
+          animation: markerPulse 2s ease-in-out infinite;
+        }
+
+        .marker-pin.marker-not-geocoded::before {
+          background: var(--gray-400);
+        }
+
+        .marker-pin.marker-low-confidence::before {
+          background: var(--danger);
+        }
+
+        .marker-pin.marker-medium-confidence::before {
+          background: var(--warning);
+        }
+
+        @keyframes markerPulse {
+          0%, 100% {
+            transform: rotate(-45deg) scale(1);
+          }
+          50% {
+            transform: rotate(-45deg) scale(1.1);
+          }
+        }
+
+        .marker-number {
+          position: relative;
+          z-index: 1;
+          color: white;
+          font-weight: bold;
+          font-size: 0.875rem;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+          transform: translateY(-2px);
+        }
+
+        /* Leaflet Popup Override for Dark Mode */
+        .leaflet-popup-content-wrapper {
+          background: var(--surface) !important;
+          color: var(--text-primary) !important;
+          border: 1px solid var(--border) !important;
+          box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4) !important;
+        }
+
+        .leaflet-popup-tip {
+          background: var(--surface) !important;
+          border: 1px solid var(--border) !important;
+        }
+
+        .leaflet-popup-close-button {
+          color: var(--text-primary) !important;
+        }
+
+        .leaflet-popup-close-button:hover {
+          color: var(--primary) !important;
+        }
+      `}</style>
     </div>
   );
 }

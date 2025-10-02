@@ -753,12 +753,22 @@ export function useAppState() {
   );
 
   const setActive = React.useCallback((idx: number) => {
-    // 🔧 CRITICAL FIX: Set protection flag before state change
-    localStorage.setItem('navigator_recent_state_change', Date.now().toString());
+    // 🔧 CRITICAL FIX: Set protection flag (no timeout - cleared on Complete/Cancel)
+    localStorage.setItem('navigator_active_protection', 'true');
 
     setBaseState((s) => {
-      // Check if this address is already completed (cross-device protection)
       const address = s.addresses[idx];
+
+      // Check if there's already an active address
+      if (s.activeIndex !== null && s.activeIndex !== idx) {
+        const currentActiveAddress = s.addresses[s.activeIndex];
+        logger.warn(`Cannot start address #${idx} - address #${s.activeIndex} "${currentActiveAddress?.address}" is already active`);
+        showWarning(`Please complete or cancel the current active address first`);
+        localStorage.removeItem('navigator_active_protection');
+        return s; // Don't change state
+      }
+
+      // Check if this address is already completed (cross-device protection)
       if (address) {
         const isCompleted = s.completions.some(c =>
           c.index === idx &&
@@ -768,35 +778,25 @@ export function useAppState() {
         if (isCompleted) {
           logger.warn(`Cannot set active - address at index ${idx} is already completed`);
           showWarning(`This address is already completed`);
-          localStorage.removeItem('navigator_recent_state_change'); // Clear protection on error
+          localStorage.removeItem('navigator_active_protection');
           return s; // Don't change state
         }
       }
 
       const now = new Date().toISOString();
-      logger.info(`📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - tracking time`);
+      logger.info(`📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - SYNC BLOCKED until Complete/Cancel`);
       return { ...s, activeIndex: idx, activeStartTime: now };
     });
-
-    // Auto-clear protection flag after 5 seconds
-    setTimeout(() => {
-      localStorage.removeItem('navigator_recent_state_change');
-    }, 5000);
   }, []);
 
   const cancelActive = React.useCallback(() => {
-    // 🔧 CRITICAL FIX: Set protection flag before state change
-    localStorage.setItem('navigator_recent_state_change', Date.now().toString());
+    // 🔧 FIX: Clear protection to resume cloud sync
+    localStorage.removeItem('navigator_active_protection');
 
     setBaseState((s) => {
-      logger.info(`📍 CANCELING ACTIVE: Clearing active state and stopping timer - will auto-sync to all devices`);
+      logger.info(`📍 CANCELING ACTIVE: Clearing active state - SYNC RESUMED`);
       return { ...s, activeIndex: null, activeStartTime: null };
     });
-
-    // Auto-clear protection flag after 5 seconds
-    setTimeout(() => {
-      localStorage.removeItem('navigator_recent_state_change');
-    }, 5000);
   }, []);
 
   // Track pending completions to prevent double submissions
@@ -889,12 +889,20 @@ export function useAppState() {
         // Apply both optimistic and base state updates in single transaction
         addOptimisticUpdate("create", "completion", completion, operationId);
 
-        setBaseState((s) => ({
-          ...s,
-          completions: [completion, ...s.completions],
-          activeIndex: s.activeIndex === index ? null : s.activeIndex,
-          activeStartTime: s.activeIndex === index ? null : s.activeStartTime,
-        }));
+        setBaseState((s) => {
+          if (s.activeIndex === index) {
+            // 🔧 FIX: Clear protection when completing active address
+            localStorage.removeItem('navigator_active_protection');
+            logger.info(`📍 COMPLETED ACTIVE ADDRESS: Clearing active state - SYNC RESUMED`);
+          }
+
+          return {
+            ...s,
+            completions: [completion, ...s.completions],
+            activeIndex: s.activeIndex === index ? null : s.activeIndex,
+            activeStartTime: s.activeIndex === index ? null : s.activeStartTime,
+          };
+        });
 
         return operationId;
       } finally {
@@ -1474,10 +1482,16 @@ export function useAppState() {
             )}
           : nextState;
 
-        // 🔧 CRITICAL FIX: Clear activeIndex if the active address was completed on another device
+        // 🔧 CRITICAL FIX: Clear activeIndex if invalid or address was completed
         if (finalState.activeIndex !== null && typeof finalState.activeIndex === 'number') {
           const activeAddress = finalState.addresses[finalState.activeIndex];
-          if (activeAddress) {
+
+          // Clear if activeIndex is out of bounds
+          if (!activeAddress) {
+            logger.warn(`🔄 CLEARING INVALID activeIndex: Index ${finalState.activeIndex} is out of bounds (max: ${finalState.addresses.length - 1})`);
+            finalState = { ...finalState, activeIndex: null, activeStartTime: null };
+          } else {
+            // Clear if active address was completed on another device
             const activeAddressCompleted = finalState.completions.some(c =>
               c.address === activeAddress.address &&
               (c.listVersion || finalState.currentListVersion) === finalState.currentListVersion
@@ -1486,7 +1500,7 @@ export function useAppState() {
             if (activeAddressCompleted) {
               logger.info(`🔄 CLEARING ACTIVE INDEX: Address "${activeAddress.address}" was completed on another device`);
               showInfo(`Address "${activeAddress.address}" was completed on another device`);
-              finalState = { ...finalState, activeIndex: null };
+              finalState = { ...finalState, activeIndex: null, activeStartTime: null };
             }
           }
         }
