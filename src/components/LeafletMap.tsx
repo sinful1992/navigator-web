@@ -185,6 +185,12 @@ export function LeafletMap({
         });
 
         if (result.success) {
+          console.log('Route segments received:', result.routeSegments.map((seg, i) => ({
+            segmentIndex: i,
+            geometryPoints: seg.geometry.length,
+            distance: seg.distance,
+            duration: seg.duration
+          })));
           setRouteSegments(result.routeSegments);
         } else {
           console.error('Failed to load route directions:', result.error);
