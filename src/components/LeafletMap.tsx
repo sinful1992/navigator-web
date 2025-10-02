@@ -132,6 +132,12 @@ export function LeafletMap({
 
       // SAFEGUARD: Validate that optimizedOrder indices are valid for addresses array
       const invalidIndices = optimizedOrder.filter(idx => idx < 0 || idx >= addresses.length);
+      console.log('Route validation:', {
+        invalidIndices: invalidIndices.length,
+        addressesLength: addresses.length,
+        optimizedOrderLength: optimizedOrder.length
+      });
+
       if (invalidIndices.length > 0) {
         console.error('Invalid optimizedOrder indices detected:', {
           invalidIndices,
@@ -152,13 +158,31 @@ export function LeafletMap({
         // Continue anyway, the backend will filter them out
       }
 
+      console.log('Starting to load route directions...', {
+        addressCount: addresses.length,
+        optimizedOrderCount: optimizedOrder.length,
+        hasStartLocation: startingPointIndex !== undefined
+      });
+
       setIsLoadingRoute(true);
       try {
         const startLocation = startingPointIndex !== undefined && addresses[startingPointIndex]
           ? [addresses[startingPointIndex].lng!, addresses[startingPointIndex].lat!] as [number, number]
           : undefined;
 
+        console.log('Calling getOptimizedRouteDirections with:', {
+          addressCount: addresses.length,
+          optimizedOrder,
+          startLocation
+        });
+
         const result = await getOptimizedRouteDirections(addresses, optimizedOrder, startLocation);
+
+        console.log('Route directions result:', {
+          success: result.success,
+          segmentsCount: result.routeSegments?.length,
+          error: result.error
+        });
 
         if (result.success) {
           setRouteSegments(result.routeSegments);
