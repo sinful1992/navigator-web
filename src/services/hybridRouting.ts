@@ -261,8 +261,9 @@ export async function optimizeRoute(
         data: data // Sometimes data contains error details even when error is present
       });
 
-      // Provide user-friendly error messages
-      let userError = 'Route optimization service error';
+      // Provide user-friendly error messages with more details
+      let userError = `Route optimization service error: ${error.message || 'Unknown error'}`;
+
       if (error.message?.includes('OpenRouteService API key')) {
         userError = 'Route optimization service not configured. Please contact support.';
       } else if (error.message?.includes('non-2xx status code')) {
@@ -271,6 +272,12 @@ export async function optimizeRoute(
         userError = 'Authentication required. Please log in again.';
       } else if (error.message?.includes('Subscription required')) {
         userError = 'Route optimization requires an active subscription.';
+      } else if (error.message?.includes('OpenRouteService API error')) {
+        userError = `OpenRouteService API error: ${error.message.split('OpenRouteService API error: ')[1] || error.message}`;
+      } else if (error.message?.includes('Maximum 100 addresses')) {
+        userError = 'Too many addresses. Maximum 100 addresses allowed per optimization.';
+      } else if (error.message?.includes('No addresses have valid coordinates')) {
+        userError = 'No addresses have valid coordinates for route optimization.';
       }
 
       return {
