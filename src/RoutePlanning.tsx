@@ -26,15 +26,9 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
   // State management
   const [addresses, setAddresses] = useState<GeocodingResult[]>([]);
   const [newAddress, setNewAddress] = useState("");
-  const [isGeocoding, setIsGeocoding] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [startingPointIndex, setStartingPointIndex] = useState<number | null>(null);
   const [showMap, setShowMap] = useState(true);
-  const [geocodingProgress, setGeocodingProgress] = useState<{
-    completed: number;
-    total: number;
-    current: string;
-  } | null>(null);
 
   // Optimization results
   const [optimizationResult, setOptimizationResult] = useState<{
@@ -121,49 +115,25 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
     });
   };
 
-  // Geocode all addresses that need it
-  const handleGeocodeAll = async () => {
+  // Geocode a single address
+  const handleGeocodeSingle = async (index: number) => {
     if (!isHybridRoutingAvailable()) {
       alert("Geocoding service is not available. Please check your connection and subscription.");
       return;
     }
 
-    const addressesToGeocode = addresses
-      .map((addr, index) => ({ addr, index }))
-      .filter(({ addr }) => !addr.success);
-
-    if (addressesToGeocode.length === 0) {
-      alert("All addresses are already geocoded!");
-      return;
-    }
-
-    setIsGeocoding(true);
-    setGeocodingProgress({ completed: 0, total: addressesToGeocode.length, current: "" });
+    const addr = addresses[index];
+    if (addr.success) return;
 
     try {
-      const addressStrings = addressesToGeocode.map(({ addr }) => addr.address);
-      const results = await geocodeAddresses(
-        addressStrings,
-        (completed, total, current) => {
-          setGeocodingProgress({ completed, total, current });
-        }
-      );
-
-      // Update the addresses array with new geocoding results
+      const results = await geocodeAddresses([addr.address]);
       const updatedAddresses = [...addresses];
-      addressesToGeocode.forEach(({ index }, resultIndex) => {
-        updatedAddresses[index] = results[resultIndex];
-      });
-
+      updatedAddresses[index] = results[0];
       setAddresses(updatedAddresses);
       setOptimizationResult(null);
-
     } catch (error) {
-      console.error('Batch geocoding failed:', error);
+      console.error('Single geocoding failed:', error);
       alert('Geocoding failed. Please check your connection and subscription.');
-    } finally {
-      setIsGeocoding(false);
-      setGeocodingProgress(null);
     }
   };
 
@@ -416,120 +386,8 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
           )}
         </div>
 
-        {/* STEP 2: Geocode (only show if addresses exist) */}
-        {addresses.length > 0 && (
-          <div style={{
-            background: 'var(--surface)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '1.5rem',
-            marginBottom: '1rem',
-            boxShadow: 'var(--shadow-sm)',
-            border: '1px solid var(--border-light)'
-          }}>
-            <h3 style={{
-              margin: '0 0 1rem 0',
-              fontSize: '1.125rem',
-              color: 'var(--text-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}>
-              <span style={{
-                background: stats.needsGeocoding === 0 ? 'var(--success)' : 'var(--primary)',
-                color: 'white',
-                width: '1.75rem',
-                height: '1.75rem',
-                borderRadius: '50%',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.875rem',
-                fontWeight: 'bold'
-              }}>
-                {stats.needsGeocoding === 0 ? '✓' : '2'}
-              </span>
-              Geocode Addresses
-            </h3>
 
-            {/* Geocoding Progress */}
-            {geocodingProgress && (
-              <div style={{
-                marginBottom: '1rem',
-                padding: '1rem',
-                background: 'var(--primary-light)',
-                borderRadius: 'var(--radius-md)'
-              }}>
-                <div style={{
-                  marginBottom: '0.5rem',
-                  fontWeight: '600',
-                  color: 'var(--primary)'
-                }}>
-                  Geocoding {geocodingProgress.completed} of {geocodingProgress.total}
-                </div>
-                <div style={{
-                  background: 'var(--gray-200)',
-                  borderRadius: '999px',
-                  height: '0.5rem',
-                  overflow: 'hidden',
-                  marginBottom: '0.5rem'
-                }}>
-                  <div style={{
-                    background: 'var(--primary)',
-                    height: '100%',
-                    width: `${(geocodingProgress.completed / geocodingProgress.total) * 100}%`,
-                    transition: 'width 0.3s ease',
-                    borderRadius: '999px'
-                  }} />
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  {geocodingProgress.current}
-                </div>
-              </div>
-            )}
-
-            {stats.needsGeocoding === 0 ? (
-              <div style={{
-                padding: '1rem',
-                background: 'var(--surface)',
-                border: '2px solid var(--success)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--success)',
-                textAlign: 'center',
-                fontWeight: '600'
-              }}>
-                ✓ All addresses geocoded
-              </div>
-            ) : (
-              <button
-                className="btn btn-primary"
-                onClick={handleGeocodeAll}
-                disabled={isGeocoding}
-                style={{
-                  width: '100%',
-                  padding: '0.875rem',
-                  fontSize: '1rem',
-                  fontWeight: '600'
-                }}
-              >
-                {isGeocoding ? (
-                  <>
-                    <span className="spinner" style={{
-                      display: 'inline-block',
-                      width: '1rem',
-                      height: '1rem',
-                      marginRight: '0.5rem'
-                    }} />
-                    Geocoding...
-                  </>
-                ) : (
-                  `🌍 Geocode ${stats.needsGeocoding} Address${stats.needsGeocoding > 1 ? 'es' : ''}`
-                )}
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* STEP 3: Optimize Route (only show if addresses are geocoded) */}
+        {/* STEP 2: Optimize Route (only show if addresses are geocoded) */}
         {addresses.length > 0 && stats.geocoded >= 2 && (
           <div style={{
             background: 'var(--surface)',
@@ -559,7 +417,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                 fontSize: '0.875rem',
                 fontWeight: 'bold'
               }}>
-                {optimizationResult && !optimizationResult.error ? '✓' : '3'}
+                {optimizationResult && !optimizationResult.error ? '✓' : '2'}
               </span>
               Optimize Route
             </h3>
@@ -716,7 +574,17 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
               margin: '0 -1.5rem',
               padding: '0 1.5rem'
             }}>
-              {addresses.map((addr, index) => (
+              {[...addresses]
+                .sort((a, b) => {
+                  // Sort ungeocoded addresses first
+                  if (!a.success && b.success) return -1;
+                  if (a.success && !b.success) return 1;
+                  return 0;
+                })
+                .map((addr) => {
+                  // Find original index for operations
+                  const index = addresses.indexOf(addr);
+                  return (
                 <div
                   key={index}
                   style={{
@@ -797,22 +665,38 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                     </div>
                   </div>
 
-                  {/* Remove Button */}
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => handleRemoveAddress(index)}
-                    title="Remove"
-                    style={{
-                      flexShrink: 0,
-                      padding: '0.5rem',
-                      minWidth: 'auto',
-                      fontSize: '1.125rem'
-                    }}
-                  >
-                    ✕
-                  </button>
+                  {/* Action Buttons */}
+                  <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
+                    {!addr.success && (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => handleGeocodeSingle(index)}
+                        title="Geocode this address"
+                        style={{
+                          padding: '0.5rem 0.75rem',
+                          fontSize: '0.875rem',
+                          minWidth: 'auto'
+                        }}
+                      >
+                        🌍
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => handleRemoveAddress(index)}
+                      title="Remove"
+                      style={{
+                        padding: '0.5rem',
+                        minWidth: 'auto',
+                        fontSize: '1.125rem'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           </div>
         )}
