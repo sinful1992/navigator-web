@@ -583,7 +583,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
             display: 'flex',
             gap: '1rem',
             flexDirection: isMobile ? 'column' : 'row',
-            minHeight: isMobile ? 'auto' : '600px' // Give proper height
+            height: isMobile ? 'auto' : '600px' // Explicit height for desktop
           }}>
             {/* Address List */}
             <div style={{
