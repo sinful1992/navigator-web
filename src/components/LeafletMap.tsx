@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { AddressRow } from "../types";
-import { geocodeAddresses, getOptimizedRouteDirections } from "../services/hybridRouting";
+import { getOptimizedRouteDirections } from "../services/hybridRouting";
 
 // Create numbered marker icon
 function createNumberedIcon(number: number, isStart: boolean, isGeocoded: boolean, confidence?: number): L.DivIcon {
@@ -101,7 +101,6 @@ export function LeafletMap({
   showRouteLines = false,
   confidences
 }: LeafletMapProps) {
-  const [isGeocoding, setIsGeocoding] = useState(false);
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
 
@@ -174,30 +173,6 @@ export function LeafletMap({
 
     loadRouteDirections();
   }, [showRouteLines, optimizedOrder, addresses.length, startingPointIndex]); // Use addresses.length instead of addresses
-
-  // Handle manual geocoding for addresses without coordinates
-  const handleGeocodeAddress = async (index: number) => {
-    const address = addresses[index];
-    if (!address || isGeocoding) return;
-
-    setIsGeocoding(true);
-    try {
-      const results = await geocodeAddresses([address.address]);
-      if (results.length > 0 && results[0].success) {
-        const updatedAddresses = [...addresses];
-        updatedAddresses[index] = {
-          ...updatedAddresses[index],
-          lat: results[0].lat,
-          lng: results[0].lng
-        };
-        onAddressesUpdate(updatedAddresses);
-      }
-    } catch (error) {
-      console.error('Failed to geocode address:', error);
-    } finally {
-      setIsGeocoding(false);
-    }
-  };
 
   // Handle marker drag to update coordinates
   const handleMarkerDragEnd = (index: number, event: L.DragEndEvent) => {
@@ -352,22 +327,6 @@ export function LeafletMap({
         })}
       </MapContainer>
 
-      {/* Geocoding status */}
-      {isGeocoding && (
-        <div style={{
-          position: 'absolute',
-          top: '10px',
-          right: '10px',
-          background: 'var(--surface)',
-          padding: '0.5rem 1rem',
-          borderRadius: 'var(--radius)',
-          boxShadow: 'var(--shadow)',
-          fontSize: '0.875rem',
-          zIndex: 1000
-        }}>
-          🔄 Geocoding address...
-        </div>
-      )}
 
       {/* Route loading status */}
       {isLoadingRoute && (
@@ -386,56 +345,6 @@ export function LeafletMap({
         </div>
       )}
 
-      {/* Addresses without coordinates */}
-      {addresses.some(addr => !addr.lat || !addr.lng) && (
-        <div style={{
-          position: 'absolute',
-          bottom: '10px',
-          left: '10px',
-          background: 'var(--surface)',
-          padding: '1rem',
-          borderRadius: 'var(--radius)',
-          boxShadow: 'var(--shadow)',
-          maxWidth: '300px',
-          zIndex: 1000
-        }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>
-            Addresses need geocoding:
-          </div>
-          {addresses.map((addr, index) => {
-            if (addr.lat && addr.lng) return null;
-            return (
-              <div key={index} style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '0.25rem',
-                fontSize: '0.875rem'
-              }}>
-                <span style={{ flex: 1, marginRight: '0.5rem' }}>
-                  {addr.address.substring(0, 30)}...
-                </span>
-                <button
-                  onClick={() => handleGeocodeAddress(index)}
-                  disabled={isGeocoding}
-                  style={{
-                    padding: '0.25rem 0.5rem',
-                    fontSize: '0.75rem',
-                    backgroundColor: 'var(--primary)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: 'var(--radius)',
-                    cursor: isGeocoding ? 'not-allowed' : 'pointer',
-                    opacity: isGeocoding ? 0.6 : 1
-                  }}
-                >
-                  📍 Find
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {/* Custom Pin Styles */}
       <style>{`
