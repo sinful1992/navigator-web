@@ -289,8 +289,8 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
         {/* Service Status Warning */}
         {!isHybridRoutingAvailable() && (
           <div style={{
-            background: 'var(--warning-light)',
-            border: '1px solid var(--warning)',
+            background: 'var(--surface)',
+            border: '2px solid var(--warning)',
             borderRadius: 'var(--radius-lg)',
             padding: '1rem',
             marginBottom: '1rem',
@@ -299,7 +299,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
             <div style={{ fontWeight: 'bold', color: 'var(--warning)', marginBottom: '0.25rem' }}>
               ⚠️ Service Unavailable
             </div>
-            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: '0.875rem', color: 'var(--text-primary)' }}>
               Check your internet connection
             </div>
           </div>
@@ -490,9 +490,10 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
             {stats.needsGeocoding === 0 ? (
               <div style={{
                 padding: '1rem',
-                background: 'var(--success-light)',
+                background: 'var(--surface)',
+                border: '2px solid var(--success)',
                 borderRadius: 'var(--radius-md)',
-                color: 'var(--success-dark)',
+                color: 'var(--success)',
                 textAlign: 'center',
                 fontWeight: '600'
               }}>
@@ -568,9 +569,10 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
               <div style={{
                 marginBottom: '1rem',
                 padding: '1rem',
-                background: optimizationResult.error ? 'var(--danger-light)' : 'var(--success-light)',
+                background: 'var(--surface)',
+                border: optimizationResult.error ? '2px solid var(--danger)' : '2px solid var(--success)',
                 borderRadius: 'var(--radius-md)',
-                color: optimizationResult.error ? 'var(--danger-dark)' : 'var(--success-dark)'
+                color: optimizationResult.error ? 'var(--danger)' : 'var(--success)'
               }}>
                 {optimizationResult.error ? (
                   <>
@@ -778,8 +780,8 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                               borderRadius: '999px',
                               background: addr.confidence >= 0.8 ? 'var(--success-light)' :
                                          addr.confidence >= 0.5 ? 'var(--warning-light)' : 'var(--danger-light)',
-                              color: addr.confidence >= 0.8 ? 'var(--success)' :
-                                     addr.confidence >= 0.5 ? 'var(--warning)' : 'var(--danger)',
+                              color: addr.confidence >= 0.8 ? 'var(--success-dark)' :
+                                     addr.confidence >= 0.5 ? 'var(--warning-dark)' : 'var(--danger-dark)',
                               fontSize: '0.75rem',
                               fontWeight: '600'
                             }}>
