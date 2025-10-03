@@ -27,8 +27,14 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
   const [addresses, setAddresses] = useState<GeocodingResult[]>([]);
   const [newAddress, setNewAddress] = useState("");
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
   const [startingPointIndex, setStartingPointIndex] = useState<number | null>(null);
   const [showMap, setShowMap] = useState(true);
+  const [geocodingProgress, setGeocodingProgress] = useState<{
+    completed: number;
+    total: number;
+    current: string;
+  } | null>(null);
 
   // Optimization results
   const [optimizationResult, setOptimizationResult] = useState<{
@@ -134,6 +140,52 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
     } catch (error) {
       console.error('Single geocoding failed:', error);
       alert('Geocoding failed. Please check your connection and subscription.');
+    }
+  };
+
+  // Geocode all addresses that need it
+  const handleGeocodeAll = async () => {
+    if (!isHybridRoutingAvailable()) {
+      alert("Geocoding service is not available. Please check your connection and subscription.");
+      return;
+    }
+
+    const addressesToGeocode = addresses
+      .map((addr, index) => ({ addr, index }))
+      .filter(({ addr }) => !addr.success);
+
+    if (addressesToGeocode.length === 0) {
+      alert("All addresses are already geocoded!");
+      return;
+    }
+
+    setIsGeocoding(true);
+    setGeocodingProgress({ completed: 0, total: addressesToGeocode.length, current: "" });
+
+    try {
+      const addressStrings = addressesToGeocode.map(({ addr }) => addr.address);
+      const results = await geocodeAddresses(
+        addressStrings,
+        (completed, total, current) => {
+          setGeocodingProgress({ completed, total, current });
+        }
+      );
+
+      // Update the addresses array with new geocoding results
+      const updatedAddresses = [...addresses];
+      addressesToGeocode.forEach(({ index }, resultIndex) => {
+        updatedAddresses[index] = results[resultIndex];
+      });
+
+      setAddresses(updatedAddresses);
+      setOptimizationResult(null);
+
+    } catch (error) {
+      console.error('Batch geocoding failed:', error);
+      alert('Geocoding failed. Please check your connection and subscription.');
+    } finally {
+      setIsGeocoding(false);
+      setGeocodingProgress(null);
     }
   };
 
@@ -546,7 +598,9 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: '1rem'
+              marginBottom: '1rem',
+              gap: '0.5rem',
+              flexWrap: 'wrap'
             }}>
               <h3 style={{ margin: 0, fontSize: '1.125rem', color: 'var(--text-primary)' }}>
                 {optimizationResult && !optimizationResult.error && optimizationResult.optimizedOrder.length > 0
@@ -554,19 +608,81 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                   : `Addresses (${addresses.length})`
                 }
               </h3>
-              {startingPointIndex !== null && (
-                <span style={{
-                  background: 'var(--primary-light)',
-                  color: 'var(--primary)',
-                  padding: '0.25rem 0.75rem',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '0.75rem',
-                  fontWeight: '600'
-                }}>
-                  Start: #{startingPointIndex + 1}
-                </span>
-              )}
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                {stats.needsGeocoding > 0 && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={handleGeocodeAll}
+                    disabled={isGeocoding}
+                    style={{
+                      padding: '0.5rem 0.75rem',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {isGeocoding ? (
+                      <>
+                        <span className="spinner" style={{
+                          display: 'inline-block',
+                          width: '0.875rem',
+                          height: '0.875rem',
+                          marginRight: '0.25rem'
+                        }} />
+                        Geocoding...
+                      </>
+                    ) : (
+                      `🌍 Geocode ${stats.needsGeocoding}`
+                    )}
+                  </button>
+                )}
+                {startingPointIndex !== null && (
+                  <span style={{
+                    background: 'var(--primary-light)',
+                    color: 'var(--primary)',
+                    padding: '0.25rem 0.75rem',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '0.75rem',
+                    fontWeight: '600'
+                  }}>
+                    Start: #{startingPointIndex + 1}
+                  </span>
+                )}
+              </div>
             </div>
+
+            {/* Geocoding Progress */}
+            {geocodingProgress && (
+              <div style={{
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                background: 'var(--primary-light)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--primary)'
+              }}>
+                <div style={{
+                  marginBottom: '0.5rem',
+                  fontWeight: '600',
+                  color: 'var(--primary)',
+                  fontSize: '0.875rem'
+                }}>
+                  Geocoding {geocodingProgress.completed} of {geocodingProgress.total}
+                </div>
+                <div style={{
+                  background: 'var(--gray-200)',
+                  borderRadius: '999px',
+                  height: '0.375rem',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    background: 'var(--primary)',
+                    height: '100%',
+                    width: `${(geocodingProgress.completed / geocodingProgress.total) * 100}%`,
+                    transition: 'width 0.3s ease',
+                    borderRadius: '999px'
+                  }} />
+                </div>
+              </div>
+            )}
 
             <div style={{
               maxHeight: '400px',
