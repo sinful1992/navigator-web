@@ -307,7 +307,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
 
         {/* STEP 1: Add Addresses */}
         <div style={{
-          background: 'white',
+          background: 'var(--surface)',
           borderRadius: 'var(--radius-lg)',
           padding: '1.5rem',
           marginBottom: '1rem',
@@ -419,7 +419,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
         {/* STEP 2: Geocode (only show if addresses exist) */}
         {addresses.length > 0 && (
           <div style={{
-            background: 'white',
+            background: 'var(--surface)',
             borderRadius: 'var(--radius-lg)',
             padding: '1.5rem',
             marginBottom: '1rem',
@@ -467,7 +467,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                   Geocoding {geocodingProgress.completed} of {geocodingProgress.total}
                 </div>
                 <div style={{
-                  background: 'white',
+                  background: 'var(--gray-200)',
                   borderRadius: '999px',
                   height: '0.5rem',
                   overflow: 'hidden',
@@ -531,7 +531,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
         {/* STEP 3: Optimize Route (only show if addresses are geocoded) */}
         {addresses.length > 0 && stats.geocoded >= 2 && (
           <div style={{
-            background: 'white',
+            background: 'var(--surface)',
             borderRadius: 'var(--radius-lg)',
             padding: '1.5rem',
             marginBottom: '1rem',
@@ -627,7 +627,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
         {/* Map View (always visible when addresses exist) */}
         {addresses.length > 0 && (
           <div style={{
-            background: 'white',
+            background: 'var(--surface)',
             borderRadius: 'var(--radius-lg)',
             padding: '1.5rem',
             marginBottom: '1rem',
@@ -675,7 +675,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
         {/* Address List */}
         {addresses.length > 0 && (
           <div style={{
-            background: 'white',
+            background: 'var(--surface)',
             borderRadius: 'var(--radius-lg)',
             padding: '1.5rem',
             marginBottom: '1rem',
@@ -852,7 +852,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
           <div style={{
             textAlign: 'center',
             padding: '3rem 1.5rem',
-            background: 'white',
+            background: 'var(--surface)',
             borderRadius: 'var(--radius-lg)',
             boxShadow: 'var(--shadow-sm)',
             border: '1px solid var(--border-light)'
