@@ -143,6 +143,21 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
     }
   };
 
+  // Handle manual coordinate input
+  const handleManualCoordinates = (index: number, lat: number | undefined, lng: number | undefined) => {
+    const updatedAddresses = [...addresses];
+    updatedAddresses[index] = {
+      ...updatedAddresses[index],
+      lat: lat,
+      lng: lng,
+      success: lat !== undefined && lng !== undefined,
+      formattedAddress: updatedAddresses[index].formattedAddress || updatedAddresses[index].address,
+      error: lat !== undefined && lng !== undefined ? undefined : 'Manual coordinates incomplete'
+    };
+    setAddresses(updatedAddresses);
+    setOptimizationResult(null);
+  };
+
   // Geocode all addresses that need it
   const handleGeocodeAll = async () => {
     if (!isHybridRoutingAvailable()) {
@@ -778,6 +793,49 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                           ⚠️ {addr.error}
                         </span>
                       )}
+                    </div>
+
+                    {/* Manual Coordinates Input */}
+                    <div style={{
+                      display: 'flex',
+                      gap: '0.5rem',
+                      marginTop: '0.5rem',
+                      alignItems: 'center'
+                    }}>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Latitude"
+                        value={addr.lat ?? ''}
+                        onChange={(e) => {
+                          const lat = e.target.value ? parseFloat(e.target.value) : undefined;
+                          handleManualCoordinates(index, lat, addr.lng);
+                        }}
+                        className="input"
+                        style={{
+                          flex: 1,
+                          fontSize: '0.75rem',
+                          padding: '0.375rem 0.5rem',
+                          border: '1px solid var(--border)'
+                        }}
+                      />
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Longitude"
+                        value={addr.lng ?? ''}
+                        onChange={(e) => {
+                          const lng = e.target.value ? parseFloat(e.target.value) : undefined;
+                          handleManualCoordinates(index, addr.lat, lng);
+                        }}
+                        className="input"
+                        style={{
+                          flex: 1,
+                          fontSize: '0.75rem',
+                          padding: '0.375rem 0.5rem',
+                          border: '1px solid var(--border)'
+                        }}
+                      />
                     </div>
                   </div>
 
