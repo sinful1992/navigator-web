@@ -492,7 +492,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                 padding: '1rem',
                 background: 'var(--success-light)',
                 borderRadius: 'var(--radius-md)',
-                color: 'var(--success)',
+                color: 'var(--success-dark)',
                 textAlign: 'center',
                 fontWeight: '600'
               }}>
@@ -570,7 +570,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                 padding: '1rem',
                 background: optimizationResult.error ? 'var(--danger-light)' : 'var(--success-light)',
                 borderRadius: 'var(--radius-md)',
-                color: optimizationResult.error ? 'var(--danger)' : 'var(--success)'
+                color: optimizationResult.error ? 'var(--danger-dark)' : 'var(--success-dark)'
               }}>
                 {optimizationResult.error ? (
                   <>
