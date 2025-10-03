@@ -51,7 +51,7 @@ interface RouteSegment {
 
 interface LeafletMapProps {
   addresses: AddressRow[];
-  onAddressesUpdate: (addresses: AddressRow[]) => void;
+  onAddressesUpdate?: (addresses: AddressRow[]) => void; // Optional - not used since drag removed
   startingPointIndex?: number;
   onStartingPointChange: (index: number | null) => void;
   optimizedOrder?: number[];
@@ -94,7 +94,6 @@ function FitBounds({ pins }: { pins: MapPin[] }) {
 
 export function LeafletMap({
   addresses,
-  onAddressesUpdate,
   startingPointIndex,
   onStartingPointChange,
   optimizedOrder,
@@ -174,20 +173,6 @@ export function LeafletMap({
     loadRouteDirections();
   }, [showRouteLines, optimizedOrder, addresses.length, startingPointIndex]); // Use addresses.length instead of addresses
 
-  // Handle marker drag to update coordinates
-  const handleMarkerDragEnd = (index: number, event: L.DragEndEvent) => {
-    const marker = event.target;
-    const position = marker.getLatLng();
-
-    const updatedAddresses = [...addresses];
-    updatedAddresses[index] = {
-      ...updatedAddresses[index],
-      lat: position.lat,
-      lng: position.lng
-    };
-    onAddressesUpdate(updatedAddresses);
-  };
-
   // Handle starting point selection
   const handleSetStartingPoint = (index: number) => {
     onStartingPointChange(startingPointIndex === index ? null : index);
@@ -230,18 +215,11 @@ export function LeafletMap({
             addr.lat === pin.lat && addr.lng === pin.lng && addr.address === pin.address
           );
 
-          // Geocoded pins are NOT draggable, only non-geocoded ones can be moved
-          const isDraggable = !pin.isGeocoded;
-
           return (
             <Marker
               key={pin.id}
               position={[pin.lat, pin.lng]}
               icon={createNumberedIcon(displayIndex + 1, pin.isStart, pin.isGeocoded, pin.confidence)}
-              draggable={isDraggable}
-              eventHandlers={{
-                dragend: (e) => handleMarkerDragEnd(addressIndex, e)
-              }}
             >
               <Popup>
                 <div style={{ minWidth: '200px' }}>
@@ -261,17 +239,6 @@ export function LeafletMap({
                              pin.confidence >= 0.5 ? 'var(--warning)' : 'var(--danger)'
                     }}>
                       Confidence: {Math.round(pin.confidence * 100)}%
-                    </div>
-                  )}
-
-                  {!isDraggable && (
-                    <div style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--text-muted)',
-                      fontStyle: 'italic',
-                      marginBottom: '0.5rem'
-                    }}>
-                      🔒 Geocoded pin (non-movable)
                     </div>
                   )}
 

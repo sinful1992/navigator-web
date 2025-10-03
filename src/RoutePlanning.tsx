@@ -795,48 +795,50 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
                       )}
                     </div>
 
-                    {/* Manual Coordinates Input */}
-                    <div style={{
-                      display: 'flex',
-                      gap: '0.5rem',
-                      marginTop: '0.5rem',
-                      alignItems: 'center'
-                    }}>
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Latitude"
-                        value={addr.lat ?? ''}
-                        onChange={(e) => {
-                          const lat = e.target.value ? parseFloat(e.target.value) : undefined;
-                          handleManualCoordinates(index, lat, addr.lng);
-                        }}
-                        className="input"
-                        style={{
-                          flex: 1,
-                          fontSize: '0.75rem',
-                          padding: '0.375rem 0.5rem',
-                          border: '1px solid var(--border)'
-                        }}
-                      />
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Longitude"
-                        value={addr.lng ?? ''}
-                        onChange={(e) => {
-                          const lng = e.target.value ? parseFloat(e.target.value) : undefined;
-                          handleManualCoordinates(index, addr.lat, lng);
-                        }}
-                        className="input"
-                        style={{
-                          flex: 1,
-                          fontSize: '0.75rem',
-                          padding: '0.375rem 0.5rem',
-                          border: '1px solid var(--border)'
-                        }}
-                      />
-                    </div>
+                    {/* Manual Coordinates Input - only for ungeocoded addresses */}
+                    {!addr.success && (
+                      <div style={{
+                        display: 'flex',
+                        gap: '0.5rem',
+                        marginTop: '0.5rem',
+                        alignItems: 'center'
+                      }}>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="Latitude"
+                          value={addr.lat ?? ''}
+                          onChange={(e) => {
+                            const lat = e.target.value ? parseFloat(e.target.value) : undefined;
+                            handleManualCoordinates(index, lat, addr.lng);
+                          }}
+                          className="input"
+                          style={{
+                            flex: 1,
+                            fontSize: '0.75rem',
+                            padding: '0.375rem 0.5rem',
+                            border: '1px solid var(--border)'
+                          }}
+                        />
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="Longitude"
+                          value={addr.lng ?? ''}
+                          onChange={(e) => {
+                            const lng = e.target.value ? parseFloat(e.target.value) : undefined;
+                            handleManualCoordinates(index, addr.lat, lng);
+                          }}
+                          className="input"
+                          style={{
+                            flex: 1,
+                            fontSize: '0.75rem',
+                            padding: '0.375rem 0.5rem',
+                            border: '1px solid var(--border)'
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Action Buttons */}
