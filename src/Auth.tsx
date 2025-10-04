@@ -4,23 +4,39 @@ import * as React from "react";
 type Props = {
   onSignIn: (email: string, password: string) => Promise<void>;
   onSignUp: (email: string, password: string) => Promise<void>;
+  onResetPassword: (email: string) => Promise<void>;
   onForceSignOut: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
   onClearError: () => void;
 };
 
-export function Auth({ onSignIn, onSignUp, onForceSignOut, isLoading, error, onClearError }: Props) {
-  const [mode, setMode] = React.useState<"signin" | "signup">("signin");
+export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLoading, error, onClearError }: Props) {
+  const [mode, setMode] = React.useState<"signin" | "signup" | "reset">("signin");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [resetSent, setResetSent] = React.useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
 
-    if (!email || !password) {
+    if (!email) {
+      return;
+    }
+
+    if (mode === "reset") {
+      try {
+        await onResetPassword(email);
+        setResetSent(true);
+      } catch (err) {
+        // Error handled by parent component
+      }
+      return;
+    }
+
+    if (!password) {
       return;
     }
 
@@ -75,12 +91,12 @@ export function Auth({ onSignIn, onSignUp, onForceSignOut, isLoading, error, onC
           }}>
             📍 Address Navigator
           </h1>
-          <p style={{ 
-            margin: 0, 
+          <p style={{
+            margin: 0,
             color: "var(--text-secondary)",
             fontSize: "0.875rem"
           }}>
-            {mode === "signin" ? "Sign in to sync across devices" : "Create account to get started"}
+            {mode === "signin" ? "Sign in to sync across devices" : mode === "signup" ? "Create account to get started" : "Reset your password"}
           </p>
         </div>
 
@@ -96,6 +112,21 @@ export function Auth({ onSignIn, onSignUp, onForceSignOut, isLoading, error, onC
             fontSize: "0.875rem"
           }}>
             ⚠️ {error}
+          </div>
+        )}
+
+        {/* Success Message for Password Reset */}
+        {mode === "reset" && resetSent && (
+          <div style={{
+            padding: "0.75rem",
+            marginBottom: "1rem",
+            background: "var(--success-light)",
+            border: "1px solid var(--success)",
+            borderRadius: "var(--radius)",
+            color: "var(--success)",
+            fontSize: "0.875rem"
+          }}>
+            ✅ Password reset email sent! Check your inbox.
           </div>
         )}
 
@@ -175,33 +206,35 @@ export function Auth({ onSignIn, onSignUp, onForceSignOut, isLoading, error, onC
               />
             </div>
 
-            <div>
-              <label
-                htmlFor="password"
-                style={{
-                  display: "block",
-                  marginBottom: "0.5rem",
-                  fontSize: "0.875rem",
-                  fontWeight: 600,
-                  color: "var(--text-secondary)"
-                }}
-              >
-                🔒 Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input"
-                placeholder="Password (6+ characters)"
-                disabled={isLoading}
-                minLength={6}
-                required
-                autoComplete={mode === "signup" ? "new-password" : "current-password"}
-              />
-            </div>
+            {mode !== "reset" && (
+              <div>
+                <label
+                  htmlFor="password"
+                  style={{
+                    display: "block",
+                    marginBottom: "0.5rem",
+                    fontSize: "0.875rem",
+                    fontWeight: 600,
+                    color: "var(--text-secondary)"
+                  }}
+                >
+                  🔒 Password
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input"
+                  placeholder="Password (6+ characters)"
+                  disabled={isLoading}
+                  minLength={6}
+                  required
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                />
+              </div>
+            )}
 
             {mode === "signup" && (
               <div>
@@ -242,11 +275,11 @@ export function Auth({ onSignIn, onSignUp, onForceSignOut, isLoading, error, onC
               {isLoading ? (
                 <>
                   <div className="spinner" />
-                  {mode === "signin" ? "Signing in..." : "Creating account..."}
+                  {mode === "signin" ? "Signing in..." : mode === "signup" ? "Creating account..." : "Sending reset email..."}
                 </>
               ) : (
                 <>
-                  {mode === "signin" ? "🚀 Sign In" : "✨ Create Account"}
+                  {mode === "signin" ? "🚀 Sign In" : mode === "signup" ? "✨ Create Account" : "📧 Send Reset Link"}
                 </>
               )}
             </button>
@@ -254,32 +287,87 @@ export function Auth({ onSignIn, onSignUp, onForceSignOut, isLoading, error, onC
         </form>
 
         {/* Toggle Mode */}
-        <div style={{ 
-          textAlign: "center", 
+        <div style={{
+          textAlign: "center",
           marginTop: "1.5rem",
           fontSize: "0.875rem",
           color: "var(--text-secondary)"
         }}>
-          {mode === "signin" ? "Don't have an account?" : "Already have an account?"}{" "}
-          <button
-            type="button"
-            onClick={() => {
-              setMode(mode === "signin" ? "signup" : "signin");
-              setConfirmPassword("");
-              onClearError();
-            }}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--primary)",
-              textDecoration: "underline",
-              cursor: "pointer",
-              fontSize: "inherit"
-            }}
-          >
-            {mode === "signin" ? "Sign up" : "Sign in"}
-          </button>
+          {mode === "reset" ? (
+            <>
+              Remember your password?{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("signin");
+                  setResetSent(false);
+                  onClearError();
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--primary)",
+                  textDecoration: "underline",
+                  cursor: "pointer",
+                  fontSize: "inherit"
+                }}
+              >
+                Sign in
+              </button>
+            </>
+          ) : (
+            <>
+              {mode === "signin" ? "Don't have an account?" : "Already have an account?"}{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(mode === "signin" ? "signup" : "signin");
+                  setConfirmPassword("");
+                  setResetSent(false);
+                  onClearError();
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--primary)",
+                  textDecoration: "underline",
+                  cursor: "pointer",
+                  fontSize: "inherit"
+                }}
+              >
+                {mode === "signin" ? "Sign up" : "Sign in"}
+              </button>
+            </>
+          )}
         </div>
+
+        {/* Forgot Password Link */}
+        {mode === "signin" && (
+          <div style={{
+            textAlign: "center",
+            marginTop: "0.75rem",
+            fontSize: "0.875rem"
+          }}>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("reset");
+                setResetSent(false);
+                onClearError();
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--text-secondary)",
+                textDecoration: "underline",
+                cursor: "pointer",
+                fontSize: "inherit"
+              }}
+            >
+              Forgot password?
+            </button>
+          </div>
+        )}
 
         {/* Offline Work Notice */}
         <div style={{

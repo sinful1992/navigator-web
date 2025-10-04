@@ -9,12 +9,18 @@ interface SettingsDropdownProps {
   trigger?: React.ReactNode;
   reminderSettings?: ReminderSettingsType;
   onUpdateReminderSettings?: (settings: ReminderSettingsType) => void;
+  onChangePassword?: () => void;
+  onChangeEmail?: () => void;
+  onDeleteAccount?: () => void;
 }
 
 export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
   trigger,
   reminderSettings,
-  onUpdateReminderSettings
+  onUpdateReminderSettings,
+  onChangePassword,
+  onChangeEmail,
+  onDeleteAccount
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showSMSSettings, setShowSMSSettings] = useState(false);
@@ -188,6 +194,91 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
               />
             </div>
           </div>
+
+          {/* Account Management */}
+          {(onChangePassword || onChangeEmail || onDeleteAccount) && (
+            <>
+              <div className="settings-separator" />
+              <div className="settings-section">
+                <h4 className="settings-section-title" style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>Account Management</h4>
+
+                {onChangePassword && (
+                  <button
+                    className="settings-action-button"
+                    onClick={() => {
+                      onChangePassword();
+                      setIsOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-light)',
+                      borderRadius: 'var(--radius)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      marginBottom: '0.5rem'
+                    }}
+                  >
+                    <span>🔑</span>
+                    <span>Change Password</span>
+                  </button>
+                )}
+
+                {onChangeEmail && (
+                  <button
+                    className="settings-action-button"
+                    onClick={() => {
+                      onChangeEmail();
+                      setIsOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-light)',
+                      borderRadius: 'var(--radius)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      marginBottom: '0.5rem'
+                    }}
+                  >
+                    <span>📧</span>
+                    <span>Change Email</span>
+                  </button>
+                )}
+
+                {onDeleteAccount && (
+                  <button
+                    className="settings-action-button"
+                    onClick={() => {
+                      onDeleteAccount();
+                      setIsOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: 'var(--danger-light)',
+                      border: '1px solid var(--danger)',
+                      borderRadius: 'var(--radius)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      color: 'var(--danger)'
+                    }}
+                  >
+                    <span>🗑️</span>
+                    <span>Delete Account</span>
+                  </button>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Footer note */}
           <div className="settings-footer">

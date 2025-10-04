@@ -250,6 +250,9 @@ export default function App() {
           onSignUp={async (email, password) => {
             await cloudSync.signUp(email, password);
           }}
+          onResetPassword={async (email) => {
+            await cloudSync.resetPassword(email);
+          }}
           onForceSignOut={async () => {
             await cloudSync.signOut();
           }}
@@ -305,6 +308,9 @@ function AuthedApp() {
   const [toolsOpen, setToolsOpen] = React.useState(false);
   const [showSupabaseSetup, setShowSupabaseSetup] = React.useState(false);
   const [showBackupManager, setShowBackupManager] = React.useState(false);
+  const [showChangePassword, setShowChangePassword] = React.useState(false);
+  const [showChangeEmail, setShowChangeEmail] = React.useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = React.useState(false);
 
   // Initialize tab from URL hash or default to "list"
   const getInitialTab = (): Tab => {
@@ -1515,6 +1521,9 @@ function AuthedApp() {
             <SettingsDropdown
               reminderSettings={state.reminderSettings}
               onUpdateReminderSettings={updateReminderSettings}
+              onChangePassword={() => setShowChangePassword(true)}
+              onChangeEmail={() => setShowChangeEmail(true)}
+              onDeleteAccount={() => setShowDeleteAccount(true)}
             />
           </div>
 
@@ -1963,6 +1972,135 @@ function AuthedApp() {
           >
             Dismiss
           </button>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
+      {showChangePassword && (
+        <div className="modal-overlay" onClick={() => setShowChangePassword(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <h2 style={{ marginBottom: '1rem' }}>Change Password</h2>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const form = e.target as HTMLFormElement;
+              const newPassword = (form.elements.namedItem('newPassword') as HTMLInputElement).value;
+              const confirmPassword = (form.elements.namedItem('confirmPassword') as HTMLInputElement).value;
+
+              if (newPassword !== confirmPassword) {
+                alert('Passwords do not match');
+                return;
+              }
+
+              if (newPassword.length < 6) {
+                alert('Password must be at least 6 characters');
+                return;
+              }
+
+              try {
+                await cloudSync.updatePassword(newPassword);
+                alert('Password updated successfully!');
+                setShowChangePassword(false);
+              } catch (err: any) {
+                alert('Error: ' + err.message);
+              }
+            }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem' }}>New Password</label>
+                <input type="password" name="newPassword" className="input" required minLength={6} />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Confirm Password</label>
+                <input type="password" name="confirmPassword" className="input" required minLength={6} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Update Password</button>
+                <button type="button" className="btn btn-ghost" onClick={() => setShowChangePassword(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Change Email Modal */}
+      {showChangeEmail && (
+        <div className="modal-overlay" onClick={() => setShowChangeEmail(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <h2 style={{ marginBottom: '1rem' }}>Change Email</h2>
+            <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+              Note: You'll need to confirm your new email address.
+            </p>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const form = e.target as HTMLFormElement;
+              const newEmail = (form.elements.namedItem('newEmail') as HTMLInputElement).value;
+
+              try {
+                if (!supabase) throw new Error('Supabase not configured');
+                const { error } = await supabase.auth.updateUser({ email: newEmail });
+                if (error) throw error;
+                alert('Confirmation email sent! Please check your inbox.');
+                setShowChangeEmail(false);
+              } catch (err: any) {
+                alert('Error: ' + err.message);
+              }
+            }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem' }}>New Email</label>
+                <input type="email" name="newEmail" className="input" required />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Update Email</button>
+                <button type="button" className="btn btn-ghost" onClick={() => setShowChangeEmail(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Modal */}
+      {showDeleteAccount && (
+        <div className="modal-overlay" onClick={() => setShowDeleteAccount(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <h2 style={{ marginBottom: '1rem', color: 'var(--danger)' }}>Delete Account</h2>
+            <p style={{ marginBottom: '1rem' }}>
+              ⚠️ This action cannot be undone. All your data will be permanently deleted.
+            </p>
+            <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              Type <strong>DELETE</strong> to confirm:
+            </p>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const form = e.target as HTMLFormElement;
+              const confirmation = (form.elements.namedItem('confirmation') as HTMLInputElement).value;
+
+              if (confirmation !== 'DELETE') {
+                alert('Please type DELETE to confirm');
+                return;
+              }
+
+              try {
+                if (!supabase) throw new Error('Supabase not configured');
+
+                // Delete user account
+                const { error } = await supabase.rpc('delete_user_account');
+                if (error) throw error;
+
+                await cloudSync.signOut();
+                alert('Account deleted successfully');
+                setShowDeleteAccount(false);
+              } catch (err: any) {
+                alert('Error: ' + err.message);
+              }
+            }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <input type="text" name="confirmation" className="input" required placeholder="Type DELETE" />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="submit" className="btn" style={{ flex: 1, background: 'var(--danger)', color: 'white' }}>Delete Account</button>
+                <button type="button" className="btn btn-ghost" onClick={() => setShowDeleteAccount(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

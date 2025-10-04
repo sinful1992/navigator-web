@@ -75,6 +75,8 @@ type UseCloudSync = {
   signIn: (email: string, password: string) => Promise<{ user: User }>;
   signUp: (email: string, password: string) => Promise<{ user: User }>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
 
   syncData: (state: AppState) => Promise<void>;
   subscribeToData: (onChange: Dispatch<SetStateAction<AppState>>) => () => void;
@@ -747,7 +749,8 @@ export function useCloudSync(): UseCloudSync {
         'navigator_supabase_key',
         'navigator_supabase_skipped',
         'navigator_data_counts',
-        'last_backup_time'
+        'last_backup_time',
+        'navigator-web:settings' // Clear theme and other settings on logout
       ];
 
       keysToRemove.forEach(key => localStorage.removeItem(key));
@@ -777,6 +780,41 @@ export function useCloudSync(): UseCloudSync {
       syncTimeoutId.current = null;
     }
   }, [clearError]);
+
+  const resetPassword = useCallback(
+    async (email: string) => {
+      clearError();
+      if (!supabase) throw new Error("Supabase not configured");
+
+      const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'https://sinful1992.github.io/navigator-web/'
+      });
+
+      if (err) {
+        setError(err.message);
+        throw err;
+      }
+    },
+    [clearError]
+  );
+
+  const updatePassword = useCallback(
+    async (newPassword: string) => {
+      clearError();
+      if (!supabase) throw new Error("Supabase not configured");
+      if (!user) throw new Error("Not authenticated");
+
+      const { error: err } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (err) {
+        setError(err.message);
+        throw err;
+      }
+    },
+    [clearError, user]
+  );
 
   // ---- Improved cloud sync with conflict resolution ----
   const syncData = useCallback(
@@ -1375,12 +1413,14 @@ export function useCloudSync(): UseCloudSync {
       signIn,
       signUp,
       signOut,
+      resetPassword,
+      updatePassword,
       syncData,
       subscribeToData,
       queueOperation,
       forceFullSync,
     }),
-    [user, isLoading, isOnline, isSyncing, error, lastSyncTime, clearError, signIn, signUp, signOut, syncData, subscribeToData, queueOperation, forceFullSync]
+    [user, isLoading, isOnline, isSyncing, error, lastSyncTime, clearError, signIn, signUp, signOut, resetPassword, updatePassword, syncData, subscribeToData, queueOperation, forceFullSync]
   );
 }
 
