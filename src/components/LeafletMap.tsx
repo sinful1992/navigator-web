@@ -59,20 +59,14 @@ interface LeafletMapProps {
   confidences?: (number | undefined)[];  // Optional confidence scores for each address
 }
 
-// Component to fit map bounds to markers (only on initial load)
+// Component to fit map bounds to markers (recenters when addresses change)
 function FitBounds({ pins }: { pins: MapPin[] }) {
   const map = useMap();
-  const hasSetInitialBounds = useRef(false);
 
   useEffect(() => {
-    // Only auto-fit on initial load or when pins count significantly changes
     if (pins.length === 0) {
-      hasSetInitialBounds.current = false;
       return;
     }
-
-    // Skip if already set bounds and pin count hasn't changed significantly
-    if (hasSetInitialBounds.current) return;
 
     if (pins.length === 1) {
       // Center on single marker
@@ -85,9 +79,7 @@ function FitBounds({ pins }: { pins: MapPin[] }) {
       );
       map.fitBounds(group.getBounds().pad(0.1));
     }
-
-    hasSetInitialBounds.current = true;
-  }, [map, pins.length]); // Only depend on pins.length, not the entire pins array
+  }, [map, pins.length]); // Recenter whenever pins count changes
 
   return null;
 }

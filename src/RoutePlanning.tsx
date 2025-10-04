@@ -381,40 +381,6 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
           </div>
         )}
 
-        {/* Quick Stats */}
-        {addresses.length > 0 && (
-          <div style={{
-            background: 'var(--surface)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '1rem 1.5rem',
-            marginBottom: '1rem',
-            boxShadow: 'var(--shadow-sm)',
-            border: '1px solid var(--border-light)',
-            display: 'flex',
-            justifyContent: 'space-around',
-            gap: '0.5rem',
-            fontSize: '0.875rem'
-          }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontWeight: 'bold', fontSize: '1.25rem', color: 'var(--primary)' }}>
-                {stats.total}
-              </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Total</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontWeight: 'bold', fontSize: '1.25rem', color: 'var(--success)' }}>
-                {stats.geocoded}
-              </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Ready</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontWeight: 'bold', fontSize: '1.25rem', color: 'var(--warning)' }}>
-                {stats.needsGeocoding}
-              </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Pending</div>
-            </div>
-          </div>
-        )}
 
 
         {/* Map View (always visible when addresses exist) */}
@@ -574,59 +540,92 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
             boxShadow: 'var(--shadow-sm)',
             border: '1px solid var(--border-light)'
           }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '1rem',
-              gap: '0.5rem',
-              flexWrap: 'wrap'
-            }}>
-              <h3 style={{ margin: 0, fontSize: '1.125rem', color: 'var(--text-primary)' }}>
-                {optimizationResult && !optimizationResult.error && optimizationResult.optimizedOrder.length > 0
-                  ? '📍 Optimized Route'
-                  : `Addresses (${addresses.length})`
-                }
-              </h3>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                {stats.needsGeocoding > 0 && (
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={handleGeocodeAll}
-                    disabled={isGeocoding}
-                    style={{
-                      padding: '0.5rem 0.75rem',
-                      fontSize: '0.875rem',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {isGeocoding ? (
-                      <>
-                        <span className="spinner" style={{
-                          display: 'inline-block',
-                          width: '0.875rem',
-                          height: '0.875rem',
-                          marginRight: '0.25rem'
-                        }} />
-                        Geocoding...
-                      </>
-                    ) : (
-                      `🌍 Geocode ${stats.needsGeocoding}`
-                    )}
-                  </button>
-                )}
-                {startingPointIndex !== null && (
-                  <span style={{
-                    background: 'var(--primary-light)',
-                    color: 'var(--primary)',
-                    padding: '0.25rem 0.75rem',
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: '0.75rem',
-                    fontWeight: '600'
-                  }}>
-                    Start: #{startingPointIndex + 1}
-                  </span>
-                )}
+            {/* Header with Stats */}
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '0.75rem',
+                gap: '0.5rem',
+                flexWrap: 'wrap'
+              }}>
+                <h3 style={{ margin: 0, fontSize: '1.125rem', color: 'var(--text-primary)' }}>
+                  {optimizationResult && !optimizationResult.error && optimizationResult.optimizedOrder.length > 0
+                    ? '📍 Optimized Route'
+                    : `Addresses (${addresses.length})`
+                  }
+                </h3>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  {stats.needsGeocoding > 0 && (
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={handleGeocodeAll}
+                      disabled={isGeocoding}
+                      style={{
+                        padding: '0.5rem 0.75rem',
+                        fontSize: '0.875rem',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {isGeocoding ? (
+                        <>
+                          <span className="spinner" style={{
+                            display: 'inline-block',
+                            width: '0.875rem',
+                            height: '0.875rem',
+                            marginRight: '0.25rem'
+                          }} />
+                          Geocoding...
+                        </>
+                      ) : (
+                        `🌍 Geocode ${stats.needsGeocoding}`
+                      )}
+                    </button>
+                  )}
+                  {startingPointIndex !== null && (
+                    <span style={{
+                      background: 'var(--primary-light)',
+                      color: 'var(--primary)',
+                      padding: '0.25rem 0.75rem',
+                      borderRadius: 'var(--radius-md)',
+                      fontSize: '0.75rem',
+                      fontWeight: '600'
+                    }}>
+                      Start: #{startingPointIndex + 1}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Quick Stats */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-around',
+                gap: '0.5rem',
+                padding: '0.75rem',
+                background: 'var(--gray-50)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.75rem'
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '1rem', color: 'var(--primary)' }}>
+                    {stats.total}
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.6875rem' }}>Total</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '1rem', color: 'var(--success)' }}>
+                    {stats.geocoded}
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.6875rem' }}>Ready</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '1rem', color: 'var(--warning)' }}>
+                    {stats.needsGeocoding}
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.6875rem' }}>Pending</div>
+                </div>
               </div>
             </div>
 
