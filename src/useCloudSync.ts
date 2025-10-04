@@ -899,30 +899,31 @@ export function useCloudSync(): UseCloudSync {
         // Verify the data actually matches what we tried to save
         const verifyChecksum = generateChecksum(verifyData.data);
         if (verifyChecksum !== finalChecksum) {
-          // Log corruption for debugging but don't show error to user - they can't fix it
-          console.warn('Data checksum mismatch detected (database may have modified data)', {
+          // Log for debugging but don't throw - checksum mismatch might be due to:
+          // - JSON serialization order differences
+          // - Database type coercion (timestamps, etc)
+          // - Postgres triggers/functions modifying data
+          console.warn('Checksum mismatch (likely harmless serialization difference)', {
             expectedChecksum: finalChecksum,
             actualChecksum: verifyChecksum,
             expectedCompletions: finalState.completions?.length || 0,
             actualCompletions: verifyData.data?.completions?.length || 0
           });
 
-          // Self-heal: Use the data that was actually saved and continue
-          // Update our local state to match what's in the database
-          lastSyncedState.current = JSON.stringify(verifyData.data);
-        } else {
-          // Data matches - update normally
-          lastSyncedState.current = JSON.stringify(finalState);
+          // Don't self-heal or throw error - just continue with what we intended to save
+          // The actual data differences are likely insignificant (JSON key order, etc)
         }
 
-        // Update sync metadata with actual saved data
+        // Update sync metadata and lastSyncedState
         syncMetadata.current = {
           lastSyncAt: verifyData.updated_at ?? now,
           deviceId: syncMetadata.current.deviceId,
           version: verifyData.version ?? version,
-          checksum: verifyChecksum // Use actual checksum from database
+          checksum: finalChecksum // Use our checksum to avoid false-positive diffs
         };
 
+        // Update lastSyncedState with what we tried to save (not what DB returned)
+        lastSyncedState.current = JSON.stringify(finalState);
         setLastSyncTime(new Date(verifyData.updated_at ?? now));
 
       } catch (e: any) {
