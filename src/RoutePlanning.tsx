@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useState, useCallback, startTransition } from "react";
 import type { AddressRow } from "./types";
 import { SubscriptionGuard } from "./SubscriptionGuard";
@@ -22,7 +23,7 @@ interface RoutePlanningProps {
   onAddressesReady: (addresses: AddressRow[]) => void;
 }
 
-export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
+const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
   // State management
   const [addresses, setAddresses] = useState<GeocodingResult[]>([]);
   const [newAddress, setNewAddress] = useState("");
@@ -934,4 +935,7 @@ function RoutePlanningLockedView() {
       </div>
     </div>
   );
-}
+};
+
+// Memoize component to prevent unnecessary re-renders
+export const RoutePlanning = React.memo(RoutePlanningComponent);

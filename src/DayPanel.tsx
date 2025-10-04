@@ -76,7 +76,7 @@ function isoToLocalDate(iso?: string): string {
   }
 }
 
-export function DayPanel({
+const DayPanelComponent = function DayPanel({
   sessions,
   completions,
   startDay,
@@ -351,4 +351,7 @@ export function DayPanel({
       </Modal>
     </div>
   );
-}
+};
+
+// Memoize component to prevent unnecessary re-renders
+export const DayPanel = React.memo(DayPanelComponent);

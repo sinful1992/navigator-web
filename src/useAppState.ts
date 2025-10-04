@@ -2,7 +2,7 @@
 import * as React from "react";
 import { storageManager } from "./utils/storageManager";
 import { logger } from "./utils/logger";
-import { showWarning, showInfo } from "./utils/toast";
+import { showWarning, showInfo, showError } from "./utils/toast";
 import type {
   AddressRow,
   AppState,
@@ -53,42 +53,6 @@ const initial: AppState = {
 };
 
 // 🔧 CRITICAL FIX: Safer deep copy that preserves data integrity
-function safeDeepCopy<T>(obj: T): T {
-  try {
-    // Use structured cloning if available (modern browsers)
-    if (typeof structuredClone !== 'undefined') {
-      return structuredClone(obj);
-    }
-    
-    // Fallback to JSON-based deep copy with validation
-    const stringified = JSON.stringify(obj);
-    const parsed = JSON.parse(stringified);
-    
-    // Validate critical fields after parsing
-    if (typeof obj === 'object' && obj !== null && 'addresses' in obj) {
-      const appState = obj as any;
-      const parsedState = parsed as any;
-      
-      // Ensure addresses array is preserved
-      if (Array.isArray(appState.addresses) && !Array.isArray(parsedState.addresses)) {
-        logger.error('Deep copy corrupted addresses array, falling back to original');
-        parsedState.addresses = appState.addresses;
-      }
-      
-      // Ensure completions array is preserved
-      if (Array.isArray(appState.completions) && !Array.isArray(parsedState.completions)) {
-        logger.error('Deep copy corrupted completions array, falling back to original');
-        parsedState.completions = appState.completions;
-      }
-    }
-    
-    return parsed;
-  } catch (error) {
-    logger.error('Deep copy failed, returning original object:', error);
-    return obj;
-  }
-}
-
 // Data validation functions
 function validateCompletion(c: any): c is Completion {
   return c &&
@@ -317,14 +281,14 @@ function applyOptimisticUpdates(
   }
 
   try {
-    // Start with a safer copy
-    let result: AppState = safeDeepCopy(baseState);
-    
-    // Validate the copy worked correctly
-    if (!result.addresses || !Array.isArray(result.addresses)) {
-      logger.error('State copy failed - addresses corrupted, using base state');
-      return baseState;
-    }
+    // Use immutable spread pattern instead of deep copy to avoid data corruption
+    let result: AppState = {
+      ...baseState,
+      addresses: [...baseState.addresses],
+      completions: [...baseState.completions],
+      arrangements: [...baseState.arrangements],
+      daySessions: [...baseState.daySessions]
+    };
 
     // Sort updates by timestamp to apply in order
     const sortedUpdates = Array.from(updates.values()).sort(
@@ -488,7 +452,7 @@ export function useAppState() {
     let alive = true;
     (async () => {
       try {
-        const saved = (await storageManager.queuedGet(STORAGE_KEY)) as any;
+        const saved = (await storageManager.queuedGet(STORAGE_KEY)) as unknown;
         if (!alive) return;
 
         if (saved) {
@@ -542,7 +506,7 @@ export function useAppState() {
         const stateToSave = { ...baseState, _schemaVersion: CURRENT_SCHEMA_VERSION };
         await storageManager.queuedSet(STORAGE_KEY, stateToSave);
         
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Failed to persist state to IndexedDB:', error);
       }
     }, 150);
@@ -807,18 +771,58 @@ export function useAppState() {
   // Track recent completions to protect against cloud sync rollbacks
   const recentCompletionsRef = React.useRef<Map<string, { timestamp: number; completion: Completion }>>(new Map());
 
+  // Periodic cleanup of recent completions to prevent memory leak
+  React.useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const cutoffTime = Date.now() - 30000; // 30 seconds
+      let removedCount = 0;
+
+      for (const [key, value] of recentCompletionsRef.current.entries()) {
+        if (value.timestamp < cutoffTime) {
+          recentCompletionsRef.current.delete(key);
+          removedCount++;
+        }
+      }
+
+      if (removedCount > 0) {
+        logger.debug(`🧹 Cleaned up ${removedCount} old completion entries from memory`);
+      }
+    }, 15000); // Run cleanup every 15 seconds
+
+    return () => clearInterval(cleanupInterval);
+  }, []);
+
   const complete = React.useCallback(
     async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string): Promise<string> => {
+      // Validate index is a valid number
+      if (!Number.isInteger(index) || index < 0) {
+        const error = `Invalid index: ${index}. Index must be a non-negative integer.`;
+        logger.error(error);
+        showError('Invalid address index. Please refresh and try again.');
+        throw new Error(error);
+      }
+
+      // Check array bounds
+      const currentState = baseState;
+      if (index >= currentState.addresses.length) {
+        const error = `Index ${index} out of bounds. Total addresses: ${currentState.addresses.length}`;
+        logger.error(error);
+        showError('Address not found. The list may have changed. Please refresh.');
+        throw new Error(error);
+      }
+
       // Check if completion is already pending for this index
       if (pendingCompletionsRef.current.has(index)) {
         throw new Error(`Completion already pending for index ${index}`);
       }
 
-      // Check if address exists
-      const currentState = baseState;
+      // Check if address exists and has valid data
       const address = currentState.addresses[index];
-      if (!address) {
-        throw new Error(`Address at index ${index} not found`);
+      if (!address || !address.address) {
+        const error = `Address at index ${index} is invalid or empty`;
+        logger.error(error);
+        showError('Invalid address data. Please refresh and try again.');
+        throw new Error(error);
       }
 
       // Check if already completed (timestamp-based check)
@@ -1412,7 +1416,7 @@ export function useAppState() {
         // Also set a backup protection flag that lasts longer
         localStorage.setItem('navigator_last_restore', restoreTime.toString());
 
-      } catch (persistError: any) {
+      } catch (persistError: unknown) {
         logger.error('Failed to persist restored state:', persistError);
         throw new Error('Restore failed: Could not save data');
       }

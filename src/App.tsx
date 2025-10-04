@@ -28,6 +28,7 @@ import { BackupManager } from "./components/BackupManager";
 import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
+import { isProtectionActive } from "./utils/protectionFlags";
 
 type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
@@ -36,24 +37,10 @@ type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 async function reconcileSessionState(cloudSync: any, setState: any, supabase: any) {
   if (!cloudSync.user || !supabase) return;
 
-  // 🔧 CRITICAL FIX: Check if restore is in progress before reconciling
-  const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
-  if (restoreInProgress) {
-    const restoreTime = parseInt(restoreInProgress);
-    const timeSinceRestore = Date.now() - restoreTime;
-
-    // If restore was within the last 30 seconds, skip reconciliation
-    if (timeSinceRestore < 30000) {
-      logger.info('🛡️ RESTORE PROTECTION: Skipping session reconciliation to prevent data loss', {
-        timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
-        restoreTime: new Date(restoreTime).toISOString()
-      });
-      return;
-    } else {
-      // Clear the flag after timeout
-      logger.info('🛡️ RESTORE PROTECTION: Session reconciliation timeout reached, clearing flag');
-      localStorage.removeItem('navigator_restore_in_progress');
-    }
+  // 🔧 CRITICAL FIX: Check if restore is in progress before reconciling (using centralized protection manager)
+  if (isProtectionActive('navigator_restore_in_progress')) {
+    logger.info('🛡️ RESTORE PROTECTION: Skipping session reconciliation to prevent data loss');
+    return;
   }
 
   try {
@@ -675,43 +662,15 @@ function AuthedApp() {
           if (!updaterOrState) return;
 
           // 🔧 CRITICAL FIX: Check if restore is in progress before applying any cloud updates
-          const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
-          if (restoreInProgress) {
-            const restoreTime = parseInt(restoreInProgress);
-            const timeSinceRestore = Date.now() - restoreTime;
-
-            // If restore was within the last 30 seconds, skip ALL cloud updates
-            if (timeSinceRestore < 30000) {
-              logger.sync('🛡️ RESTORE PROTECTION: App.tsx subscription skipping cloud state update to prevent data loss', {
-                timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
-                restoreTime: new Date(restoreTime).toISOString()
-              });
-              return;
-            } else {
-              // Clear the flag after timeout
-              logger.sync('🛡️ RESTORE PROTECTION: App.tsx subscription timeout reached, clearing flag');
-              localStorage.removeItem('navigator_restore_in_progress');
-            }
+          if (isProtectionActive('navigator_restore_in_progress')) {
+            logger.sync('🛡️ RESTORE PROTECTION: App.tsx subscription skipping cloud state update to prevent data loss');
+            return;
           }
 
           // 🔧 CRITICAL FIX: Check if import is in progress before applying any cloud updates
-          const importInProgress = localStorage.getItem('navigator_import_in_progress');
-          if (importInProgress) {
-            const importTime = parseInt(importInProgress);
-            const timeSinceImport = Date.now() - importTime;
-
-            // If import was within the last 2 seconds, skip ALL cloud updates
-            if (timeSinceImport < 2000) {
-              logger.sync('🛡️ IMPORT PROTECTION: App.tsx subscription skipping cloud state update to prevent import override', {
-                timeSinceImport: `${Math.round(timeSinceImport/1000)}s`,
-                importTime: new Date(importTime).toISOString()
-              });
-              return;
-            } else {
-              // Clear the flag after timeout
-              logger.sync('🛡️ IMPORT PROTECTION: App.tsx subscription timeout reached, clearing flag');
-              localStorage.removeItem('navigator_import_in_progress');
-            }
+          if (isProtectionActive('navigator_import_in_progress')) {
+            logger.sync('🛡️ IMPORT PROTECTION: App.tsx subscription skipping cloud state update to prevent import override');
+            return;
           }
 
           if (typeof updaterOrState === 'function') {
@@ -765,41 +724,17 @@ function AuthedApp() {
     const t = setTimeout(async () => {
       try {
         // 🔧 CRITICAL FIX: Check if restore is in progress before syncing
-        const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
-        if (restoreInProgress) {
-          const restoreTime = parseInt(restoreInProgress);
-          const timeSinceRestore = Date.now() - restoreTime;
-
-          // If restore was within the last 30 seconds, skip sync to prevent override
-          if (timeSinceRestore < 30000) {
-            logger.sync('🛡️ RESTORE PROTECTION: Debounced sync skipping to prevent data loss', {
-              timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
-              restoreTime: new Date(restoreTime).toISOString()
-            });
-            return;
-          } else {
-            // Clear the flag after timeout
-            logger.sync('🛡️ RESTORE PROTECTION: Debounced sync timeout reached, clearing flag');
-            localStorage.removeItem('navigator_restore_in_progress');
-          }
+        if (isProtectionActive('navigator_restore_in_progress')) {
+          logger.sync('🛡️ RESTORE PROTECTION: Debounced sync skipping to prevent data loss');
+          return;
         }
 
         // 🔧 CRITICAL FIX: Allow import to sync to cloud IMMEDIATELY after state settles
         // Import protection only blocks INCOMING syncs, not outgoing pushes
         // Wait 300ms after import starts to ensure state is fully updated before pushing
-        const importInProgress = localStorage.getItem('navigator_import_in_progress');
-        if (importInProgress) {
-          const importTime = parseInt(importInProgress);
-          const timeSinceImport = Date.now() - importTime;
-
-          if (timeSinceImport < 300) {
-            logger.sync('🛡️ IMPORT PROTECTION: Waiting 300ms for import state to settle before sync', {
-              timeSinceImport: `${Math.round(timeSinceImport)}ms`
-            });
-            return; // Will retry when state updates again
-          }
-          // After 300ms, proceed with sync to push import to cloud
-          logger.sync('🚀 IMPORT SYNC: Import settled, pushing to cloud');
+        if (isProtectionActive('navigator_import_in_progress', 300)) {
+          logger.sync('🛡️ IMPORT PROTECTION: Waiting 300ms for import state to settle before sync');
+          return; // Will retry when state updates again
         }
 
         logger.sync("Syncing changes to cloud...");
@@ -1259,26 +1194,13 @@ function AuthedApp() {
       const stateStr = JSON.stringify(safeState);
 
       // 🔧 CRITICAL FIX: Check if restore is in progress before manual sync
-      const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
-      if (restoreInProgress) {
-        const restoreTime = parseInt(restoreInProgress);
-        const timeSinceRestore = Date.now() - restoreTime;
-
-        // If restore was within the last 30 seconds, warn and skip
-        if (timeSinceRestore < 30000) {
-          logger.sync('🛡️ RESTORE PROTECTION: Manual sync blocked to prevent data loss', {
-            timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
-            restoreTime: new Date(restoreTime).toISOString()
-          });
-          await alert({
-            title: "Restore in Progress",
-            message: "Please wait 30 seconds before manual sync to prevent data loss"
-          });
-          return;
-        } else {
-          // Clear the flag after timeout
-          localStorage.removeItem('navigator_restore_in_progress');
-        }
+      if (isProtectionActive('navigator_restore_in_progress')) {
+        logger.sync('🛡️ RESTORE PROTECTION: Manual sync blocked to prevent data loss');
+        await alert({
+          title: "Restore in Progress",
+          message: "Please wait 30 seconds before manual sync to prevent data loss"
+        });
+        return;
       }
 
       // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition

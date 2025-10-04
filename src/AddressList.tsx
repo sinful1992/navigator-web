@@ -169,10 +169,9 @@ const AddressListComponent = function AddressList({
   const [caseReference, setCaseReference] = React.useState<string>("");
   const [showCaseRefPrompt, setShowCaseRefPrompt] = React.useState<number | null>(null);
 
-  // Prevent double submissions
+  // Prevent double submissions with Promise-based locking
   const [submittingIndex, setSubmittingIndex] = React.useState<number | null>(null);
-  const submittingRef = React.useRef<number | null>(null);
-  const [lastSubmission, setLastSubmission] = React.useState<{index: number, outcome: string, timestamp: number} | null>(null);
+  const pendingCompletions = React.useRef<Map<number, Promise<void>>>(new Map());
 
   // Arrangement form state
   const [showArrangementForm, setShowArrangementForm] = React.useState<number | null>(null);
@@ -188,35 +187,35 @@ const AddressListComponent = function AddressList({
       setSubmittingIndex(null);
     }
   }, [activeIndex]);
-  
-  // Debounced completion handler with duplicate protection
+
+  // Robust completion handler with Promise-based locking
   const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseRef?: string) => {
-    // Check if already submitting this index
-    if (submittingRef.current === index) return;
-    
-    // Check for duplicate submission within 2 seconds
-    const now = Date.now();
-    if (lastSubmission && 
-        lastSubmission.index === index && 
-        lastSubmission.outcome === outcome &&
-        now - lastSubmission.timestamp < 2000) {
+    // Check if there's already a pending completion for this index
+    const existingPromise = pendingCompletions.current.get(index);
+    if (existingPromise) {
+      // Wait for the existing completion to finish before returning
+      await existingPromise;
       return;
     }
-    
-    try {
-      submittingRef.current = index;
-      setSubmittingIndex(index);
-      setLastSubmission({ index, outcome, timestamp: now });
 
-      await onComplete(index, outcome, amount, arrangementId, caseRef);
-      setOutcomeOpenFor(null);
-    } catch (error) {
-      console.error('Completion failed:', error);
-    } finally {
-      submittingRef.current = null;
-      setSubmittingIndex(null);
-    }
-  }, [lastSubmission, onComplete]);
+    // Create and store the completion promise
+    const completionPromise = (async () => {
+      try {
+        setSubmittingIndex(index);
+        await onComplete(index, outcome, amount, arrangementId, caseRef);
+        setOutcomeOpenFor(null);
+      } catch (error) {
+        console.error('Completion failed:', error);
+        throw error;
+      } finally {
+        setSubmittingIndex(null);
+        pendingCompletions.current.delete(index);
+      }
+    })();
+
+    pendingCompletions.current.set(index, completionPromise);
+    await completionPromise;
+  }, [onComplete]);
 
   // Filter visible addresses that have coordinates for map view
   const geocodedVisible = React.useMemo(

@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useState, useEffect } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
@@ -65,7 +66,7 @@ interface AdminDashboardProps {
   onClose?: () => void;
 }
 
-export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
+const AdminDashboardComponent = function AdminDashboard({ user, onClose }: AdminDashboardProps) {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [subscriptions, setSubscriptions] = useState<SubscriptionOverview[]>([]);
   const [recentActions, setRecentActions] = useState<AdminAction[]>([]);
@@ -499,7 +500,10 @@ export function AdminDashboard({ user, onClose }: AdminDashboardProps) {
       )}
     </div>
   );
-}
+};
+
+// Memoize component to prevent unnecessary re-renders
+export const AdminDashboard = React.memo(AdminDashboardComponent);
 
 // Modern CSS Styles with Dark Mode Support
 const adminStyles = `

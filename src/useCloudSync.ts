@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
 import type { AppState } from "./types";
 import { generateChecksum } from "./utils/checksum";
+import { isProtectionActive } from "./utils/protectionFlags";
 
 // Initialize a new user with default subscription
 async function initializeNewUser(userId: string): Promise<void> {
@@ -1002,68 +1003,42 @@ export function useCloudSync(): UseCloudSync {
       console.log('🔧 Resolving conflicts between local and server state');
     }
 
-    // 🔧 CRITICAL FIX: Check if restore is in progress
-    const restoreInProgress = localStorage.getItem('navigator_restore_in_progress');
-    if (restoreInProgress) {
-      const restoreTime = parseInt(restoreInProgress);
-      const timeSinceRestore = Date.now() - restoreTime;
+    // 🔧 CRITICAL FIX: Check if restore is in progress (using centralized protection manager)
+    if (isProtectionActive('navigator_restore_in_progress')) {
+      console.log('🛡️ RESTORE PROTECTION: Preferring local state to prevent data loss');
+      const localVersion =
+        typeof localState.currentListVersion === "number"
+          ? localState.currentListVersion
+          : 1;
+      const serverVersion =
+        typeof serverState.currentListVersion === "number"
+          ? serverState.currentListVersion
+          : 1;
 
-      // If restore was within the last 30 seconds, prefer local state
-      if (timeSinceRestore < 30000) {
-        console.log('🛡️ RESTORE PROTECTION: Preferring local state to prevent data loss', {
-          timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
-          restoreTime: new Date(restoreTime).toISOString()
-        });
-        const localVersion =
-          typeof localState.currentListVersion === "number"
-            ? localState.currentListVersion
-            : 1;
-        const serverVersion =
-          typeof serverState.currentListVersion === "number"
-            ? serverState.currentListVersion
-            : 1;
-
-        return {
-          ...localState,
-          // Keep the higher version but don't bump it
-          currentListVersion: Math.max(localVersion, serverVersion)
-        };
-      } else {
-        // Clear the flag after timeout
-        localStorage.removeItem('navigator_restore_in_progress');
-      }
+      return {
+        ...localState,
+        // Keep the higher version but don't bump it
+        currentListVersion: Math.max(localVersion, serverVersion)
+      };
     }
 
-    // 🔧 CRITICAL FIX: Check if import is in progress
-    const importInProgress = localStorage.getItem('navigator_import_in_progress');
-    if (importInProgress) {
-      const importTime = parseInt(importInProgress);
-      const timeSinceImport = Date.now() - importTime;
+    // 🔧 CRITICAL FIX: Check if import is in progress (using centralized protection manager)
+    if (isProtectionActive('navigator_import_in_progress')) {
+      console.log('🛡️ IMPORT PROTECTION: Preferring local state to prevent import override');
+      const localVersion =
+        typeof localState.currentListVersion === "number"
+          ? localState.currentListVersion
+          : 1;
+      const serverVersion =
+        typeof serverState.currentListVersion === "number"
+          ? serverState.currentListVersion
+          : 1;
 
-      // If import was within the last 2 seconds, prefer local state
-      if (timeSinceImport < 2000) {
-        console.log('🛡️ IMPORT PROTECTION: Preferring local state to prevent import override', {
-          timeSinceImport: `${Math.round(timeSinceImport/1000)}s`,
-          importTime: new Date(importTime).toISOString()
-        });
-        const localVersion =
-          typeof localState.currentListVersion === "number"
-            ? localState.currentListVersion
-            : 1;
-        const serverVersion =
-          typeof serverState.currentListVersion === "number"
-            ? serverState.currentListVersion
-            : 1;
-
-        return {
-          ...localState,
-          // Keep the higher version but don't bump it
-          currentListVersion: Math.max(localVersion, serverVersion)
-        };
-      } else {
-        // Clear the flag after timeout
-        localStorage.removeItem('navigator_import_in_progress');
-      }
+      return {
+        ...localState,
+        // Keep the higher version but don't bump it
+        currentListVersion: Math.max(localVersion, serverVersion)
+      };
     }
 
     // 🔧 OFFLINE PROTECTION: Check if we have recent local work that needs preserving

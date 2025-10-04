@@ -16,12 +16,25 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, isLoading, error, on
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [resetSent, setResetSent] = React.useState(false);
+  const [validationError, setValidationError] = React.useState<string | null>(null);
+
+  // Email validation regex
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
 
-    if (!email) {
+    setValidationError(null);
+
+    // Validate email
+    if (!email || email.trim() === "") {
+      setValidationError("Email is required");
+      return;
+    }
+
+    if (!emailRegex.test(email)) {
+      setValidationError("Please enter a valid email address");
       return;
     }
 
@@ -35,16 +48,39 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, isLoading, error, on
       return;
     }
 
-    if (!password) {
+    // Validate password
+    if (!password || password.trim() === "") {
+      setValidationError("Password is required");
       return;
     }
 
     if (password.length < 6) {
+      setValidationError("Password must be at least 6 characters");
       return;
     }
 
-    if (mode === "signup" && password !== confirmPassword) {
+    if (password.length > 72) {
+      setValidationError("Password must be less than 72 characters");
       return;
+    }
+
+    // Check for common weak passwords
+    const weakPasswords = ["password", "123456", "qwerty", "abc123", "password123"];
+    if (weakPasswords.includes(password.toLowerCase())) {
+      setValidationError("Please choose a stronger password");
+      return;
+    }
+
+    if (mode === "signup") {
+      if (!confirmPassword || confirmPassword.trim() === "") {
+        setValidationError("Please confirm your password");
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setValidationError("Passwords do not match");
+        return;
+      }
     }
 
     try {
@@ -111,8 +147,8 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, isLoading, error, on
 
         <div style={{ padding: "0 2.5rem 2.5rem" }}>
 
-        {/* Error Message */}
-        {error && (
+        {/* Error Messages */}
+        {(error || validationError) && (
           <div style={{
             padding: "1rem",
             marginBottom: "1.5rem",
@@ -123,7 +159,7 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, isLoading, error, on
             fontSize: "0.875rem",
             lineHeight: "1.5"
           }}>
-            {error}
+            {validationError || error}
           </div>
         )}
 

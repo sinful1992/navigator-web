@@ -264,7 +264,7 @@ function getCompletionDateKey(c: Completion, fallbackSessions: DaySession[]): st
   return null;
 }
 
-export default function Completed({ state, onChangeOutcome, onAddArrangement, onComplete }: Props) {
+const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArrangement, onComplete }: Props) {
   const { addresses, completions, daySessions, arrangements } = state;
 
   // Track which PIF amounts are being edited
@@ -690,4 +690,7 @@ export default function Completed({ state, onChangeOutcome, onAddArrangement, on
       )}
     </div>
   );
-}
+};
+
+// Memoize component to prevent unnecessary re-renders
+export default React.memo(CompletedComponent);
