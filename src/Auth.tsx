@@ -69,70 +69,84 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLo
   }, [error, onClearError]);
 
   return (
-    <div className="container">
+    <div style={{
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      padding: "1rem"
+    }}>
       <div style={{
-        maxWidth: "400px",
-        margin: "2rem auto",
-        padding: "2rem",
-        background: "var(--surface)",
-        borderRadius: "var(--radius-lg)",
-        border: "1px solid var(--border-light)",
-        boxShadow: "var(--shadow-lg)"
+        width: "100%",
+        maxWidth: "420px",
+        background: "white",
+        borderRadius: "16px",
+        boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
+        overflow: "hidden"
       }}>
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <h1 style={{ 
-            margin: "0 0 0.5rem 0", 
-            fontSize: "1.75rem",
-            background: "linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
+        <div style={{
+          padding: "3rem 2.5rem 2rem",
+          textAlign: "center",
+          background: "white"
+        }}>
+          <h1 style={{
+            margin: "0 0 0.75rem 0",
+            fontSize: "2rem",
+            fontWeight: 700,
+            color: "#1a202c",
+            letterSpacing: "-0.025em"
           }}>
-            📍 Address Navigator
+            Navigator
           </h1>
           <p style={{
             margin: 0,
-            color: "var(--text-secondary)",
-            fontSize: "0.875rem"
+            color: "#718096",
+            fontSize: "0.9375rem",
+            fontWeight: 400
           }}>
-            {mode === "signin" ? "Sign in to sync across devices" : mode === "signup" ? "Create account to get started" : "Reset your password"}
+            {mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your account" : "Reset your password"}
           </p>
         </div>
+
+        <div style={{ padding: "0 2.5rem 2.5rem" }}>
 
         {/* Error Message */}
         {error && (
           <div style={{
-            padding: "0.75rem",
-            marginBottom: "1rem",
-            background: "var(--danger-light)",
-            border: "1px solid var(--danger)",
-            borderRadius: "var(--radius)",
-            color: "var(--danger)",
-            fontSize: "0.875rem"
+            padding: "1rem",
+            marginBottom: "1.5rem",
+            background: "#fee2e2",
+            borderLeft: "4px solid #dc2626",
+            borderRadius: "6px",
+            color: "#991b1b",
+            fontSize: "0.875rem",
+            lineHeight: "1.5"
           }}>
-            ⚠️ {error}
+            {error}
           </div>
         )}
 
         {/* Success Message for Password Reset */}
         {mode === "reset" && resetSent && (
           <div style={{
-            padding: "0.75rem",
-            marginBottom: "1rem",
-            background: "var(--success-light)",
-            border: "1px solid var(--success)",
-            borderRadius: "var(--radius)",
-            color: "var(--success)",
-            fontSize: "0.875rem"
+            padding: "1rem",
+            marginBottom: "1.5rem",
+            background: "#d1fae5",
+            borderLeft: "4px solid #059669",
+            borderRadius: "6px",
+            color: "#065f46",
+            fontSize: "0.875rem",
+            lineHeight: "1.5"
           }}>
-            ✅ Password reset email sent! Check your inbox.
+            Password reset email sent! Check your inbox.
           </div>
         )}
 
         {/* Form */}
         <form onSubmit={handleSubmit}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
             <div>
               <label
                 htmlFor="email"
@@ -140,11 +154,11 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLo
                   display: "block",
                   marginBottom: "0.5rem",
                   fontSize: "0.875rem",
-                  fontWeight: 600,
-                  color: "var(--text-secondary)"
+                  fontWeight: 500,
+                  color: "#374151"
                 }}
               >
-                📧 Email
+                Email address
               </label>
               <input
                 id="email"
@@ -152,11 +166,22 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLo
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="input"
-                placeholder="your@email.com"
                 disabled={isLoading}
                 required
                 autoComplete="email"
+                placeholder="you@example.com"
+                style={{
+                  width: "100%",
+                  padding: "0.75rem 1rem",
+                  fontSize: "1rem",
+                  border: "1px solid #d1d5db",
+                  borderRadius: "8px",
+                  outline: "none",
+                  transition: "all 0.15s ease",
+                  backgroundColor: "white"
+                }}
+                onFocus={(e) => e.target.style.borderColor = "#667eea"}
+                onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
               />
             </div>
 
@@ -168,11 +193,11 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLo
                     display: "block",
                     marginBottom: "0.5rem",
                     fontSize: "0.875rem",
-                    fontWeight: 600,
-                    color: "var(--text-secondary)"
+                    fontWeight: 500,
+                    color: "#374151"
                   }}
                 >
-                  🔒 Password
+                  Password
                 </label>
                 <input
                   id="password"
@@ -180,12 +205,23 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLo
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="input"
-                  placeholder="Password (6+ characters)"
                   disabled={isLoading}
                   minLength={6}
                   required
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  placeholder="Enter your password"
+                  style={{
+                    width: "100%",
+                    padding: "0.75rem 1rem",
+                    fontSize: "1rem",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "8px",
+                    outline: "none",
+                    transition: "all 0.15s ease",
+                    backgroundColor: "white"
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = "#667eea"}
+                  onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
                 />
               </div>
             )}
@@ -198,11 +234,11 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLo
                     display: "block",
                     marginBottom: "0.5rem",
                     fontSize: "0.875rem",
-                    fontWeight: 600,
-                    color: "var(--text-secondary)"
+                    fontWeight: 500,
+                    color: "#374151"
                   }}
                 >
-                  🔒 Confirm Password
+                  Confirm password
                 </label>
                 <input
                   id="confirmPassword"
@@ -210,42 +246,113 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLo
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="input"
-                  placeholder="Confirm password"
                   disabled={isLoading}
                   minLength={6}
                   required
                   autoComplete="new-password"
+                  placeholder="Confirm your password"
+                  style={{
+                    width: "100%",
+                    padding: "0.75rem 1rem",
+                    fontSize: "1rem",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "8px",
+                    outline: "none",
+                    transition: "all 0.15s ease",
+                    backgroundColor: "white"
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = "#667eea"}
+                  onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
                 />
               </div>
             )}
 
             <button
               type="submit"
-              className={`btn btn-primary ${isLoading ? 'pulse' : ''}`}
               disabled={isLoading}
-              style={{ marginTop: "0.5rem" }}
+              style={{
+                width: "100%",
+                marginTop: "0.5rem",
+                padding: "0.875rem 1rem",
+                fontSize: "1rem",
+                fontWeight: 600,
+                color: "white",
+                background: isLoading ? "#9ca3af" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                border: "none",
+                borderRadius: "8px",
+                cursor: isLoading ? "not-allowed" : "pointer",
+                transition: "all 0.15s ease",
+                boxShadow: "0 4px 6px rgba(102, 126, 234, 0.25)"
+              }}
+              onMouseEnter={(e) => !isLoading && (e.currentTarget.style.transform = "translateY(-1px)")}
+              onMouseLeave={(e) => e.currentTarget.style.transform = "translateY(0)"}
             >
               {isLoading ? (
-                <>
-                  <div className="spinner" />
-                  {mode === "signin" ? "Signing in..." : mode === "signup" ? "Creating account..." : "Sending reset email..."}
-                </>
+                mode === "signin" ? "Signing in..." : mode === "signup" ? "Creating account..." : "Sending reset email..."
               ) : (
-                <>
-                  {mode === "signin" ? "🚀 Sign In" : mode === "signup" ? "✨ Create Account" : "📧 Send Reset Link"}
-                </>
+                mode === "signin" ? "Sign In" : mode === "signup" ? "Create Account" : "Send Reset Link"
               )}
             </button>
           </div>
         </form>
 
+        {/* Forgot Password Link */}
+        {mode === "signin" && (
+          <div style={{
+            textAlign: "center",
+            marginTop: "1rem"
+          }}>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("reset");
+                setResetSent(false);
+                onClearError();
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#667eea",
+                fontSize: "0.875rem",
+                cursor: "pointer",
+                fontWeight: 500,
+                textDecoration: "none"
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
+              onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}
+            >
+              Forgot your password?
+            </button>
+          </div>
+        )}
+
+        {/* Divider */}
+        <div style={{
+          position: "relative",
+          margin: "1.5rem 0",
+          height: "1px",
+          background: "#e5e7eb"
+        }}>
+          <span style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            padding: "0 1rem",
+            background: "white",
+            color: "#9ca3af",
+            fontSize: "0.75rem",
+            fontWeight: 500
+          }}>
+            {mode === "reset" ? "OR" : mode === "signin" ? "OR" : "OR"}
+          </span>
+        </div>
+
         {/* Toggle Mode */}
         <div style={{
           textAlign: "center",
-          marginTop: "1.5rem",
           fontSize: "0.875rem",
-          color: "var(--text-secondary)"
+          color: "#6b7280"
         }}>
           {mode === "reset" ? (
             <>
@@ -260,18 +367,20 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLo
                 style={{
                   background: "none",
                   border: "none",
-                  color: "var(--primary)",
-                  textDecoration: "underline",
+                  color: "#667eea",
+                  fontWeight: 600,
                   cursor: "pointer",
                   fontSize: "inherit"
                 }}
+                onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
+                onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}
               >
                 Sign in
               </button>
             </>
           ) : (
             <>
-              {mode === "signin" ? "Don't have an account?" : "Already have an account?"}{" "}
+              {mode === "signin" ? "New to Navigator?" : "Already have an account?"}{" "}
               <button
                 type="button"
                 onClick={() => {
@@ -283,57 +392,19 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLo
                 style={{
                   background: "none",
                   border: "none",
-                  color: "var(--primary)",
-                  textDecoration: "underline",
+                  color: "#667eea",
+                  fontWeight: 600,
                   cursor: "pointer",
                   fontSize: "inherit"
                 }}
+                onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
+                onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}
               >
-                {mode === "signin" ? "Sign up" : "Sign in"}
+                {mode === "signin" ? "Create account" : "Sign in"}
               </button>
             </>
           )}
         </div>
-
-        {/* Forgot Password Link */}
-        {mode === "signin" && (
-          <div style={{
-            textAlign: "center",
-            marginTop: "0.75rem",
-            fontSize: "0.875rem"
-          }}>
-            <button
-              type="button"
-              onClick={() => {
-                setMode("reset");
-                setResetSent(false);
-                onClearError();
-              }}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--text-secondary)",
-                textDecoration: "underline",
-                cursor: "pointer",
-                fontSize: "inherit"
-              }}
-            >
-              Forgot password?
-            </button>
-          </div>
-        )}
-
-        {/* Offline Work Notice */}
-        <div style={{
-          marginTop: "1.5rem",
-          padding: "0.75rem",
-          background: "var(--bg-tertiary)",
-          borderRadius: "var(--radius)",
-          fontSize: "0.8125rem",
-          color: "var(--text-muted)",
-          textAlign: "center"
-        }}>
-          💡 <strong>Tip:</strong> The app works offline. Data will sync when you're back online.
         </div>
       </div>
     </div>
