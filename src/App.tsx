@@ -253,9 +253,6 @@ export default function App() {
           onResetPassword={async (email) => {
             await cloudSync.resetPassword(email);
           }}
-          onForceSignOut={async () => {
-            await cloudSync.signOut();
-          }}
           isLoading={cloudSync.isLoading}
           error={cloudSync.error}
           onClearError={cloudSync.clearError}

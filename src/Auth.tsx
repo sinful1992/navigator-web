@@ -5,13 +5,12 @@ type Props = {
   onSignIn: (email: string, password: string) => Promise<void>;
   onSignUp: (email: string, password: string) => Promise<void>;
   onResetPassword: (email: string) => Promise<void>;
-  onForceSignOut: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
   onClearError: () => void;
 };
 
-export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLoading, error, onClearError }: Props) {
+export function Auth({ onSignIn, onSignUp, onResetPassword, isLoading, error, onClearError }: Props) {
   const [mode, setMode] = React.useState<"signin" | "signup" | "reset">("signin");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
