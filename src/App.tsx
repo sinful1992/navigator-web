@@ -1945,7 +1945,7 @@ function AuthedApp() {
       )}
 
       {/* Enhanced error display */}
-      {cloudSync.error && (
+      {cloudSync.error && cloudSync.error !== 'Auth session missing!' && !cloudSync.isLoading && (
         <div
           style={{
             position: "fixed",
