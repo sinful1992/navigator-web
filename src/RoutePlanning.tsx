@@ -30,6 +30,7 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [startingPointIndex, setStartingPointIndex] = useState<number | null>(null);
   const [showMap, setShowMap] = useState(true);
+  const [showImportSection, setShowImportSection] = useState(false);
   const [geocodingProgress, setGeocodingProgress] = useState<{
     completed: number;
     total: number;
@@ -342,214 +343,79 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
           </div>
         )}
 
-        {/* STEP 1: Add Addresses */}
-        <div style={{
-          background: 'var(--surface)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '1.5rem',
-          marginBottom: '1rem',
-          boxShadow: 'var(--shadow-sm)',
-          border: '1px solid var(--border-light)'
-        }}>
-          <h3 style={{
-            margin: '0 0 1rem 0',
-            fontSize: '1.125rem',
-            color: 'var(--text-primary)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem'
-          }}>
-            <span style={{
-              background: 'var(--primary)',
-              color: 'white',
-              width: '1.75rem',
-              height: '1.75rem',
-              borderRadius: '50%',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '0.875rem',
-              fontWeight: 'bold'
-            }}>1</span>
-            Add Addresses
-          </h3>
-
-          {/* Import Excel - Full Width Button */}
-          <div style={{ marginBottom: '1rem' }}>
-            <ImportExcel onImported={handleImportExcel} />
-          </div>
-
-          {/* OR Divider */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem',
-            margin: '1rem 0',
-            color: 'var(--text-muted)',
-            fontSize: '0.875rem'
-          }}>
-            <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
-            <span>OR</span>
-            <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
-          </div>
-
-          {/* Manual Entry */}
-          <div>
-            <AddressAutocomplete
-              id="manual-address-input"
-              value={newAddress}
-              onChange={setNewAddress}
-              onSelect={handleSelectFromAutocomplete}
-              placeholder="Type an address..."
-              disabled={!isHybridRoutingAvailable()}
-            />
-            <button
-              className="btn btn-primary"
-              onClick={handleAddAddress}
-              disabled={!newAddress.trim()}
-              style={{
-                width: '100%',
-                marginTop: '0.5rem',
-                padding: '0.875rem',
-                fontSize: '1rem',
-                fontWeight: '600'
-              }}
-            >
-              + Add Address
-            </button>
-          </div>
-
-          {/* Quick Stats */}
-          {addresses.length > 0 && (
-            <div style={{
-              marginTop: '1rem',
-              padding: '0.75rem',
-              background: 'var(--gray-50)',
-              borderRadius: 'var(--radius-md)',
-              display: 'flex',
-              justifyContent: 'space-around',
-              gap: '0.5rem',
-              fontSize: '0.875rem'
-            }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontWeight: 'bold', fontSize: '1.25rem', color: 'var(--primary)' }}>
-                  {stats.total}
-                </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Total</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontWeight: 'bold', fontSize: '1.25rem', color: 'var(--success)' }}>
-                  {stats.geocoded}
-                </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Ready</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontWeight: 'bold', fontSize: '1.25rem', color: 'var(--warning)' }}>
-                  {stats.needsGeocoding}
-                </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Pending</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-
-        {/* STEP 2: Optimize Route (only show if addresses are geocoded) */}
-        {addresses.length > 0 && stats.geocoded >= 2 && (
+        {/* Collapsible Import Section */}
+        {addresses.length === 0 && (
           <div style={{
             background: 'var(--surface)',
             borderRadius: 'var(--radius-lg)',
-            padding: '1.5rem',
             marginBottom: '1rem',
             boxShadow: 'var(--shadow-sm)',
-            border: '1px solid var(--border-light)'
+            border: '1px solid var(--border-light)',
+            overflow: 'hidden'
           }}>
-            <h3 style={{
-              margin: '0 0 1rem 0',
-              fontSize: '1.125rem',
-              color: 'var(--text-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}>
-              <span style={{
-                background: optimizationResult && !optimizationResult.error ? 'var(--success)' : 'var(--primary)',
-                color: 'white',
-                width: '1.75rem',
-                height: '1.75rem',
-                borderRadius: '50%',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.875rem',
-                fontWeight: 'bold'
-              }}>
-                {optimizationResult && !optimizationResult.error ? '✓' : '2'}
-              </span>
-              Optimize Route
-            </h3>
-
-            {/* Optimization Result */}
-            {optimizationResult && (
-              <div style={{
-                marginBottom: '1rem',
-                padding: '1rem',
-                background: 'var(--surface)',
-                border: optimizationResult.error ? '2px solid var(--danger)' : '2px solid var(--success)',
-                borderRadius: 'var(--radius-md)',
-                color: optimizationResult.error ? 'var(--danger)' : 'var(--success)'
-              }}>
-                {optimizationResult.error ? (
-                  <>
-                    <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>
-                      ❌ Optimization Failed
-                    </div>
-                    <div style={{ fontSize: '0.875rem' }}>
-                      {optimizationResult.error}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                      ✓ Route Optimized
-                    </div>
-                    <div style={{ fontSize: '0.875rem', lineHeight: '1.5' }}>
-                      <div>📍 {optimizationResult.optimizedOrder.length} stops</div>
-                      <div>🚗 {formatDuration(optimizationResult.totalDuration)}</div>
-                      <div>📏 {formatDistance(optimizationResult.totalDistance)}</div>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
             <button
-              className="btn btn-primary"
-              onClick={handleOptimizeRoute}
-              disabled={isOptimizing}
+              onClick={() => setShowImportSection(!showImportSection)}
               style={{
                 width: '100%',
-                padding: '0.875rem',
+                padding: '1rem 1.5rem',
+                background: 'transparent',
+                border: 'none',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
                 fontSize: '1rem',
                 fontWeight: '600'
               }}
             >
-              {isOptimizing ? (
-                <>
-                  <span className="spinner" style={{
-                    display: 'inline-block',
-                    width: '1rem',
-                    height: '1rem',
-                    marginRight: '0.5rem'
-                  }} />
-                  Optimizing...
-                </>
-              ) : (
-                `🗺️ Optimize ${stats.geocoded} Address${stats.geocoded > 1 ? 'es' : ''}`
-              )}
+              <span>📁 Import Excel File</span>
+              <span style={{ fontSize: '1.25rem' }}>{showImportSection ? '▼' : '▶'}</span>
             </button>
+
+            {showImportSection && (
+              <div style={{ padding: '0 1.5rem 1.5rem 1.5rem' }}>
+                <ImportExcel onImported={handleImportExcel} />
+              </div>
+            )}
           </div>
         )}
+
+        {/* Quick Stats */}
+        {addresses.length > 0 && (
+          <div style={{
+            background: 'var(--surface)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '1rem 1.5rem',
+            marginBottom: '1rem',
+            boxShadow: 'var(--shadow-sm)',
+            border: '1px solid var(--border-light)',
+            display: 'flex',
+            justifyContent: 'space-around',
+            gap: '0.5rem',
+            fontSize: '0.875rem'
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontWeight: 'bold', fontSize: '1.25rem', color: 'var(--primary)' }}>
+                {stats.total}
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Total</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontWeight: 'bold', fontSize: '1.25rem', color: 'var(--success)' }}>
+                {stats.geocoded}
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Ready</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontWeight: 'bold', fontSize: '1.25rem', color: 'var(--warning)' }}>
+                {stats.needsGeocoding}
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Pending</div>
+            </div>
+          </div>
+        )}
+
 
         {/* Map View (always visible when addresses exist) */}
         {addresses.length > 0 && (
@@ -598,6 +464,105 @@ export function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
             )}
           </div>
         )}
+
+        {/* Add Address & Optimize Controls (below map) */}
+        <div style={{
+          background: 'var(--surface)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '1.5rem',
+          marginBottom: '1rem',
+          boxShadow: 'var(--shadow-sm)',
+          border: '1px solid var(--border-light)'
+        }}>
+          {/* Address Input */}
+          <div style={{ marginBottom: '1rem' }}>
+            <AddressAutocomplete
+              id="manual-address-input"
+              value={newAddress}
+              onChange={setNewAddress}
+              onSelect={handleSelectFromAutocomplete}
+              placeholder="Type an address to add..."
+              disabled={!isHybridRoutingAvailable()}
+            />
+            <button
+              className="btn btn-primary"
+              onClick={handleAddAddress}
+              disabled={!newAddress.trim()}
+              style={{
+                width: '100%',
+                marginTop: '0.5rem',
+                padding: '0.75rem',
+                fontSize: '0.9375rem',
+                fontWeight: '600'
+              }}
+            >
+              + Add Address
+            </button>
+          </div>
+
+          {/* Optimization Result */}
+          {optimizationResult && (
+            <div style={{
+              marginBottom: '1rem',
+              padding: '1rem',
+              background: 'var(--surface)',
+              border: optimizationResult.error ? '2px solid var(--danger)' : '2px solid var(--success)',
+              borderRadius: 'var(--radius-md)',
+              color: optimizationResult.error ? 'var(--danger)' : 'var(--success)'
+            }}>
+              {optimizationResult.error ? (
+                <>
+                  <div style={{ fontWeight: 'bold', marginBottom: '0.25rem', fontSize: '0.9375rem' }}>
+                    ❌ Optimization Failed
+                  </div>
+                  <div style={{ fontSize: '0.8125rem' }}>
+                    {optimizationResult.error}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', fontSize: '0.9375rem' }}>
+                    ✓ Route Optimized
+                  </div>
+                  <div style={{ fontSize: '0.8125rem', lineHeight: '1.5' }}>
+                    <div>📍 {optimizationResult.optimizedOrder.length} stops</div>
+                    <div>🚗 {formatDuration(optimizationResult.totalDuration)}</div>
+                    <div>📏 {formatDistance(optimizationResult.totalDistance)}</div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Optimize Button */}
+          {addresses.length > 0 && stats.geocoded >= 2 && (
+            <button
+              className="btn btn-primary"
+              onClick={handleOptimizeRoute}
+              disabled={isOptimizing}
+              style={{
+                width: '100%',
+                padding: '0.875rem',
+                fontSize: '1rem',
+                fontWeight: '600'
+              }}
+            >
+              {isOptimizing ? (
+                <>
+                  <span className="spinner" style={{
+                    display: 'inline-block',
+                    width: '1rem',
+                    height: '1rem',
+                    marginRight: '0.5rem'
+                  }} />
+                  Optimizing...
+                </>
+              ) : (
+                `🗺️ Optimize ${stats.geocoded} Address${stats.geocoded > 1 ? 'es' : ''}`
+              )}
+            </button>
+          )}
+        </div>
 
         {/* Address List */}
         {addresses.length > 0 && (
