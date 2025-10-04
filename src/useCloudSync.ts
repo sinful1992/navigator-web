@@ -494,10 +494,15 @@ export function useCloudSync(): UseCloudSync {
 
     if (!supabase) return () => { mounted = false; };
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       // RACE CONDITION FIX: Check mounted flag before setting state
       if (mounted) {
         setUser(session?.user ?? null);
+
+        // Clear any error messages when user successfully signs in
+        if (event === 'SIGNED_IN' && session) {
+          clearError();
+        }
       }
     });
 
@@ -694,29 +699,15 @@ export function useCloudSync(): UseCloudSync {
           // Don't throw - user is created, just missing subscription setup
         }
 
-        // If no session was created, try to sign in immediately to create one
+        // If no session was created, check if email confirmation is required
         if (!data.session) {
           if (import.meta.env.DEV) {
-            console.log("No session created during signup, attempting immediate signin...");
+            console.log("No session created during signup - email confirmation likely required");
           }
-          try {
-            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-              email,
-              password
-            });
 
-            if (signInError) {
-              console.warn("Immediate signin failed:", signInError);
-            } else {
-              if (import.meta.env.DEV) {
-                console.log("Immediate signin successful, session created");
-              }
-              setUser(signInData.user);
-              return { user: signInData.user! };
-            }
-          } catch (signInErr) {
-            console.warn("Immediate signin error:", signInErr);
-          }
+          // Email confirmation is enabled - inform user to check email
+          setError("Please check your email to confirm your account before signing in.");
+          throw new Error("Email confirmation required");
         }
 
         setUser(data.user);
