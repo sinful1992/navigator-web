@@ -130,52 +130,6 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, onForceSignOut, isLo
           </div>
         )}
 
-        {/* Demo Notice */}
-        <div style={{
-          padding: "0.75rem",
-          marginBottom: "1.5rem",
-          background: "var(--primary-light)",
-          border: "1px solid var(--primary)",
-          borderRadius: "var(--radius)",
-          color: "var(--primary-dark)",
-          fontSize: "0.8125rem",
-          textAlign: "center"
-        }}>
-          🧪 <strong>Demo Mode:</strong> Use any email/password (6+ chars). Data syncs across browser tabs.
-        </div>
-
-        {/* Clear Session Button for Troubleshooting */}
-        <div style={{
-          marginBottom: "1rem",
-          textAlign: "center"
-        }}>
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                await onForceSignOut();
-                onClearError();
-                setEmail("");
-                setPassword("");
-                setConfirmPassword("");
-              } catch (err) {
-                console.error("Force signout error:", err);
-              }
-            }}
-            style={{
-              background: "none",
-              border: "1px solid var(--border-light)",
-              borderRadius: "var(--radius)",
-              padding: "0.5rem 1rem",
-              fontSize: "0.75rem",
-              color: "var(--text-secondary)",
-              cursor: "pointer"
-            }}
-          >
-            🔄 Clear Session
-          </button>
-        </div>
-
         {/* Form */}
         <form onSubmit={handleSubmit}>
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
