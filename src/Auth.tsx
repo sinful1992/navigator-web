@@ -21,12 +21,14 @@ export function Auth({ onSignIn, onSignUp, onForceSignOut, isLoading, error, onC
     if (isLoading) return;
 
     if (!email || !password) {
-      alert("Please enter email and password");
+      return;
+    }
+
+    if (password.length < 6) {
       return;
     }
 
     if (mode === "signup" && password !== confirmPassword) {
-      alert("Passwords do not match");
       return;
     }
 
@@ -263,6 +265,7 @@ export function Auth({ onSignIn, onSignUp, onForceSignOut, isLoading, error, onC
             type="button"
             onClick={() => {
               setMode(mode === "signin" ? "signup" : "signin");
+              setConfirmPassword("");
               onClearError();
             }}
             style={{
