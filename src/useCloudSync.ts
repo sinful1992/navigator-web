@@ -661,7 +661,7 @@ export function useCloudSync(): UseCloudSync {
           data: {
             signup_source: 'navigator_web'
           },
-          emailRedirectTo: 'https://sinful1992.github.io/navigator-web/' // Redirect back to app after email confirmation
+          emailRedirectTo: 'https://fieldnav.app' // Redirect back to app after email confirmation
         }
       });
 
@@ -787,7 +787,7 @@ export function useCloudSync(): UseCloudSync {
       if (!supabase) throw new Error("Supabase not configured");
 
       const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://sinful1992.github.io/navigator-web/'
+        redirectTo: 'https://fieldnav.app'
       });
 
       if (err) {
