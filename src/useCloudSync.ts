@@ -659,7 +659,7 @@ export function useCloudSync(): UseCloudSync {
           data: {
             signup_source: 'navigator_web'
           },
-          emailRedirectTo: window.location.origin // Redirect back to app after email confirmation
+          emailRedirectTo: 'https://sinful1992.github.io/navigator-web/' // Redirect back to app after email confirmation
         }
       });
 
