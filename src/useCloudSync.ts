@@ -488,7 +488,10 @@ export function useCloudSync(): UseCloudSync {
         if (authErr) throw authErr;
         if (mounted) setUser(data.user ?? null);
       } catch (e: any) {
-        if (mounted) setError(e?.message || String(e));
+        // Ignore "Auth session missing!" - it's a normal state when not logged in
+        if (mounted && e?.message !== 'Auth session missing!') {
+          setError(e?.message || String(e));
+        }
       } finally {
         if (mounted) setIsLoading(false);
       }
@@ -956,7 +959,10 @@ export function useCloudSync(): UseCloudSync {
         setLastSyncTime(new Date(verifyData.updated_at ?? now));
 
       } catch (e: any) {
-        setError(e?.message || String(e));
+        // Ignore "Auth session missing!" - it's a normal state when not logged in
+        if (e?.message !== 'Auth session missing!') {
+          setError(e?.message || String(e));
+        }
         console.error('Sync failed:', e);
 
         // 🔧 OFFLINE PROTECTION: If we're offline, queue this state for later sync
