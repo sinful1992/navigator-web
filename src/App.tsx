@@ -1987,21 +1987,21 @@ function AuthedApp() {
               const confirmPassword = (form.elements.namedItem('confirmPassword') as HTMLInputElement).value;
 
               if (newPassword !== confirmPassword) {
-                alert('Passwords do not match');
+                window.alert('Passwords do not match');
                 return;
               }
 
               if (newPassword.length < 6) {
-                alert('Password must be at least 6 characters');
+                window.alert('Password must be at least 6 characters');
                 return;
               }
 
               try {
                 await cloudSync.updatePassword(newPassword);
-                alert('Password updated successfully!');
+                window.alert('Password updated successfully!');
                 setShowChangePassword(false);
               } catch (err: any) {
-                alert('Error: ' + err.message);
+                window.alert('Error: ' + err.message);
               }
             }}>
               <div style={{ marginBottom: '1rem' }}>
@@ -2038,10 +2038,10 @@ function AuthedApp() {
                 if (!supabase) throw new Error('Supabase not configured');
                 const { error } = await supabase.auth.updateUser({ email: newEmail });
                 if (error) throw error;
-                alert('Confirmation email sent! Please check your inbox.');
+                window.alert('Confirmation email sent! Please check your inbox.');
                 setShowChangeEmail(false);
               } catch (err: any) {
-                alert('Error: ' + err.message);
+                window.alert('Error: ' + err.message);
               }
             }}>
               <div style={{ marginBottom: '1rem' }}>
@@ -2074,7 +2074,7 @@ function AuthedApp() {
               const confirmation = (form.elements.namedItem('confirmation') as HTMLInputElement).value;
 
               if (confirmation !== 'DELETE') {
-                alert('Please type DELETE to confirm');
+                window.alert('Please type DELETE to confirm');
                 return;
               }
 
@@ -2086,10 +2086,10 @@ function AuthedApp() {
                 if (error) throw error;
 
                 await cloudSync.signOut();
-                alert('Account deleted successfully');
+                window.alert('Account deleted successfully');
                 setShowDeleteAccount(false);
               } catch (err: any) {
-                alert('Error: ' + err.message);
+                window.alert('Error: ' + err.message);
               }
             }}>
               <div style={{ marginBottom: '1rem' }}>
