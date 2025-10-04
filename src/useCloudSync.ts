@@ -654,7 +654,7 @@ export function useCloudSync(): UseCloudSync {
           data: {
             signup_source: 'navigator_web'
           },
-          emailRedirectTo: undefined // Disable email confirmation for immediate access
+          emailRedirectTo: window.location.origin // Redirect back to app after email confirmation
         }
       });
 
