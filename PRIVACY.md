@@ -1,7 +1,7 @@
 # Privacy Policy - Navigator Web
 
-**Last Updated:** 2025-01-06
-**Effective Date:** 2025-01-06
+**Last Updated:** 2025-01-05
+**Effective Date:** 2025-01-05
 
 ## 1. Introduction
 
@@ -12,6 +12,7 @@ Navigator Web is a professional enforcement tool designed for bailiffs, enforcem
 - We are the **Data Processor** providing infrastructure
 - We do not access, analyze, or sell your data
 - You have full control to export or delete your data
+- **Inactive accounts** (no login for 6 months) are automatically deleted after email warning
 
 ## 2. Who We Are
 
@@ -146,7 +147,11 @@ For GDPR purposes:
 ## 8. Data Retention
 
 ### We Keep Data:
-- **Active accounts:** Indefinitely (until you delete)
+- **Active accounts:** Indefinitely (until you delete or account becomes inactive)
+- **Inactive accounts:** Automatically deleted after **6 months of no login activity**
+  - **5-month warning:** Email notification sent with 30-day grace period
+  - **Opt-out:** Simply log in to cancel deletion
+  - **Exception:** Active paying subscribers are never auto-deleted
 - **Deleted accounts:** Immediately purged from active systems
 - **Backups:** Retained for 30 days, then permanently deleted
 - **Logs (security):** 90 days maximum
