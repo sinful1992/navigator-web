@@ -18,18 +18,18 @@ RETURNS TABLE(
 LANGUAGE sql STABLE
 AS $$
   WITH user_activity AS (
-    -- Get last activity from entity_store (completions, arrangements, addresses)
+    -- Get last activity from navigator_operations (completions, arrangements, addresses)
     SELECT
       user_id,
       MAX(GREATEST(
         -- Check data timestamp field (for completions/arrangements)
         COALESCE((data->>'timestamp')::timestamptz, '1970-01-01'::timestamptz),
-        -- Check when record was last updated
-        COALESCE(updated_at, '1970-01-01'::timestamptz),
+        -- Check operation timestamp
+        COALESCE(timestamp, '1970-01-01'::timestamptz),
         -- Check when record was created
         COALESCE(created_at, '1970-01-01'::timestamptz)
       )) as last_activity
-    FROM entity_store
+    FROM navigator_operations
     GROUP BY user_id
   )
   SELECT
@@ -170,7 +170,6 @@ BEGIN
     );
 
     -- Delete all user data (same as manual deletion)
-    DELETE FROM entity_store WHERE entity_store.user_id = inactive_user.user_id;
     DELETE FROM navigator_operations WHERE navigator_operations.user_id = inactive_user.user_id;
     DELETE FROM sync_oplog WHERE sync_oplog.user_id = inactive_user.user_id;
     DELETE FROM backups WHERE backups.user_id = inactive_user.user_id;
@@ -228,8 +227,8 @@ ORDER BY w.deletion_scheduled_for ASC;
 COMMENT ON VIEW admin_upcoming_deletions IS 'Admin view of accounts scheduled for deletion due to inactivity (based on data activity, not just login)';
 
 -- Update the auto-cancel trigger to also consider activity
--- When user creates ANY data in entity_store, cancel pending deletion
-DROP TRIGGER IF EXISTS on_entity_activity_cancel_deletion ON entity_store;
+-- When user creates ANY data in navigator_operations, cancel pending deletion
+DROP TRIGGER IF EXISTS on_operation_activity_cancel_deletion ON navigator_operations;
 
 CREATE OR REPLACE FUNCTION cancel_deletion_on_activity()
 RETURNS TRIGGER
@@ -247,12 +246,12 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER on_entity_activity_cancel_deletion
-  AFTER INSERT OR UPDATE ON entity_store
+CREATE TRIGGER on_operation_activity_cancel_deletion
+  AFTER INSERT OR UPDATE ON navigator_operations
   FOR EACH ROW
   EXECUTE FUNCTION cancel_deletion_on_activity();
 
-COMMENT ON FUNCTION cancel_deletion_on_activity IS 'Automatically cancels scheduled account deletion when user creates or updates data';
+COMMENT ON FUNCTION cancel_deletion_on_activity IS 'Automatically cancels scheduled account deletion when user creates or updates operations';
 
 -- Keep the original login-based trigger as well (double protection)
 -- Already exists from previous migration, no changes needed

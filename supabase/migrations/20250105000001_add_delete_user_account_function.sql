@@ -15,7 +15,6 @@ AS $$
 DECLARE
   current_user_id UUID;
   deleted_counts JSONB;
-  entity_count INTEGER;
   operations_count INTEGER;
   sync_count INTEGER;
   backups_count INTEGER;
@@ -34,11 +33,7 @@ BEGIN
   -- Note: Some tables have ON DELETE CASCADE, so they'll auto-delete
   -- We explicitly delete from tables that don't have CASCADE or to track counts
 
-  -- 1. Delete from entity_store (work data: addresses, completions, arrangements)
-  DELETE FROM entity_store WHERE user_id = current_user_id;
-  GET DIAGNOSTICS entity_count = ROW_COUNT;
-
-  -- 2. Delete from navigator_operations (operation log)
+  -- 1. Delete from navigator_operations (operation log - contains all work data)
   DELETE FROM navigator_operations WHERE user_id = current_user_id;
   GET DIAGNOSTICS operations_count = ROW_COUNT;
 
@@ -78,7 +73,6 @@ BEGIN
     'user_id', current_user_id,
     'deleted_at', NOW(),
     'records_deleted', jsonb_build_object(
-      'entity_store', entity_count,
       'navigator_operations', operations_count,
       'sync_oplog', sync_count,
       'backups', backups_count,
@@ -145,7 +139,6 @@ DECLARE
   current_user_id UUID;
   current_user_email TEXT;
   deleted_counts JSONB;
-  entity_count INTEGER;
   operations_count INTEGER;
   sync_count INTEGER;
   backups_count INTEGER;
@@ -170,9 +163,6 @@ BEGIN
   VALUES (current_user_id, current_user_email);
 
   -- Delete user data (same as before)
-  DELETE FROM entity_store WHERE user_id = current_user_id;
-  GET DIAGNOSTICS entity_count = ROW_COUNT;
-
   DELETE FROM navigator_operations WHERE user_id = current_user_id;
   GET DIAGNOSTICS operations_count = ROW_COUNT;
 
@@ -195,7 +185,6 @@ BEGIN
   -- Update audit log with deletion details
   UPDATE account_deletion_log
   SET deletion_details = jsonb_build_object(
-    'entity_store', entity_count,
     'navigator_operations', operations_count,
     'sync_oplog', sync_count,
     'backups', backups_count,
@@ -214,7 +203,6 @@ BEGIN
     'email', current_user_email,
     'deleted_at', NOW(),
     'records_deleted', jsonb_build_object(
-      'entity_store', entity_count,
       'navigator_operations', operations_count,
       'sync_oplog', sync_count,
       'backups', backups_count,
