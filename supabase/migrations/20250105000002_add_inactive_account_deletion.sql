@@ -21,6 +21,12 @@ CREATE TABLE IF NOT EXISTS inactive_account_warnings (
 -- Enable RLS
 ALTER TABLE inactive_account_warnings ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (for idempotent migrations)
+DROP POLICY IF EXISTS "inactive_warnings_select_policy" ON inactive_account_warnings;
+DROP POLICY IF EXISTS "inactive_warnings_insert_policy" ON inactive_account_warnings;
+DROP POLICY IF EXISTS "inactive_warnings_update_policy" ON inactive_account_warnings;
+DROP POLICY IF EXISTS "upcoming_deletions_admin_only" ON inactive_account_warnings;
+
 -- Users can see their own warnings
 CREATE POLICY "inactive_warnings_select_policy" ON inactive_account_warnings
   FOR SELECT USING (user_id = auth.uid());

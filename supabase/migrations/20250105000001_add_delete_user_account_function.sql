@@ -114,6 +114,10 @@ CREATE TABLE IF NOT EXISTS account_deletion_log (
 -- Enable RLS on deletion log (only admins can view)
 ALTER TABLE account_deletion_log ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (for idempotent migrations)
+DROP POLICY IF EXISTS "deletion_log_admin_only" ON account_deletion_log;
+DROP POLICY IF EXISTS "deletion_log_insert_policy" ON account_deletion_log;
+
 -- Only admins can view deletion log
 CREATE POLICY "deletion_log_admin_only" ON account_deletion_log
   FOR SELECT USING (is_admin());
