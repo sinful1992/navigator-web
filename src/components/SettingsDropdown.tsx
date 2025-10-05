@@ -4,6 +4,14 @@ import { useSettings, isSupabaseConfigured } from '../hooks/useSettings';
 import { ReminderSettings } from './ReminderSettings';
 import type { ReminderSettings as ReminderSettingsType } from '../types';
 import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
+import type { AppState } from '../types';
+import {
+  exportDataAsJSON,
+  exportCompletionsAsCSV,
+  exportArrangementsAsCSV,
+  getStorageInfo,
+  clearLocalCaches
+} from '../utils/dataExport';
 
 interface SettingsDropdownProps {
   trigger?: React.ReactNode;
@@ -12,6 +20,8 @@ interface SettingsDropdownProps {
   onChangePassword?: () => void;
   onChangeEmail?: () => void;
   onDeleteAccount?: () => void;
+  appState?: AppState; // For data export
+  userEmail?: string; // For data export
 }
 
 export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
@@ -20,10 +30,13 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
   onUpdateReminderSettings,
   onChangePassword,
   onChangeEmail,
-  onDeleteAccount
+  onDeleteAccount,
+  appState,
+  userEmail
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showSMSSettings, setShowSMSSettings] = useState(false);
+  const [storageInfo, setStorageInfo] = useState<{ usedMB: string; quotaMB: string; percentage: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const {
     settings,
@@ -32,6 +45,13 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     togglePushNotifications,
     toggleAutoSync,
   } = useSettings();
+
+  // Load storage info when dropdown opens
+  useEffect(() => {
+    if (isOpen && !storageInfo) {
+      getStorageInfo().then(setStorageInfo);
+    }
+  }, [isOpen, storageInfo]);
 
 
   // Close dropdown when clicking outside
@@ -280,9 +300,192 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
             </>
           )}
 
+          {/* Privacy & Data (GDPR Compliance) */}
+          <div className="settings-separator" />
+          <div className="settings-section">
+            <h4 className="settings-section-title" style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>Privacy & Data (GDPR)</h4>
+
+            {/* Storage Usage */}
+            {storageInfo && (
+              <div style={{
+                padding: '0.75rem',
+                background: 'var(--bg-secondary)',
+                borderRadius: 'var(--radius)',
+                marginBottom: '0.75rem',
+                border: '1px solid var(--border-light)'
+              }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
+                  Storage Usage
+                </div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                  {storageInfo.usedMB} MB / {storageInfo.quotaMB} MB ({storageInfo.percentage}%)
+                </div>
+                <div style={{
+                  height: '6px',
+                  background: 'var(--gray-200)',
+                  borderRadius: '3px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: `${storageInfo.percentage}%`,
+                    height: '100%',
+                    background: storageInfo.percentage > 80 ? 'var(--danger)' : 'var(--primary)',
+                    transition: 'width 0.3s'
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {/* Data Export (GDPR Article 20) */}
+            {appState && (
+              <>
+                <button
+                  onClick={() => {
+                    exportDataAsJSON(appState, userEmail);
+                    setIsOpen(false);
+                  }}
+                  className="settings-action-button"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: 'var(--primary-light)',
+                    border: '1px solid var(--primary)',
+                    borderRadius: 'var(--radius)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    marginBottom: '0.5rem',
+                    color: 'var(--primary)'
+                  }}
+                >
+                  <span>📥</span>
+                  <span>Export All Data (JSON)</span>
+                </button>
+
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <button
+                    onClick={() => {
+                      exportCompletionsAsCSV(appState);
+                      setIsOpen(false);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '0.625rem',
+                      background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-light)',
+                      borderRadius: 'var(--radius)',
+                      cursor: 'pointer',
+                      fontSize: '0.8125rem'
+                    }}
+                  >
+                    Export Completions (CSV)
+                  </button>
+                  <button
+                    onClick={() => {
+                      exportArrangementsAsCSV(appState);
+                      setIsOpen(false);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '0.625rem',
+                      background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-light)',
+                      borderRadius: 'var(--radius)',
+                      cursor: 'pointer',
+                      fontSize: '0.8125rem'
+                    }}
+                  >
+                    Export Arrangements (CSV)
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Clear Cache */}
+            <button
+              onClick={async () => {
+                await clearLocalCaches();
+                setStorageInfo(null); // Refresh storage info
+                setTimeout(() => getStorageInfo().then(setStorageInfo), 500);
+              }}
+              className="settings-action-button"
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-light)',
+                borderRadius: 'var(--radius)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                marginBottom: '0.75rem'
+              }}
+            >
+              <span>🗑️</span>
+              <span>Clear Cache & Temporary Data</span>
+            </button>
+
+            {/* Privacy Links */}
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <a
+                href="/PRIVACY.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1,
+                  padding: '0.625rem',
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: 'var(--radius)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  fontSize: '0.8125rem'
+                }}
+              >
+                <span>🔒</span>
+                <span>Privacy Policy</span>
+              </a>
+
+              <a
+                href="/TERMS_OF_USE.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1,
+                  padding: '0.625rem',
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: 'var(--radius)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  fontSize: '0.8125rem'
+                }}
+              >
+                <span>📄</span>
+                <span>Terms</span>
+              </a>
+            </div>
+          </div>
+
           {/* Footer note */}
           <div className="settings-footer">
             Settings are saved locally and synced to cloud if configured.
+            <br />
+            <a href="/PRIVACY.md" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline', fontSize: '0.75rem' }}>
+              Your privacy rights
+            </a>
           </div>
         </div>
       )}

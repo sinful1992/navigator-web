@@ -29,6 +29,7 @@ import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
 import { isProtectionActive } from "./utils/protectionFlags";
+import { PrivacyConsent } from "./components/PrivacyConsent";
 
 type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
@@ -1443,6 +1444,8 @@ function AuthedApp() {
               onChangePassword={() => setShowChangePassword(true)}
               onChangeEmail={() => setShowChangeEmail(true)}
               onDeleteAccount={() => setShowDeleteAccount(true)}
+              appState={state}
+              userEmail={cloudSync.user?.email}
             />
           </div>
 
@@ -2025,6 +2028,9 @@ function AuthedApp() {
 
       {/* Toast Notifications */}
       <ToastContainer />
+
+      {/* GDPR Compliance: Privacy & Cookie Consent */}
+      <PrivacyConsent />
     </div>
   );
 }

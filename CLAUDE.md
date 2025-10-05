@@ -73,3 +73,14 @@ VITE_SUPABASE_ANON_KEY=your_anon_key
 
 The app gracefully handles missing environment variables with console warnings.
 - this project is published on git pages , not localy
+- remove these as i dont want them:\
+- 📏 Distance units (Miles/Kilometers)\
+💤 Keep screen awake toggle\
+🔋 Battery saver mode
+  - 📶 WiFi-only sync
+  - 🔤 Font size adjustment
+  - 🔒 Auto-lock timeout\
+- ♿ High contrast mode
+  - 🎬 Reduce motion toggle\
+- 🌍 Language selection
+  - 📅 Date/time formats
