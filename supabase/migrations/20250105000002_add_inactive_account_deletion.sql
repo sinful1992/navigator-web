@@ -305,6 +305,9 @@ GRANT UPDATE ON inactive_account_warnings TO authenticated;
 -- The warn_inactive_accounts() function returns the list of users to email.
 
 -- Create a view for admins to monitor upcoming deletions
+-- Drop view first to allow column name changes (makes migration idempotent)
+DROP VIEW IF EXISTS admin_upcoming_deletions;
+
 CREATE OR REPLACE VIEW admin_upcoming_deletions AS
 SELECT
   w.user_id,
