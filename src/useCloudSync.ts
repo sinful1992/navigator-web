@@ -26,11 +26,25 @@ async function initializeNewUser(userId: string): Promise<void> {
   }
 
   if (error) {
+    // If error is about existing subscription, that's fine - user already has one
+    if (error.message?.includes('already has a subscription')) {
+      if (import.meta.env.DEV) {
+        console.log("User already has a subscription, skipping trial creation");
+      }
+      return;
+    }
     console.error("Failed to create trial subscription:", error);
     throw error;
   }
 
   if (data && !data.success) {
+    // If the error message indicates subscription already exists, that's fine
+    if (data.message?.includes('already has a subscription')) {
+      if (import.meta.env.DEV) {
+        console.log("User already has a subscription (from data), skipping trial creation");
+      }
+      return;
+    }
     console.error("Trial subscription creation failed:", data.message);
     throw new Error(data.message);
   }
@@ -533,6 +547,18 @@ export function useCloudSync(): UseCloudSync {
 
               // Clear any error state
               clearError();
+
+              // CRITICAL: Create trial subscription if user doesn't have one yet
+              // This handles the case where email confirmation was required
+              try {
+                if (import.meta.env.DEV) {
+                  console.log('Checking if user needs trial subscription...');
+                }
+                await initializeNewUser(sessionData.session.user.id);
+              } catch (initError: any) {
+                // Don't block login if trial creation fails
+                console.warn('Trial subscription creation failed (may already exist):', initError);
+              }
             } else {
               console.warn('Session data missing after setSession');
               setError('Email confirmation incomplete. Please try signing in.');
