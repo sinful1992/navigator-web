@@ -47,6 +47,9 @@ CREATE INDEX IF NOT EXISTS idx_inactive_warnings_cancelled ON inactive_account_w
 COMMENT ON TABLE inactive_account_warnings IS 'Tracks warnings sent to users about upcoming account deletion due to inactivity';
 
 -- Function to identify inactive accounts (>6 months since last sign in)
+-- Drop existing function first (makes migration idempotent)
+DROP FUNCTION IF EXISTS get_inactive_accounts(INTEGER);
+
 CREATE OR REPLACE FUNCTION get_inactive_accounts(inactive_months INTEGER DEFAULT 6)
 RETURNS TABLE(
   user_id UUID,
@@ -76,6 +79,9 @@ $$;
 COMMENT ON FUNCTION get_inactive_accounts IS 'Returns list of accounts inactive for specified months (default 6)';
 
 -- Function to send warning emails to users at 5 months of inactivity
+-- Drop existing function first (makes migration idempotent)
+DROP FUNCTION IF EXISTS warn_inactive_accounts();
+
 CREATE OR REPLACE FUNCTION warn_inactive_accounts()
 RETURNS TABLE(
   user_id UUID,
@@ -138,6 +144,9 @@ $$;
 COMMENT ON FUNCTION warn_inactive_accounts IS 'Identifies accounts inactive for 5 months and creates warning records. Run this monthly via cron.';
 
 -- Function to delete inactive accounts (>6 months, warning sent, 30 days passed)
+-- Drop existing function first (makes migration idempotent)
+DROP FUNCTION IF EXISTS delete_inactive_accounts();
+
 CREATE OR REPLACE FUNCTION delete_inactive_accounts()
 RETURNS TABLE(
   user_id UUID,
@@ -226,6 +235,9 @@ GRANT EXECUTE ON FUNCTION delete_inactive_accounts TO authenticated;
 COMMENT ON FUNCTION delete_inactive_accounts IS 'Automatically deletes accounts inactive for 6+ months after warning. Run this monthly via cron.';
 
 -- Function to cancel scheduled deletion when user logs in
+-- Drop existing function first (makes migration idempotent)
+DROP FUNCTION IF EXISTS cancel_inactive_account_deletion();
+
 CREATE OR REPLACE FUNCTION cancel_inactive_account_deletion()
 RETURNS TRIGGER
 LANGUAGE plpgsql
