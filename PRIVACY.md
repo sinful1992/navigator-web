@@ -150,6 +150,7 @@ For GDPR purposes:
 - **Deleted accounts:** Immediately purged from active systems
 - **Backups:** Retained for 30 days, then permanently deleted
 - **Logs (security):** 90 days maximum
+- **Deletion audit log:** Minimal record (user ID, email, deletion timestamp) kept indefinitely for legal compliance and fraud prevention (GDPR Article 17(3)(b) - legal obligations)
 
 ### You Should Implement:
 As the Data Controller for work data, you must establish retention policies for:
@@ -173,7 +174,9 @@ As the Data Controller for work data, you must establish retention policies for:
 
 **3. Erasure / "Right to be Forgotten" (Art. 17)**
 - Delete account: Settings → Delete Account
-- All data permanently removed within 30 days
+- All data immediately and permanently removed from active systems
+- Backups purged within 30 days
+- Exception: Minimal deletion audit log (user ID, email, timestamp) retained for legal compliance per GDPR Article 17(3)(b)
 
 **4. Data Portability (Art. 20)**
 - Export data in JSON or CSV format
