@@ -69,46 +69,33 @@ jobid | schedule  | command                             | nodename  | nodeport |
 
 ## Email Integration (Optional but Recommended)
 
-The `warn_inactive_accounts()` function returns a list of users to warn, but doesn't send emails automatically. You have two options:
+The `warn_inactive_accounts()` function creates warning records in the database, but doesn't send emails automatically.
 
-### Option A: Supabase Edge Function
+### ✅ Recommended: Supabase Edge Function (Already Created!)
 
-Create a Supabase Edge Function that:
-1. Calls `warn_inactive_accounts()`
-2. For each user returned, sends an email via SendGrid/AWS SES/Resend
-3. Schedule the edge function to run monthly
+We've created a ready-to-deploy edge function that:
+- ✅ Calls `warn_inactive_accounts()` database function
+- ✅ Sends professional HTML emails via Resend API
+- ✅ Includes deletion date and "Log In to Cancel" button
+- ✅ Handles errors and provides detailed logging
 
-### Option B: External Service
+**Location:** `supabase/functions/warn-inactive-accounts/`
+
+**Full setup instructions:** See `supabase/functions/warn-inactive-accounts/README.md`
+
+**Quick start:**
+1. Sign up for Resend: https://resend.com (free for 3,000 emails/month)
+2. Get your API key: https://resend.com/api-keys
+3. Add to Supabase: Settings → Edge Functions → Add Secret → `RESEND_API_KEY`
+4. Deploy: `npx supabase functions deploy warn-inactive-accounts`
+5. Schedule with cron (see edge function README)
+
+### Alternative: External Service
 
 Use a service like n8n, Zapier, or Make.com to:
 1. Query the `inactive_account_warnings` table daily
 2. Send emails for warnings created in last 24 hours
-3. Template email with deletion date and "log in to cancel" link
-
-### Example Email Template
-
-```
-Subject: ⚠️ Your Navigator Web Account Will Be Deleted Soon
-
-Hi,
-
-Your Navigator Web account has been inactive for 5 months.
-
-Due to our data retention policy (GDPR compliance), accounts inactive for 6 months are automatically deleted.
-
-Your account will be deleted on: [DELETION_DATE]
-
-To keep your account:
-→ Simply log in at https://fieldnav.app/
-
-If you want to keep your data but stop using the service:
-→ Export your data: Settings → Export All Data
-
-Questions? Contact [YOUR_EMAIL]
-
-Thanks,
-Navigator Web Team
-```
+3. Use your own email template
 
 ## Manual Testing
 

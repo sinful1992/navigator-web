@@ -1,0 +1,8 @@
+# Supabase Edge Functions - Local Development
+.env
+.env.local
+*.env
+
+# Deno
+.deno/
+deno.lock
