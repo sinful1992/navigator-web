@@ -511,7 +511,9 @@ export function useCloudSync(): UseCloudSync {
         // Handle auth callback errors
         if (errorParam) {
           console.error('Auth callback error:', errorParam, errorDescription);
-          setError(errorDescription || errorParam);
+          const errorMsg = `Email confirmation failed: ${errorDescription || errorParam}`;
+          setError(errorMsg);
+          alert(errorMsg); // Show visible error to user
           // Clear the hash from URL
           window.history.replaceState(null, '', window.location.pathname);
           if (mounted) setIsLoading(false);
@@ -535,7 +537,9 @@ export function useCloudSync(): UseCloudSync {
 
             if (sessionError) {
               console.error('Error setting session from URL:', sessionError);
-              setError('Failed to confirm email: ' + sessionError.message);
+              const errorMsg = 'Failed to confirm email: ' + sessionError.message;
+              setError(errorMsg);
+              alert(errorMsg + '\n\nPlease try signing in manually or contact support.');
             } else if (sessionData.session) {
               if (import.meta.env.DEV) {
                 console.log('Email confirmed successfully, session established:', {
@@ -561,7 +565,9 @@ export function useCloudSync(): UseCloudSync {
               }
             } else {
               console.warn('Session data missing after setSession');
-              setError('Email confirmation incomplete. Please try signing in.');
+              const errorMsg = 'Email confirmation incomplete. Please try signing in with your email and password.';
+              setError(errorMsg);
+              alert(errorMsg);
             }
           } catch (e: any) {
             console.error('Exception during session setup:', e);
