@@ -489,31 +489,61 @@ export function useCloudSync(): UseCloudSync {
         // Check for email confirmation or password reset tokens in URL
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
         const type = hashParams.get('type');
+        const errorParam = hashParams.get('error');
+        const errorDescription = hashParams.get('error_description');
+
+        // Handle auth callback errors
+        if (errorParam) {
+          console.error('Auth callback error:', errorParam, errorDescription);
+          setError(errorDescription || errorParam);
+          // Clear the hash from URL
+          window.history.replaceState(null, '', window.location.pathname);
+          if (mounted) setIsLoading(false);
+          return;
+        }
 
         if (accessToken && type) {
           if (import.meta.env.DEV) {
-            console.log('Detected auth callback:', type);
+            console.log('Detected auth callback:', type, {
+              hasAccessToken: !!accessToken,
+              hasRefreshToken: !!refreshToken
+            });
           }
 
-          // Let Supabase handle the session from the URL
-          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+          try {
+            // Use setSession to establish the session from the URL tokens
+            const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken || ''
+            });
 
-          if (sessionError) {
-            console.error('Error getting session from URL:', sessionError);
-            setError(sessionError.message);
-          } else if (sessionData.session) {
-            if (import.meta.env.DEV) {
-              console.log('Email confirmed successfully, session established');
+            if (sessionError) {
+              console.error('Error setting session from URL:', sessionError);
+              setError('Failed to confirm email: ' + sessionError.message);
+            } else if (sessionData.session) {
+              if (import.meta.env.DEV) {
+                console.log('Email confirmed successfully, session established:', {
+                  userId: sessionData.session.user.id,
+                  email: sessionData.session.user.email
+                });
+              }
+              setUser(sessionData.session.user);
+
+              // Clear any error state
+              clearError();
+            } else {
+              console.warn('Session data missing after setSession');
+              setError('Email confirmation incomplete. Please try signing in.');
             }
-            setUser(sessionData.session.user);
-
-            // Clear the hash from URL
-            window.history.replaceState(null, '', window.location.pathname);
-
-            // Clear any error state
-            clearError();
+          } catch (e: any) {
+            console.error('Exception during session setup:', e);
+            setError('Error confirming email: ' + (e?.message || String(e)));
           }
+
+          // Clear the hash from URL regardless of success/failure
+          window.history.replaceState(null, '', window.location.pathname);
         } else {
           // Normal auth check
           const { data, error: authErr } = await supabase.auth.getUser();
@@ -694,6 +724,9 @@ export function useCloudSync(): UseCloudSync {
         console.log("Supabase configured:", !!supabase);
       }
 
+      // Use current origin for redirect (works for any deployment URL)
+      const redirectUrl = window.location.origin;
+
       const { data, error: err } = await supabase.auth.signUp({
         email,
         password,
@@ -701,7 +734,7 @@ export function useCloudSync(): UseCloudSync {
           data: {
             signup_source: 'navigator_web'
           },
-          emailRedirectTo: 'https://fieldnav.app' // Redirect back to app after email confirmation
+          emailRedirectTo: redirectUrl // Redirect back to app after email confirmation
         }
       });
 
@@ -828,8 +861,10 @@ export function useCloudSync(): UseCloudSync {
       clearError();
       if (!supabase) throw new Error("Supabase not configured");
 
+      const redirectUrl = window.location.origin;
+
       const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://fieldnav.app'
+        redirectTo: redirectUrl
       });
 
       if (err) {
