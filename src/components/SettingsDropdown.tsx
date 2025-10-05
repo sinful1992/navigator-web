@@ -335,7 +335,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
           position: absolute;
           top: 100%;
           right: 0;
-          z-index: 1000;
+          z-index: 10000;
           min-width: 320px;
           max-width: 400px;
           background: white;
