@@ -61,6 +61,18 @@ interface AdminAction {
   admin_email?: string;
 }
 
+interface UpcomingDeletion {
+  user_id: string;
+  user_email: string;
+  last_activity_at: string;
+  deletion_scheduled_for: string;
+  warning_sent_at: string;
+  warning_acknowledged: boolean;
+  cancelled: boolean;
+  days_until_deletion: number;
+  has_active_subscription: boolean;
+}
+
 interface AdminDashboardProps {
   user: User;
   onClose?: () => void;
@@ -70,9 +82,10 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [subscriptions, setSubscriptions] = useState<SubscriptionOverview[]>([]);
   const [recentActions, setRecentActions] = useState<AdminAction[]>([]);
+  const [upcomingDeletions, setUpcomingDeletions] = useState<UpcomingDeletion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'subscriptions' | 'actions' | 'settings'>('subscriptions');
+  const [activeTab, setActiveTab] = useState<'subscriptions' | 'actions' | 'inactive' | 'settings'>('subscriptions');
 
   // Form states
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -159,6 +172,18 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
       }));
       setRecentActions(formattedActions);
 
+      // Load upcoming deletions
+      const { data: deletionsData, error: deletionsError } = await supabase
+        .from('admin_upcoming_deletions')
+        .select('*')
+        .order('deletion_scheduled_for', { ascending: true });
+
+      if (!deletionsError) {
+        setUpcomingDeletions(deletionsData || []);
+      } else {
+        console.warn('Failed to load upcoming deletions:', deletionsError);
+      }
+
     } catch (e: any) {
       setError(e.message || 'Failed to load admin data');
     } finally {
@@ -206,7 +231,7 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
 
     try {
       setActionLoading('extend');
-      
+
       const { error } = await supabase
         .rpc('admin_extend_trial', {
           target_user_id: selectedUserId,
@@ -218,16 +243,47 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
 
       // Refresh data
       await loadAdminData();
-      
+
       // Reset form
       setSelectedUserId('');
       setExtendDays(7);
       setAdminNotes('');
-      
+
       alert('Trial extended successfully!');
 
     } catch (e: any) {
       alert('Failed to extend trial: ' + e.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Cancel scheduled deletion for user
+  const handleCancelDeletion = async (userId: string, userEmail: string) => {
+    if (!supabase) return;
+
+    const confirmed = confirm(`Cancel scheduled deletion for ${userEmail}?`);
+    if (!confirmed) return;
+
+    try {
+      setActionLoading('cancel-deletion');
+
+      // Update warnings to mark as cancelled
+      const { error } = await supabase
+        .from('inactive_account_warnings')
+        .update({ cancelled: true, warning_acknowledged: true })
+        .eq('user_id', userId)
+        .eq('cancelled', false);
+
+      if (error) throw error;
+
+      // Refresh data
+      await loadAdminData();
+
+      alert(`Scheduled deletion cancelled for ${userEmail}`);
+
+    } catch (e: any) {
+      alert('Failed to cancel deletion: ' + e.message);
     } finally {
       setActionLoading(null);
     }
@@ -302,19 +358,25 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
       </div>
 
       <div className="admin-tabs">
-        <button 
+        <button
           className={activeTab === 'subscriptions' ? 'active' : ''}
           onClick={() => setActiveTab('subscriptions')}
         >
           Subscriptions ({subscriptions.length})
         </button>
-        <button 
+        <button
           className={activeTab === 'actions' ? 'active' : ''}
           onClick={() => setActiveTab('actions')}
         >
           Recent Actions ({recentActions.length})
         </button>
-        <button 
+        <button
+          className={activeTab === 'inactive' ? 'active' : ''}
+          onClick={() => setActiveTab('inactive')}
+        >
+          Inactive Accounts ({upcomingDeletions.length})
+        </button>
+        <button
           className={activeTab === 'settings' ? 'active' : ''}
           onClick={() => setActiveTab('settings')}
         >
@@ -474,6 +536,96 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'inactive' && (
+        <div className="inactive-tab">
+          <h3>Upcoming Account Deletions (GDPR Compliance)</h3>
+          {upcomingDeletions.length === 0 ? (
+            <div className="no-deletions">
+              <p>No accounts scheduled for deletion. All users are active! 🎉</p>
+            </div>
+          ) : (
+            <div className="deletions-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>User Email</th>
+                    <th>Last Activity</th>
+                    <th>Warning Sent</th>
+                    <th>Deletion Date</th>
+                    <th>Days Until</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {upcomingDeletions.map(deletion => (
+                    <tr key={deletion.user_id}>
+                      <td>{deletion.user_email}</td>
+                      <td>{formatDate(deletion.last_activity_at)}</td>
+                      <td>{formatDate(deletion.warning_sent_at)}</td>
+                      <td>{formatDate(deletion.deletion_scheduled_for)}</td>
+                      <td>
+                        <span style={{
+                          color: deletion.days_until_deletion <= 7 ? 'var(--danger)' : 'var(--text)',
+                          fontWeight: deletion.days_until_deletion <= 7 ? '700' : '400'
+                        }}>
+                          {deletion.days_until_deletion} days
+                        </span>
+                      </td>
+                      <td>
+                        {deletion.warning_acknowledged ? (
+                          <span style={{ color: 'var(--primary)' }}>Acknowledged</span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>Pending</span>
+                        )}
+                      </td>
+                      <td>
+                        <button
+                          className="cancel-btn"
+                          onClick={() => handleCancelDeletion(deletion.user_id, deletion.user_email)}
+                          disabled={actionLoading !== null}
+                          style={{
+                            background: 'var(--danger)',
+                            color: 'white',
+                            border: 'none',
+                            padding: '0.375rem 0.75rem',
+                            borderRadius: 'var(--radius)',
+                            cursor: 'pointer',
+                            fontSize: '0.625rem',
+                            fontWeight: '600',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          Cancel Deletion
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="deletion-info" style={{
+                marginTop: '1rem',
+                padding: '1rem',
+                background: 'var(--surface)',
+                border: '1px solid var(--border-light)',
+                borderRadius: 'var(--radius)',
+                fontSize: '0.75rem',
+                color: 'var(--text-muted)'
+              }}>
+                <p><strong>How it works:</strong></p>
+                <ul style={{ marginLeft: '1.5rem', marginTop: '0.5rem' }}>
+                  <li>Accounts inactive for 5 months receive a warning email</li>
+                  <li>After 6 months of inactivity, account is automatically deleted</li>
+                  <li>Users can prevent deletion by simply logging in or creating data</li>
+                  <li>Active subscriptions are never deleted automatically</li>
+                  <li>Admins can cancel scheduled deletions manually using the button above</li>
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -485,9 +485,41 @@ export function useCloudSync(): UseCloudSync {
           }
           return;
         }
-        const { data, error: authErr } = await supabase.auth.getUser();
-        if (authErr) throw authErr;
-        if (mounted) setUser(data.user ?? null);
+
+        // Check for email confirmation or password reset tokens in URL
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const type = hashParams.get('type');
+
+        if (accessToken && type) {
+          if (import.meta.env.DEV) {
+            console.log('Detected auth callback:', type);
+          }
+
+          // Let Supabase handle the session from the URL
+          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+          if (sessionError) {
+            console.error('Error getting session from URL:', sessionError);
+            setError(sessionError.message);
+          } else if (sessionData.session) {
+            if (import.meta.env.DEV) {
+              console.log('Email confirmed successfully, session established');
+            }
+            setUser(sessionData.session.user);
+
+            // Clear the hash from URL
+            window.history.replaceState(null, '', window.location.pathname);
+
+            // Clear any error state
+            clearError();
+          }
+        } else {
+          // Normal auth check
+          const { data, error: authErr } = await supabase.auth.getUser();
+          if (authErr) throw authErr;
+          if (mounted) setUser(data.user ?? null);
+        }
       } catch (e: any) {
         // Ignore "Auth session missing!" - it's a normal state when not logged in
         if (mounted && e?.message !== 'Auth session missing!') {
@@ -505,9 +537,13 @@ export function useCloudSync(): UseCloudSync {
       if (mounted) {
         setUser(session?.user ?? null);
 
-        // Clear any error messages when user successfully signs in
-        if (event === 'SIGNED_IN' && session) {
+        // Clear any error messages when user successfully signs in or confirms email
+        if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session) {
           clearError();
+
+          if (import.meta.env.DEV) {
+            console.log('Auth state changed:', event);
+          }
         }
       }
     });
@@ -516,7 +552,7 @@ export function useCloudSync(): UseCloudSync {
       mounted = false; // RACE CONDITION FIX: Set mounted to false on cleanup
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [clearError]);
 
   // ---- Online/offline tracking and queue processing ----
   useEffect(() => {
@@ -705,15 +741,17 @@ export function useCloudSync(): UseCloudSync {
           // Don't throw - user is created, just missing subscription setup
         }
 
-        // If no session was created, check if email confirmation is required
+        // If no session was created, email confirmation is required
         if (!data.session) {
           if (import.meta.env.DEV) {
-            console.log("No session created during signup - email confirmation likely required");
+            console.log("No session created during signup - email confirmation required");
           }
 
           // Email confirmation is enabled - inform user to check email
-          setError("Please check your email to confirm your account before signing in.");
-          throw new Error("Email confirmation required");
+          setError("✉️ Check your email! Click the confirmation link to activate your account.");
+
+          // Don't throw error - just return with user data
+          return { user: data.user! };
         }
 
         setUser(data.user);
