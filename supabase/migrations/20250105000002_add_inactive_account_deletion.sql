@@ -235,7 +235,10 @@ GRANT EXECUTE ON FUNCTION delete_inactive_accounts TO authenticated;
 COMMENT ON FUNCTION delete_inactive_accounts IS 'Automatically deletes accounts inactive for 6+ months after warning. Run this monthly via cron.';
 
 -- Function to cancel scheduled deletion when user logs in
--- Drop existing function first (makes migration idempotent)
+-- Drop trigger first (it depends on the function)
+DROP TRIGGER IF EXISTS on_user_login_cancel_deletion ON auth.users;
+
+-- Now drop the function (makes migration idempotent)
 DROP FUNCTION IF EXISTS cancel_inactive_account_deletion();
 
 CREATE OR REPLACE FUNCTION cancel_inactive_account_deletion()
@@ -255,7 +258,6 @@ END;
 $$;
 
 -- Trigger to auto-cancel deletion when user signs in
-DROP TRIGGER IF EXISTS on_user_login_cancel_deletion ON auth.users;
 CREATE TRIGGER on_user_login_cancel_deletion
   AFTER UPDATE OF last_sign_in_at ON auth.users
   FOR EACH ROW

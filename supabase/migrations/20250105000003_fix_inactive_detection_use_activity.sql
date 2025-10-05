@@ -228,7 +228,11 @@ COMMENT ON VIEW admin_upcoming_deletions IS 'Admin view of accounts scheduled fo
 
 -- Update the auto-cancel trigger to also consider activity
 -- When user creates ANY data in navigator_operations, cancel pending deletion
+-- Drop trigger first (it depends on the function)
 DROP TRIGGER IF EXISTS on_operation_activity_cancel_deletion ON navigator_operations;
+
+-- Now drop the function (makes migration idempotent)
+DROP FUNCTION IF EXISTS cancel_deletion_on_activity();
 
 CREATE OR REPLACE FUNCTION cancel_deletion_on_activity()
 RETURNS TRIGGER
