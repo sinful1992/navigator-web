@@ -8,6 +8,8 @@ export interface Settings {
   darkMode: boolean;
   pushNotifications: boolean;
   autoSyncOnStart: boolean;
+  confirmBeforeDelete: boolean;
+  keepDataForMonths: 0 | 3 | 6 | 12; // 0 = forever
 }
 
 // Pre-defined reminder texts for SMS
@@ -25,6 +27,8 @@ const DEFAULT_SETTINGS: Settings = {
   darkMode: false,
   pushNotifications: true,
   autoSyncOnStart: true,
+  confirmBeforeDelete: true,
+  keepDataForMonths: 6,
 };
 
 // Key for localStorage
@@ -72,9 +76,13 @@ export const useSettings = () => {
   const toggleDarkMode = () => updateSettings({ darkMode: !settings.darkMode });
   const togglePushNotifications = () => updateSettings({ pushNotifications: !settings.pushNotifications });
   const toggleAutoSync = () => updateSettings({ autoSyncOnStart: !settings.autoSyncOnStart });
+  const toggleConfirmBeforeDelete = () => updateSettings({ confirmBeforeDelete: !settings.confirmBeforeDelete });
 
   // Update reminder text
   const updateReminderText = (text: string) => updateSettings({ reminderText: text });
+
+  // Update data retention
+  const updateKeepDataForMonths = (months: 0 | 3 | 6 | 12) => updateSettings({ keepDataForMonths: months });
 
   return {
     settings,
@@ -83,7 +91,9 @@ export const useSettings = () => {
     toggleDarkMode,
     togglePushNotifications,
     toggleAutoSync,
+    toggleConfirmBeforeDelete,
     updateReminderText,
+    updateKeepDataForMonths,
     predefinedReminders: PREDEFINED_REMINDERS,
   };
 };

@@ -12,6 +12,8 @@ import {
   getStorageInfo,
   clearLocalCaches
 } from '../utils/dataExport';
+// @ts-ignore
+import packageJson from '../../package.json';
 
 interface SettingsDropdownProps {
   trigger?: React.ReactNode;
@@ -44,6 +46,8 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     toggleDarkMode,
     togglePushNotifications,
     toggleAutoSync,
+    toggleConfirmBeforeDelete,
+    updateKeepDataForMonths,
   } = useSettings();
 
   // Load storage info when dropdown opens
@@ -215,12 +219,53 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
             </div>
           </div>
 
+          <div className="settings-separator" />
+
+          {/* Safety & Data Management */}
+          <div className="settings-section">
+            <div className="setting-item">
+              <div className="setting-info">
+                <label htmlFor="confirm-delete" className="setting-label">
+                  Ask before deleting
+                </label>
+                <p className="setting-description">
+                  Confirm before deleting completions, addresses, or arrangements
+                </p>
+              </div>
+              <ToggleSwitch
+                id="confirm-delete"
+                checked={settings.confirmBeforeDelete}
+                onChange={toggleConfirmBeforeDelete}
+              />
+            </div>
+
+            <div className="setting-item-column">
+              <label htmlFor="data-retention" className="setting-label">
+                Keep data for
+              </label>
+              <select
+                id="data-retention"
+                className="settings-select"
+                value={settings.keepDataForMonths}
+                onChange={(e) => updateKeepDataForMonths(Number(e.target.value) as 0 | 3 | 6 | 12)}
+              >
+                <option value={3}>3 months</option>
+                <option value={6}>6 months</option>
+                <option value={12}>1 year</option>
+                <option value={0}>Forever</option>
+              </select>
+              <p className="setting-description">
+                Automatically removes old completions and arrangements once per day
+              </p>
+            </div>
+          </div>
+
           {/* Account Management */}
           {(onChangePassword || onChangeEmail || onDeleteAccount) && (
             <>
               <div className="settings-separator" />
               <div className="settings-section">
-                <h4 className="settings-section-title" style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>Account Management</h4>
+                <h4 className="settings-section-title">Account Management</h4>
 
                 {onChangePassword && (
                   <button
@@ -228,18 +273,6 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
                     onClick={() => {
                       onChangePassword();
                       setIsOpen(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-light)',
-                      borderRadius: 'var(--radius)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      marginBottom: '0.5rem'
                     }}
                   >
                     <span>🔑</span>
@@ -254,18 +287,6 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
                       onChangeEmail();
                       setIsOpen(false);
                     }}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-light)',
-                      borderRadius: 'var(--radius)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      marginBottom: '0.5rem'
-                    }}
                   >
                     <span>📧</span>
                     <span>Change Email</span>
@@ -274,22 +295,10 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
 
                 {onDeleteAccount && (
                   <button
-                    className="settings-action-button"
+                    className="settings-action-button danger"
                     onClick={() => {
                       onDeleteAccount();
                       setIsOpen(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      background: 'var(--danger-light)',
-                      border: '1px solid var(--danger)',
-                      borderRadius: 'var(--radius)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      color: 'var(--danger)'
                     }}
                   >
                     <span>🗑️</span>
@@ -303,35 +312,20 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
           {/* Privacy & Data (GDPR Compliance) */}
           <div className="settings-separator" />
           <div className="settings-section">
-            <h4 className="settings-section-title" style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>Privacy & Data (GDPR)</h4>
+            <h4 className="settings-section-title">Privacy & Data (GDPR)</h4>
 
             {/* Storage Usage */}
             {storageInfo && (
-              <div style={{
-                padding: '0.75rem',
-                background: 'var(--bg-secondary)',
-                borderRadius: 'var(--radius)',
-                marginBottom: '0.75rem',
-                border: '1px solid var(--border-light)'
-              }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
-                  Storage Usage
-                </div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+              <div className="storage-card">
+                <div className="storage-label">Storage Usage</div>
+                <div className="storage-value">
                   {storageInfo.usedMB} MB / {storageInfo.quotaMB} MB ({storageInfo.percentage}%)
                 </div>
-                <div style={{
-                  height: '6px',
-                  background: 'var(--gray-200)',
-                  borderRadius: '3px',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{
-                    width: `${storageInfo.percentage}%`,
-                    height: '100%',
-                    background: storageInfo.percentage > 80 ? 'var(--danger)' : 'var(--primary)',
-                    transition: 'width 0.3s'
-                  }} />
+                <div className="storage-bar">
+                  <div
+                    className={`storage-bar-fill ${storageInfo.percentage > 80 ? 'warning' : ''}`}
+                    style={{ width: `${storageInfo.percentage}%` }}
+                  />
                 </div>
               </div>
             )}
@@ -344,40 +338,19 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
                     exportDataAsJSON(appState, userEmail);
                     setIsOpen(false);
                   }}
-                  className="settings-action-button"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: 'var(--primary-light)',
-                    border: '1px solid var(--primary)',
-                    borderRadius: 'var(--radius)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    marginBottom: '0.5rem',
-                    color: 'var(--primary)'
-                  }}
+                  className="settings-action-button primary"
                 >
                   <span>📥</span>
                   <span>Export All Data (JSON)</span>
                 </button>
 
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <div className="button-group">
                   <button
                     onClick={() => {
                       exportCompletionsAsCSV(appState);
                       setIsOpen(false);
                     }}
-                    style={{
-                      flex: 1,
-                      padding: '0.625rem',
-                      background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-light)',
-                      borderRadius: 'var(--radius)',
-                      cursor: 'pointer',
-                      fontSize: '0.8125rem'
-                    }}
+                    className="settings-action-button small"
                   >
                     Export Completions (CSV)
                   </button>
@@ -386,15 +359,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
                       exportArrangementsAsCSV(appState);
                       setIsOpen(false);
                     }}
-                    style={{
-                      flex: 1,
-                      padding: '0.625rem',
-                      background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-light)',
-                      borderRadius: 'var(--radius)',
-                      cursor: 'pointer',
-                      fontSize: '0.8125rem'
-                    }}
+                    className="settings-action-button small"
                   >
                     Export Arrangements (CSV)
                   </button>
@@ -406,48 +371,22 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
             <button
               onClick={async () => {
                 await clearLocalCaches();
-                setStorageInfo(null); // Refresh storage info
+                setStorageInfo(null);
                 setTimeout(() => getStorageInfo().then(setStorageInfo), 500);
               }}
               className="settings-action-button"
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border-light)',
-                borderRadius: 'var(--radius)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                marginBottom: '0.75rem'
-              }}
             >
               <span>🗑️</span>
               <span>Clear Cache & Temporary Data</span>
             </button>
 
             {/* Privacy Links */}
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div className="button-group">
               <a
                 href="/PRIVACY.md"
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{
-                  flex: 1,
-                  padding: '0.625rem',
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: 'var(--radius)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  fontSize: '0.8125rem'
-                }}
+                className="settings-link-button"
               >
                 <span>🔒</span>
                 <span>Privacy Policy</span>
@@ -457,21 +396,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
                 href="/TERMS_OF_USE.md"
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{
-                  flex: 1,
-                  padding: '0.625rem',
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: 'var(--radius)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  fontSize: '0.8125rem'
-                }}
+                className="settings-link-button"
               >
                 <span>📄</span>
                 <span>Terms</span>
@@ -481,11 +406,15 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
 
           {/* Footer note */}
           <div className="settings-footer">
-            Settings are saved locally and synced to cloud if configured.
-            <br />
-            <a href="/PRIVACY.md" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline', fontSize: '0.75rem' }}>
+            <div className="footer-text">
+              Settings are saved locally and synced to cloud if configured.
+            </div>
+            <a href="/PRIVACY.md" target="_blank" rel="noopener noreferrer" className="footer-link">
               Your privacy rights
             </a>
+            <div className="footer-version">
+              Version {packageJson.version}
+            </div>
           </div>
         </div>
       )}
@@ -505,6 +434,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
       )}
 
       <style>{`
+        /* Base Dropdown */
         .settings-dropdown {
           position: relative;
           display: inline-block;
@@ -514,90 +444,115 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          padding: 0.5rem 1rem;
-          background: var(--gray-100);
-          border: 1px solid var(--gray-200);
-          border-radius: var(--radius-md);
-          color: var(--gray-700);
+          padding: 0.625rem 1.125rem;
+          background: rgba(255, 255, 255, 0.95);
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          border-radius: 10px;
+          color: #374151;
           font-size: 0.875rem;
           font-weight: 500;
           cursor: pointer;
-          transition: var(--transition-normal);
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
         }
 
         .settings-trigger:hover {
-          background: var(--gray-200);
-          color: var(--gray-800);
+          background: white;
+          border-color: rgba(99, 102, 241, 0.3);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          transform: translateY(-1px);
         }
 
         .settings-icon {
-          font-size: 1rem;
+          font-size: 1.125rem;
         }
 
+        /* Dropdown Content - Modern Glassmorphism */
         .settings-dropdown-content {
           position: absolute;
-          top: 100%;
+          top: calc(100% + 8px);
           right: 0;
           z-index: 10000;
-          min-width: 320px;
-          max-width: 400px;
-          background: white;
-          border: 1px solid var(--gray-200);
-          border-radius: var(--radius-lg);
-          box-shadow: var(--shadow-xl);
+          min-width: 340px;
+          max-width: 420px;
+          background: rgba(255, 255, 255, 0.98);
+          backdrop-filter: blur(20px);
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          border-radius: 16px;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12), 0 8px 24px rgba(0, 0, 0, 0.06);
           padding: 1.5rem;
-          margin-top: 0.5rem;
-          animation: slideDown 0.2s ease-out;
+          animation: slideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         @keyframes slideDown {
           from {
             opacity: 0;
-            transform: translateY(-10px);
+            transform: translateY(-12px) scale(0.96);
           }
           to {
             opacity: 1;
-            transform: translateY(0);
+            transform: translateY(0) scale(1);
           }
         }
 
+        /* Header */
         .settings-header {
           margin-bottom: 1.5rem;
         }
 
         .settings-title {
-          font-size: 1.125rem;
-          font-weight: 600;
-          color: var(--gray-800);
-          margin: 0 0 0.25rem 0;
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #111827;
+          margin: 0 0 0.375rem 0;
+          letter-spacing: -0.02em;
         }
 
         .settings-subtitle {
           font-size: 0.875rem;
-          color: var(--gray-500);
+          color: #6b7280;
           margin: 0;
         }
 
+        /* Sections */
         .settings-section {
           margin-bottom: 1rem;
         }
 
-        .settings-separator {
-          height: 1px;
-          background: var(--gray-200);
-          margin: 1rem 0;
+        .settings-section-title {
+          font-size: 0.8125rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: #9ca3af;
+          margin: 0 0 0.875rem 0;
         }
 
+        .settings-separator {
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(0,0,0,0.08), transparent);
+          margin: 1.25rem 0;
+        }
+
+        /* Setting Items */
         .setting-item {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 1rem;
-          margin-bottom: 1rem;
+          gap: 1.25rem;
+          padding: 0.625rem 0;
+          margin-bottom: 0.75rem;
         }
 
         .setting-item:last-child {
           margin-bottom: 0;
+        }
+
+        .setting-item-column {
+          display: flex;
+          flex-direction: column;
+          gap: 0.625rem;
+          margin-bottom: 0.75rem;
         }
 
         .setting-info {
@@ -608,46 +563,50 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
           display: block;
           font-size: 0.875rem;
           font-weight: 500;
-          color: var(--gray-700);
+          color: #374151;
           margin-bottom: 0.25rem;
           cursor: pointer;
         }
 
         .setting-description {
           font-size: 0.75rem;
-          color: var(--gray-500);
+          color: #9ca3af;
           margin: 0.25rem 0 0 0;
-          line-height: 1.4;
+          line-height: 1.5;
         }
 
-        .settings-select,
-        .settings-input {
+        /* Form Elements */
+        .settings-select {
           width: 100%;
-          padding: 0.5rem 0.75rem;
-          border: 1px solid var(--gray-300);
-          border-radius: var(--radius-sm);
+          padding: 0.625rem 0.875rem;
+          border: 1.5px solid rgba(0, 0, 0, 0.1);
+          border-radius: 8px;
           font-size: 0.875rem;
           background: white;
-          transition: var(--transition-normal);
+          color: #374151;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .settings-select:focus,
-        .settings-input:focus {
+        .settings-select:hover {
+          border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .settings-select:focus {
           outline: none;
-          border-color: var(--primary);
-          box-shadow: 0 0 0 3px var(--primary-light);
+          border-color: #6366f1;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
 
-        .settings-input {
-          margin-top: 0.5rem;
-        }
-
+        /* Toggle Switch - Modern Design */
         .toggle-switch {
           position: relative;
           display: inline-block;
-          width: 44px;
-          height: 24px;
+          width: 48px;
+          height: 26px;
           cursor: pointer;
+          flex-shrink: 0;
         }
 
         .toggle-input {
@@ -658,106 +617,194 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
 
         .toggle-slider {
           position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: var(--gray-300);
-          border-radius: 24px;
-          transition: var(--transition-normal);
+          inset: 0;
+          background: #d1d5db;
+          border-radius: 26px;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .toggle-slider.checked {
-          background: var(--primary);
+          background: linear-gradient(135deg, #6366f1, #8b5cf6);
         }
 
         .toggle-thumb {
           position: absolute;
-          content: "";
-          height: 20px;
-          width: 20px;
+          height: 22px;
+          width: 22px;
           left: 2px;
           bottom: 2px;
           background: white;
           border-radius: 50%;
-          transition: var(--transition-normal);
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         }
 
         .toggle-slider.checked .toggle-thumb {
-          transform: translateX(20px);
+          transform: translateX(22px);
+          box-shadow: 0 3px 8px rgba(99, 102, 241, 0.3);
         }
 
-        .settings-footer {
-          margin-top: 1.5rem;
-          padding-top: 1rem;
-          border-top: 1px solid var(--gray-200);
+        /* Storage Card */
+        .storage-card {
+          padding: 1rem;
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
+          border: 1px solid rgba(99, 102, 241, 0.15);
+          border-radius: 12px;
+          margin-bottom: 0.875rem;
+        }
+
+        .storage-label {
           font-size: 0.75rem;
-          color: var(--gray-500);
-          text-align: center;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: #6366f1;
+          margin-bottom: 0.5rem;
         }
 
-        /* Dark mode styles */
-        .dark-mode .settings-dropdown-content {
-          background: var(--gray-800);
-          border-color: var(--gray-700);
-          color: var(--gray-100);
+        .storage-value {
+          font-size: 0.9375rem;
+          font-weight: 600;
+          color: #111827;
+          margin-bottom: 0.625rem;
         }
 
-        .dark-mode .settings-title {
-          color: var(--gray-100);
+        .storage-bar {
+          height: 8px;
+          background: rgba(0, 0, 0, 0.06);
+          border-radius: 8px;
+          overflow: hidden;
         }
 
-        .dark-mode .settings-subtitle,
-        .dark-mode .setting-description,
-        .dark-mode .settings-footer {
-          color: var(--gray-400);
+        .storage-bar-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #6366f1, #8b5cf6);
+          border-radius: 8px;
+          transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .dark-mode .setting-label {
-          color: var(--gray-200);
+        .storage-bar-fill.warning {
+          background: linear-gradient(90deg, #ef4444, #dc2626);
         }
 
-        .dark-mode .settings-separator {
-          background: var(--gray-700);
-        }
-
-        .dark-mode .settings-select,
-        .dark-mode .settings-input {
-          background: var(--gray-700);
-          border-color: var(--gray-600);
-          color: var(--gray-100);
-        }
-
-        .dark-mode .settings-select:focus,
-        .dark-mode .settings-input:focus {
-          border-color: var(--primary);
-        }
-
-        /* SMS Settings Button Styles */
-        .sms-settings-button {
+        /* Action Buttons */
+        .settings-action-button {
           width: 100%;
           display: flex;
           align-items: center;
           gap: 0.75rem;
-          padding: 0.75rem;
-          background: var(--gray-50);
-          border: 1px solid var(--gray-200);
-          border-radius: var(--radius-md);
-          color: var(--gray-700);
+          padding: 0.875rem 1rem;
+          background: white;
+          border: 1.5px solid rgba(0, 0, 0, 0.1);
+          border-radius: 10px;
+          font-size: 0.875rem;
+          font-weight: 500;
+          color: #374151;
           text-align: left;
           cursor: pointer;
-          transition: var(--transition-normal);
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          margin-bottom: 0.625rem;
+        }
+
+        .settings-action-button:hover {
+          background: #f9fafb;
+          border-color: rgba(99, 102, 241, 0.3);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .settings-action-button:active {
+          transform: translateY(0);
+        }
+
+        .settings-action-button.primary {
+          background: linear-gradient(135deg, #6366f1, #8b5cf6);
+          border-color: transparent;
+          color: white;
+          font-weight: 600;
+        }
+
+        .settings-action-button.primary:hover {
+          box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .settings-action-button.danger {
+          background: rgba(239, 68, 68, 0.05);
+          border-color: rgba(239, 68, 68, 0.2);
+          color: #dc2626;
+        }
+
+        .settings-action-button.danger:hover {
+          background: rgba(239, 68, 68, 0.1);
+          border-color: rgba(239, 68, 68, 0.4);
+        }
+
+        .settings-action-button.small {
+          padding: 0.75rem 0.875rem;
+          font-size: 0.8125rem;
+        }
+
+        /* Button Groups */
+        .button-group {
+          display: flex;
+          gap: 0.625rem;
+          margin-bottom: 0.625rem;
+        }
+
+        .button-group .settings-action-button,
+        .button-group .settings-link-button {
+          flex: 1;
+        }
+
+        /* Link Buttons */
+        .settings-link-button {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          padding: 0.75rem 0.875rem;
+          background: white;
+          border: 1.5px solid rgba(0, 0, 0, 0.1);
+          border-radius: 10px;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: #374151;
+          text-decoration: none;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .settings-link-button:hover {
+          background: #f9fafb;
+          border-color: rgba(99, 102, 241, 0.3);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        /* SMS Settings Button */
+        .sms-settings-button {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 0.875rem;
+          padding: 1rem;
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
+          border: 1.5px solid rgba(99, 102, 241, 0.15);
+          border-radius: 12px;
+          text-align: left;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .sms-settings-button:hover {
-          background: var(--gray-100);
-          border-color: var(--primary);
-          color: var(--gray-800);
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+          border-color: rgba(99, 102, 241, 0.3);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
         }
 
         .sms-settings-icon {
-          font-size: 1.25rem;
+          font-size: 1.5rem;
           flex-shrink: 0;
         }
 
@@ -766,48 +813,171 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
         }
 
         .sms-settings-title {
-          font-size: 0.875rem;
-          font-weight: 500;
-          color: var(--gray-800);
-          margin-bottom: 0.125rem;
+          font-size: 0.9375rem;
+          font-weight: 600;
+          color: #111827;
+          margin-bottom: 0.25rem;
         }
 
         .sms-settings-desc {
           font-size: 0.75rem;
-          color: var(--gray-500);
-          line-height: 1.3;
+          color: #6b7280;
+          line-height: 1.4;
         }
 
         .sms-settings-arrow {
-          font-size: 0.875rem;
-          color: var(--gray-400);
+          font-size: 1rem;
+          color: #9ca3af;
           flex-shrink: 0;
+          transition: transform 0.2s;
+        }
+
+        .sms-settings-button:hover .sms-settings-arrow {
+          transform: translateX(3px);
+        }
+
+        /* Footer */
+        .settings-footer {
+          margin-top: 1.5rem;
+          padding-top: 1.25rem;
+          border-top: 1px solid rgba(0, 0, 0, 0.06);
+          text-align: center;
+        }
+
+        .footer-text {
+          font-size: 0.75rem;
+          color: #9ca3af;
+          line-height: 1.5;
+          margin-bottom: 0.5rem;
+        }
+
+        .footer-link {
+          display: inline-block;
+          font-size: 0.75rem;
+          color: #6366f1;
+          text-decoration: none;
+          font-weight: 500;
+          margin-bottom: 0.75rem;
+          transition: color 0.2s;
+        }
+
+        .footer-link:hover {
+          color: #8b5cf6;
+          text-decoration: underline;
+        }
+
+        .footer-version {
+          font-size: 0.6875rem;
+          color: #d1d5db;
+          font-weight: 500;
+          margin-top: 0.75rem;
+        }
+
+        /* Dark Mode */
+        .dark-mode .settings-trigger {
+          background: rgba(31, 41, 55, 0.95);
+          border-color: rgba(255, 255, 255, 0.1);
+          color: #e5e7eb;
+        }
+
+        .dark-mode .settings-trigger:hover {
+          background: rgba(31, 41, 55, 1);
+          border-color: rgba(139, 92, 246, 0.3);
+        }
+
+        .dark-mode .settings-dropdown-content {
+          background: rgba(31, 41, 55, 0.98);
+          border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .dark-mode .settings-title {
+          color: #f9fafb;
+        }
+
+        .dark-mode .settings-subtitle,
+        .dark-mode .setting-description,
+        .dark-mode .footer-text {
+          color: #9ca3af;
+        }
+
+        .dark-mode .setting-label,
+        .dark-mode .sms-settings-title,
+        .dark-mode .storage-value {
+          color: #e5e7eb;
+        }
+
+        .dark-mode .settings-section-title,
+        .dark-mode .footer-version {
+          color: #6b7280;
+        }
+
+        .dark-mode .settings-separator {
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+        }
+
+        .dark-mode .settings-select {
+          background: rgba(17, 24, 39, 0.6);
+          border-color: rgba(255, 255, 255, 0.15);
+          color: #e5e7eb;
+        }
+
+        .dark-mode .settings-select:hover {
+          border-color: rgba(139, 92, 246, 0.4);
+        }
+
+        .dark-mode .storage-card {
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+          border-color: rgba(99, 102, 241, 0.25);
+        }
+
+        .dark-mode .storage-bar {
+          background: rgba(0, 0, 0, 0.3);
+        }
+
+        .dark-mode .settings-action-button,
+        .dark-mode .settings-link-button {
+          background: rgba(17, 24, 39, 0.6);
+          border-color: rgba(255, 255, 255, 0.15);
+          color: #e5e7eb;
+        }
+
+        .dark-mode .settings-action-button:hover,
+        .dark-mode .settings-link-button:hover {
+          background: rgba(17, 24, 39, 0.8);
+          border-color: rgba(139, 92, 246, 0.4);
+        }
+
+        .dark-mode .settings-action-button.primary {
+          background: linear-gradient(135deg, #6366f1, #8b5cf6);
+          border-color: transparent;
+          color: white;
+        }
+
+        .dark-mode .settings-action-button.danger {
+          background: rgba(239, 68, 68, 0.1);
+          border-color: rgba(239, 68, 68, 0.3);
+          color: #f87171;
         }
 
         .dark-mode .sms-settings-button {
-          background: var(--gray-700);
-          border-color: var(--gray-600);
-          color: var(--gray-200);
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+          border-color: rgba(99, 102, 241, 0.25);
         }
 
         .dark-mode .sms-settings-button:hover {
-          background: var(--gray-600);
-          border-color: var(--primary);
-          color: var(--gray-100);
-        }
-
-        .dark-mode .sms-settings-title {
-          color: var(--gray-100);
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.15));
+          border-color: rgba(99, 102, 241, 0.4);
         }
 
         .dark-mode .sms-settings-desc {
-          color: var(--gray-400);
+          color: #9ca3af;
         }
 
         .dark-mode .sms-settings-arrow {
-          color: var(--gray-500);
+          color: #6b7280;
         }
 
+        /* Mobile Responsive */
         @media (max-width: 768px) {
           .settings-dropdown-content {
             position: fixed;
@@ -815,10 +985,21 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
             left: 50%;
             right: auto;
             transform: translate(-50%, -50%);
-            min-width: 280px;
-            max-width: 90vw;
-            max-height: 90vh;
+            min-width: 300px;
+            max-width: 92vw;
+            max-height: 88vh;
             overflow-y: auto;
+          }
+
+          @keyframes slideDown {
+            from {
+              opacity: 0;
+              transform: translate(-50%, -50%) scale(0.95);
+            }
+            to {
+              opacity: 1;
+              transform: translate(-50%, -50%) scale(1);
+            }
           }
         }
       `}</style>

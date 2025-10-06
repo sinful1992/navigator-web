@@ -30,6 +30,9 @@ import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
 import { isProtectionActive } from "./utils/protectionFlags";
 import { PrivacyConsent } from "./components/PrivacyConsent";
+import { SyncStatusIcon } from "./components/SyncStatusIcon";
+import { shouldRunCleanup, performDataCleanup, applyDataCleanup } from "./services/dataCleanup";
+import { useSettings } from "./hooks/useSettings";
 
 type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
@@ -284,7 +287,8 @@ function AuthedApp() {
 
   const cloudSync = useCloudSync();
   const { confirm, alert } = useModalContext();
-  
+  const { settings } = useSettings();
+
   const { hasAccess } = useSubscription(cloudSync.user);
   const { isAdmin, isOwner } = useAdmin(cloudSync.user);
   const [showSubscription, setShowSubscription] = React.useState(false);
@@ -322,6 +326,25 @@ function AuthedApp() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // Data retention cleanup (runs once per day on app start)
+  React.useEffect(() => {
+    const runCleanup = async () => {
+      if (!shouldRunCleanup()) return;
+
+      const result = await performDataCleanup(state, settings.keepDataForMonths);
+      if (result && (result.deletedCompletions > 0 || result.deletedArrangements > 0)) {
+        // Apply cleanup to state
+        const cleanedState = applyDataCleanup(state, settings.keepDataForMonths);
+        setState(cleanedState);
+
+        // Log cleanup (silent - no user notification)
+        console.log(`Data cleanup completed: ${result.deletedCompletions} completions, ${result.deletedArrangements} arrangements, ${result.deletedSessions} sessions removed`);
+      }
+    };
+
+    runCleanup();
+  }, []); // Run only once on mount
 
   // Function to change tab with history support
   const navigateToTab = React.useCallback((newTab: Tab) => {
@@ -1316,6 +1339,8 @@ function AuthedApp() {
     return email.slice(0, 2).toUpperCase();
   };
 
+  // Sync status now handled by SyncStatusIcon component
+  /*
   const getSyncStatus = () => {
     if (cloudSync.isSyncing) {
       return { text: "Syncing", color: "var(--warning)" };
@@ -1328,8 +1353,8 @@ function AuthedApp() {
     }
     return { text: "Online", color: "var(--success)" };
   };
-
   const syncStatus = getSyncStatus();
+  */
 
   if (loading) {
     return (
@@ -1429,15 +1454,11 @@ function AuthedApp() {
           </div>
 
           <div className="header-center">
-            <div className="sync-status">
-              <div className="sync-indicator" style={{ background: syncStatus.color }} />
-              <span>{syncStatus.text}</span>
-              {cloudSync.lastSyncTime && (
-                <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>
-                  {cloudSync.lastSyncTime.toLocaleTimeString()}
-                </span>
-              )}
-            </div>
+            <SyncStatusIcon
+              lastSyncTime={cloudSync.lastSyncTime}
+              isSyncing={cloudSync.isSyncing}
+              onForceSync={cloudSync.forceFullSync}
+            />
             <SettingsDropdown
               reminderSettings={state.reminderSettings}
               onUpdateReminderSettings={updateReminderSettings}
