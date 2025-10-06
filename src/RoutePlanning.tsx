@@ -234,7 +234,7 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
     try {
       const addressRows = addresses.map(geocodingResultToAddressRow);
 
-      // Use starting point if selected
+      // Use starting point if selected (optional)
       let startLocation: [number, number] | undefined;
       if (startingPointIndex !== null && startingPointIndex >= 0) {
         const startAddr = addresses[startingPointIndex];
@@ -243,6 +243,7 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
         }
       }
 
+      // ALWAYS one-way route - VROOM will find the best route ending at the last optimized stop
       const result = await optimizeRoute(addressRows, startLocation);
 
       setOptimizationResult({
@@ -593,7 +594,7 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
                       fontSize: '0.75rem',
                       fontWeight: '600'
                     }}>
-                      Start: #{startingPointIndex + 1}
+                      🏠 Start: #{startingPointIndex + 1}
                     </span>
                   )}
                 </div>
@@ -694,7 +695,7 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
                     marginBottom: index < addresses.length - 1 ? '0.5rem' : '0'
                   }}
                 >
-                  {/* Number Badge */}
+                  {/* Number Badge - Click to set as starting point */}
                   <div style={{
                     minWidth: '2rem',
                     height: '2rem',
@@ -708,10 +709,16 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
                     fontSize: '0.875rem',
                     fontWeight: 'bold',
                     flexShrink: 0,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    border: index === startingPointIndex ? '2px solid white' : 'none'
                   }}
-                  onClick={() => setStartingPointIndex(index === startingPointIndex ? null : index)}
-                  title={index === startingPointIndex ? 'Remove as starting point' : 'Set as starting point'}
+                  onClick={() => {
+                    setStartingPointIndex(index === startingPointIndex ? null : index);
+                  }}
+                  title={
+                    index === startingPointIndex ? 'Starting Point (click to clear)' :
+                    'Click to set as starting point'
+                  }
                   >
                     {index === startingPointIndex ? '🏠' : index + 1}
                   </div>

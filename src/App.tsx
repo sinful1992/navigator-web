@@ -1,7 +1,6 @@
 // src/App.tsx - Complete Modern Design with Right Sidebar
 import * as React from "react";
 import "./App.css"; // Use the updated modern CSS
-import { ImportExcel } from "./ImportExcel";
 import { useAppState } from "./useAppState";
 import { normalizeState, normalizeBackupData } from "./utils/normalizeState";
 import { SmartUserDetection } from "./utils/userDetection";
@@ -294,7 +293,6 @@ function AuthedApp() {
   const [showSubscription, setShowSubscription] = React.useState(false);
   const [showAdmin, setShowAdmin] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
-  const [toolsOpen, setToolsOpen] = React.useState(false);
   const [showSupabaseSetup, setShowSupabaseSetup] = React.useState(false);
   const [showBackupManager, setShowBackupManager] = React.useState(false);
   const [showChangePassword, setShowChangePassword] = React.useState(false);
@@ -1467,6 +1465,65 @@ function AuthedApp() {
               onDeleteAccount={() => setShowDeleteAccount(true)}
               appState={state}
               userEmail={cloudSync.user?.email}
+              onImportExcel={async (file) => {
+                // Process Excel file inline using same logic as ImportExcel component
+                try {
+                  const XLSX = await import('xlsx');
+                  const data = await file.arrayBuffer();
+                  const wb = XLSX.read(data, { type: "array" });
+                  const ws = wb.Sheets[wb.SheetNames[0]];
+                  const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+                  if (!rows.length) {
+                    alert({ message: "📄 File appears to be empty. Please check your Excel file." });
+                    return;
+                  }
+
+                  const header = (rows[0] || []).map((x) => String(x ?? "").trim().toLowerCase());
+                  let addrIdx = header.findIndex((h) => h.includes("address"));
+                  if (addrIdx === -1) addrIdx = 0;
+
+                  const latRaw = header.findIndex((h) => h === "lat" || h.includes("latitude"));
+                  const lngRaw = header.findIndex((h) => h === "lng" || h === "lon" || h.includes("longitude"));
+                  const latCol: number | undefined = latRaw === -1 ? undefined : latRaw;
+                  const lngCol: number | undefined = lngRaw === -1 ? undefined : lngRaw;
+
+                  const out: AddressRow[] = [];
+                  for (let r = 1; r < rows.length; r++) {
+                    const row = rows[r] || [];
+                    const address = String(row[addrIdx] ?? "").trim();
+                    if (!address) continue;
+
+                    const lat = latCol !== undefined && row[latCol] != null && row[latCol] !== "" ? Number(row[latCol]) : undefined;
+                    const lng = lngCol !== undefined && row[lngCol] != null && row[lngCol] !== "" ? Number(row[lngCol]) : undefined;
+
+                    out.push({ address, lat, lng });
+                  }
+
+                  if (out.length === 0) {
+                    alert({ message: "🚫 No valid addresses found in the file. Please check the format." });
+                    return;
+                  }
+
+                  handleImportExcel(out);
+                  console.log(`✅ Successfully imported ${out.length} addresses!`);
+                } catch (err) {
+                  console.error(err);
+                  alert({ message: "❌ Failed to read Excel file. Please ensure it's a valid .xlsx or .xls file." });
+                }
+              }}
+              onRestoreBackup={onRestore}
+              onManualSync={handleManualSync}
+              isSyncing={cloudSync.isSyncing}
+              onShowBackupManager={() => setShowBackupManager(true)}
+              onShowCloudBackups={async () => {
+                setCloudMenuOpen(true);
+                await loadRecentCloudBackups();
+              }}
+              onShowSubscription={() => setShowSubscription(true)}
+              onShowSupabaseSetup={() => setShowSupabaseSetup(true)}
+              onSignOut={cloudSync.signOut}
+              hasSupabase={!!supabase}
             />
           </div>
 
@@ -1477,47 +1534,6 @@ function AuthedApp() {
 
         {/* Content Area */}
         <div className="content-area">
-          {/* Tools Panel (collapsible) */}
-          {toolsOpen && tab === "list" && (
-            <div style={{
-              background: "var(--surface)",
-              padding: "1rem",
-              borderRadius: "var(--radius-lg)",
-              marginBottom: "1.5rem",
-              border: "1px solid var(--border-light)",
-              boxShadow: "var(--shadow-sm)"
-            }}>
-              <div className="btn-row" style={{ gap: '0.75rem', flexWrap: 'wrap', alignItems: 'stretch' }}>
-                <ImportExcel onImported={handleImportExcel} />
-
-                <input
-                  type="file"
-                  accept="application/json"
-                  onChange={onRestore}
-                  className="file-input"
-                  id="restore-input"
-                  style={{ display: 'none' }}
-                />
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => document.getElementById('restore-input')?.click()}
-                  style={{ whiteSpace: 'nowrap' }}
-                >
-                  📂 Restore Backup
-                </button>
-
-                <button
-                  className="btn btn-ghost"
-                  onClick={handleManualSync}
-                  disabled={cloudSync.isSyncing}
-                  style={{ whiteSpace: 'nowrap' }}
-                >
-                  {cloudSync.isSyncing ? "⟳ Syncing..." : "🔄 Sync Now"}
-                </button>
-              </div>
-            </div>
-          )}
-
           {tab === "list" && (
             <>
               {/* Original Day Panel with Full Editing */}
@@ -1730,51 +1746,16 @@ function AuthedApp() {
             </div>
           </div>
 
-          <div className="nav-section">
-            <div className="nav-section-title">Tools</div>
-            <div className="nav-item" onClick={() => { setToolsOpen(!toolsOpen); setSidebarOpen(false); }}>
-              <span className="nav-icon">🛠️</span>
-              <span>Import/Export</span>
-            </div>
-            <div className="nav-item" onClick={() => { setShowBackupManager(true); setSidebarOpen(false); }}>
-              <span className="nav-icon">💾</span>
-              <span>Backup Manager</span>
-            </div>
-            {supabase && (
-              <div className="nav-item" onClick={async () => {
-                setCloudMenuOpen(true);
-                await loadRecentCloudBackups();
-                setSidebarOpen(false);
-              }}>
-                <span className="nav-icon">☁️</span>
-                <span>Cloud Backups</span>
-              </div>
-            )}
-            {!supabase && (
-              <div className="nav-item" onClick={() => { setShowSupabaseSetup(true); setSidebarOpen(false); }}>
-                <span className="nav-icon">🔗</span>
-                <span>Connect Cloud Storage</span>
-              </div>
-            )}
-          </div>
-
-          <div className="nav-section">
-            <div className="nav-section-title">Account</div>
-            <div className="nav-item" onClick={() => { setShowSubscription(true); setSidebarOpen(false); }}>
-              <span className="nav-icon">⭐</span>
-              <span>Subscription</span>
-            </div>
-            {isAdmin && (
+          {/* Admin section - only visible for admins */}
+          {isAdmin && (
+            <div className="nav-section">
+              <div className="nav-section-title">Admin</div>
               <div className="nav-item" onClick={() => { setShowAdmin(true); setSidebarOpen(false); }}>
                 <span className="nav-icon">👑</span>
                 <span>Admin Panel</span>
               </div>
-            )}
-            <div className="nav-item" onClick={cloudSync.signOut}>
-              <span className="nav-icon">🚪</span>
-              <span>Sign Out</span>
             </div>
-          </div>
+          )}
         </nav>
       </aside>
 

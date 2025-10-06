@@ -120,8 +120,7 @@ export async function searchAddresses(
  */
 export async function optimizeRoute(
   addresses: AddressRow[],
-  startLocation?: [number, number],
-  endLocation?: [number, number]
+  startLocation?: [number, number]
 ): Promise<RouteOptimizationResult> {
   if (!supabase) {
     throw new Error('Supabase client not available');
@@ -170,16 +169,30 @@ export async function optimizeRoute(
         lat: addr.lat!,
         lng: addr.lng!
       })),
-      startLocation,
-      endLocation
+      startLocation
+      // NOTE: No endLocation - VROOM will optimize a one-way route
     };
 
     console.log('Route optimization request:', {
       addressCount: requestBody.addresses.length,
       hasStartLocation: !!startLocation,
-      hasEndLocation: !!endLocation,
       firstAddress: requestBody.addresses[0]
     });
+
+    /**
+     * IMPORTANT: Backend Edge Function should configure VROOM vehicle for ONE-WAY routes:
+     *
+     * vehicle = {
+     *   id: 1,
+     *   start: startLocation,  // Optional starting location
+     *   // NO end property - VROOM will find the best one-way route ending at the last optimized stop
+     * }
+     *
+     * See VROOM docs: https://github.com/VROOM-Project/vroom/blob/master/docs/API.md#vehicles
+     *
+     * "At least one of start or end must be present"
+     * "If end is omitted, the resulting route will stop at the last visited task"
+     */
 
     // Try direct HTTP request to get better error details
     let data = null;

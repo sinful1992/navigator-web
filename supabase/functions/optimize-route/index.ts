@@ -12,8 +12,7 @@ interface RouteOptimizationRequest {
     lat: number;
     lng: number;
   }>;
-  startLocation?: [number, number]; // [lng, lat]
-  endLocation?: [number, number];
+  startLocation?: [number, number]; // [lng, lat] - Optional starting point
 }
 
 interface RouteOptimizationResult {
@@ -80,7 +79,7 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { addresses, startLocation, endLocation }: RouteOptimizationRequest = await req.json()
+    const { addresses, startLocation }: RouteOptimizationRequest = await req.json()
 
     if (!addresses || !Array.isArray(addresses)) {
       throw new Error('Invalid request: addresses array required')
@@ -184,11 +183,12 @@ serve(async (req) => {
     })
 
     // Prepare vehicle (enforcement agent)
+    // NOTE: NO 'end' property - VROOM will optimize a one-way route ending at the last task
     const vehicles = [{
       id: 1,
       profile: 'driving-car',
-      start: defaultStart,
-      end: endLocation || defaultStart
+      start: defaultStart
+      // Omit 'end' for one-way routes (VROOM will find best route without returning to start)
     }]
 
     const requestBody = {

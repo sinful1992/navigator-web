@@ -1,4 +1,4 @@
-// src/components/SettingsDropdown.tsx
+// src/components/SettingsDropdown.tsx - Modern Redesign
 import React, { useState, useRef, useEffect } from 'react';
 import { useSettings, isSupabaseConfigured } from '../hooks/useSettings';
 import { ReminderSettings } from './ReminderSettings';
@@ -22,8 +22,20 @@ interface SettingsDropdownProps {
   onChangePassword?: () => void;
   onChangeEmail?: () => void;
   onDeleteAccount?: () => void;
-  appState?: AppState; // For data export
-  userEmail?: string; // For data export
+  appState?: AppState;
+  userEmail?: string;
+
+  // New props for consolidated functionality
+  onImportExcel?: (file: File) => void;
+  onRestoreBackup?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onManualSync?: () => void;
+  isSyncing?: boolean;
+  onShowBackupManager?: () => void;
+  onShowCloudBackups?: () => void;
+  onShowSubscription?: () => void;
+  onShowSupabaseSetup?: () => void;
+  onSignOut?: () => void;
+  hasSupabase?: boolean;
 }
 
 export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
@@ -34,12 +46,26 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
   onChangeEmail,
   onDeleteAccount,
   appState,
-  userEmail
+  userEmail,
+  onImportExcel,
+  onRestoreBackup,
+  onManualSync,
+  isSyncing,
+  onShowBackupManager,
+  onShowCloudBackups,
+  onShowSubscription,
+  onShowSupabaseSetup,
+  onSignOut,
+  hasSupabase
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showSMSSettings, setShowSMSSettings] = useState(false);
   const [storageInfo, setStorageInfo] = useState<{ usedMB: string; quotaMB: string; percentage: number } | null>(null);
+  const [expandedSection, setExpandedSection] = useState<string | null>('general');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
+
   const {
     settings,
     toggleBackup,
@@ -56,7 +82,6 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
       getStorageInfo().then(setStorageInfo);
     }
   }, [isOpen, storageInfo]);
-
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -80,6 +105,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsOpen(false);
+        setExpandedSection(null);
       }
     };
 
@@ -92,328 +118,485 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     };
   }, [isOpen]);
 
+  const toggleSection = (section: string) => {
+    setExpandedSection(expandedSection === section ? null : section);
+  };
 
   const ToggleSwitch: React.FC<{
     checked: boolean;
     onChange: () => void;
     id: string;
   }> = ({ checked, onChange, id }) => (
-    <div className="toggle-switch" onClick={onChange}>
+    <div className="modern-toggle-switch" onClick={onChange}>
       <input
         type="checkbox"
         id={id}
         checked={checked}
         onChange={onChange}
-        className="toggle-input"
+        className="modern-toggle-input"
       />
-      <div className={`toggle-slider ${checked ? 'checked' : ''}`}>
-        <div className="toggle-thumb"></div>
+      <div className={`modern-toggle-slider ${checked ? 'checked' : ''}`}>
+        <div className="modern-toggle-thumb"></div>
       </div>
     </div>
   );
 
+  const CollapsibleSection: React.FC<{
+    title: string;
+    icon: string;
+    sectionKey: string;
+    children: React.ReactNode;
+  }> = ({ title, icon, sectionKey, children }) => {
+    const isExpanded = expandedSection === sectionKey;
+
+    return (
+      <div className="modern-settings-section-container">
+        <button
+          className="modern-section-header"
+          onClick={() => toggleSection(sectionKey)}
+        >
+          <div className="modern-section-title-area">
+            <span className="modern-section-icon">{icon}</span>
+            <span className="modern-section-title">{title}</span>
+          </div>
+          <span className={`modern-section-chevron ${isExpanded ? 'expanded' : ''}`}>
+            ›
+          </span>
+        </button>
+
+        <div className={`modern-section-content ${isExpanded ? 'expanded' : ''}`}>
+          <div className="modern-section-inner">
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onImportExcel) {
+      onImportExcel(file);
+      setIsOpen(false);
+    }
+  };
+
   return (
-    <div className="settings-dropdown" ref={dropdownRef}>
+    <div className="modern-settings-dropdown" ref={dropdownRef}>
       <button
-        className="settings-trigger"
+        className="modern-settings-trigger"
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
         {trigger || (
           <>
-            <span className="settings-icon">⚙️</span>
-            <span className="settings-text">Settings</span>
+            <span className="modern-trigger-icon">⚙️</span>
+            <span className="modern-trigger-text">Settings</span>
           </>
         )}
       </button>
 
       {isOpen && (
-        <div className="settings-dropdown-content">
-          <div className="settings-header">
-            <h3 className="settings-title">App Settings</h3>
-            <p className="settings-subtitle">Customize your experience</p>
-          </div>
-
-          {/* Backup Option - Always Available */}
-          <div className="settings-section">
-            <div className="setting-item">
-              <div className="setting-info">
-                <label htmlFor="backup-toggle" className="setting-label">
-                  Auto-download backup on end of day
-                </label>
-                <p className="setting-description">
-                  {isSupabaseConfigured()
-                    ? "Automatically download backup file when finishing the day."
-                    : "Automatically download backup file when finishing the day (local backup only)."
-                  }
-                </p>
-              </div>
-              <ToggleSwitch
-                id="backup-toggle"
-                checked={settings.backupOnEndOfDay}
-                onChange={toggleBackup}
-              />
+        <div className="modern-settings-panel">
+          <div className="modern-panel-header">
+            <div className="modern-header-content">
+              <h2 className="modern-panel-title">Settings</h2>
+              <p className="modern-panel-subtitle">Manage your app preferences</p>
             </div>
-          </div>
-          <div className="settings-separator" />
-
-          {/* Reminder & SMS Settings */}
-          <div className="settings-section">
             <button
-              className="sms-settings-button"
-              onClick={() => {
-                setShowSMSSettings(true);
-                setIsOpen(false);
-              }}
+              className="modern-close-button"
+              onClick={() => setIsOpen(false)}
+              aria-label="Close settings"
             >
-              <span className="sms-settings-icon">🔔</span>
-              <div className="sms-settings-info">
-                <div className="sms-settings-title">Reminder & SMS Settings</div>
-                <div className="sms-settings-desc">Message templates, scheduling, agent profile, and reminder preferences</div>
-              </div>
-              <span className="sms-settings-arrow">→</span>
+              ✕
             </button>
           </div>
-          <div className="settings-separator" />
 
-          {/* Other Settings */}
-          <div className="settings-section">
-            <div className="setting-item">
-              <div className="setting-info">
-                <label htmlFor="dark-mode" className="setting-label">
-                  Dark Mode
-                </label>
-              </div>
-              <ToggleSwitch
-                id="dark-mode"
-                checked={settings.darkMode}
-                onChange={toggleDarkMode}
-              />
-            </div>
-
-            <div className="setting-item">
-              <div className="setting-info">
-                <label htmlFor="push-notifs" className="setting-label">
-                  Push Notifications
-                </label>
-              </div>
-              <ToggleSwitch
-                id="push-notifs"
-                checked={settings.pushNotifications}
-                onChange={togglePushNotifications}
-              />
-            </div>
-
-            <div className="setting-item">
-              <div className="setting-info">
-                <label htmlFor="auto-sync" className="setting-label">
-                  Auto-sync on app start
-                </label>
-              </div>
-              <ToggleSwitch
-                id="auto-sync"
-                checked={settings.autoSyncOnStart}
-                onChange={toggleAutoSync}
-              />
-            </div>
-          </div>
-
-          <div className="settings-separator" />
-
-          {/* Safety & Data Management */}
-          <div className="settings-section">
-            <div className="setting-item">
-              <div className="setting-info">
-                <label htmlFor="confirm-delete" className="setting-label">
-                  Ask before deleting
-                </label>
-                <p className="setting-description">
-                  Confirm before deleting completions, addresses, or arrangements
-                </p>
-              </div>
-              <ToggleSwitch
-                id="confirm-delete"
-                checked={settings.confirmBeforeDelete}
-                onChange={toggleConfirmBeforeDelete}
-              />
-            </div>
-
-            <div className="setting-item-column">
-              <label htmlFor="data-retention" className="setting-label">
-                Keep data for
-              </label>
-              <select
-                id="data-retention"
-                className="settings-select"
-                value={settings.keepDataForMonths}
-                onChange={(e) => updateKeepDataForMonths(Number(e.target.value) as 0 | 3 | 6 | 12)}
-              >
-                <option value={3}>3 months</option>
-                <option value={6}>6 months</option>
-                <option value={12}>1 year</option>
-                <option value={0}>Forever</option>
-              </select>
-              <p className="setting-description">
-                Automatically removes old completions and arrangements once per day
-              </p>
-            </div>
-          </div>
-
-          {/* Account Management */}
-          {(onChangePassword || onChangeEmail || onDeleteAccount) && (
-            <>
-              <div className="settings-separator" />
-              <div className="settings-section">
-                <h4 className="settings-section-title">Account Management</h4>
-
-                {onChangePassword && (
-                  <button
-                    className="settings-action-button"
-                    onClick={() => {
-                      onChangePassword();
-                      setIsOpen(false);
-                    }}
-                  >
-                    <span>🔑</span>
-                    <span>Change Password</span>
-                  </button>
-                )}
-
-                {onChangeEmail && (
-                  <button
-                    className="settings-action-button"
-                    onClick={() => {
-                      onChangeEmail();
-                      setIsOpen(false);
-                    }}
-                  >
-                    <span>📧</span>
-                    <span>Change Email</span>
-                  </button>
-                )}
-
-                {onDeleteAccount && (
-                  <button
-                    className="settings-action-button danger"
-                    onClick={() => {
-                      onDeleteAccount();
-                      setIsOpen(false);
-                    }}
-                  >
-                    <span>🗑️</span>
-                    <span>Delete Account</span>
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* Privacy & Data (GDPR Compliance) */}
-          <div className="settings-separator" />
-          <div className="settings-section">
-            <h4 className="settings-section-title">Privacy & Data (GDPR)</h4>
-
-            {/* Storage Usage */}
-            {storageInfo && (
-              <div className="storage-card">
-                <div className="storage-label">Storage Usage</div>
-                <div className="storage-value">
-                  {storageInfo.usedMB} MB / {storageInfo.quotaMB} MB ({storageInfo.percentage}%)
+          <div className="modern-panel-body">
+            {/* General Settings */}
+            <CollapsibleSection title="General" icon="📱" sectionKey="general">
+              <div className="modern-setting-row">
+                <div className="modern-setting-info">
+                  <div className="modern-setting-label">Dark Mode</div>
+                  <div className="modern-setting-desc">Switch between light and dark theme</div>
                 </div>
-                <div className="storage-bar">
-                  <div
-                    className={`storage-bar-fill ${storageInfo.percentage > 80 ? 'warning' : ''}`}
-                    style={{ width: `${storageInfo.percentage}%` }}
+                <ToggleSwitch
+                  id="dark-mode"
+                  checked={settings.darkMode}
+                  onChange={toggleDarkMode}
+                />
+              </div>
+
+              <div className="modern-setting-row">
+                <div className="modern-setting-info">
+                  <div className="modern-setting-label">Push Notifications</div>
+                  <div className="modern-setting-desc">Receive arrangement reminders</div>
+                </div>
+                <ToggleSwitch
+                  id="push-notifs"
+                  checked={settings.pushNotifications}
+                  onChange={togglePushNotifications}
+                />
+              </div>
+
+              <div className="modern-setting-row">
+                <div className="modern-setting-info">
+                  <div className="modern-setting-label">Auto-sync on startup</div>
+                  <div className="modern-setting-desc">Automatically sync when app opens</div>
+                </div>
+                <ToggleSwitch
+                  id="auto-sync"
+                  checked={settings.autoSyncOnStart}
+                  onChange={toggleAutoSync}
+                />
+              </div>
+            </CollapsibleSection>
+
+            {/* Data & Backup */}
+            <CollapsibleSection title="Data & Backup" icon="💾" sectionKey="data">
+              {/* Import/Export */}
+              <div className="modern-subsection">
+                <div className="modern-subsection-title">Import & Export</div>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileSelect}
+                  style={{ display: 'none' }}
+                />
+
+                <button
+                  className="modern-action-button"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <span className="modern-button-icon">📊</span>
+                  <span className="modern-button-text">Import Excel/CSV</span>
+                </button>
+
+                {appState && (
+                  <>
+                    <button
+                      onClick={() => {
+                        exportDataAsJSON(appState, userEmail);
+                        setIsOpen(false);
+                      }}
+                      className="modern-action-button primary"
+                    >
+                      <span className="modern-button-icon">📥</span>
+                      <span className="modern-button-text">Export All Data (JSON)</span>
+                    </button>
+
+                    <div className="modern-button-group">
+                      <button
+                        onClick={() => {
+                          exportCompletionsAsCSV(appState);
+                          setIsOpen(false);
+                        }}
+                        className="modern-action-button small"
+                      >
+                        <span className="modern-button-icon">📋</span>
+                        <span className="modern-button-text">Completions CSV</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          exportArrangementsAsCSV(appState);
+                          setIsOpen(false);
+                        }}
+                        className="modern-action-button small"
+                      >
+                        <span className="modern-button-icon">📅</span>
+                        <span className="modern-button-text">Arrangements CSV</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Backup Management */}
+              <div className="modern-subsection">
+                <div className="modern-subsection-title">Backup Management</div>
+
+                <input
+                  type="file"
+                  ref={restoreInputRef}
+                  accept="application/json"
+                  onChange={(e) => {
+                    if (onRestoreBackup) {
+                      onRestoreBackup(e);
+                      setIsOpen(false);
+                    }
+                  }}
+                  style={{ display: 'none' }}
+                />
+
+                <button
+                  className="modern-action-button"
+                  onClick={() => restoreInputRef.current?.click()}
+                >
+                  <span className="modern-button-icon">📂</span>
+                  <span className="modern-button-text">Restore from Backup</span>
+                </button>
+
+                {onShowBackupManager && (
+                  <button
+                    className="modern-action-button"
+                    onClick={() => {
+                      onShowBackupManager();
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="modern-button-icon">💾</span>
+                    <span className="modern-button-text">Local Backup Manager</span>
+                  </button>
+                )}
+
+                {hasSupabase && onShowCloudBackups && (
+                  <button
+                    className="modern-action-button"
+                    onClick={() => {
+                      onShowCloudBackups();
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="modern-button-icon">☁️</span>
+                    <span className="modern-button-text">Cloud Backups (Last 7 Days)</span>
+                  </button>
+                )}
+
+                {!hasSupabase && onShowSupabaseSetup && (
+                  <button
+                    className="modern-action-button"
+                    onClick={() => {
+                      onShowSupabaseSetup();
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="modern-button-icon">🔗</span>
+                    <span className="modern-button-text">Connect Cloud Storage</span>
+                  </button>
+                )}
+
+                <div className="modern-setting-row">
+                  <div className="modern-setting-info">
+                    <div className="modern-setting-label">Auto-backup on end of day</div>
+                    <div className="modern-setting-desc">
+                      {isSupabaseConfigured()
+                        ? "Automatic backup when finishing your day"
+                        : "Local backup only (cloud not configured)"}
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    id="backup-toggle"
+                    checked={settings.backupOnEndOfDay}
+                    onChange={toggleBackup}
                   />
                 </div>
               </div>
-            )}
 
-            {/* Data Export (GDPR Article 20) */}
-            {appState && (
-              <>
-                <button
-                  onClick={() => {
-                    exportDataAsJSON(appState, userEmail);
-                    setIsOpen(false);
-                  }}
-                  className="settings-action-button primary"
-                >
-                  <span>📥</span>
-                  <span>Export All Data (JSON)</span>
-                </button>
-
-                <div className="button-group">
+              {/* Sync */}
+              {onManualSync && (
+                <div className="modern-subsection">
+                  <div className="modern-subsection-title">Cloud Sync</div>
                   <button
+                    className="modern-action-button"
                     onClick={() => {
-                      exportCompletionsAsCSV(appState);
+                      onManualSync();
                       setIsOpen(false);
                     }}
-                    className="settings-action-button small"
+                    disabled={isSyncing}
                   >
-                    Export Completions (CSV)
-                  </button>
-                  <button
-                    onClick={() => {
-                      exportArrangementsAsCSV(appState);
-                      setIsOpen(false);
-                    }}
-                    className="settings-action-button small"
-                  >
-                    Export Arrangements (CSV)
+                    <span className="modern-button-icon">
+                      {isSyncing ? "⟳" : "🔄"}
+                    </span>
+                    <span className="modern-button-text">
+                      {isSyncing ? "Syncing..." : "Sync Now"}
+                    </span>
                   </button>
                 </div>
-              </>
-            )}
+              )}
+            </CollapsibleSection>
 
-            {/* Clear Cache */}
-            <button
-              onClick={async () => {
-                await clearLocalCaches();
-                setStorageInfo(null);
-                setTimeout(() => getStorageInfo().then(setStorageInfo), 500);
-              }}
-              className="settings-action-button"
-            >
-              <span>🗑️</span>
-              <span>Clear Cache & Temporary Data</span>
-            </button>
-
-            {/* Privacy Links */}
-            <div className="button-group">
-              <a
-                href="/PRIVACY.md"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="settings-link-button"
+            {/* Reminders & SMS */}
+            <CollapsibleSection title="Reminders & SMS" icon="🔔" sectionKey="reminders">
+              <button
+                className="modern-feature-button"
+                onClick={() => {
+                  setShowSMSSettings(true);
+                  setIsOpen(false);
+                }}
               >
-                <span>🔒</span>
-                <span>Privacy Policy</span>
-              </a>
+                <div className="modern-feature-content">
+                  <div className="modern-feature-title">Reminder Settings</div>
+                  <div className="modern-feature-desc">
+                    Configure message templates, scheduling, and reminder preferences
+                  </div>
+                </div>
+                <span className="modern-feature-arrow">→</span>
+              </button>
+            </CollapsibleSection>
 
-              <a
-                href="/TERMS_OF_USE.md"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="settings-link-button"
+            {/* Privacy & Safety */}
+            <CollapsibleSection title="Privacy & Safety" icon="🔒" sectionKey="privacy">
+              <div className="modern-setting-row">
+                <div className="modern-setting-info">
+                  <div className="modern-setting-label">Confirm before deleting</div>
+                  <div className="modern-setting-desc">Ask for confirmation on deletions</div>
+                </div>
+                <ToggleSwitch
+                  id="confirm-delete"
+                  checked={settings.confirmBeforeDelete}
+                  onChange={toggleConfirmBeforeDelete}
+                />
+              </div>
+
+              <div className="modern-setting-column">
+                <label htmlFor="data-retention" className="modern-setting-label">
+                  Data Retention Period
+                </label>
+                <select
+                  id="data-retention"
+                  className="modern-select"
+                  value={settings.keepDataForMonths}
+                  onChange={(e) => updateKeepDataForMonths(Number(e.target.value) as 0 | 3 | 6 | 12)}
+                >
+                  <option value={3}>3 months</option>
+                  <option value={6}>6 months</option>
+                  <option value={12}>1 year</option>
+                  <option value={0}>Forever</option>
+                </select>
+                <p className="modern-setting-desc">
+                  Automatically removes old data once per day
+                </p>
+              </div>
+
+              {/* Storage Usage */}
+              {storageInfo && (
+                <div className="modern-storage-card">
+                  <div className="modern-storage-header">
+                    <span className="modern-storage-label">Storage Usage</span>
+                    <span className="modern-storage-value">
+                      {storageInfo.usedMB} / {storageInfo.quotaMB} MB
+                    </span>
+                  </div>
+                  <div className="modern-storage-bar">
+                    <div
+                      className={`modern-storage-fill ${storageInfo.percentage > 80 ? 'warning' : ''}`}
+                      style={{ width: `${storageInfo.percentage}%` }}
+                    />
+                  </div>
+                  <div className="modern-storage-percent">{storageInfo.percentage}% used</div>
+                </div>
+              )}
+
+              <button
+                onClick={async () => {
+                  await clearLocalCaches();
+                  setStorageInfo(null);
+                  setTimeout(() => getStorageInfo().then(setStorageInfo), 500);
+                }}
+                className="modern-action-button"
               >
-                <span>📄</span>
-                <span>Terms</span>
-              </a>
-            </div>
+                <span className="modern-button-icon">🗑️</span>
+                <span className="modern-button-text">Clear Cache & Temporary Data</span>
+              </button>
+
+              <div className="modern-link-group">
+                <a
+                  href="/PRIVACY.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="modern-link-button"
+                >
+                  <span className="modern-button-icon">🔒</span>
+                  <span className="modern-button-text">Privacy Policy</span>
+                </a>
+                <a
+                  href="/TERMS_OF_USE.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="modern-link-button"
+                >
+                  <span className="modern-button-icon">📄</span>
+                  <span className="modern-button-text">Terms of Use</span>
+                </a>
+              </div>
+            </CollapsibleSection>
+
+            {/* Account */}
+            <CollapsibleSection title="Account" icon="👤" sectionKey="account">
+              {onShowSubscription && (
+                <button
+                  className="modern-action-button accent"
+                  onClick={() => {
+                    onShowSubscription();
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="modern-button-icon">⭐</span>
+                  <span className="modern-button-text">Subscription</span>
+                </button>
+              )}
+
+              {onChangePassword && (
+                <button
+                  className="modern-action-button"
+                  onClick={() => {
+                    onChangePassword();
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="modern-button-icon">🔑</span>
+                  <span className="modern-button-text">Change Password</span>
+                </button>
+              )}
+
+              {onChangeEmail && (
+                <button
+                  className="modern-action-button"
+                  onClick={() => {
+                    onChangeEmail();
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="modern-button-icon">📧</span>
+                  <span className="modern-button-text">Change Email</span>
+                </button>
+              )}
+
+              {onSignOut && (
+                <button
+                  className="modern-action-button"
+                  onClick={() => {
+                    onSignOut();
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="modern-button-icon">🚪</span>
+                  <span className="modern-button-text">Sign Out</span>
+                </button>
+              )}
+
+              {onDeleteAccount && (
+                <button
+                  className="modern-action-button danger"
+                  onClick={() => {
+                    onDeleteAccount();
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="modern-button-icon">⚠️</span>
+                  <span className="modern-button-text">Delete Account</span>
+                </button>
+              )}
+            </CollapsibleSection>
           </div>
 
-          {/* Footer note */}
-          <div className="settings-footer">
-            <div className="footer-text">
-              Settings are saved locally and synced to cloud if configured.
-            </div>
-            <a href="/PRIVACY.md" target="_blank" rel="noopener noreferrer" className="footer-link">
-              Your privacy rights
-            </a>
-            <div className="footer-version">
-              Version {packageJson.version}
+          {/* Footer */}
+          <div className="modern-panel-footer">
+            <div className="modern-footer-text">
+              Settings sync across devices • Version {packageJson.version}
             </div>
           </div>
         </div>
@@ -434,60 +617,65 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
       )}
 
       <style>{`
-        /* Base Dropdown */
-        .settings-dropdown {
+        /* Modern Settings Dropdown - Complete Redesign */
+        .modern-settings-dropdown {
           position: relative;
           display: inline-block;
         }
 
-        .settings-trigger {
+        /* Trigger Button */
+        .modern-settings-trigger {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
-          padding: 0.625rem 1.125rem;
-          background: rgba(255, 255, 255, 0.95);
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          border-radius: 10px;
-          color: #374151;
-          font-size: 0.875rem;
-          font-weight: 500;
+          gap: 0.625rem;
+          padding: 0.75rem 1.25rem;
+          background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+          border: 1.5px solid rgba(99, 102, 241, 0.12);
+          border-radius: 12px;
+          color: #1f2937;
+          font-size: 0.9375rem;
+          font-weight: 600;
           cursor: pointer;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
         }
 
-        .settings-trigger:hover {
-          background: white;
+        .modern-settings-trigger:hover {
+          background: linear-gradient(135deg, #ffffff 0%, #f0f1ff 100%);
           border-color: rgba(99, 102, 241, 0.3);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 4px 16px rgba(99, 102, 241, 0.15);
           transform: translateY(-1px);
         }
 
-        .settings-icon {
-          font-size: 1.125rem;
+        .modern-trigger-icon {
+          font-size: 1.25rem;
         }
 
-        /* Dropdown Content - Modern Glassmorphism */
-        .settings-dropdown-content {
+        /* Main Panel */
+        .modern-settings-panel {
           position: absolute;
-          top: calc(100% + 8px);
+          top: calc(100% + 12px);
           right: 0;
           z-index: 10000;
-          min-width: 340px;
-          max-width: 420px;
-          background: rgba(255, 255, 255, 0.98);
-          backdrop-filter: blur(20px);
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          border-radius: 16px;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12), 0 8px 24px rgba(0, 0, 0, 0.06);
-          padding: 1.5rem;
-          animation: slideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          width: 440px;
+          max-height: 85vh;
+          background: linear-gradient(135deg, #ffffff 0%, #fafbff 100%);
+          border: 1px solid rgba(99, 102, 241, 0.08);
+          border-radius: 20px;
+          box-shadow:
+            0 24px 64px rgba(0, 0, 0, 0.12),
+            0 12px 32px rgba(99, 102, 241, 0.08),
+            0 0 0 1px rgba(99, 102, 241, 0.05);
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          animation: modernSlideIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        @keyframes slideDown {
+        @keyframes modernSlideIn {
           from {
             opacity: 0;
-            transform: translateY(-12px) scale(0.96);
+            transform: translateY(-16px) scale(0.95);
           }
           to {
             opacity: 1;
@@ -495,511 +683,661 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
           }
         }
 
-        /* Header */
-        .settings-header {
-          margin-bottom: 1.5rem;
+        /* Panel Header */
+        .modern-panel-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          padding: 1.75rem 1.75rem 1.25rem;
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.03) 100%);
+          border-bottom: 1px solid rgba(99, 102, 241, 0.08);
         }
 
-        .settings-title {
-          font-size: 1.25rem;
+        .modern-header-content {
+          flex: 1;
+        }
+
+        .modern-panel-title {
+          font-size: 1.5rem;
           font-weight: 700;
           color: #111827;
           margin: 0 0 0.375rem 0;
-          letter-spacing: -0.02em;
+          letter-spacing: -0.03em;
         }
 
-        .settings-subtitle {
+        .modern-panel-subtitle {
           font-size: 0.875rem;
           color: #6b7280;
           margin: 0;
         }
 
-        /* Sections */
-        .settings-section {
-          margin-bottom: 1rem;
+        .modern-close-button {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          background: white;
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          border-radius: 8px;
+          color: #6b7280;
+          font-size: 1.125rem;
+          cursor: pointer;
+          transition: all 0.2s;
         }
 
-        .settings-section-title {
-          font-size: 0.8125rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: #9ca3af;
-          margin: 0 0 0.875rem 0;
+        .modern-close-button:hover {
+          background: #f9fafb;
+          border-color: #ef4444;
+          color: #ef4444;
+          transform: scale(1.05);
         }
 
-        .settings-separator {
-          height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(0,0,0,0.08), transparent);
-          margin: 1.25rem 0;
+        /* Panel Body */
+        .modern-panel-body {
+          flex: 1;
+          overflow-y: auto;
+          padding: 0.5rem 0.75rem 1rem;
         }
 
-        /* Setting Items */
-        .setting-item {
+        .modern-panel-body::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .modern-panel-body::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .modern-panel-body::-webkit-scrollbar-thumb {
+          background: rgba(99, 102, 241, 0.2);
+          border-radius: 3px;
+        }
+
+        .modern-panel-body::-webkit-scrollbar-thumb:hover {
+          background: rgba(99, 102, 241, 0.3);
+        }
+
+        /* Collapsible Sections */
+        .modern-settings-section-container {
+          margin: 0.5rem 0.5rem;
+          background: white;
+          border: 1.5px solid rgba(99, 102, 241, 0.08);
+          border-radius: 14px;
+          overflow: hidden;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .modern-settings-section-container:hover {
+          border-color: rgba(99, 102, 241, 0.15);
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.06);
+        }
+
+        .modern-section-header {
+          width: 100%;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 1.25rem;
-          padding: 0.625rem 0;
-          margin-bottom: 0.75rem;
+          padding: 1rem 1.25rem;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          transition: all 0.2s;
         }
 
-        .setting-item:last-child {
+        .modern-section-header:hover {
+          background: rgba(99, 102, 241, 0.03);
+        }
+
+        .modern-section-title-area {
+          display: flex;
+          align-items: center;
+          gap: 0.875rem;
+        }
+
+        .modern-section-icon {
+          font-size: 1.375rem;
+        }
+
+        .modern-section-title {
+          font-size: 1rem;
+          font-weight: 600;
+          color: #111827;
+          letter-spacing: -0.01em;
+        }
+
+        .modern-section-chevron {
+          font-size: 1.5rem;
+          color: #9ca3af;
+          transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .modern-section-chevron.expanded {
+          transform: rotate(90deg);
+          color: #6366f1;
+        }
+
+        .modern-section-content {
+          max-height: 0;
+          overflow: hidden;
+          transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .modern-section-content.expanded {
+          max-height: 2000px;
+        }
+
+        .modern-section-inner {
+          padding: 0 1.25rem 1.25rem;
+        }
+
+        /* Subsections */
+        .modern-subsection {
+          margin-bottom: 1.5rem;
+        }
+
+        .modern-subsection:last-child {
           margin-bottom: 0;
         }
 
-        .setting-item-column {
-          display: flex;
-          flex-direction: column;
-          gap: 0.625rem;
+        .modern-subsection-title {
+          font-size: 0.75rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.075em;
+          color: #6366f1;
           margin-bottom: 0.75rem;
         }
 
-        .setting-info {
+        /* Setting Rows */
+        .modern-setting-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          padding: 0.875rem 0;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+        }
+
+        .modern-setting-row:last-child {
+          border-bottom: none;
+        }
+
+        .modern-setting-column {
+          padding: 0.875rem 0;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+        }
+
+        .modern-setting-column:last-child {
+          border-bottom: none;
+        }
+
+        .modern-setting-info {
           flex: 1;
         }
 
-        .setting-label {
-          display: block;
-          font-size: 0.875rem;
-          font-weight: 500;
+        .modern-setting-label {
+          font-size: 0.9375rem;
+          font-weight: 600;
           color: #374151;
           margin-bottom: 0.25rem;
-          cursor: pointer;
+          display: block;
         }
 
-        .setting-description {
-          font-size: 0.75rem;
+        .modern-setting-desc {
+          font-size: 0.8125rem;
           color: #9ca3af;
-          margin: 0.25rem 0 0 0;
-          line-height: 1.5;
+          line-height: 1.4;
+          margin-top: 0.25rem;
         }
 
-        /* Form Elements */
-        .settings-select {
-          width: 100%;
-          padding: 0.625rem 0.875rem;
-          border: 1.5px solid rgba(0, 0, 0, 0.1);
-          border-radius: 8px;
-          font-size: 0.875rem;
-          background: white;
-          color: #374151;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .settings-select:hover {
-          border-color: rgba(99, 102, 241, 0.3);
-        }
-
-        .settings-select:focus {
-          outline: none;
-          border-color: #6366f1;
-          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-        }
-
-        /* Toggle Switch - Modern Design */
-        .toggle-switch {
+        /* Toggle Switch */
+        .modern-toggle-switch {
           position: relative;
-          display: inline-block;
-          width: 48px;
-          height: 26px;
+          width: 52px;
+          height: 28px;
           cursor: pointer;
           flex-shrink: 0;
         }
 
-        .toggle-input {
+        .modern-toggle-input {
           opacity: 0;
           width: 0;
           height: 0;
         }
 
-        .toggle-slider {
+        .modern-toggle-slider {
           position: absolute;
           inset: 0;
-          background: #d1d5db;
-          border-radius: 26px;
+          background: #e5e7eb;
+          border-radius: 28px;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .toggle-slider.checked {
-          background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        .modern-toggle-slider.checked {
+          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
         }
 
-        .toggle-thumb {
+        .modern-toggle-thumb {
           position: absolute;
-          height: 22px;
-          width: 22px;
+          height: 24px;
+          width: 24px;
           left: 2px;
           bottom: 2px;
           background: white;
           border-radius: 50%;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         }
 
-        .toggle-slider.checked .toggle-thumb {
-          transform: translateX(22px);
-          box-shadow: 0 3px 8px rgba(99, 102, 241, 0.3);
+        .modern-toggle-slider.checked .modern-toggle-thumb {
+          transform: translateX(24px);
+          box-shadow: 0 3px 12px rgba(99, 102, 241, 0.4);
         }
 
-        /* Storage Card */
-        .storage-card {
-          padding: 1rem;
-          background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
-          border: 1px solid rgba(99, 102, 241, 0.15);
-          border-radius: 12px;
-          margin-bottom: 0.875rem;
-        }
-
-        .storage-label {
-          font-size: 0.75rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: #6366f1;
-          margin-bottom: 0.5rem;
-        }
-
-        .storage-value {
-          font-size: 0.9375rem;
-          font-weight: 600;
-          color: #111827;
-          margin-bottom: 0.625rem;
-        }
-
-        .storage-bar {
-          height: 8px;
-          background: rgba(0, 0, 0, 0.06);
-          border-radius: 8px;
-          overflow: hidden;
-        }
-
-        .storage-bar-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #6366f1, #8b5cf6);
-          border-radius: 8px;
-          transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .storage-bar-fill.warning {
-          background: linear-gradient(90deg, #ef4444, #dc2626);
-        }
-
-        /* Action Buttons */
-        .settings-action-button {
+        /* Select Dropdown */
+        .modern-select {
           width: 100%;
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.875rem 1rem;
+          padding: 0.75rem 1rem;
+          margin-top: 0.5rem;
           background: white;
           border: 1.5px solid rgba(0, 0, 0, 0.1);
           border-radius: 10px;
-          font-size: 0.875rem;
+          font-size: 0.9375rem;
           font-weight: 500;
           color: #374151;
-          text-align: left;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .modern-select:hover {
+          border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .modern-select:focus {
+          outline: none;
+          border-color: #6366f1;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        /* Action Buttons */
+        .modern-action-button {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 0.875rem;
+          padding: 0.875rem 1rem;
+          margin-bottom: 0.625rem;
+          background: white;
+          border: 1.5px solid rgba(0, 0, 0, 0.08);
+          border-radius: 10px;
+          font-size: 0.9375rem;
+          font-weight: 500;
+          color: #374151;
           cursor: pointer;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-          margin-bottom: 0.625rem;
         }
 
-        .settings-action-button:hover {
+        .modern-action-button:last-child {
+          margin-bottom: 0;
+        }
+
+        .modern-action-button:hover {
           background: #f9fafb;
           border-color: rgba(99, 102, 241, 0.3);
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+          transform: translateX(2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
         }
 
-        .settings-action-button:active {
-          transform: translateY(0);
+        .modern-action-button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          transform: none;
         }
 
-        .settings-action-button.primary {
-          background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        .modern-action-button.primary {
+          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
           border-color: transparent;
           color: white;
           font-weight: 600;
         }
 
-        .settings-action-button.primary:hover {
-          box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+        .modern-action-button.primary:hover {
+          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
+          transform: translateY(-1px);
         }
 
-        .settings-action-button.danger {
-          background: rgba(239, 68, 68, 0.05);
+        .modern-action-button.accent {
+          background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 191, 36, 0.1) 100%);
+          border-color: rgba(245, 158, 11, 0.3);
+          color: #b45309;
+        }
+
+        .modern-action-button.accent:hover {
+          background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.15) 100%);
+          border-color: rgba(245, 158, 11, 0.5);
+        }
+
+        .modern-action-button.danger {
+          background: rgba(239, 68, 68, 0.06);
           border-color: rgba(239, 68, 68, 0.2);
           color: #dc2626;
         }
 
-        .settings-action-button.danger:hover {
-          background: rgba(239, 68, 68, 0.1);
+        .modern-action-button.danger:hover {
+          background: rgba(239, 68, 68, 0.12);
           border-color: rgba(239, 68, 68, 0.4);
         }
 
-        .settings-action-button.small {
+        .modern-action-button.small {
           padding: 0.75rem 0.875rem;
-          font-size: 0.8125rem;
+          font-size: 0.875rem;
+        }
+
+        .modern-button-icon {
+          font-size: 1.125rem;
+          flex-shrink: 0;
+        }
+
+        .modern-button-text {
+          flex: 1;
+          text-align: left;
         }
 
         /* Button Groups */
-        .button-group {
+        .modern-button-group {
           display: flex;
           gap: 0.625rem;
-          margin-bottom: 0.625rem;
         }
 
-        .button-group .settings-action-button,
-        .button-group .settings-link-button {
+        .modern-button-group .modern-action-button {
           flex: 1;
         }
 
         /* Link Buttons */
-        .settings-link-button {
+        .modern-link-group {
+          display: flex;
+          gap: 0.625rem;
+          margin-top: 0.625rem;
+        }
+
+        .modern-link-button {
+          flex: 1;
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 0.5rem;
           padding: 0.75rem 0.875rem;
           background: white;
-          border: 1.5px solid rgba(0, 0, 0, 0.1);
+          border: 1.5px solid rgba(0, 0, 0, 0.08);
           border-radius: 10px;
-          font-size: 0.8125rem;
+          font-size: 0.875rem;
           font-weight: 500;
           color: #374151;
           text-decoration: none;
           cursor: pointer;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.2s;
         }
 
-        .settings-link-button:hover {
+        .modern-link-button:hover {
           background: #f9fafb;
           border-color: rgba(99, 102, 241, 0.3);
           transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
         }
 
-        /* SMS Settings Button */
-        .sms-settings-button {
+        /* Storage Card */
+        .modern-storage-card {
+          padding: 1rem;
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.03) 100%);
+          border: 1.5px solid rgba(99, 102, 241, 0.15);
+          border-radius: 12px;
+          margin: 0.875rem 0;
+        }
+
+        .modern-storage-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 0.625rem;
+        }
+
+        .modern-storage-label {
+          font-size: 0.75rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: #6366f1;
+        }
+
+        .modern-storage-value {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #111827;
+        }
+
+        .modern-storage-bar {
+          height: 8px;
+          background: rgba(0, 0, 0, 0.06);
+          border-radius: 8px;
+          overflow: hidden;
+          margin-bottom: 0.5rem;
+        }
+
+        .modern-storage-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+          border-radius: 8px;
+          transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .modern-storage-fill.warning {
+          background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        .modern-storage-percent {
+          font-size: 0.8125rem;
+          color: #6b7280;
+          text-align: right;
+        }
+
+        /* Feature Button (for SMS Settings) */
+        .modern-feature-button {
           width: 100%;
           display: flex;
           align-items: center;
-          gap: 0.875rem;
-          padding: 1rem;
-          background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
+          gap: 1rem;
+          padding: 1.125rem 1.25rem;
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.03) 100%);
           border: 1.5px solid rgba(99, 102, 241, 0.15);
           border-radius: 12px;
-          text-align: left;
           cursor: pointer;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .sms-settings-button:hover {
-          background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+        .modern-feature-button:hover {
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.08) 100%);
           border-color: rgba(99, 102, 241, 0.3);
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+          transform: translateX(2px);
+          box-shadow: 0 4px 16px rgba(99, 102, 241, 0.12);
         }
 
-        .sms-settings-icon {
-          font-size: 1.5rem;
-          flex-shrink: 0;
-        }
-
-        .sms-settings-info {
+        .modern-feature-content {
           flex: 1;
         }
 
-        .sms-settings-title {
-          font-size: 0.9375rem;
+        .modern-feature-title {
+          font-size: 1rem;
           font-weight: 600;
           color: #111827;
           margin-bottom: 0.25rem;
         }
 
-        .sms-settings-desc {
-          font-size: 0.75rem;
+        .modern-feature-desc {
+          font-size: 0.8125rem;
           color: #6b7280;
           line-height: 1.4;
         }
 
-        .sms-settings-arrow {
-          font-size: 1rem;
+        .modern-feature-arrow {
+          font-size: 1.25rem;
           color: #9ca3af;
-          flex-shrink: 0;
           transition: transform 0.2s;
         }
 
-        .sms-settings-button:hover .sms-settings-arrow {
-          transform: translateX(3px);
+        .modern-feature-button:hover .modern-feature-arrow {
+          transform: translateX(4px);
+          color: #6366f1;
         }
 
-        /* Footer */
-        .settings-footer {
-          margin-top: 1.5rem;
-          padding-top: 1.25rem;
-          border-top: 1px solid rgba(0, 0, 0, 0.06);
-          text-align: center;
+        /* Panel Footer */
+        .modern-panel-footer {
+          padding: 1rem 1.75rem;
+          background: rgba(99, 102, 241, 0.02);
+          border-top: 1px solid rgba(99, 102, 241, 0.08);
         }
 
-        .footer-text {
+        .modern-footer-text {
           font-size: 0.75rem;
           color: #9ca3af;
+          text-align: center;
           line-height: 1.5;
-          margin-bottom: 0.5rem;
         }
 
-        .footer-link {
-          display: inline-block;
-          font-size: 0.75rem;
-          color: #6366f1;
-          text-decoration: none;
-          font-weight: 500;
-          margin-bottom: 0.75rem;
-          transition: color 0.2s;
-        }
-
-        .footer-link:hover {
-          color: #8b5cf6;
-          text-decoration: underline;
-        }
-
-        .footer-version {
-          font-size: 0.6875rem;
-          color: #d1d5db;
-          font-weight: 500;
-          margin-top: 0.75rem;
-        }
-
-        /* Dark Mode */
-        .dark-mode .settings-trigger {
-          background: rgba(31, 41, 55, 0.95);
-          border-color: rgba(255, 255, 255, 0.1);
+        /* Dark Mode Support */
+        .dark-mode .modern-settings-trigger {
+          background: linear-gradient(135deg, rgba(31, 41, 55, 0.95) 0%, rgba(17, 24, 39, 1) 100%);
+          border-color: rgba(139, 92, 246, 0.2);
           color: #e5e7eb;
         }
 
-        .dark-mode .settings-trigger:hover {
-          background: rgba(31, 41, 55, 1);
-          border-color: rgba(139, 92, 246, 0.3);
+        .dark-mode .modern-settings-trigger:hover {
+          background: linear-gradient(135deg, rgba(31, 41, 55, 1) 0%, rgba(17, 24, 39, 1) 100%);
+          border-color: rgba(139, 92, 246, 0.4);
         }
 
-        .dark-mode .settings-dropdown-content {
-          background: rgba(31, 41, 55, 0.98);
-          border-color: rgba(255, 255, 255, 0.1);
+        .dark-mode .modern-settings-panel {
+          background: linear-gradient(135deg, rgba(17, 24, 39, 0.98) 0%, rgba(31, 41, 55, 0.98) 100%);
+          border-color: rgba(139, 92, 246, 0.15);
         }
 
-        .dark-mode .settings-title {
+        .dark-mode .modern-panel-header {
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.05) 100%);
+          border-bottom-color: rgba(139, 92, 246, 0.15);
+        }
+
+        .dark-mode .modern-panel-title,
+        .dark-mode .modern-section-title,
+        .dark-mode .modern-setting-label,
+        .dark-mode .modern-feature-title,
+        .dark-mode .modern-storage-value {
           color: #f9fafb;
         }
 
-        .dark-mode .settings-subtitle,
-        .dark-mode .setting-description,
-        .dark-mode .footer-text {
+        .dark-mode .modern-panel-subtitle,
+        .dark-mode .modern-setting-desc,
+        .dark-mode .modern-feature-desc,
+        .dark-mode .modern-footer-text {
           color: #9ca3af;
         }
 
-        .dark-mode .setting-label,
-        .dark-mode .sms-settings-title,
-        .dark-mode .storage-value {
-          color: #e5e7eb;
-        }
-
-        .dark-mode .settings-section-title,
-        .dark-mode .footer-version {
-          color: #6b7280;
-        }
-
-        .dark-mode .settings-separator {
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-        }
-
-        .dark-mode .settings-select {
+        .dark-mode .modern-settings-section-container {
           background: rgba(17, 24, 39, 0.6);
-          border-color: rgba(255, 255, 255, 0.15);
+          border-color: rgba(139, 92, 246, 0.15);
+        }
+
+        .dark-mode .modern-section-header:hover {
+          background: rgba(99, 102, 241, 0.05);
+        }
+
+        .dark-mode .modern-setting-row,
+        .dark-mode .modern-setting-column {
+          border-bottom-color: rgba(255, 255, 255, 0.06);
+        }
+
+        .dark-mode .modern-action-button,
+        .dark-mode .modern-link-button {
+          background: rgba(17, 24, 39, 0.8);
+          border-color: rgba(255, 255, 255, 0.1);
           color: #e5e7eb;
         }
 
-        .dark-mode .settings-select:hover {
+        .dark-mode .modern-action-button:hover,
+        .dark-mode .modern-link-button:hover {
+          background: rgba(17, 24, 39, 0.95);
           border-color: rgba(139, 92, 246, 0.4);
         }
 
-        .dark-mode .storage-card {
-          background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+        .dark-mode .modern-select {
+          background: rgba(17, 24, 39, 0.8);
+          border-color: rgba(255, 255, 255, 0.1);
+          color: #e5e7eb;
+        }
+
+        .dark-mode .modern-storage-card {
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.08) 100%);
           border-color: rgba(99, 102, 241, 0.25);
         }
 
-        .dark-mode .storage-bar {
+        .dark-mode .modern-storage-bar {
           background: rgba(0, 0, 0, 0.3);
         }
 
-        .dark-mode .settings-action-button,
-        .dark-mode .settings-link-button {
-          background: rgba(17, 24, 39, 0.6);
-          border-color: rgba(255, 255, 255, 0.15);
-          color: #e5e7eb;
-        }
-
-        .dark-mode .settings-action-button:hover,
-        .dark-mode .settings-link-button:hover {
-          background: rgba(17, 24, 39, 0.8);
-          border-color: rgba(139, 92, 246, 0.4);
-        }
-
-        .dark-mode .settings-action-button.primary {
-          background: linear-gradient(135deg, #6366f1, #8b5cf6);
-          border-color: transparent;
-          color: white;
-        }
-
-        .dark-mode .settings-action-button.danger {
-          background: rgba(239, 68, 68, 0.1);
-          border-color: rgba(239, 68, 68, 0.3);
-          color: #f87171;
-        }
-
-        .dark-mode .sms-settings-button {
-          background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+        .dark-mode .modern-feature-button {
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.08) 100%);
           border-color: rgba(99, 102, 241, 0.25);
         }
 
-        .dark-mode .sms-settings-button:hover {
-          background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.15));
+        .dark-mode .modern-feature-button:hover {
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.12) 100%);
           border-color: rgba(99, 102, 241, 0.4);
         }
 
-        .dark-mode .sms-settings-desc {
+        .dark-mode .modern-close-button {
+          background: rgba(17, 24, 39, 0.8);
+          border-color: rgba(255, 255, 255, 0.1);
           color: #9ca3af;
         }
 
-        .dark-mode .sms-settings-arrow {
-          color: #6b7280;
+        .dark-mode .modern-close-button:hover {
+          background: rgba(239, 68, 68, 0.1);
+          border-color: #ef4444;
+          color: #ef4444;
         }
 
         /* Mobile Responsive */
         @media (max-width: 768px) {
-          .settings-dropdown-content {
+          .modern-settings-panel {
             position: fixed;
             top: 50%;
             left: 50%;
             right: auto;
             transform: translate(-50%, -50%);
-            min-width: 300px;
-            max-width: 92vw;
-            max-height: 88vh;
-            overflow-y: auto;
+            width: calc(100vw - 2rem);
+            max-width: 420px;
+            max-height: 90vh;
           }
 
-          @keyframes slideDown {
+          @keyframes modernSlideIn {
             from {
               opacity: 0;
-              transform: translate(-50%, -50%) scale(0.95);
+              transform: translate(-50%, -50%) scale(0.92);
             }
             to {
               opacity: 1;
               transform: translate(-50%, -50%) scale(1);
             }
+          }
+
+          .modern-panel-header {
+            padding: 1.5rem 1.25rem 1rem;
+          }
+
+          .modern-panel-title {
+            font-size: 1.375rem;
+          }
+
+          .modern-section-inner {
+            padding: 0 1rem 1rem;
           }
         }
       `}</style>
