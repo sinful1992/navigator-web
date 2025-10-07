@@ -718,11 +718,13 @@ const AddressListComponent = function AddressList({
           overflow: hidden;
           border: 1px solid var(--border);
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          z-index: 1;
         }
 
         /* Ensure Leaflet map respects container */
         .map-view-container .leaflet-container {
           border-radius: var(--radius-lg);
+          z-index: 1;
         }
 
         /* Map Reset Button */
@@ -730,7 +732,7 @@ const AddressListComponent = function AddressList({
           position: absolute;
           top: 10px;
           right: 10px;
-          z-index: 1000;
+          z-index: 10;
           padding: 0.5rem 1rem;
           background: var(--surface);
           color: var(--text-primary);

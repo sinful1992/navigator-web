@@ -298,7 +298,7 @@ export function LeafletMap({
           borderRadius: 'var(--radius)',
           boxShadow: 'var(--shadow)',
           fontSize: '0.875rem',
-          zIndex: 1000
+          zIndex: 10
         }}>
           🗺️ Loading route directions...
         </div>
