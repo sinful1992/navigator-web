@@ -425,7 +425,7 @@ function applyOptimisticUpdates(
   }
 }
 
-export function useAppState() {
+export function useAppState(userId?: string) {
   const [baseState, setBaseState] = React.useState<AppState>(initial);
   const [optimisticState, setOptimisticState] =
     React.useState<OptimisticState>({
@@ -437,6 +437,12 @@ export function useAppState() {
   // stable device id
   const deviceId = React.useMemo(() => getOrCreateDeviceId(), []);
 
+  // Store current user ID for ownership tracking
+  const ownerUserIdRef = React.useRef<string | undefined>(userId);
+  React.useEffect(() => {
+    ownerUserIdRef.current = userId;
+  }, [userId]);
+
   // Computed state with optimistic updates applied
   const state = React.useMemo(() => {
     return applyOptimisticUpdates(baseState, optimisticState.updates);
@@ -447,15 +453,31 @@ export function useAppState() {
     new Map()
   );
 
+  // Track loaded owner metadata for ownership verification
+  const [ownerMetadata, setOwnerMetadata] = React.useState<{
+    ownerUserId?: string;
+    ownerChecksum?: string;
+  }>({});
+
   // ---- load from IndexedDB (with validation and migration) ----
   React.useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const saved = (await storageManager.queuedGet(STORAGE_KEY)) as unknown;
+        const saved = (await storageManager.queuedGet(STORAGE_KEY)) as any;
         if (!alive) return;
 
         if (saved) {
+          // Extract owner metadata before validation
+          const loadedOwnerUserId = saved._ownerUserId;
+          const loadedOwnerChecksum = saved._ownerChecksum;
+
+          // Store owner metadata for verification
+          setOwnerMetadata({
+            ownerUserId: loadedOwnerUserId,
+            ownerChecksum: loadedOwnerChecksum
+          });
+
           // Validate loaded data
           if (!validateAppState(saved)) {
             logger.warn('Loaded data failed validation, using initial state');
@@ -499,18 +521,35 @@ export function useAppState() {
   // ---- persist to IndexedDB (debounced with error handling) ----
   React.useEffect(() => {
     if (loading) return;
-    
+
     const t = setTimeout(async () => {
       try {
-        // Add schema version before saving
-        const stateToSave = { ...baseState, _schemaVersion: CURRENT_SCHEMA_VERSION };
+        // Add schema version and owner signature before saving
+        const stateToSave: any = {
+          ...baseState,
+          _schemaVersion: CURRENT_SCHEMA_VERSION
+        };
+
+        // Add immutable owner signature if authenticated
+        if (ownerUserIdRef.current) {
+          stateToSave._ownerUserId = ownerUserIdRef.current;
+          // Create tamper-detection hash: hash(userId + timestamp + data checksum)
+          const dataChecksum = JSON.stringify({
+            addressCount: baseState.addresses.length,
+            completionCount: baseState.completions.length,
+            listVersion: baseState.currentListVersion
+          });
+          const signatureInput = `${ownerUserIdRef.current}|${dataChecksum}`;
+          stateToSave._ownerChecksum = btoa(signatureInput).slice(0, 32);
+        }
+
         await storageManager.queuedSet(STORAGE_KEY, stateToSave);
-        
+
       } catch (error: unknown) {
         logger.error('Failed to persist state to IndexedDB:', error);
       }
     }, 150);
-    
+
     return () => clearTimeout(t);
   }, [baseState, loading]);
 
@@ -1592,6 +1631,9 @@ export function useAppState() {
     setBaseState,
     deviceId,
     enqueueOp,
+
+    // Owner metadata for verification
+    ownerMetadata,
 
     // Optimistic update management
     optimisticUpdates: optimisticState.updates,

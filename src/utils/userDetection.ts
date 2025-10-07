@@ -18,6 +18,11 @@ export interface DataOwnership {
   action: 'sync' | 'backup_and_clear' | 'preserve_and_ask';
 }
 
+export interface OwnerMetadata {
+  ownerUserId?: string;
+  ownerChecksum?: string;
+}
+
 export class SmartUserDetection {
 
   // Generate device fingerprint (more stable than localStorage)
@@ -43,18 +48,41 @@ export class SmartUserDetection {
   static analyzeDataOwnership(
     localData: AppState,
     currentUser: User,
-    cloudData?: AppState
+    cloudData?: AppState,
+    ownerMetadata?: OwnerMetadata
   ): DataOwnership {
 
     const signals = {
       hasLocalData: this.hasSignificantLocalData(localData),
       hasCloudData: cloudData ? this.hasSignificantLocalData(cloudData) : false,
       localDataAge: this.estimateDataAge(localData),
-      userInLocalData: this.findUserSignalsInData(localData, currentUser),
-      cloudUserMatch: cloudData ? this.findUserSignalsInData(cloudData, currentUser) : null
+      userInLocalData: this.findUserSignalsInData(localData, currentUser, ownerMetadata),
+      cloudUserMatch: cloudData ? this.findUserSignalsInData(cloudData, currentUser) : null,
+      hasOwnerSignature: !!ownerMetadata?.ownerUserId,
+      signatureMatches: ownerMetadata?.ownerUserId === currentUser.id
     };
 
     logger.info('User detection signals:', signals);
+
+    // CRITICAL: If we have an owner signature, use it as the primary signal
+    if (signals.hasOwnerSignature) {
+      if (signals.signatureMatches) {
+        return {
+          isOwner: true,
+          confidence: 'high',
+          reason: 'Owner signature matches current user',
+          action: 'sync'
+        };
+      } else {
+        // Signature exists but doesn't match - this is a different user's data
+        return {
+          isOwner: false,
+          confidence: 'high',
+          reason: 'Owner signature belongs to different user',
+          action: 'backup_and_clear'
+        };
+      }
+    }
 
     // HIGH CONFIDENCE: Cloud data exists and matches user
     if (signals.hasCloudData && signals.cloudUserMatch) {
@@ -145,8 +173,26 @@ export class SmartUserDetection {
   }
 
   // Look for user identification signals in data
-  private static findUserSignalsInData(data: AppState, user: User): boolean {
+  private static findUserSignalsInData(
+    data: AppState,
+    user: User,
+    ownerMetadata?: OwnerMetadata
+  ): boolean {
     try {
+      // CRITICAL: Check owner signature first (most reliable signal)
+      if (ownerMetadata?.ownerUserId) {
+        // If we have an explicit signature, ONLY trust it
+        const matches = ownerMetadata.ownerUserId === user.id;
+        logger.info(`Owner signature check: ${matches ? 'MATCH' : 'MISMATCH'}`, {
+          stored: ownerMetadata.ownerUserId,
+          current: user.id
+        });
+        return matches;
+      }
+
+      // FALLBACK: If no signature exists (legacy data), use heuristics
+      logger.warn('No owner signature found - using legacy heuristics (less reliable)');
+
       // Check if arrangements contain user email/info
       const arrangements = Array.isArray(data.arrangements) ? data.arrangements : [];
       const userEmail = user.email?.toLowerCase();
@@ -159,15 +205,11 @@ export class SmartUserDetection {
         if (hasEmailMatch) return true;
       }
 
-      // Check completion patterns (same day activity suggests same user)
-      const completions = Array.isArray(data.completions) ? data.completions : [];
-      const recentCompletions = completions.filter(c => {
-        const hoursDiff = (Date.now() - new Date(c.timestamp).getTime()) / (1000 * 60 * 60);
-        return hoursDiff < 24;
-      });
+      // REMOVED: The "recent completions" heuristic that caused the bug
+      // This was too broad and matched any data from the last 24 hours
+      // Without an explicit signature, we should be conservative
 
-      // Recent activity suggests current user
-      return recentCompletions.length > 0;
+      return false; // Conservative default without signature
     } catch {
       return false;
     }

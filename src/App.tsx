@@ -261,6 +261,8 @@ export default function App() {
 }
 
 function AuthedApp() {
+  const cloudSync = useCloudSync();
+
   const {
     state,
     loading,
@@ -282,9 +284,9 @@ function AuthedApp() {
     deviceId,
     enqueueOp,
     updateReminderSettings,
-  } = useAppState();
+    ownerMetadata,
+  } = useAppState(cloudSync.user?.id);
 
-  const cloudSync = useCloudSync();
   const { confirm, alert } = useModalContext();
   const { settings } = useSettings();
 
@@ -298,6 +300,7 @@ function AuthedApp() {
   const [showChangePassword, setShowChangePassword] = React.useState(false);
   const [showChangeEmail, setShowChangeEmail] = React.useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = React.useState(false);
+  const [showOwnershipPrompt, setShowOwnershipPrompt] = React.useState(false);
 
   // Initialize tab from URL hash or default to "list"
   const getInitialTab = (): Tab => {
@@ -324,6 +327,13 @@ function AuthedApp() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // Check for ownership uncertainty flag
+  React.useEffect(() => {
+    if (hydrated && localStorage.getItem('navigator_ownership_uncertain') === 'true') {
+      setShowOwnershipPrompt(true);
+    }
+  }, [hydrated]);
 
   // Data retention cleanup (runs once per day on app start)
   React.useEffect(() => {
@@ -597,11 +607,12 @@ function AuthedApp() {
                 logger.warn("Could not fetch cloud data for analysis:", cloudError);
               }
 
-              // Analyze ownership using multiple signals
+              // Analyze ownership using multiple signals including owner metadata
               const ownership = SmartUserDetection.analyzeDataOwnership(
                 safeState,
                 cloudSync.user!,
-                cloudData
+                cloudData,
+                ownerMetadata
               );
 
               logger.info("Data ownership analysis:", ownership);
@@ -643,24 +654,19 @@ function AuthedApp() {
                     if (!cancelled) setHydrated(true);
                   } catch (backupError) {
                     logger.error("Backup failed - preserving data for safety:", backupError);
-                    await cloudSync.syncData(safeState);
+                    // CRITICAL FIX: Don't auto-sync on error - let user decide
                     SmartUserDetection.storeDeviceContext(cloudSync.user!);
-                    if (!cancelled) {
-                      lastFromCloudRef.current = JSON.stringify(safeState);
-                      setHydrated(true);
-                    }
+                    if (!cancelled) setHydrated(true);
                   }
                   break;
 
                 case 'preserve_and_ask':
                 default:
-                  logger.info("Preserving local data (uncertain ownership) - user can decide later");
-                  await cloudSync.syncData(safeState);
+                  logger.info("Preserving local data (uncertain ownership) - user must decide before syncing");
+                  // CRITICAL FIX: Don't auto-sync - store a flag to show prompt
+                  localStorage.setItem('navigator_ownership_uncertain', 'true');
                   SmartUserDetection.storeDeviceContext(cloudSync.user!);
-                  if (!cancelled) {
-                    lastFromCloudRef.current = JSON.stringify(safeState);
-                    setHydrated(true);
-                  }
+                  if (!cancelled) setHydrated(true);
                   break;
               }
             } catch (analysisError) {
@@ -2030,6 +2036,126 @@ function AuthedApp() {
 
       {/* Toast Notifications */}
       <ToastContainer />
+
+      {/* Ownership Uncertainty Prompt */}
+      {showOwnershipPrompt && (
+        <div className="modal-overlay" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <h2 style={{ marginBottom: '1rem', color: 'var(--warning)' }}>⚠️ Data Ownership Unclear</h2>
+            <p style={{ marginBottom: '1rem' }}>
+              We found local data on this device, but we cannot determine if it belongs to your account.
+            </p>
+            <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              This can happen when:
+            </p>
+            <ul style={{ marginBottom: '1rem', paddingLeft: '1.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              <li>You're using a shared device</li>
+              <li>Another user previously used this browser</li>
+              <li>You're signing in from a different account</li>
+            </ul>
+            <p style={{ marginBottom: '1.5rem', fontWeight: 500 }}>
+              What would you like to do with the local data?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <button
+                className="btn btn-primary"
+                style={{ width: '100%' }}
+                onClick={async () => {
+                  // User confirmed ownership - sync to cloud
+                  localStorage.removeItem('navigator_ownership_uncertain');
+                  setShowOwnershipPrompt(false);
+                  try {
+                    await cloudSync.syncData(safeState);
+                    SmartUserDetection.storeDeviceContext(cloudSync.user!);
+                    lastFromCloudRef.current = JSON.stringify(safeState);
+                    await alert({
+                      title: "Success",
+                      message: "Your data has been synced to the cloud.",
+                      type: "success"
+                    });
+                  } catch (err) {
+                    logger.error("Failed to sync data:", err);
+                    await alert({
+                      title: "Sync Failed",
+                      message: "Failed to sync data to cloud. Please try again.",
+                      type: "error"
+                    });
+                  }
+                }}
+              >
+                Keep & Sync to My Account
+              </button>
+              <button
+                className="btn"
+                style={{ width: '100%', background: 'var(--gray-200)' }}
+                onClick={async () => {
+                  // User wants to discard local data
+                  const confirmed = await confirm({
+                    title: "Discard Local Data?",
+                    message: "This will permanently delete the local data and load your cloud data instead. This action cannot be undone.",
+                    confirmText: "Discard Local Data",
+                    cancelText: "Cancel",
+                    type: "warning"
+                  });
+
+                  if (confirmed) {
+                    localStorage.removeItem('navigator_ownership_uncertain');
+
+                    // Create safety backup before clearing
+                    try {
+                      const backupKey = `navigator_safety_backup_${Date.now()}_user_choice_discard`;
+                      localStorage.setItem(backupKey, JSON.stringify({
+                        ...safeState,
+                        _backup_timestamp: new Date().toISOString(),
+                        _backup_reason: 'user_chose_discard'
+                      }));
+                      logger.info(`Safety backup created: ${backupKey}`);
+                    } catch (err) {
+                      logger.warn("Failed to create safety backup:", err);
+                    }
+
+                    // Clear local state
+                    setState({
+                      addresses: [],
+                      completions: [],
+                      arrangements: [],
+                      daySessions: [],
+                      activeIndex: null,
+                      currentListVersion: 1
+                    });
+
+                    SmartUserDetection.storeDeviceContext(cloudSync.user!);
+                    setShowOwnershipPrompt(false);
+
+                    await alert({
+                      title: "Data Cleared",
+                      message: "Local data has been cleared. Your cloud data will now load.",
+                      type: "success"
+                    });
+                  }
+                }}
+              >
+                Discard Local Data
+              </button>
+              <button
+                className="btn btn-ghost"
+                style={{ width: '100%' }}
+                onClick={() => {
+                  // User wants to decide later - keep modal available
+                  setShowOwnershipPrompt(false);
+                  alert({
+                    title: "Decision Deferred",
+                    message: "You can access this prompt again from Settings > Account > Resolve Data Ownership",
+                    type: "info"
+                  });
+                }}
+              >
+                Decide Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* GDPR Compliance: Privacy & Cookie Consent */}
       <PrivacyConsent />
