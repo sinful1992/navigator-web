@@ -7,8 +7,6 @@ import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
 import type { AppState } from '../types';
 import {
   exportDataAsJSON,
-  exportCompletionsAsCSV,
-  exportArrangementsAsCSV,
   getStorageInfo,
   clearLocalCaches
 } from '../utils/dataExport';
@@ -276,41 +274,16 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
                 </button>
 
                 {appState && (
-                  <>
-                    <button
-                      onClick={() => {
-                        exportDataAsJSON(appState, userEmail);
-                        setIsOpen(false);
-                      }}
-                      className="modern-action-button primary"
-                    >
-                      <span className="modern-button-icon">📥</span>
-                      <span className="modern-button-text">Export All Data (JSON)</span>
-                    </button>
-
-                    <div className="modern-button-group">
-                      <button
-                        onClick={() => {
-                          exportCompletionsAsCSV(appState);
-                          setIsOpen(false);
-                        }}
-                        className="modern-action-button small"
-                      >
-                        <span className="modern-button-icon">📋</span>
-                        <span className="modern-button-text">Completions CSV</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          exportArrangementsAsCSV(appState);
-                          setIsOpen(false);
-                        }}
-                        className="modern-action-button small"
-                      >
-                        <span className="modern-button-icon">📅</span>
-                        <span className="modern-button-text">Arrangements CSV</span>
-                      </button>
-                    </div>
-                  </>
+                  <button
+                    onClick={() => {
+                      exportDataAsJSON(appState, userEmail);
+                      setIsOpen(false);
+                    }}
+                    className="modern-action-button primary"
+                  >
+                    <span className="modern-button-icon">💾</span>
+                    <span className="modern-button-text">Backup All Data</span>
+                  </button>
                 )}
               </div>
 
@@ -526,69 +499,83 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
 
             {/* Account */}
             <CollapsibleSection title="Account" icon="👤" sectionKey="account">
-              {onShowSubscription && (
-                <button
-                  className="modern-action-button accent"
-                  onClick={() => {
-                    onShowSubscription();
-                    setIsOpen(false);
-                  }}
-                >
-                  <span className="modern-button-icon">⭐</span>
-                  <span className="modern-button-text">Subscription</span>
-                </button>
-              )}
+              <div className="modern-subsection">
+                <div className="modern-subsection-title">Account Settings</div>
 
-              {onChangePassword && (
-                <button
-                  className="modern-action-button"
-                  onClick={() => {
-                    onChangePassword();
-                    setIsOpen(false);
-                  }}
-                >
-                  <span className="modern-button-icon">🔑</span>
-                  <span className="modern-button-text">Change Password</span>
-                </button>
-              )}
+                {onShowSubscription && (
+                  <button
+                    className="modern-action-button accent"
+                    onClick={() => {
+                      onShowSubscription();
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="modern-button-icon">⭐</span>
+                    <span className="modern-button-text">Subscription</span>
+                  </button>
+                )}
 
-              {onChangeEmail && (
-                <button
-                  className="modern-action-button"
-                  onClick={() => {
-                    onChangeEmail();
-                    setIsOpen(false);
-                  }}
-                >
-                  <span className="modern-button-icon">📧</span>
-                  <span className="modern-button-text">Change Email</span>
-                </button>
-              )}
+                {onChangePassword && (
+                  <button
+                    className="modern-action-button"
+                    onClick={() => {
+                      onChangePassword();
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="modern-button-icon">🔑</span>
+                    <span className="modern-button-text">Change Password</span>
+                  </button>
+                )}
 
-              {onSignOut && (
-                <button
-                  className="modern-action-button"
-                  onClick={() => {
-                    onSignOut();
-                    setIsOpen(false);
-                  }}
-                >
-                  <span className="modern-button-icon">🚪</span>
-                  <span className="modern-button-text">Sign Out</span>
-                </button>
-              )}
+                {onChangeEmail && (
+                  <button
+                    className="modern-action-button"
+                    onClick={() => {
+                      onChangeEmail();
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="modern-button-icon">📧</span>
+                    <span className="modern-button-text">Change Email</span>
+                  </button>
+                )}
 
+                {onSignOut && (
+                  <button
+                    className="modern-action-button"
+                    onClick={() => {
+                      onSignOut();
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="modern-button-icon">🚪</span>
+                    <span className="modern-button-text">Sign Out</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Danger Zone */}
               {onDeleteAccount && (
-                <button
-                  className="modern-action-button danger"
-                  onClick={() => {
-                    onDeleteAccount();
-                    setIsOpen(false);
-                  }}
-                >
-                  <span className="modern-button-icon">⚠️</span>
-                  <span className="modern-button-text">Delete Account</span>
-                </button>
+                <div className="modern-subsection modern-danger-zone">
+                  <div className="modern-danger-zone-header">
+                    <span className="modern-danger-icon">⚠️</span>
+                    <div>
+                      <div className="modern-subsection-title danger">Danger Zone</div>
+                      <div className="modern-danger-desc">Irreversible actions</div>
+                    </div>
+                  </div>
+                  <button
+                    className="modern-action-button danger-full"
+                    onClick={() => {
+                      onDeleteAccount();
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="modern-button-icon">🗑️</span>
+                    <span className="modern-button-text">Delete Account Permanently</span>
+                  </button>
+                </div>
               )}
             </CollapsibleSection>
           </div>
@@ -656,7 +643,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
           position: absolute;
           top: calc(100% + 12px);
           right: 0;
-          z-index: 10000;
+          z-index: 999999;
           width: 440px;
           max-height: 85vh;
           background: linear-gradient(135deg, #ffffff 0%, #fafbff 100%);
@@ -670,6 +657,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
           display: flex;
           flex-direction: column;
           animation: modernSlideIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+          backdrop-filter: blur(8px);
         }
 
         @keyframes modernSlideIn {
@@ -846,6 +834,38 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
           letter-spacing: 0.075em;
           color: #6366f1;
           margin-bottom: 0.75rem;
+        }
+
+        .modern-subsection-title.danger {
+          color: #dc2626;
+        }
+
+        /* Danger Zone Styles */
+        .modern-danger-zone {
+          margin-top: 1.5rem;
+          padding: 1.25rem;
+          background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, rgba(220, 38, 38, 0.08) 100%);
+          border: 2px solid rgba(239, 68, 68, 0.25);
+          border-radius: 12px;
+        }
+
+        .modern-danger-zone-header {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.75rem;
+          margin-bottom: 1rem;
+        }
+
+        .modern-danger-icon {
+          font-size: 1.75rem;
+          flex-shrink: 0;
+        }
+
+        .modern-danger-desc {
+          font-size: 0.8125rem;
+          color: #dc2626;
+          margin-top: 0.25rem;
+          font-weight: 500;
         }
 
         /* Setting Rows */
@@ -1026,6 +1046,21 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
         .modern-action-button.danger:hover {
           background: rgba(239, 68, 68, 0.12);
           border-color: rgba(239, 68, 68, 0.4);
+        }
+
+        .modern-action-button.danger-full {
+          background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+          border: 2px solid #991b1b;
+          color: white;
+          font-weight: 600;
+          box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+        }
+
+        .modern-action-button.danger-full:hover {
+          background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
+          border-color: #7f1d1d;
+          box-shadow: 0 6px 20px rgba(220, 38, 38, 0.4);
+          transform: translateY(-1px);
         }
 
         .modern-action-button.small {
@@ -1306,15 +1341,21 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
 
         /* Mobile Responsive */
         @media (max-width: 768px) {
+          .modern-settings-dropdown {
+            position: static;
+          }
+
           .modern-settings-panel {
             position: fixed;
             top: 50%;
             left: 50%;
             right: auto;
+            bottom: auto;
             transform: translate(-50%, -50%);
             width: calc(100vw - 2rem);
             max-width: 420px;
-            max-height: 90vh;
+            max-height: 85vh;
+            z-index: 999999;
           }
 
           @keyframes modernSlideIn {
@@ -1338,6 +1379,35 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
 
           .modern-section-inner {
             padding: 0 1rem 1rem;
+          }
+
+          .modern-settings-trigger {
+            padding: 0.625rem 1rem;
+            font-size: 0.875rem;
+          }
+
+          .modern-trigger-icon {
+            font-size: 1.125rem;
+          }
+        }
+
+        /* Mobile Overlay */
+        @media (max-width: 768px) {
+          .modern-settings-panel::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: -1;
+            animation: fadeIn 0.3s ease-out;
+          }
+
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
           }
         }
       `}</style>
