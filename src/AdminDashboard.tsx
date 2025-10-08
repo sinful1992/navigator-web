@@ -348,42 +348,46 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
 
   return (
     <div className="admin-dashboard">
-      <div className="admin-header">
-        <h2>Admin Dashboard</h2>
-        <div className="admin-info">
-          <span>Role: <strong>{adminUser?.role}</strong></span>
-          {onClose && (
-            <button className="close-button" onClick={onClose}>✕</button>
-          )}
+      <div className="admin-header-fixed">
+        <div className="admin-header">
+          <h2>Admin Dashboard</h2>
+          <div className="admin-info">
+            <span>Role: <strong>{adminUser?.role}</strong></span>
+            {onClose && (
+              <button className="close-button" onClick={onClose}>✕</button>
+            )}
+          </div>
+        </div>
+
+        <div className="admin-tabs">
+          <button
+            className={activeTab === 'subscriptions' ? 'active' : ''}
+            onClick={() => setActiveTab('subscriptions')}
+          >
+            Subscriptions ({subscriptions.length})
+          </button>
+          <button
+            className={activeTab === 'actions' ? 'active' : ''}
+            onClick={() => setActiveTab('actions')}
+          >
+            Actions ({recentActions.length})
+          </button>
+          <button
+            className={activeTab === 'inactive' ? 'active' : ''}
+            onClick={() => setActiveTab('inactive')}
+          >
+            Inactive ({upcomingDeletions.length})
+          </button>
+          <button
+            className={activeTab === 'settings' ? 'active' : ''}
+            onClick={() => setActiveTab('settings')}
+          >
+            Settings
+          </button>
         </div>
       </div>
 
-      <div className="admin-tabs">
-        <button
-          className={activeTab === 'subscriptions' ? 'active' : ''}
-          onClick={() => setActiveTab('subscriptions')}
-        >
-          Subscriptions ({subscriptions.length})
-        </button>
-        <button
-          className={activeTab === 'actions' ? 'active' : ''}
-          onClick={() => setActiveTab('actions')}
-        >
-          Recent Actions ({recentActions.length})
-        </button>
-        <button
-          className={activeTab === 'inactive' ? 'active' : ''}
-          onClick={() => setActiveTab('inactive')}
-        >
-          Inactive Accounts ({upcomingDeletions.length})
-        </button>
-        <button
-          className={activeTab === 'settings' ? 'active' : ''}
-          onClick={() => setActiveTab('settings')}
-        >
-          Settings
-        </button>
-      </div>
+      <div className="admin-content-scrollable">
 
       {activeTab === 'subscriptions' && (
         <div className="subscriptions-tab">
@@ -651,6 +655,7 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
@@ -660,14 +665,33 @@ export const AdminDashboard = React.memo(AdminDashboardComponent);
 
 // Modern CSS Styles with Dark Mode Support
 const adminStyles = `
-/* ==== Admin Dashboard Modern Styles ==== */
+/* ==== Admin Dashboard Modern Professional Styles ==== */
 .admin-dashboard {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
   background: var(--background);
-  min-height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+.admin-header-fixed {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--background);
+  border-bottom: 2px solid var(--border-light);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.admin-content-scrollable {
+  flex: 1;
+  overflow-y: auto;
   overflow-x: hidden;
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
   box-sizing: border-box;
 }
 
@@ -675,18 +699,16 @@ const adminStyles = `
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  padding: 1rem 1.5rem;
   background: var(--surface);
-  padding: 1rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--border-light);
 }
 
 .admin-header h2 {
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--text);
   margin: 0;
+  letter-spacing: -0.02em;
 }
 
 .admin-info {
@@ -718,115 +740,124 @@ const adminStyles = `
 
 .admin-tabs {
   display: flex;
-  gap: 0.25rem;
-  margin-bottom: 1rem;
-  background: var(--surface);
-  padding: 0.25rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--border-light);
+  gap: 0;
+  background: var(--background);
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--border-light);
 }
 
 .admin-tabs button {
-  flex: 1;
-  padding: 0.5rem 0.75rem;
+  padding: 0.875rem 1.5rem;
   border: none;
   background: transparent;
   cursor: pointer;
-  border-radius: var(--radius);
-  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  font-weight: 600;
   color: var(--text-muted);
   transition: all 0.2s ease;
-  position: relative;
-  font-size: 0.75rem;
-  text-align: center;
+  font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .admin-tabs button:hover {
-  background: var(--background);
   color: var(--text);
+  background: var(--surface);
 }
 
 .admin-tabs button.active {
-  background: var(--primary);
-  color: white;
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  background: transparent;
 }
 
 .stats-bar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 .stat {
-  background: var(--surface);
-  padding: 0.75rem;
-  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--surface) 0%, var(--background) 100%);
+  padding: 1.25rem;
+  border-radius: 12px;
   border: 1px solid var(--border-light);
   text-align: center;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .stat:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: var(--primary);
 }
 
 .stat strong {
   display: block;
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 2rem;
+  font-weight: 800;
   color: var(--primary);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
+  line-height: 1;
 }
 
 .stat span {
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  line-height: 1.2;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
 }
 
 .admin-actions-panel {
   background: var(--surface);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius);
-  padding: 1rem;
-  margin-bottom: 1rem;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .admin-actions-panel h3 {
-  margin: 0 0 1rem 0;
-  font-size: 1rem;
-  font-weight: 600;
+  margin: 0 0 1.25rem 0;
+  font-size: 1.125rem;
+  font-weight: 700;
   color: var(--text);
+  border-bottom: 2px solid var(--border-light);
+  padding-bottom: 0.75rem;
 }
 
 .admin-form .form-row {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.admin-form .form-row:last-child {
+  margin-bottom: 0;
 }
 
 .admin-form label {
   display: block;
   margin-bottom: 0.5rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .admin-form select,
 .admin-form input,
 .admin-form textarea {
   width: 100%;
-  padding: 0.5rem;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius);
-  font-size: 0.75rem;
+  padding: 0.75rem;
+  border: 2px solid var(--border-light);
+  border-radius: 8px;
+  font-size: 0.875rem;
   transition: all 0.2s ease;
   background: var(--background);
   color: var(--text);
   box-sizing: border-box;
+  font-family: inherit;
 }
 
 .admin-form select:focus,
@@ -834,193 +865,246 @@ const adminStyles = `
 .admin-form textarea:focus {
   outline: none;
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 74, 144, 226), 0.1);
 }
 
 .form-row .action-group {
-  display: flex;
-  gap: 0.5rem;
-  align-items: end;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
 }
 
 .input-group {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  flex: 1;
-  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--background);
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
 }
 
 .input-group label {
   margin: 0;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
+  color: var(--text);
+  white-space: nowrap;
+  min-width: fit-content;
 }
 
 .input-group input {
   width: 80px;
   min-width: 60px;
+  padding: 0.5rem;
+  text-align: center;
+  font-weight: 600;
 }
 
 .input-group button {
   background: var(--primary);
   color: white;
   border: none;
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius);
+  padding: 0.625rem 1.5rem;
+  border-radius: 8px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
   transition: all 0.2s ease;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .input-group button:hover {
   background: var(--primary-hover);
   transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .input-group button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 
 .subscriptions-table {
   background: var(--surface);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius);
+  border-radius: 12px;
   overflow: hidden;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .subscriptions-table h3 {
   margin: 0;
-  padding: 0.75rem 1rem;
+  padding: 1rem 1.5rem;
   background: var(--background);
-  border-bottom: 1px solid var(--border-light);
-  font-size: 1rem;
-  font-weight: 600;
+  border-bottom: 2px solid var(--border-light);
+  font-size: 1.125rem;
+  font-weight: 700;
   color: var(--text);
 }
 
 .subscriptions-table table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 600px;
+  display: block;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.subscriptions-table thead {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.subscriptions-table tbody {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
 }
 
 .subscriptions-table th,
 .subscriptions-table td {
-  padding: 0.5rem 0.75rem;
+  padding: 1rem 1.5rem;
   text-align: left;
   border-bottom: 1px solid var(--border-light);
 }
 
 .subscriptions-table th {
-  background: var(--background);
-  font-weight: 600;
-  font-size: 0.625rem;
+  background: var(--surface);
+  font-weight: 700;
+  font-size: 0.75rem;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   white-space: nowrap;
+  border-bottom: 2px solid var(--border-light);
 }
 
 .subscriptions-table td {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   color: var(--text);
-  white-space: nowrap;
+  background: var(--background);
+}
+
+.subscriptions-table tbody tr:hover td {
+  background: var(--surface);
+}
+
+.actions-tab,
+.inactive-tab,
+.settings-tab {
+  max-width: 1200px;
 }
 
 .actions-list {
-  max-height: 400px;
+  max-height: 600px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  padding-right: 0.5rem;
 }
 
 .action-item {
   border: 1px solid var(--border-light);
-  border-radius: var(--radius);
-  margin-bottom: 0.5rem;
-  padding: 1rem;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  padding: 1.25rem;
   background: var(--surface);
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 .action-item:hover {
-  transform: translateY(-1px);
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: var(--primary);
 }
 
 .action-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 0.75rem;
-  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  gap: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-light);
 }
 
 .action-header strong {
   color: var(--primary);
-  font-weight: 600;
-  font-size: 0.75rem;
+  font-weight: 700;
+  font-size: 0.875rem;
   flex: 1;
+  text-transform: capitalize;
 }
 
 .action-date {
   color: var(--text-muted);
-  font-size: 0.625rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 600;
   white-space: nowrap;
+  background: var(--background);
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
 }
 
 .action-details p {
-  margin: 0.25rem 0;
-  font-size: 0.75rem;
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
   color: var(--text);
+  line-height: 1.6;
 }
 
 .action-notes {
-  margin-top: 0.75rem;
+  margin-top: 1rem;
 }
 
 .action-notes pre {
   background: var(--background);
-  padding: 0.75rem;
-  border-radius: var(--radius);
-  font-size: 0.625rem;
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
   overflow-x: auto;
   border: 1px solid var(--border-light);
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
+  line-height: 1.5;
 }
 
 .settings-info,
-.quick-stats {
+.quick-stats,
+.deletions-table {
   background: var(--surface);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius);
-  padding: 1rem;
-  margin-bottom: 1rem;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .settings-info h4,
 .quick-stats h4 {
-  margin: 0 0 0.75rem 0;
+  margin: 0 0 1rem 0;
   color: var(--text);
-  font-weight: 600;
-  font-size: 1rem;
+  font-weight: 700;
+  font-size: 1.125rem;
+  border-bottom: 2px solid var(--border-light);
+  padding-bottom: 0.75rem;
 }
 
 .settings-info p {
-  margin: 0.5rem 0;
+  margin: 0.75rem 0;
   color: var(--text);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
 
 .quick-stats ul {
@@ -1030,17 +1114,76 @@ const adminStyles = `
 }
 
 .quick-stats li {
-  padding: 0.5rem 0;
+  padding: 1rem 0;
   border-bottom: 1px solid var(--border-light);
   color: var(--text);
   display: flex;
   justify-content: space-between;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   gap: 1rem;
 }
 
 .quick-stats li:last-child {
   border-bottom: none;
+}
+
+.deletions-table table {
+  width: 100%;
+  border-collapse: collapse;
+  display: block;
+  max-height: 400px;
+  overflow-y: auto;
+  margin-top: 1rem;
+}
+
+.deletions-table thead {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.deletions-table tbody {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.deletions-table th,
+.deletions-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.deletions-table th {
+  background: var(--surface);
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-bottom: 2px solid var(--border-light);
+}
+
+.deletions-table td {
+  font-size: 0.875rem;
+  color: var(--text);
+  background: var(--background);
+}
+
+.deletions-table tbody tr:hover td {
+  background: var(--surface);
+}
+
+.no-deletions {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+  font-size: 1rem;
 }
 
 .loading,
@@ -1066,17 +1209,75 @@ const adminStyles = `
 
 /* CSS Variables handle dark mode automatically through the app's theme system */
 
-/* ==== Responsive Design - Mobile First ==== */
-@media (max-width: 480px) {
-  .admin-dashboard {
-    padding: 0.5rem;
-    margin: 0;
+/* ==== Responsive Design ==== */
+@media (max-width: 768px) {
+  .admin-content-scrollable {
+    padding: 1rem;
   }
 
   .admin-header {
     flex-direction: column;
-    gap: 0.5rem;
-    text-align: center;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .admin-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .admin-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 1rem;
+  }
+
+  .admin-tabs button {
+    padding: 0.75rem 1rem;
+    font-size: 0.8125rem;
+  }
+
+  .stats-bar {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
+  .stat strong {
+    font-size: 1.5rem;
+  }
+
+  .stat span {
+    font-size: 0.6875rem;
+  }
+
+  .form-row .action-group {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .subscriptions-table table,
+  .deletions-table table {
+    max-height: 400px;
+  }
+
+  .subscriptions-table th,
+  .subscriptions-table td,
+  .deletions-table th,
+  .deletions-table td {
+    padding: 0.75rem 1rem;
+    font-size: 0.8125rem;
+  }
+
+  .action-item {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-content-scrollable {
+    padding: 0.75rem;
+  }
+
+  .admin-header {
     padding: 0.75rem;
   }
 
@@ -1084,165 +1285,100 @@ const adminStyles = `
     font-size: 1.125rem;
   }
 
-  .admin-info {
-    flex-direction: column;
-    gap: 0.25rem;
-    font-size: 0.625rem;
+  .admin-info span {
+    font-size: 0.75rem;
   }
 
   .admin-tabs {
-    flex-direction: column;
-    gap: 0.125rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 0 0.75rem;
   }
 
   .admin-tabs button {
-    padding: 0.5rem;
+    padding: 0.625rem 0.875rem;
     font-size: 0.75rem;
   }
 
   .stats-bar {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.25rem;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
   }
 
   .stat {
-    padding: 0.5rem;
+    padding: 1rem;
   }
 
   .stat strong {
-    font-size: 1rem;
-    margin-bottom: 0.125rem;
+    font-size: 1.5rem;
   }
 
   .stat span {
-    font-size: 0.5rem;
+    font-size: 0.6875rem;
   }
 
-  .admin-actions-panel {
-    padding: 0.75rem;
+  .admin-actions-panel,
+  .settings-info,
+  .quick-stats,
+  .deletions-table {
+    padding: 1rem;
   }
 
-  .form-row .action-group {
-    flex-direction: column;
-    gap: 0.5rem;
-    align-items: stretch;
+  .admin-actions-panel h3,
+  .settings-info h4,
+  .quick-stats h4 {
+    font-size: 1rem;
   }
 
   .input-group {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: space-between;
   }
 
   .input-group label {
-    margin: 0;
-    min-width: 60px;
-    text-align: left;
-    font-size: 0.5rem;
+    flex: 1 1 100%;
+    margin-bottom: 0.5rem;
   }
 
   .input-group input {
-    width: 60px;
-    min-width: 60px;
+    flex: 1;
   }
 
   .input-group button {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.625rem;
+    flex: 1;
+    min-width: 120px;
   }
 
-  .subscriptions-table h3 {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.875rem;
+  .subscriptions-table h3,
+  .deletions-table h3 {
+    font-size: 1rem;
+    padding: 0.75rem 1rem;
   }
 
   .subscriptions-table th,
-  .subscriptions-table td {
-    padding: 0.375rem 0.5rem;
-    font-size: 0.625rem;
+  .subscriptions-table td,
+  .deletions-table th,
+  .deletions-table td {
+    padding: 0.75rem;
+    font-size: 0.75rem;
   }
 
   .action-item {
-    padding: 0.75rem;
+    padding: 0.875rem;
   }
 
   .action-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.25rem;
-  }
-
-  .action-header strong {
-    font-size: 0.625rem;
   }
 
   .action-date {
-    font-size: 0.5rem;
+    align-self: flex-end;
   }
 
-  .action-details p {
-    font-size: 0.625rem;
-    margin: 0.125rem 0;
-  }
-
-  .action-notes pre {
-    padding: 0.5rem;
-    font-size: 0.5rem;
-  }
-
-  .settings-info,
-  .quick-stats {
-    padding: 0.75rem;
-  }
-
-  .settings-info h4,
-  .quick-stats h4 {
-    font-size: 0.875rem;
-  }
-
-  .settings-info p,
   .quick-stats li {
-    font-size: 0.625rem;
-  }
-}
-
-@media (max-width: 360px) {
-  .admin-dashboard {
-    padding: 0.25rem;
-  }
-
-  .stats-bar {
-    grid-template-columns: 1fr;
-    gap: 0.25rem;
-  }
-
-  .stat strong {
-    font-size: 0.875rem;
-  }
-
-  .stat span {
-    font-size: 0.5rem;
-  }
-
-  .admin-tabs button {
-    padding: 0.375rem;
-    font-size: 0.625rem;
-  }
-}
-
-/* Tablet optimizations */
-@media (min-width: 481px) and (max-width: 768px) {
-  .admin-dashboard {
-    padding: 0.75rem;
-  }
-
-  .stats-bar {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .form-row .action-group {
-    flex-wrap: wrap;
-    gap: 0.75rem;
+    font-size: 0.8125rem;
+    padding: 0.75rem 0;
   }
 }
 `;
