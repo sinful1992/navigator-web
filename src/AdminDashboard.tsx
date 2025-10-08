@@ -14,6 +14,7 @@ interface AdminUser {
 }
 
 interface SubscriptionOverview {
+  user_id: string;
   user_email: string;
   subscription_status: string;
   subscription_plan: string;
@@ -418,7 +419,7 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
                 >
                   <option value="">Select User...</option>
                   {subscriptions.map(sub => (
-                    <option key={sub.user_email} value={sub.user_email}>
+                    <option key={sub.user_id} value={sub.user_id}>
                       {sub.user_email} - {getStatusBadge(sub.subscription_status).props.children}
                     </option>
                   ))}
