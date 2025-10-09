@@ -421,6 +421,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
               <button
                 className="modern-feature-button"
                 onClick={() => {
+                  console.log('Bonus settings button clicked', { bonusSettings, onUpdateBonusSettings });
                   setShowBonusSettings(true);
                   setIsOpen(false);
                 }}
