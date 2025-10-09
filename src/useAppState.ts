@@ -500,6 +500,10 @@ export function useAppState(userId?: string) {
             arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
             currentListVersion: version,
             subscription: saved.subscription || null,
+            reminderSettings: saved.reminderSettings || DEFAULT_REMINDER_SETTINGS,
+            reminderNotifications: Array.isArray(saved.reminderNotifications) ? saved.reminderNotifications : [],
+            lastReminderProcessed: saved.lastReminderProcessed,
+            bonusSettings: saved.bonusSettings || DEFAULT_BONUS_SETTINGS,
             _schemaVersion: CURRENT_SCHEMA_VERSION,
           };
 
