@@ -448,7 +448,15 @@ export function useAppState(userId?: string) {
 
   // Computed state with optimistic updates applied
   const state = React.useMemo(() => {
-    return applyOptimisticUpdates(baseState, optimisticState.updates);
+    // 🔧 FIX: Ensure bonusSettings exists (migration for existing users)
+    let patchedBaseState = baseState;
+    if (!baseState.bonusSettings) {
+      logger.warn('Missing bonusSettings in baseState, applying default');
+      patchedBaseState = { ...baseState, bonusSettings: DEFAULT_BONUS_SETTINGS };
+      // Update baseState immediately
+      setTimeout(() => setBaseState(patchedBaseState), 0);
+    }
+    return applyOptimisticUpdates(patchedBaseState, optimisticState.updates);
   }, [baseState, optimisticState.updates]);
 
   // Track conflicts
@@ -506,6 +514,11 @@ export function useAppState(userId?: string) {
             bonusSettings: saved.bonusSettings || DEFAULT_BONUS_SETTINGS,
             _schemaVersion: CURRENT_SCHEMA_VERSION,
           };
+
+          logger.info('State loaded from IndexedDB:', {
+            hasBonusSettings: !!next.bonusSettings,
+            bonusSettings: next.bonusSettings
+          });
 
           setBaseState(next);
         } else {
