@@ -2,7 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSettings, isSupabaseConfigured } from '../hooks/useSettings';
 import { ReminderSettings } from './ReminderSettings';
-import type { ReminderSettings as ReminderSettingsType } from '../types';
+import { BonusSettingsModal } from './BonusSettingsModal';
+import type { ReminderSettings as ReminderSettingsType, BonusSettings } from '../types';
 import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
 import type { AppState } from '../types';
 import {
@@ -17,6 +18,8 @@ interface SettingsDropdownProps {
   trigger?: React.ReactNode;
   reminderSettings?: ReminderSettingsType;
   onUpdateReminderSettings?: (settings: ReminderSettingsType) => void;
+  bonusSettings?: BonusSettings;
+  onUpdateBonusSettings?: (settings: BonusSettings) => void;
   onChangePassword?: () => void;
   onChangeEmail?: () => void;
   onDeleteAccount?: () => void;
@@ -40,6 +43,8 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
   trigger,
   reminderSettings,
   onUpdateReminderSettings,
+  bonusSettings,
+  onUpdateBonusSettings,
   onChangePassword,
   onChangeEmail,
   onDeleteAccount,
@@ -58,6 +63,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showSMSSettings, setShowSMSSettings] = useState(false);
+  const [showBonusSettings, setShowBonusSettings] = useState(false);
   const [storageInfo, setStorageInfo] = useState<{ usedMB: string; quotaMB: string; percentage: number } | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>('general');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -410,6 +416,25 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
               </button>
             </CollapsibleSection>
 
+            {/* Earnings & Bonus */}
+            <CollapsibleSection title="Earnings & Bonus" icon="💰" sectionKey="earnings">
+              <button
+                className="modern-feature-button"
+                onClick={() => {
+                  setShowBonusSettings(true);
+                  setIsOpen(false);
+                }}
+              >
+                <div className="modern-feature-content">
+                  <div className="modern-feature-title">Bonus Calculation Settings</div>
+                  <div className="modern-feature-desc">
+                    Configure your bonus calculation formula, thresholds, and case counting
+                  </div>
+                </div>
+                <span className="modern-feature-arrow">→</span>
+              </button>
+            </CollapsibleSection>
+
             {/* Privacy & Safety */}
             <CollapsibleSection title="Privacy & Safety" icon="🔒" sectionKey="privacy">
               <div className="modern-setting-row">
@@ -600,6 +625,18 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
             setShowSMSSettings(false);
           }}
           onClose={() => setShowSMSSettings(false)}
+        />
+      )}
+
+      {/* Bonus Settings Modal */}
+      {showBonusSettings && bonusSettings && onUpdateBonusSettings && (
+        <BonusSettingsModal
+          settings={bonusSettings}
+          onUpdateSettings={(settings) => {
+            onUpdateBonusSettings(settings);
+            setShowBonusSettings(false);
+          }}
+          onClose={() => setShowBonusSettings(false)}
         />
       )}
 

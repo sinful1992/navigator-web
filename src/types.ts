@@ -22,6 +22,8 @@ export type Completion = {
   caseReference?: string;
   /** Time spent on this case in seconds. */
   timeSpentSeconds?: number;
+  /** Number of cases paid in full (for linked cases - e.g., 1 debtor, 3 cases). */
+  numberOfCases?: number;
 };
 
 export type DaySession = {
@@ -179,6 +181,43 @@ export type ReminderSettings = {
   };
 };
 
+export type BonusCalculationType = 'simple' | 'complex' | 'custom';
+
+export type BonusSettings = {
+  enabled: boolean;
+  calculationType: BonusCalculationType;
+
+  // Simple calculation (£X per PIF - £Y per day threshold)
+  simpleSettings?: {
+    pifBonus: number;              // £ per PIF (e.g., 100)
+    dailyThreshold: number;        // £ daily threshold (e.g., 100)
+  };
+
+  // Complex calculation (based on PDF formula)
+  complexSettings?: {
+    baseEnforcementFee: number;    // £235 enforcement fee
+    basePifBonus: number;          // £100 for standard PIF
+    largePifThreshold: number;     // £1500 debt threshold
+    largePifPercentage: number;    // 2.5% of 7.5% = 0.025 * 0.075 = 0.001875
+    largePifCap: number;           // £500 max bonus
+    smallPifBonus: number;         // £30 for balance < £100
+    linkedCaseBonus: number;       // £10 for linked cases with 0 fee
+    complianceFeePerCase: number;  // £75 per case
+    complianceFeeFixed: number;    // £122.5 fixed fee
+    dailyThreshold: number;        // £100 per working day
+  };
+
+  // Custom JavaScript formula
+  customFormula?: string;          // JavaScript expression: (T, N, D) => bonus
+
+  // Additional settings
+  countLinkedCases: boolean;       // Count each case separately (PDF: 3 cases = 3 PIFs)
+  adjustForWorkingDays: boolean;   // Adjust thresholds for actual working days
+
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type AppState = {
   addresses: AddressRow[];
   activeIndex: number | null;
@@ -202,4 +241,6 @@ export type AppState = {
   reminderNotifications?: ReminderNotification[];
   /** Last time reminders were processed */
   lastReminderProcessed?: string; // ISO timestamp
+  /** Bonus calculation settings */
+  bonusSettings?: BonusSettings;
 };

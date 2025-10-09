@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import type { AppState } from "./types";
 import { SubscriptionGuard } from "./SubscriptionGuard";
 import type { User } from "@supabase/supabase-js";
+import { calculateBonus, calculateBonusBreakdown, DEFAULT_BONUS_SETTINGS } from "./utils/bonusCalculator";
 
 interface EarningsCalendarProps {
   state: AppState;
@@ -39,13 +40,29 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
     const daCount = rangeCompletions.filter(c => c.outcome === 'DA').length;
     const arrCount = rangeCompletions.filter(c => c.outcome === 'ARR').length;
 
+    // Calculate working days from day sessions in the selected range
+    const daySessions = state.daySessions || [];
+    const workingDays = daySessions.filter(session => {
+      return session.date >= selectedStartDate && session.date <= selectedEndDate && session.end;
+    }).length;
+
+    // Use configurable bonus settings
+    const bonusSettings = state.bonusSettings || DEFAULT_BONUS_SETTINGS;
+
+    // Calculate total bonus using the configured formula
+    const totalBonus = calculateBonus(rangeCompletions, workingDays, bonusSettings);
+
+    // Get detailed breakdown
+    const bonusBreakdown = calculateBonusBreakdown(rangeCompletions, workingDays, bonusSettings);
+
     // Group by date for daily breakdown
     const dailyStats = rangeCompletions.reduce((acc, completion) => {
       const date = completion.timestamp.slice(0, 10);
       if (!acc[date]) {
-        acc[date] = { date, pifs: 0, total: 0, fees: 0 };
+        acc[date] = { date, pifs: 0, total: 0, fees: 0, completions: [] };
       }
       acc[date].total++;
+      acc[date].completions.push(completion);
       if (completion.outcome === 'PIF') {
         acc[date].pifs++;
         const amount = parseFloat(completion.amount || '0');
@@ -54,16 +71,33 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
         }
       }
       return acc;
-    }, {} as Record<string, { date: string; pifs: number; total: number; fees: number }>);
+    }, {} as Record<string, { date: string; pifs: number; total: number; fees: number; completions: any[] }>);
 
-    // Calculate bonus for each day: (PIFs × £100) - £100 daily deduction
-    const dailyStatsWithBonus = Object.values(dailyStats).map(day => ({
-      ...day,
-      bonus: Math.max(0, (day.pifs * 100) - 100)
-    }));
+    // Calculate bonus for each day using the configured formula
+    const dailyStatsWithBonus = Object.values(dailyStats).map(day => {
+      const dayCompletions = day.completions;
+      // For daily calculation, use 1 working day
+      const dayBonus = calculateBonus(dayCompletions, 1, bonusSettings);
+      return {
+        date: day.date,
+        pifs: day.pifs,
+        total: day.total,
+        fees: day.fees,
+        bonus: dayBonus
+      };
+    });
 
-    // Calculate total bonus for the range
-    const totalBonus = dailyStatsWithBonus.reduce((sum, day) => sum + day.bonus, 0);
+    // Get formula description
+    let formulaDescription = '';
+    if (bonusSettings.calculationType === 'simple') {
+      const pifBonus = bonusSettings.simpleSettings?.pifBonus || 100;
+      const threshold = bonusSettings.simpleSettings?.dailyThreshold || 100;
+      formulaDescription = `£${pifBonus}/PIF - £${threshold}/day`;
+    } else if (bonusSettings.calculationType === 'complex') {
+      formulaDescription = 'TCG Regulations 2014';
+    } else if (bonusSettings.calculationType === 'custom') {
+      formulaDescription = 'Custom Formula';
+    }
 
     return {
       totalPifFees,
@@ -73,9 +107,12 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
       daCount,
       arrCount,
       totalBonus,
+      workingDays,
+      bonusBreakdown,
+      formulaDescription,
       dailyStats: dailyStatsWithBonus.sort((a, b) => b.date.localeCompare(a.date))
     };
-  }, [state.completions, selectedStartDate, selectedEndDate]);
+  }, [state.completions, state.daySessions, state.bonusSettings, selectedStartDate, selectedEndDate]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-GB', {
@@ -185,7 +222,10 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
               {formatCurrency(rangeStats.totalBonus)}
             </div>
             <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-              £100/PIF - £100/day
+              {rangeStats.formulaDescription}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              {rangeStats.workingDays} working day{rangeStats.workingDays !== 1 ? 's' : ''}
             </div>
           </div>
 

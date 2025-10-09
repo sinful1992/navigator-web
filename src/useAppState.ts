@@ -13,6 +13,7 @@ import type {
   UserSubscription,
   ReminderSettings,
   ReminderNotification,
+  BonusSettings,
 } from "./types";
 import {
   processArrangementReminders,
@@ -20,6 +21,7 @@ import {
   cleanupOldNotifications,
   DEFAULT_REMINDER_SETTINGS,
 } from "./services/reminderScheduler";
+import { DEFAULT_BONUS_SETTINGS } from "./utils/bonusCalculator";
 
 const STORAGE_KEY = "navigator_state_v5";
 const CURRENT_SCHEMA_VERSION = 5;
@@ -50,6 +52,7 @@ const initial: AppState = {
   reminderSettings: DEFAULT_REMINDER_SETTINGS,
   reminderNotifications: [],
   lastReminderProcessed: undefined,
+  bonusSettings: DEFAULT_BONUS_SETTINGS,
 };
 
 // 🔧 CRITICAL FIX: Safer deep copy that preserves data integrity
@@ -832,7 +835,7 @@ export function useAppState(userId?: string) {
   }, []);
 
   const complete = React.useCallback(
-    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string): Promise<string> => {
+    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number): Promise<string> => {
       // Validate index is a valid number
       if (!Number.isInteger(index) || index < 0) {
         const error = `Invalid index: ${index}. Index must be a non-negative integer.`;
@@ -907,6 +910,7 @@ export function useAppState(userId?: string) {
         arrangementId,
         caseReference,
         timeSpentSeconds,
+        numberOfCases,
       };
 
       const operationId = generateOperationId(
@@ -1194,6 +1198,12 @@ export function useAppState(userId?: string) {
 
   const updateReminderSettings = React.useCallback((settings: ReminderSettings) => {
     setBaseState((s) => ({ ...s, reminderSettings: settings }));
+  }, []);
+
+  // ---- bonus settings management ----
+
+  const updateBonusSettings = React.useCallback((settings: BonusSettings) => {
+    setBaseState((s) => ({ ...s, bonusSettings: settings }));
   }, []);
 
   const updateReminderNotification = React.useCallback(
@@ -1674,5 +1684,7 @@ export function useAppState(userId?: string) {
     updateReminderSettings,
     updateReminderNotification,
     processReminders,
+    // Bonus settings
+    updateBonusSettings,
   };
 }

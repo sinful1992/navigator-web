@@ -284,6 +284,7 @@ function AuthedApp() {
     deviceId,
     enqueueOp,
     updateReminderSettings,
+    updateBonusSettings,
     ownerMetadata,
   } = useAppState(cloudSync.user?.id);
 
@@ -969,9 +970,9 @@ function AuthedApp() {
   }, [setAddresses]);
 
   const handleComplete = React.useCallback(
-    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string) => {
+    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number) => {
       try {
-        await complete(index, outcome, amount, arrangementId, caseReference);
+        await complete(index, outcome, amount, arrangementId, caseReference, numberOfCases);
 
         // FIXED: Reduced backup - only cloud backup + local storage (no file downloads)
         try {
@@ -1466,6 +1467,8 @@ function AuthedApp() {
             <SettingsDropdown
               reminderSettings={state.reminderSettings}
               onUpdateReminderSettings={updateReminderSettings}
+              bonusSettings={state.bonusSettings}
+              onUpdateBonusSettings={updateBonusSettings}
               onChangePassword={() => setShowChangePassword(true)}
               onChangeEmail={() => setShowChangeEmail(true)}
               onDeleteAccount={() => setShowDeleteAccount(true)}

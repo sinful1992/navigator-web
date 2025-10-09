@@ -10,7 +10,7 @@ type Props = {
   state: AppState;
   setActive: (index: number) => void;
   cancelActive: () => void;
-  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string) => void;
+  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number) => void;
   onAddArrangement?: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
   filterText: string;
 };
@@ -167,6 +167,7 @@ const AddressListComponent = function AddressList({
   const [outcomeOpenFor, setOutcomeOpenFor] = React.useState<number | null>(null);
   const [pifAmount, setPifAmount] = React.useState<string>("");
   const [caseReference, setCaseReference] = React.useState<string>("");
+  const [numberOfCases, setNumberOfCases] = React.useState<string>("1");
   const [showCaseRefPrompt, setShowCaseRefPrompt] = React.useState<number | null>(null);
 
   // Prevent double submissions with Promise-based locking
@@ -182,6 +183,7 @@ const AddressListComponent = function AddressList({
       setOutcomeOpenFor(null);
       setPifAmount("");
       setCaseReference("");
+      setNumberOfCases("1");
       setShowCaseRefPrompt(null);
       setShowArrangementForm(null);
       setSubmittingIndex(null);
@@ -189,7 +191,7 @@ const AddressListComponent = function AddressList({
   }, [activeIndex]);
 
   // Robust completion handler with Promise-based locking
-  const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseRef?: string) => {
+  const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseRef?: string, numCases?: number) => {
     // Check if there's already a pending completion for this index
     const existingPromise = pendingCompletions.current.get(index);
     if (existingPromise) {
@@ -202,7 +204,7 @@ const AddressListComponent = function AddressList({
     const completionPromise = (async () => {
       try {
         setSubmittingIndex(index);
-        await onComplete(index, outcome, amount, arrangementId, caseRef);
+        await onComplete(index, outcome, amount, arrangementId, caseRef, numCases);
         setOutcomeOpenFor(null);
       } catch (error) {
         console.error('Completion failed:', error);
@@ -552,7 +554,7 @@ const AddressListComponent = function AddressList({
         <div className="case-ref-modal-overlay" onClick={() => setShowCaseRefPrompt(null)}>
           <div className="case-ref-modal" onClick={(e) => e.stopPropagation()}>
             <div className="case-ref-modal-header">
-              <h3>📋 Enter Case Reference</h3>
+              <h3>📋 Enter Case Details</h3>
               <button className="close-btn" onClick={() => setShowCaseRefPrompt(null)}>✕</button>
             </div>
             <div className="case-ref-modal-body">
@@ -569,9 +571,24 @@ const AddressListComponent = function AddressList({
                   onChange={(e) => setCaseReference(e.target.value)}
                   autoComplete="off"
                   autoFocus
+                />
+              </div>
+              <div className="case-ref-input-wrapper" style={{ marginTop: '1rem' }}>
+                <label htmlFor="num-cases-input">Number of Cases</label>
+                <input
+                  id="num-cases-input"
+                  type="number"
+                  inputMode="numeric"
+                  className="case-ref-input"
+                  placeholder="e.g. 1"
+                  min="1"
+                  value={numberOfCases}
+                  onChange={(e) => setNumberOfCases(e.target.value)}
+                  autoComplete="off"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       const caseRefNum = Number(caseReference);
+                      const numCases = Number(numberOfCases);
                       if (!caseReference || !caseReference.trim()) {
                         alert("Please enter a case reference number");
                         return;
@@ -580,13 +597,21 @@ const AddressListComponent = function AddressList({
                         alert("Case reference must be a valid whole number");
                         return;
                       }
-                      handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim());
+                      if (!Number.isFinite(numCases) || numCases <= 0 || !Number.isInteger(numCases)) {
+                        alert("Number of cases must be a valid whole number");
+                        return;
+                      }
+                      handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim(), numCases);
                       setShowCaseRefPrompt(null);
                       setCaseReference("");
+                      setNumberOfCases("1");
                       setPifAmount("");
                     }
                   }}
                 />
+                <small style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.25rem' }}>
+                  If 1 debtor has 3 linked cases, enter 3
+                </small>
               </div>
             </div>
             <div className="case-ref-modal-footer">
@@ -595,6 +620,7 @@ const AddressListComponent = function AddressList({
                 onClick={() => {
                   setShowCaseRefPrompt(null);
                   setCaseReference("");
+                  setNumberOfCases("1");
                 }}
               >
                 Cancel
@@ -604,6 +630,7 @@ const AddressListComponent = function AddressList({
                 disabled={submittingIndex === showCaseRefPrompt}
                 onClick={() => {
                   const caseRefNum = Number(caseReference);
+                  const numCases = Number(numberOfCases);
                   if (!caseReference || !caseReference.trim()) {
                     alert("Please enter a case reference number");
                     return;
@@ -612,9 +639,14 @@ const AddressListComponent = function AddressList({
                     alert("Case reference must be a valid whole number");
                     return;
                   }
-                  handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim());
+                  if (!Number.isFinite(numCases) || numCases <= 0 || !Number.isInteger(numCases)) {
+                    alert("Number of cases must be a valid whole number");
+                    return;
+                  }
+                  handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim(), numCases);
                   setShowCaseRefPrompt(null);
                   setCaseReference("");
+                  setNumberOfCases("1");
                   setPifAmount("");
                 }}
               >
