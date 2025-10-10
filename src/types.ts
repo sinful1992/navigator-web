@@ -242,4 +242,8 @@ export type AppState = {
   lastReminderProcessed?: string; // ISO timestamp
   /** Bonus calculation settings */
   bonusSettings?: BonusSettings;
+  /** Internal: Owner user ID for security validation */
+  _ownerUserId?: string;
+  /** Internal: Owner checksum for tamper detection */
+  _ownerChecksum?: string;
 };

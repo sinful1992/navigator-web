@@ -41,10 +41,13 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
     const arrCount = rangeCompletions.filter(c => c.outcome === 'ARR').length;
 
     // Calculate working days from day sessions in the selected range
+    // Count unique dates (not total sessions) to handle multiple start/stop on same day
     const daySessions = state.daySessions || [];
-    const workingDays = daySessions.filter(session => {
-      return session.date >= selectedStartDate && session.date <= selectedEndDate && session.end;
-    }).length;
+    const workingDays = new Set(
+      daySessions
+        .filter(session => session.date >= selectedStartDate && session.date <= selectedEndDate && session.end)
+        .map(session => session.date)
+    ).size;
 
     // Use configurable bonus settings
     const bonusSettings = state.bonusSettings || DEFAULT_BONUS_SETTINGS;
