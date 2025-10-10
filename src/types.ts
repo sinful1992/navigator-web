@@ -211,7 +211,6 @@ export type BonusSettings = {
   customFormula?: string;          // JavaScript expression: (T, N, D) => bonus
 
   // Additional settings
-  countLinkedCases: boolean;       // Count each case separately (PDF: 3 cases = 3 PIFs)
   adjustForWorkingDays: boolean;   // Adjust thresholds for actual working days
 
   createdAt?: string;

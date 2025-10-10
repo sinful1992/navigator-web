@@ -371,25 +371,6 @@ export function BonusSettingsModal({
                 <label className="setting-row">
                   <input
                     type="checkbox"
-                    checked={localSettings.countLinkedCases}
-                    onChange={(e) =>
-                      setLocalSettings({
-                        ...localSettings,
-                        countLinkedCases: e.target.checked,
-                      })
-                    }
-                  />
-                  <span className="setting-label">
-                    Count Linked Cases Separately
-                    <small style={{ display: 'block', marginTop: '0.25rem' }}>
-                      If 1 debtor has 3 cases, count as 3 PIFs
-                    </small>
-                  </span>
-                </label>
-
-                <label className="setting-row">
-                  <input
-                    type="checkbox"
                     checked={localSettings.adjustForWorkingDays}
                     onChange={(e) =>
                       setLocalSettings({

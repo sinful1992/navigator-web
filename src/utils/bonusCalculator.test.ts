@@ -79,7 +79,6 @@ describe('bonusCalculator', () => {
         pifBonus: 100,
         dailyThreshold: 100,
       },
-      countLinkedCases: true,
       adjustForWorkingDays: true,
     };
 
@@ -98,18 +97,18 @@ describe('bonusCalculator', () => {
       expect(bonus).toBe(100);
     });
 
-    it('should count linked cases separately', () => {
+    it('should count as 1 PIF per debtor regardless of cases', () => {
       const completions = [
-        createCompletion('PIF', '500', 3), // 1 PIF but 3 cases
+        createCompletion('PIF', '500', 3), // 1 debtor with 3 cases = 1 PIF
         createCompletion('PIF', '600', 1),
       ];
       const workingDays = 1;
 
-      // 4 total cases × £100 = £400
+      // 2 PIFs × £100 = £200
       // 1 day × £100 = £100
-      // Net = £400 - £100 = £300
+      // Net = £200 - £100 = £100
       const bonus = calculateBonus(completions, workingDays, simpleSettings);
-      expect(bonus).toBe(300);
+      expect(bonus).toBe(100);
     });
 
     it('should return 0 when bonus is negative', () => {
@@ -158,7 +157,6 @@ describe('bonusCalculator', () => {
         complianceFeeFixed: 122.5,
         dailyThreshold: 100,
       },
-      countLinkedCases: true,
       adjustForWorkingDays: true,
     };
 
@@ -225,14 +223,14 @@ describe('bonusCalculator', () => {
     it('should handle multiple linked cases with large debt', () => {
       // £5000, 3 cases
       // Debt = (5000 - (75*3 + 122.5)) / 1.075 = (5000 - 347.5) / 1.075 = 4327.91
-      // Bonus = £100 + 0.001875 * (4327.91 - 1500) = £100 + 5.30 = £105.30 (per case)
-      // Total = £105.30 × 3 = £315.91
+      // Bonus = £100 + 0.001875 * (4327.91 - 1500) = £100 + 5.30 = £105.30
+      // Count as 1 PIF (not multiplied by cases)
       const completions = [createCompletion('PIF', '5000', 3)];
       const workingDays = 1;
 
       const bonus = calculateBonus(completions, workingDays, complexSettings);
-      // £315.91 - £100 = £215.91
-      expect(bonus).toBeCloseTo(215.91, 2);
+      // £105.30 - £100 = £5.30
+      expect(bonus).toBeCloseTo(5.30, 2);
     });
 
     it('should calculate mixed PIFs correctly', () => {
@@ -259,7 +257,6 @@ describe('bonusCalculator', () => {
         enabled: true,
         calculationType: 'custom',
         customFormula: 'T * 0.05', // 5% of total
-        countLinkedCases: true,
         adjustForWorkingDays: true,
       };
 
@@ -276,7 +273,6 @@ describe('bonusCalculator', () => {
         enabled: true,
         calculationType: 'custom',
         customFormula: 'D > 1500 ? 150 : 75', // £150 if debt > £1500, else £75
-        countLinkedCases: true,
         adjustForWorkingDays: true,
       };
 
@@ -296,7 +292,6 @@ describe('bonusCalculator', () => {
         enabled: true,
         calculationType: 'custom',
         customFormula: 'N * 50', // £50 per case
-        countLinkedCases: true,
         adjustForWorkingDays: true,
       };
 
@@ -313,7 +308,6 @@ describe('bonusCalculator', () => {
         enabled: true,
         calculationType: 'custom',
         customFormula: 'T - (days * 100)', // Total minus daily threshold
-        countLinkedCases: true,
         adjustForWorkingDays: true,
       };
 
@@ -330,7 +324,6 @@ describe('bonusCalculator', () => {
         enabled: true,
         calculationType: 'custom',
         customFormula: 'invalid syntax {',
-        countLinkedCases: true,
         adjustForWorkingDays: true,
       };
 
@@ -347,7 +340,6 @@ describe('bonusCalculator', () => {
         enabled: true,
         calculationType: 'custom',
         customFormula: 'Math.max(0, (D > 1500 ? 100 + (D - 1500) * 0.01 : 50) * N - days * 75)',
-        countLinkedCases: true,
         adjustForWorkingDays: true,
       };
 
@@ -369,7 +361,6 @@ describe('bonusCalculator', () => {
           pifBonus: 100,
           dailyThreshold: 100,
         },
-        countLinkedCases: true,
         adjustForWorkingDays: true,
       };
 
@@ -383,9 +374,9 @@ describe('bonusCalculator', () => {
 
       expect(breakdown.totalPifs).toBe(2);
       expect(breakdown.totalCases).toBe(3);
-      expect(breakdown.grossBonus).toBe(300); // 3 × £100
+      expect(breakdown.grossBonus).toBe(200); // 2 PIFs × £100
       expect(breakdown.threshold).toBe(200);  // 2 × £100
-      expect(breakdown.netBonus).toBe(100);   // £300 - £200
+      expect(breakdown.netBonus).toBe(0);     // £200 - £200
       expect(breakdown.pifDetails).toHaveLength(2);
     });
 
@@ -405,7 +396,6 @@ describe('bonusCalculator', () => {
           complianceFeeFixed: 122.5,
           dailyThreshold: 100,
         },
-        countLinkedCases: true,
         adjustForWorkingDays: true,
       };
 
@@ -434,7 +424,6 @@ describe('bonusCalculator', () => {
           pifBonus: 100,
           dailyThreshold: 100,
         },
-        countLinkedCases: true,
         adjustForWorkingDays: true,
       };
 
@@ -456,7 +445,7 @@ describe('bonusCalculator', () => {
       expect(bonus).toBeGreaterThan(0); // No daily deduction
     });
 
-    it('should not count linked cases when disabled', () => {
+    it('should always count as 1 PIF per debtor regardless of cases', () => {
       const settings: BonusSettings = {
         enabled: true,
         calculationType: 'simple',
@@ -464,16 +453,16 @@ describe('bonusCalculator', () => {
           pifBonus: 100,
           dailyThreshold: 100,
         },
-        countLinkedCases: false, // Disabled
         adjustForWorkingDays: true,
       };
 
-      const completions = [createCompletion('PIF', '1000', 5)]; // 5 cases
+      const completions = [createCompletion('PIF', '1000', 5)]; // 1 debtor with 5 cases
       const workingDays = 1;
 
       const breakdown = calculateBonusBreakdown(completions, workingDays, settings);
-      expect(breakdown.totalCases).toBe(1); // Only count as 1
-      expect(breakdown.grossBonus).toBe(100); // Only 1 × £100
+      expect(breakdown.totalPifs).toBe(1); // 1 debtor = 1 PIF
+      expect(breakdown.totalCases).toBe(5); // Track actual case count
+      expect(breakdown.grossBonus).toBe(100); // 1 PIF × £100
     });
   });
 });

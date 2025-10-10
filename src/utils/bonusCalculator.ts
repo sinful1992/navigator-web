@@ -23,7 +23,6 @@ export const DEFAULT_BONUS_SETTINGS: BonusSettings = {
     complianceFeeFixed: 122.5,    // £122.5 fixed fee
     dailyThreshold: 100,          // £100 per working day
   },
-  countLinkedCases: true,         // Count each case separately
   adjustForWorkingDays: true,     // Adjust thresholds for actual working days
 };
 
@@ -78,14 +77,11 @@ export function calculateSimpleBonus(
 
   const { pifBonus, dailyThreshold } = settings.simpleSettings;
 
-  // Count PIFs, accounting for numberOfCases
+  // Count PIFs - each debtor counts as 1 PIF regardless of number of cases
   let totalPifs = 0;
   for (const completion of completions) {
     if (completion.outcome === 'PIF') {
-      const cases = settings.countLinkedCases && completion.numberOfCases
-        ? completion.numberOfCases
-        : 1;
-      totalPifs += cases;
+      totalPifs += 1;  // Always count as 1 PIF per debtor
     }
   }
 
@@ -122,35 +118,36 @@ export function calculateComplexBonus(
     if (completion.outcome !== 'PIF') continue;
 
     const amount = parseFloat(completion.amount || '0');
-    const cases = settings.countLinkedCases && completion.numberOfCases
-      ? completion.numberOfCases
-      : 1;
+    // Always use actual number of cases for debt calculation (affects compliance fees)
+    const actualCases = completion.numberOfCases || 1;
 
     // Determine bonus per PIF based on amount
-    let bonusPerPif = 0;
+    let bonusForThisPif = 0;
 
     if (amount === 0) {
       // Linked case with 0 fee
-      bonusPerPif = linkedCaseBonus;
+      bonusForThisPif = linkedCaseBonus;
     } else if (amount < 100) {
       // Small PIF (balance < £100)
-      bonusPerPif = smallPifBonus;
+      bonusForThisPif = smallPifBonus;
     } else {
-      // Calculate debt from total using reverse formula
-      const debt = calculateDebtFromTotal(amount, cases);
+      // Calculate debt from total using reverse formula with actual case count
+      // This ensures compliance fees (£75 × N) are correctly accounted for
+      const debt = calculateDebtFromTotal(amount, actualCases);
 
       if (debt > largePifThreshold) {
         // Large PIF: £100 + 2.5% of 7.5% over £1500
         const additionalBonus = largePifPercentage * (debt - largePifThreshold);
-        bonusPerPif = Math.min(basePifBonus + additionalBonus, largePifCap);
+        bonusForThisPif = Math.min(basePifBonus + additionalBonus, largePifCap);
       } else {
         // Standard PIF
-        bonusPerPif = basePifBonus;
+        bonusForThisPif = basePifBonus;
       }
     }
 
-    // Multiply by number of cases
-    totalBonus += bonusPerPif * cases;
+    // Count as 1 PIF per debtor (don't multiply by number of cases)
+    // Only 1 enforcement fee is charged per debtor, so only 1 PIF bonus
+    totalBonus += bonusForThisPif;
   }
 
   // Subtract daily threshold
@@ -206,17 +203,17 @@ export function calculateCustomBonus(
     if (completion.outcome !== 'PIF') continue;
 
     const amount = parseFloat(completion.amount || '0');
-    const cases = settings.countLinkedCases && completion.numberOfCases
-      ? completion.numberOfCases
-      : 1;
+    // Always use actual number of cases for custom formula
+    const actualCases = completion.numberOfCases || 1;
 
     const bonus = evaluateCustomFormula(
       settings.customFormula,
       amount,
-      cases,
+      actualCases,
       workingDays
     );
 
+    // Count as 1 PIF per debtor
     totalBonus += bonus;
   }
 
@@ -294,19 +291,18 @@ export function calculateBonusBreakdown(
     if (completion.outcome !== 'PIF') continue;
 
     const amount = parseFloat(completion.amount || '0');
-    const cases = settings.countLinkedCases && completion.numberOfCases
-      ? completion.numberOfCases
-      : 1;
+    // Always use actual number of cases for debt calculation
+    const actualCases = completion.numberOfCases || 1;
 
-    breakdown.totalPifs++;
-    breakdown.totalCases += cases;
+    breakdown.totalPifs++;  // Count as 1 PIF per debtor
+    breakdown.totalCases += actualCases;
 
-    let bonusPerCase = 0;
+    let bonusForThisPif = 0;
     let debtAmount: number | undefined;
 
     // Calculate bonus based on type
     if (settings.calculationType === 'simple' && settings.simpleSettings) {
-      bonusPerCase = settings.simpleSettings.pifBonus;
+      bonusForThisPif = settings.simpleSettings.pifBonus;
     } else if (settings.calculationType === 'complex' && settings.complexSettings) {
       const {
         basePifBonus,
@@ -318,36 +314,37 @@ export function calculateBonusBreakdown(
       } = settings.complexSettings;
 
       if (amount === 0) {
-        bonusPerCase = linkedCaseBonus;
+        bonusForThisPif = linkedCaseBonus;
       } else if (amount < 100) {
-        bonusPerCase = smallPifBonus;
+        bonusForThisPif = smallPifBonus;
       } else {
-        debtAmount = calculateDebtFromTotal(amount, cases);
+        // Use actual cases for debt calculation (compliance fees matter)
+        debtAmount = calculateDebtFromTotal(amount, actualCases);
         if (debtAmount > largePifThreshold) {
           const additionalBonus = largePifPercentage * (debtAmount - largePifThreshold);
-          bonusPerCase = Math.min(basePifBonus + additionalBonus, largePifCap);
+          bonusForThisPif = Math.min(basePifBonus + additionalBonus, largePifCap);
         } else {
-          bonusPerCase = basePifBonus;
+          bonusForThisPif = basePifBonus;
         }
       }
     } else if (settings.calculationType === 'custom' && settings.customFormula) {
-      debtAmount = calculateDebtFromTotal(amount, cases);
-      bonusPerCase = evaluateCustomFormula(
+      debtAmount = calculateDebtFromTotal(amount, actualCases);
+      bonusForThisPif = evaluateCustomFormula(
         settings.customFormula,
         amount,
-        cases,
+        actualCases,
         workingDays
-      ) / cases; // Divide by cases to get per-case amount
+      );
     }
 
-    const totalBonusForCompletion = bonusPerCase * cases;
-    breakdown.grossBonus += totalBonusForCompletion;
+    // Count as 1 PIF per debtor (don't multiply by cases)
+    breakdown.grossBonus += bonusForThisPif;
 
     breakdown.pifDetails.push({
       amount,
-      cases,
-      bonusPerCase,
-      totalBonus: totalBonusForCompletion,
+      cases: actualCases,
+      bonusPerCase: bonusForThisPif,  // Show total bonus (not per case)
+      totalBonus: bonusForThisPif,
       debtAmount,
     });
   }
