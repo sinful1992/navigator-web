@@ -486,18 +486,140 @@ export function useCloudSync(): UseCloudSync {
     });
   }, [isOnline, processSyncQueue]);
 
-  // ---- Auth bootstrap ----
+  // ---- Auth bootstrap with session validation ----
   useEffect(() => {
     let mounted = true;
 
     (async () => {
       try {
+        // 🔧 CRITICAL FIX: If offline, skip cloud validation and finish loading quickly
+        if (!navigator.onLine) {
+          if (import.meta.env.DEV) {
+            console.log('🔌 OFFLINE: Skipping session validation, will use cached session');
+          }
+
+          // 🔧 CRITICAL FIX: Check if user was previously authenticated
+          const wasAuthenticated = localStorage.getItem('navigator_was_authenticated');
+          const lastUserId = localStorage.getItem('navigator_expected_user_id');
+
+          // Try to get cached user from Supabase client storage
+          if (supabase) {
+            try {
+              const { data } = await supabase.auth.getSession();
+              if (mounted && data.session?.user) {
+                setUser(data.session.user);
+                if (import.meta.env.DEV) {
+                  console.log('🔌 OFFLINE: Restored session from cache');
+                }
+              } else if (wasAuthenticated === 'true' && lastUserId) {
+                // 🔧 OFFLINE MODE: Create pseudo-user for offline access
+                // This allows access to local data without valid session
+                if (import.meta.env.DEV) {
+                  console.log('🔌 OFFLINE MODE: Creating pseudo-user for offline access');
+                }
+                const pseudoUser = {
+                  id: lastUserId,
+                  email: localStorage.getItem('navigator_last_user_email') || 'offline@local',
+                  app_metadata: {},
+                  user_metadata: {},
+                  aud: 'authenticated',
+                  created_at: new Date().toISOString(),
+                  role: 'authenticated',
+                  updated_at: new Date().toISOString()
+                } as any;
+
+                if (mounted) {
+                  setUser(pseudoUser);
+                  // Set flag so app knows this is offline mode
+                  localStorage.setItem('navigator_offline_mode', 'true');
+                }
+              }
+            } catch (e) {
+              // If session restoration fails but user was authenticated, use pseudo-user
+              if (wasAuthenticated === 'true' && lastUserId && mounted) {
+                if (import.meta.env.DEV) {
+                  console.log('🔌 OFFLINE MODE: Session restoration failed, using pseudo-user');
+                }
+                const pseudoUser = {
+                  id: lastUserId,
+                  email: localStorage.getItem('navigator_last_user_email') || 'offline@local',
+                  app_metadata: {},
+                  user_metadata: {},
+                  aud: 'authenticated',
+                  created_at: new Date().toISOString(),
+                  role: 'authenticated',
+                  updated_at: new Date().toISOString()
+                } as any;
+                setUser(pseudoUser);
+                localStorage.setItem('navigator_offline_mode', 'true');
+              }
+            }
+          } else if (wasAuthenticated === 'true' && lastUserId && mounted) {
+            // No Supabase but was authenticated - use pseudo-user
+            const pseudoUser = {
+              id: lastUserId,
+              email: localStorage.getItem('navigator_last_user_email') || 'offline@local',
+              app_metadata: {},
+              user_metadata: {},
+              aud: 'authenticated',
+              created_at: new Date().toISOString(),
+              role: 'authenticated',
+              updated_at: new Date().toISOString()
+            } as any;
+            setUser(pseudoUser);
+            localStorage.setItem('navigator_offline_mode', 'true');
+          }
+
+          if (mounted) setIsLoading(false);
+          return;
+        }
+
         if (!supabase) {
           if (mounted) {
             setError("Supabase not configured");
             setIsLoading(false);
           }
           return;
+        }
+
+        // 🔒 SECURITY: Check for stale/corrupted session data
+        const storedExpectedUserId = localStorage.getItem('navigator_expected_user_id');
+        const lastSessionValidation = localStorage.getItem('navigator_last_session_validation');
+        const lastValidationTime = lastSessionValidation ? parseInt(lastSessionValidation) : 0;
+        const timeSinceLastValidation = Date.now() - lastValidationTime;
+
+        // 🎯 UX IMPROVEMENT: Validate session every 15 minutes (or on startup) to reduce interruptions
+        // This reduces the frequency of "restoring session" messages while maintaining security
+        if (timeSinceLastValidation > 900000 || !lastSessionValidation) {
+          if (import.meta.env.DEV) {
+            console.log('🔒 SECURITY: Validating session integrity...');
+          }
+
+          // Check for session token tampering
+          const sessionStr = localStorage.getItem(`sb-${window.location.hostname.replace(/\./g, '-')}-auth-token`);
+          if (sessionStr) {
+            try {
+              const sessionData = JSON.parse(sessionStr);
+              const currentUserId = sessionData?.user?.id;
+
+              if (storedExpectedUserId && currentUserId && currentUserId !== storedExpectedUserId) {
+                console.error('🚨 SESSION TAMPERING DETECTED: Session user ID does not match expected user ID');
+
+                // Clear ALL auth storage to prevent contamination
+                localStorage.removeItem(`sb-${window.location.hostname.replace(/\./g, '-')}-auth-token`);
+                localStorage.removeItem('navigator_expected_user_id');
+                sessionStorage.clear();
+
+                setError('Session security error. Please sign in again.');
+                setIsLoading(false);
+                return;
+              }
+            } catch (parseError) {
+              console.warn('Could not parse session data for validation:', parseError);
+            }
+          }
+
+          localStorage.setItem('navigator_last_session_validation', Date.now().toString());
         }
 
         // Check for email confirmation or password reset tokens in URL
@@ -577,9 +699,28 @@ export function useCloudSync(): UseCloudSync {
           // Clear the hash from URL regardless of success/failure
           window.history.replaceState(null, '', window.location.pathname);
         } else {
-          // Normal auth check
+          // Normal auth check with validation
           const { data, error: authErr } = await supabase.auth.getUser();
           if (authErr) throw authErr;
+
+          // 🔒 SECURITY: Validate user ID consistency
+          if (data.user && storedExpectedUserId && data.user.id !== storedExpectedUserId) {
+            console.error(`🚨 USER ID MISMATCH: Expected ${storedExpectedUserId}, got ${data.user.id}`);
+
+            // This is a critical security issue - different user session loaded
+            setError(`Security error: Session user mismatch. Signing out for safety.`);
+
+            // Force sign out and clear everything
+            await supabase.auth.signOut();
+            localStorage.removeItem('navigator_expected_user_id');
+
+            if (mounted) {
+              setUser(null);
+              setIsLoading(false);
+            }
+            return;
+          }
+
           if (mounted) setUser(data.user ?? null);
         }
       } catch (e: any) {
@@ -597,15 +738,45 @@ export function useCloudSync(): UseCloudSync {
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       // RACE CONDITION FIX: Check mounted flag before setting state
       if (mounted) {
+        // 🔒 SECURITY: Validate user continuity on auth state changes
+        const storedExpectedUserId = localStorage.getItem('navigator_expected_user_id');
+        const newUserId = session?.user?.id;
+
+        if (storedExpectedUserId && newUserId && storedExpectedUserId !== newUserId) {
+          console.error(`🚨 AUTH STATE CHANGE: User ID changed from ${storedExpectedUserId} to ${newUserId}`);
+
+          // Only set user if this is a legitimate user switch (SIGNED_IN event)
+          if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+            console.log('🔒 SECURITY: Legitimate user change, updating expected user ID');
+            localStorage.setItem('navigator_expected_user_id', newUserId);
+          } else {
+            console.error('🚨 SECURITY: Unexpected user ID change on event:', event);
+            // Don't update user state - this might be session poisoning
+            return;
+          }
+        }
+
         setUser(session?.user ?? null);
 
         // Clear any error messages when user successfully signs in or confirms email
         if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session) {
+          // 🔧 CRITICAL FIX: Mark authenticated and clear offline mode
+          localStorage.setItem('navigator_was_authenticated', 'true');
+          localStorage.setItem('navigator_last_user_email', session.user.email || '');
+          localStorage.removeItem('navigator_offline_mode');
+
           clearError();
 
           if (import.meta.env.DEV) {
             console.log('Auth state changed:', event);
           }
+        }
+
+        // 🔧 CRITICAL FIX: Clear authentication flag on sign out
+        if (event === 'SIGNED_OUT') {
+          localStorage.removeItem('navigator_was_authenticated');
+          localStorage.removeItem('navigator_last_user_email');
+          localStorage.removeItem('navigator_offline_mode');
         }
       }
     });
@@ -699,6 +870,11 @@ export function useCloudSync(): UseCloudSync {
       // Clear trial access flags when user properly signs in
       localStorage.removeItem('navigator_trial_created');
       localStorage.removeItem('navigator_trial_user_id');
+
+      // 🔧 CRITICAL FIX: Mark user as authenticated for offline mode
+      localStorage.setItem('navigator_was_authenticated', 'true');
+      localStorage.setItem('navigator_last_user_email', data.user.email || '');
+      localStorage.removeItem('navigator_offline_mode'); // Clear offline mode flag
 
       // Store device context for smart user detection
       const { SmartUserDetection } = await import('./utils/userDetection');
@@ -857,7 +1033,15 @@ export function useCloudSync(): UseCloudSync {
         'navigator_supabase_skipped',
         'navigator_data_counts',
         'last_backup_time',
-        'navigator-web:settings' // Clear theme and other settings on logout
+        'navigator-web:settings', // Clear theme and other settings on logout
+        'navigator_expected_user_id', // 🔒 SECURITY: Clear expected user ID to prevent persistence
+        'navigator_last_session_validation', // Clear session validation timestamp
+        'navigator_active_protection', // Clear active protection flag
+        'navigator_restore_in_progress', // Clear restore protection
+        'navigator_import_in_progress', // Clear import protection
+        'navigator_was_authenticated', // 🔧 CRITICAL: Clear authentication flag
+        'navigator_last_user_email', // Clear last user email
+        'navigator_offline_mode' // Clear offline mode flag
       ];
 
       keysToRemove.forEach(key => localStorage.removeItem(key));
@@ -1313,8 +1497,21 @@ export function useCloudSync(): UseCloudSync {
             const row = payload?.new ?? payload?.old ?? null;
             if (!row) return;
 
-            const updatedAt: string = row.updated_at;
+            // 🔒 SECURITY: Validate that the data is for the correct user
+            const storedExpectedUserId = localStorage.getItem('navigator_expected_user_id');
+            if (storedExpectedUserId && row.user_id && row.user_id !== storedExpectedUserId) {
+              console.error(`🚨 SUBSCRIPTION DATA CONTAMINATION: Received data for user ${row.user_id} but expected ${storedExpectedUserId}`);
+              return; // Ignore data from wrong user
+            }
+
+            // 🔒 SECURITY: Validate data ownership
             const dataObj: AppState = row.data;
+            if (dataObj._ownerUserId && dataObj._ownerUserId !== user.id) {
+              console.error(`🚨 DATA OWNERSHIP MISMATCH: Data belongs to ${dataObj._ownerUserId} but current user is ${user.id}`);
+              return; // Ignore data with wrong ownership
+            }
+
+            const updatedAt: string = row.updated_at;
             const serverVersion: number = row.version || 0;
             const serverChecksum: string = row.checksum || '';
 

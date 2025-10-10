@@ -479,9 +479,32 @@ export function useAppState(userId?: string) {
         if (!alive) return;
 
         if (saved) {
-          // Extract owner metadata before validation
+          // 🔒 SECURITY: Validate IndexedDB data ownership
           const loadedOwnerUserId = saved._ownerUserId;
           const loadedOwnerChecksum = saved._ownerChecksum;
+          const expectedUserId = localStorage.getItem('navigator_expected_user_id');
+
+          // Critical validation: Check if IndexedDB data belongs to current user
+          if (expectedUserId && loadedOwnerUserId && loadedOwnerUserId !== expectedUserId) {
+            logger.error(`🚨 INDEXEDDB CONTAMINATION: Data belongs to ${loadedOwnerUserId} but expected ${expectedUserId}`);
+
+            // Create emergency backup
+            const emergencyBackup = {
+              timestamp: new Date().toISOString(),
+              contaminatedData: saved,
+              expectedUserId,
+              actualUserId: loadedOwnerUserId,
+              reason: 'indexeddb_contamination'
+            };
+            localStorage.setItem(`navigator_emergency_backup_${Date.now()}`, JSON.stringify(emergencyBackup));
+
+            // Clear contaminated data and start fresh
+            await storageManager.queuedSet(STORAGE_KEY, null);
+            logger.warn('🔒 SECURITY: Cleared contaminated IndexedDB data');
+
+            setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
+            return;
+          }
 
           // Store owner metadata for verification
           setOwnerMetadata({

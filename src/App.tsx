@@ -215,14 +215,54 @@ function StatsCard({ title, value, change, changeType, icon, iconType }: {
 export default function App() {
   const cloudSync = useCloudSync();
 
-  if (cloudSync.isLoading) {
+  // 🎯 UX IMPROVEMENT: Only show loading screen if actually taking time
+  const [showLoading, setShowLoading] = React.useState(false);
+  const [forceSkipLoading, setForceSkipLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (cloudSync.isLoading) {
+      // Delay showing loading screen by 500ms - most sessions restore instantly
+      const timer = setTimeout(() => setShowLoading(true), 500);
+
+      // 🔧 CRITICAL FIX: If offline, skip loading after 3 seconds and let user access local data
+      const offlineTimer = setTimeout(() => {
+        if (!navigator.onLine) {
+          logger.warn('🔌 OFFLINE: Force skipping loading screen to allow local data access');
+          setForceSkipLoading(true);
+        }
+      }, 3000);
+
+      // 🔧 CRITICAL FIX: Absolute timeout - never block for more than 10 seconds
+      const maxTimer = setTimeout(() => {
+        logger.warn('⏱️ TIMEOUT: Force skipping loading screen after 10 seconds');
+        setForceSkipLoading(true);
+      }, 10000);
+
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(offlineTimer);
+        clearTimeout(maxTimer);
+      };
+    } else {
+      setShowLoading(false);
+      setForceSkipLoading(false);
+    }
+  }, [cloudSync.isLoading]);
+
+  // 🔧 CRITICAL FIX: If offline or timeout, show app with offline indicator instead of blocking
+  if (cloudSync.isLoading && showLoading && !forceSkipLoading) {
     return (
       <div className="app-wrapper">
         <div className="main-area">
           <div className="content-area">
             <div className="loading">
               <div className="spinner" />
-              Analyzing session data...
+              <div>Restoring session...</div>
+              {!cloudSync.isOnline && (
+                <div style={{ marginTop: '1rem', color: 'var(--warning)', fontSize: '0.875rem' }}>
+                  📡 You appear to be offline. Loading local data...
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -503,11 +543,54 @@ function AuthedApp() {
   );
 
 
-  // Cloud sync initialization
+  // 🔒 SECURITY: Track expected user ID to prevent session poisoning
+  const expectedUserIdRef = React.useRef<string | null>(null);
+  const bootstrapLockRef = React.useRef<boolean>(false);
+
+  // Store expected user ID when it changes
+  React.useEffect(() => {
+    if (cloudSync.user?.id) {
+      const storedUserId = localStorage.getItem('navigator_expected_user_id');
+
+      // First time or user changed
+      if (!storedUserId || storedUserId !== cloudSync.user.id) {
+        logger.info(`🔒 SECURITY: Setting expected user ID: ${cloudSync.user.id}`);
+        localStorage.setItem('navigator_expected_user_id', cloudSync.user.id);
+        expectedUserIdRef.current = cloudSync.user.id;
+      } else {
+        expectedUserIdRef.current = storedUserId;
+      }
+    }
+  }, [cloudSync.user?.id]);
+
+  // Cloud sync initialization with session poisoning protection
   React.useEffect(() => {
     if (!cloudSync.user || loading) return;
+
+    // 🔧 CRITICAL FIX: If offline, skip cloud sync and use local data immediately
+    if (!cloudSync.isOnline) {
+      logger.info('🔌 OFFLINE: Skipping bootstrap sync, using local data only');
+
+      // 🔧 Clear offline mode flag when online returns
+      if (localStorage.getItem('navigator_offline_mode') === 'true') {
+        logger.info('🔌 ONLINE RESTORED: Clearing offline mode, will re-authenticate');
+      }
+
+      setHydrated(true);
+      return;
+    }
+
+    // 🔧 CRITICAL FIX: Clear offline mode flag when properly authenticated online
+    localStorage.removeItem('navigator_offline_mode');
+
     if (!supabase) {
       setHydrated(true);
+      return;
+    }
+
+    // 🔒 SECURITY: Prevent concurrent bootstrap syncs
+    if (bootstrapLockRef.current) {
+      logger.warn('🔒 SECURITY: Bootstrap sync already in progress, skipping');
       return;
     }
 
@@ -516,13 +599,65 @@ function AuthedApp() {
 
     (async () => {
       try {
+        bootstrapLockRef.current = true;
+
+        // 🔒 SECURITY: Validate user ID before any state sync
+        const currentUserId = cloudSync.user!.id;
+        const expectedUserId = localStorage.getItem('navigator_expected_user_id');
+
+        if (expectedUserId && expectedUserId !== currentUserId) {
+          logger.error(`🚨 SESSION POISONING DETECTED: Expected ${expectedUserId}, got ${currentUserId}`);
+
+          // Create emergency backup before clearing
+          const emergencyBackup = {
+            timestamp: new Date().toISOString(),
+            expectedUserId,
+            actualUserId: currentUserId,
+            localState: safeState,
+            reason: 'session_poisoning_detected'
+          };
+          localStorage.setItem(`navigator_emergency_backup_${Date.now()}`, JSON.stringify(emergencyBackup));
+
+          await alert({
+            title: "⚠️ Security Alert: Session Mismatch",
+            message: `Detected session for different user. Your data has been backed up. Please sign out and sign in again.`,
+            type: "error"
+          });
+
+          // Force sign out to clear poisoned session
+          await cloudSync.signOut();
+          return;
+        }
+
+        // 🔒 SECURITY: Check for active protection flag before syncing
+        const activeProtection = localStorage.getItem('navigator_active_protection');
+        if (activeProtection && state.activeIndex !== null) {
+          logger.info(`🛡️ ACTIVE PROTECTION: Skipping bootstrap sync - user has active address #${state.activeIndex}`);
+          setHydrated(true);
+          return;
+        }
+
         const sel = await supabase
           .from("navigator_state")
           .select("data, updated_at, version")
-          .eq("user_id", cloudSync.user!.id)
+          .eq("user_id", currentUserId)
           .maybeSingle();
 
         const row = sel.data;
+
+        // 🔒 SECURITY: Verify the response is for the correct user
+        if (row && row.data && row.data._ownerUserId && row.data._ownerUserId !== currentUserId) {
+          logger.error(`🚨 DATA CONTAMINATION: Cloud state has wrong owner! Expected ${currentUserId}, found ${row.data._ownerUserId}`);
+
+          await alert({
+            title: "⚠️ Data Security Error",
+            message: "Cloud data ownership mismatch detected. Using local data only.",
+            type: "error"
+          });
+
+          setHydrated(true);
+          return;
+        }
 
         if (row && row.data) {
           const cloudState = normalizeState(row.data);
@@ -733,14 +868,17 @@ function AuthedApp() {
       } catch (err) {
         logger.error("Bootstrap sync failed:", err);
         if (!cancelled) setHydrated(true);
+      } finally {
+        bootstrapLockRef.current = false;
       }
     })();
 
     return () => {
       cancelled = true;
+      bootstrapLockRef.current = false;
       if (cleanup) cleanup();
     };
-  }, [cloudSync.user, loading]);
+  }, [cloudSync.user, cloudSync.isOnline, loading, safeState, state.activeIndex, alert]);
 
   // REMOVED: Visibility change handler - was over-engineering after fixing React subscription bug
 
@@ -1431,6 +1569,46 @@ function AuthedApp() {
 
       {/* Main Content Area (Left Side) */}
       <main className="main-area">
+        {/* 🔧 CRITICAL FIX: Offline/Offline Mode Banners */}
+        {!cloudSync.isOnline && (
+          <div style={{
+            background: 'linear-gradient(135deg, #FFA500, #FF8C00)',
+            color: 'white',
+            padding: '0.75rem 1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.75rem',
+            fontSize: '0.9rem',
+            fontWeight: 500,
+            boxShadow: '0 2px 8px rgba(255, 140, 0, 0.3)',
+            zIndex: 100
+          }}>
+            <span>📡</span>
+            <span>Working Offline - Changes will sync when connection returns</span>
+          </div>
+        )}
+
+        {/* 🔧 OFFLINE MODE: Show warning if using pseudo-session */}
+        {localStorage.getItem('navigator_offline_mode') === 'true' && (
+          <div style={{
+            background: 'linear-gradient(135deg, #9C27B0, #7B1FA2)',
+            color: 'white',
+            padding: '0.75rem 1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.75rem',
+            fontSize: '0.9rem',
+            fontWeight: 500,
+            boxShadow: '0 2px 8px rgba(156, 39, 176, 0.3)',
+            zIndex: 100
+          }}>
+            <span>⚡</span>
+            <span>Offline Mode - Sign in when online to sync data</span>
+          </div>
+        )}
+
         {/* Modern Header */}
         <header className="app-header-modern">
           <div className="header-left">
