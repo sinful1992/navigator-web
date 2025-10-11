@@ -8,7 +8,7 @@ interface Props {
   completions: Completion[];
 }
 
-export const AddressHistoryCard: React.FC<Props> = ({ address, completions }) => {
+const AddressHistoryCardComponent: React.FC<Props> = ({ address, completions }) => {
   const history = useMemo(() => {
     return AddressIntelligence.getAddressHistory(address, completions);
   }, [address, completions]);
@@ -175,3 +175,6 @@ export const AddressHistoryCard: React.FC<Props> = ({ address, completions }) =>
     </div>
   );
 };
+
+// Memoize to prevent unnecessary re-renders
+export const AddressHistoryCard = React.memo(AddressHistoryCardComponent);
