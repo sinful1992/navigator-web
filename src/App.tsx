@@ -29,7 +29,9 @@ import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
 import { isProtectionActive } from "./utils/protectionFlags";
 import { PrivacyConsent } from "./components/PrivacyConsent";
-import { SyncStatusIcon } from "./components/SyncStatusIcon";
+import { EnhancedOfflineIndicator } from "./components/EnhancedOfflineIndicator";
+import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
+import { pwaManager } from "./utils/pwaManager";
 import { shouldRunCleanup, performDataCleanup, applyDataCleanup } from "./services/dataCleanup";
 import { useSettings } from "./hooks/useSettings";
 
@@ -375,6 +377,20 @@ function AuthedApp() {
       setShowOwnershipPrompt(true);
     }
   }, [hydrated]);
+
+  // PWA initialization - request persistent storage
+  React.useEffect(() => {
+    const initPWA = async () => {
+      try {
+        await pwaManager.requestPersistentStorage();
+        logger.info('PWA initialized successfully');
+      } catch (error) {
+        logger.error('PWA initialization failed:', error);
+      }
+    };
+
+    initPWA();
+  }, []); // Run only once on mount
 
   // Data retention cleanup (runs once per day on app start)
   React.useEffect(() => {
@@ -1637,10 +1653,10 @@ function AuthedApp() {
           </div>
 
           <div className="header-center">
-            <SyncStatusIcon
-              lastSyncTime={cloudSync.lastSyncTime}
+            <EnhancedOfflineIndicator
+              isOnline={cloudSync.isOnline}
               isSyncing={cloudSync.isSyncing}
-              onForceSync={cloudSync.forceFullSync}
+              lastSyncTime={cloudSync.lastSyncTime}
             />
             <SettingsDropdown
               reminderSettings={state.reminderSettings}
@@ -2462,6 +2478,9 @@ function AuthedApp() {
           </div>
         </div>
       )}
+
+      {/* PWA Install Prompt */}
+      <PWAInstallPrompt />
 
       {/* GDPR Compliance: Privacy & Cookie Consent */}
       <PrivacyConsent />

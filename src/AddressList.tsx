@@ -2,6 +2,7 @@
 import * as React from "react";
 import type { AppState, Outcome, AddressRow, Arrangement } from "./types";
 import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
+import { AddressHistoryCard } from "./components/AddressHistoryCard";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -432,6 +433,12 @@ const AddressListComponent = function AddressList({
                   </>
                 )}
               </div>
+
+              {/* Address History Card - Show previous outcomes and insights */}
+              <AddressHistoryCard
+                address={a.address}
+                completions={completions}
+              />
 
               {/* Outcome Panel (shown when Complete is pressed) */}
               {isActive && outcomeOpenFor === i && (
