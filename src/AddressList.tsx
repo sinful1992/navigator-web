@@ -178,6 +178,15 @@ const AddressListComponent = function AddressList({
   // Arrangement form state
   const [showArrangementForm, setShowArrangementForm] = React.useState<number | null>(null);
 
+  // Memoize addresses that have completion history for performance
+  const addressesWithHistory = React.useMemo(() => {
+    const set = new Set<string>();
+    completions.forEach(c => {
+      if (c.address) set.add(c.address);
+    });
+    return set;
+  }, [completions]);
+
   // Closing outcomes when active changes
   React.useEffect(() => {
     if (activeIndex === null) {
@@ -434,11 +443,13 @@ const AddressListComponent = function AddressList({
                 )}
               </div>
 
-              {/* Address History Card - Show previous outcomes and insights */}
-              <AddressHistoryCard
-                address={a.address}
-                completions={completions}
-              />
+              {/* Address History Card - Only show if address has history */}
+              {addressesWithHistory.has(a.address) && (
+                <AddressHistoryCard
+                  address={a.address}
+                  completions={completions}
+                />
+              )}
 
               {/* Outcome Panel (shown when Complete is pressed) */}
               {isActive && outcomeOpenFor === i && (
