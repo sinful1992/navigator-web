@@ -49,8 +49,9 @@ export interface AreaAnalytics {
 export class AddressIntelligence {
   /**
    * Normalize address for consistent matching
+   * Exported for use in optimization checks
    */
-  private static normalizeAddress(address: string): string {
+  static normalizeAddress(address: string): string {
     return address
       .toLowerCase()
       .trim()

@@ -3,6 +3,7 @@ import * as React from "react";
 import type { AppState, Outcome, AddressRow, Arrangement } from "./types";
 import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
 import { AddressHistoryCard } from "./components/AddressHistoryCard";
+import { AddressIntelligence } from "./services/addressIntelligence";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -178,11 +179,15 @@ const AddressListComponent = function AddressList({
   // Arrangement form state
   const [showArrangementForm, setShowArrangementForm] = React.useState<number | null>(null);
 
-  // Memoize addresses that have completion history for performance
+  // Memoize NORMALIZED addresses that have completion history for performance
+  // This matches the normalization used in AddressIntelligence
   const addressesWithHistory = React.useMemo(() => {
     const set = new Set<string>();
     completions.forEach(c => {
-      if (c.address) set.add(c.address);
+      if (c.address) {
+        const normalized = AddressIntelligence.normalizeAddress(c.address);
+        set.add(normalized);
+      }
     });
     return set;
   }, [completions]);
@@ -443,8 +448,8 @@ const AddressListComponent = function AddressList({
                 )}
               </div>
 
-              {/* Address History Card - Only show if address has history */}
-              {addressesWithHistory.has(a.address) && (
+              {/* Address History Card - Only show if address has history (normalized match) */}
+              {addressesWithHistory.has(AddressIntelligence.normalizeAddress(a.address)) && (
                 <AddressHistoryCard
                   address={a.address}
                   completions={completions}
