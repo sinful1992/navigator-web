@@ -6,9 +6,10 @@ interface Props {
   isOnline: boolean;
   isSyncing: boolean;
   lastSyncTime: Date | null;
+  onForceSync?: () => void;
 }
 
-export const EnhancedOfflineIndicator: React.FC<Props> = ({ isOnline, isSyncing, lastSyncTime }) => {
+export const EnhancedOfflineIndicator: React.FC<Props> = ({ isOnline, isSyncing, lastSyncTime, onForceSync }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [connectivity, setConnectivity] = useState<'checking' | 'connected' | 'disconnected'>('connected');
 
@@ -187,6 +188,39 @@ export const EnhancedOfflineIndicator: React.FC<Props> = ({ isOnline, isSyncing,
               Last sync: <strong style={{ color: '#111827' }}>{getLastSyncText()}</strong>
             </div>
           </div>
+
+          {/* Force Sync Button */}
+          {onForceSync && isOnline && connectivity === 'connected' && !isSyncing && (
+            <button
+              onClick={() => {
+                onForceSync();
+                setShowDetails(false);
+              }}
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                marginBottom: '0.75rem',
+                transition: 'transform 0.2s, box-shadow 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)';
+                (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
+                (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+              }}
+            >
+              🔄 Force Sync Now
+            </button>
+          )}
 
           {/* Offline Tips */}
           {(!isOnline || connectivity === 'disconnected') && (

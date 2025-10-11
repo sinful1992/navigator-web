@@ -1657,6 +1657,7 @@ function AuthedApp() {
               isOnline={cloudSync.isOnline}
               isSyncing={cloudSync.isSyncing}
               lastSyncTime={cloudSync.lastSyncTime}
+              onForceSync={cloudSync.forceFullSync}
             />
             <SettingsDropdown
               reminderSettings={state.reminderSettings}
