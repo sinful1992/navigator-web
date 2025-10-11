@@ -39,7 +39,7 @@ interface SettingsDropdownProps {
   hasSupabase?: boolean;
 }
 
-export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
+const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   trigger,
   reminderSettings,
   onUpdateReminderSettings,
@@ -189,6 +189,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
   return (
     <div className="modern-settings-dropdown" ref={dropdownRef}>
       <button
+        type="button"
         className="modern-settings-trigger"
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
@@ -210,6 +211,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
               <p className="modern-panel-subtitle">Manage your app preferences</p>
             </div>
             <button
+              type="button"
               className="modern-close-button"
               onClick={() => setIsOpen(false)}
               aria-label="Close settings"
@@ -1457,3 +1459,6 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     </div>
   );
 };
+
+// Memoize to prevent re-renders from parent app state changes
+export const SettingsDropdown = React.memo(SettingsDropdownComponent);
