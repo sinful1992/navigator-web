@@ -156,6 +156,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     return (
       <div className="modern-settings-section-container">
         <button
+          type="button"
           className="modern-section-header"
           onClick={() => toggleSection(sectionKey)}
         >
