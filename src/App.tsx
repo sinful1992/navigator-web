@@ -2089,8 +2089,37 @@ function AuthedApp() {
       {/* Change Password Modal */}
       {showChangePassword && (
         <div className="modal-overlay" onClick={() => setShowChangePassword(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
-            <h2 style={{ marginBottom: '1rem' }}>Change Password</h2>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1.5rem',
+              paddingBottom: '1rem',
+              borderBottom: '1px solid var(--gray-200)'
+            }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-primary)' }}>Change Password</h2>
+                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                  Update your account password
+                </p>
+              </div>
+              <button
+                onClick={() => setShowChangePassword(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                  padding: '0.25rem',
+                  lineHeight: 1
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
             <form onSubmit={async (e) => {
               e.preventDefault();
               const form = e.target as HTMLFormElement;
@@ -2098,34 +2127,130 @@ function AuthedApp() {
               const confirmPassword = (form.elements.namedItem('confirmPassword') as HTMLInputElement).value;
 
               if (newPassword !== confirmPassword) {
-                window.alert('Passwords do not match');
+                await alert({
+                  title: 'Password Mismatch',
+                  message: 'The passwords you entered do not match. Please try again.',
+                  type: 'error'
+                });
                 return;
               }
 
               if (newPassword.length < 6) {
-                window.alert('Password must be at least 6 characters');
+                await alert({
+                  title: 'Password Too Short',
+                  message: 'Password must be at least 6 characters long.',
+                  type: 'error'
+                });
                 return;
               }
 
               try {
                 await cloudSync.updatePassword(newPassword);
-                window.alert('Password updated successfully!');
                 setShowChangePassword(false);
+                await alert({
+                  title: 'Password Updated',
+                  message: 'Your password has been updated successfully!',
+                  type: 'success'
+                });
               } catch (err: any) {
-                window.alert('Error: ' + err.message);
+                await alert({
+                  title: 'Update Failed',
+                  message: err.message || 'Failed to update password. Please try again.',
+                  type: 'error'
+                });
               }
             }}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>New Password</label>
-                <input type="password" name="newPassword" className="input" required minLength={6} />
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontWeight: 500,
+                  fontSize: '0.9375rem',
+                  color: 'var(--text-primary)'
+                }}>
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  name="newPassword"
+                  className="input"
+                  required
+                  minLength={6}
+                  placeholder="Enter new password"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--gray-300)',
+                    fontSize: '1rem'
+                  }}
+                />
+                <p style={{
+                  margin: '0.5rem 0 0 0',
+                  fontSize: '0.8125rem',
+                  color: 'var(--text-secondary)'
+                }}>
+                  Must be at least 6 characters
+                </p>
               </div>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Confirm Password</label>
-                <input type="password" name="confirmPassword" className="input" required minLength={6} />
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontWeight: 500,
+                  fontSize: '0.9375rem',
+                  color: 'var(--text-primary)'
+                }}>
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  className="input"
+                  required
+                  minLength={6}
+                  placeholder="Re-enter new password"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--gray-300)',
+                    fontSize: '1rem'
+                  }}
+                />
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Update Password</button>
-                <button type="button" className="btn btn-ghost" onClick={() => setShowChangePassword(false)}>Cancel</button>
+
+              <div style={{
+                display: 'flex',
+                gap: '0.75rem',
+                marginTop: '1.5rem',
+                paddingTop: '1rem',
+                borderTop: '1px solid var(--gray-200)'
+              }}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{
+                    flex: 1,
+                    padding: '0.875rem',
+                    fontSize: '1rem',
+                    fontWeight: 600
+                  }}
+                >
+                  Update Password
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setShowChangePassword(false)}
+                  style={{
+                    padding: '0.875rem 1.5rem',
+                    fontSize: '1rem'
+                  }}
+                >
+                  Cancel
+                </button>
               </div>
             </form>
           </div>
