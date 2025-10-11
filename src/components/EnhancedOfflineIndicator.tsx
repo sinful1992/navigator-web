@@ -71,6 +71,7 @@ export const EnhancedOfflineIndicator: React.FC<Props> = ({ isOnline, isSyncing,
     <div style={{ position: 'relative' }}>
       {/* Status Badge */}
       <button
+        type="button"
         onClick={() => setShowDetails(!showDetails)}
         style={{
           display: 'flex',
@@ -134,6 +135,7 @@ export const EnhancedOfflineIndicator: React.FC<Props> = ({ isOnline, isSyncing,
           }}>
             <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Connection Status</h4>
             <button
+              type="button"
               onClick={() => setShowDetails(false)}
               style={{
                 background: 'none',
@@ -192,6 +194,7 @@ export const EnhancedOfflineIndicator: React.FC<Props> = ({ isOnline, isSyncing,
           {/* Force Sync Button */}
           {onForceSync && isOnline && connectivity === 'connected' && !isSyncing && (
             <button
+              type="button"
               onClick={() => {
                 onForceSync();
                 setShowDetails(false);
