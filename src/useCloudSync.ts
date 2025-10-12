@@ -344,6 +344,7 @@ export function useCloudSync(): UseCloudSync {
   
   // Subscription cleanup ref
   const subscriptionCleanup = useRef<(() => void) | null>(null);
+  const activeChannelCountRef = useRef<number>(0);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -1489,6 +1490,15 @@ export function useCloudSync(): UseCloudSync {
       const sb = supabase as NonNullable<typeof supabase>;
       const channel = sb.channel("navigator_state_" + user.id);
 
+      activeChannelCountRef.current += 1;
+      if (import.meta.env.DEV) {
+        const topic = (channel as any)?.topic ?? "unknown";
+        console.log(
+          `🛰️ subscribeToData: creating channel (#${activeChannelCountRef.current})`,
+          topic
+        );
+      }
+
       channel.on(
         "postgres_changes",
         { event: "*", schema: "public", table: "navigator_state", filter: `user_id=eq.${user.id}` },
@@ -1671,6 +1681,16 @@ export function useCloudSync(): UseCloudSync {
       channel.subscribe();
 
       const cleanup = () => {
+        if (activeChannelCountRef.current > 0) {
+          activeChannelCountRef.current -= 1;
+        }
+        if (import.meta.env.DEV) {
+          const topic = (channel as any)?.topic ?? "unknown";
+          console.log(
+            `🛰️ subscribeToData: cleaning up channel (remaining #${activeChannelCountRef.current})`,
+            topic
+          );
+        }
         try {
           sb.removeChannel(channel);
         } catch {
