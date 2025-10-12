@@ -1458,5 +1458,21 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   );
 };
 
-// Memoize to prevent re-renders from parent app state changes
-export const SettingsDropdown = React.memo(SettingsDropdownComponent);
+// Custom comparison function that prevents re-renders from inline functions
+const arePropsEqual = (prevProps: SettingsDropdownProps, nextProps: SettingsDropdownProps) => {
+  // Only compare primitive values and data that actually affects rendering
+  return (
+    prevProps.isSyncing === nextProps.isSyncing &&
+    prevProps.hasSupabase === nextProps.hasSupabase &&
+    prevProps.userEmail === nextProps.userEmail &&
+    // Compare reminder settings by reference (it's a stable object from state)
+    prevProps.reminderSettings === nextProps.reminderSettings &&
+    // Compare bonus settings by reference
+    prevProps.bonusSettings === nextProps.bonusSettings
+    // Ignore all function props - they change every render but we don't care
+    // Ignore appState - we only use it for export which happens on click, not render
+  );
+};
+
+// Memoize with custom comparison to prevent re-renders from parent app state changes
+export const SettingsDropdown = React.memo(SettingsDropdownComponent, arePropsEqual);
