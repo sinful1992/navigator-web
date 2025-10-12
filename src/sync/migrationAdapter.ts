@@ -282,9 +282,17 @@ export function useUnifiedSync() {
     signUp: activeSync.signUp,
     signOut: activeSync.signOut,
 
+    // 🔧 FIX: Auth methods always use legacySync (Supabase Auth doesn't change)
+    resetPassword: legacySync.resetPassword,
+    updatePassword: legacySync.updatePassword,
+
     // Unified sync methods
     syncData,
     subscribeToData,
+
+    // 🔧 FIX: Legacy sync methods for compatibility
+    queueOperation: legacySync.queueOperation,
+    forceFullSync: currentMode === 'operations' ? operationSync.forceSync : legacySync.forceFullSync,
 
     // Operations-specific methods (only available in operations mode)
     submitOperation: currentMode === 'operations' ? operationSync.submitOperation : undefined,

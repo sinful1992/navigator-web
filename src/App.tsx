@@ -144,14 +144,35 @@ async function uploadBackupToStorage(
 
     logger.info(`Uploading backup to ${objectPath}, size: ${blob.size} bytes`);
 
+    // 🔧 OPTIMIZATION: Upload with CDN caching headers to utilize 5GB cached egress quota
     const uploadRes = await supabase
       .storage
       .from(bucket)
-      .upload(objectPath, blob, { upsert: true, contentType: "application/json" }); // Changed to upsert: true for reliability
+      .upload(objectPath, blob, {
+        upsert: true,
+        contentType: "application/json",
+        cacheControl: "3600" // Cache for 1 hour
+      });
 
     if (uploadRes.error) {
       logger.error("Backup upload failed:", uploadRes.error);
       throw new Error(uploadRes.error.message);
+    }
+
+    // 🔧 OPTIMIZATION: Also save as "latest.json" for cacheable downloads
+    const latestPath = `${userId}/latest.json`;
+    const latestRes = await supabase
+      .storage
+      .from(bucket)
+      .upload(latestPath, blob, {
+        upsert: true,
+        contentType: "application/json",
+        cacheControl: "1800" // Cache for 30 minutes
+      });
+
+    if (latestRes.error) {
+      logger.warn("Latest backup upload failed (non-critical):", latestRes.error);
+      // Don't throw - timestamped backup succeeded
     }
 
     logger.info("Backup upload successful:", objectPath);
@@ -999,7 +1020,7 @@ function AuthedApp() {
           }
         }, retryDelay);
       }
-    }, 150);
+    }, 2000); // 🔧 OPTIMIZATION: Increased from 150ms to 2s to batch rapid changes and reduce egress
 
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
@@ -1027,8 +1048,8 @@ function AuthedApp() {
       }
     };
 
-    // Run backup every 1 hour
-    const interval = setInterval(periodicBackup, 60 * 60 * 1000);
+    // 🔧 OPTIMIZATION: Run backup every 3 hours (was 1h) to reduce egress while maintaining safety
+    const interval = setInterval(periodicBackup, 3 * 60 * 60 * 1000);
 
     // Run immediate backup if we have data but no recent backup
     const lastBackup = localStorage.getItem('last_backup_time');
@@ -1521,8 +1542,8 @@ function AuthedApp() {
       }
     };
 
-    // Run backup every 1 hour
-    const interval = setInterval(periodicBackup, 60 * 60 * 1000);
+    // 🔧 OPTIMIZATION: Run backup every 3 hours (was 1h) to reduce egress while maintaining safety
+    const interval = setInterval(periodicBackup, 3 * 60 * 60 * 1000);
 
     // Cleanup old backups weekly
     const cleanupInterval = setInterval(() => {
