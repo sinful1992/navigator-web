@@ -282,6 +282,11 @@ export function useUnifiedSync() {
     signUp: activeSync.signUp,
     signOut: activeSync.signOut,
 
+    // Auth methods (always use legacy sync for these)
+    resetPassword: legacySync.resetPassword,
+    updatePassword: legacySync.updatePassword,
+    updateEmail: legacySync.updateEmail,
+
     // Unified sync methods
     syncData,
     subscribeToData,
@@ -289,6 +294,7 @@ export function useUnifiedSync() {
     // Operations-specific methods (only available in operations mode)
     submitOperation: currentMode === 'operations' ? operationSync.submitOperation : undefined,
     forceSync: currentMode === 'operations' ? operationSync.forceSync : legacySync.forceFullSync,
+    forceFullSync: currentMode === 'operations' ? operationSync.forceSync : legacySync.forceFullSync, // Alias for backwards compatibility
     getStateFromOperations: currentMode === 'operations' ? operationSync.getStateFromOperations : undefined,
 
     // Migration utilities
