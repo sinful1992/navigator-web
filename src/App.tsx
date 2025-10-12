@@ -711,6 +711,10 @@ function AuthedApp() {
 
                 // Sync the merged state back to cloud to preserve local changes
                 setTimeout(async () => {
+                  if (cancelled) {
+                    logger.sync("🛑 Bootstrap sync cancelled before queued merge sync ran");
+                    return;
+                  }
                   try {
                     await cloudSync.syncData(mergedState);
                     logger.sync("✅ Synced merged state back to cloud");
@@ -835,6 +839,11 @@ function AuthedApp() {
             SmartUserDetection.storeDeviceContext(cloudSync.user!);
             if (!cancelled) setHydrated(true);
           }
+        }
+
+        if (cancelled) {
+          logger.sync("🛑 Bootstrap sync cancelled before subscribing to cloud updates");
+          return;
         }
 
         cleanup = cloudSync.subscribeToData((updaterOrState) => {
