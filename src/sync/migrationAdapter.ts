@@ -21,8 +21,8 @@ type MigrationConfig = {
 };
 
 const DEFAULT_CONFIG: MigrationConfig = {
-  mode: 'legacy', // Start with legacy mode
-  rolloutPercentage: 0, // No users on new sync initially
+  mode: 'operations', // 🚀 SWITCHED TO DELTA SYNC (operations mode)
+  rolloutPercentage: 100, // All users on delta sync
   migrationEnabled: true,
 };
 
