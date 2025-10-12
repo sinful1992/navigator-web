@@ -1375,7 +1375,12 @@ function AuthedApp() {
   };
 
   const handleChangeOutcome = React.useCallback(
-    async (targetCompletionIndex: number, outcome: Outcome, amount?: string) => {
+    async (
+      targetCompletionIndex: number,
+      outcome: Outcome,
+      amount?: string,
+      arrangementId?: string
+    ) => {
       setState((s) => {
         if (
           !Number.isInteger(targetCompletionIndex) ||
@@ -1385,11 +1390,15 @@ function AuthedApp() {
           return s;
         }
         const comps = s.completions.slice();
-        comps[targetCompletionIndex] = {
+        const updatedCompletion = {
           ...comps[targetCompletionIndex],
           outcome,
           amount,
         };
+        if (arrangementId !== undefined) {
+          updatedCompletion.arrangementId = arrangementId;
+        }
+        comps[targetCompletionIndex] = updatedCompletion;
         return { ...s, completions: comps };
       });
 

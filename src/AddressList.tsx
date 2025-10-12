@@ -13,7 +13,9 @@ type Props = {
   setActive: (index: number) => void;
   cancelActive: () => void;
   onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number) => void;
-  onAddArrangement?: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onAddArrangement?: (
+    arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>
+  ) => Promise<string>;
   filterText: string;
 };
 
@@ -561,9 +563,9 @@ const AddressListComponent = function AddressList({
           state={state}
           preSelectedAddressIndex={showArrangementForm}
           onSave={async (arrangementData) => {
-            await onAddArrangement(arrangementData);
-            // Mark the address as ARR completed
-            handleCompletion(showArrangementForm, "ARR");
+            const arrangementId = await onAddArrangement(arrangementData);
+            // Mark the address as ARR completed and link the new arrangement
+            handleCompletion(showArrangementForm, "ARR", undefined, arrangementId);
             setShowArrangementForm(null);
           }}
           onCancel={() => setShowArrangementForm(null)}

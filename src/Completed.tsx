@@ -12,8 +12,15 @@ type AppStateSlice = {
 
 type Props = {
   state: AppStateSlice & AppState;
-  onChangeOutcome: (completionArrayIndex: number, outcome: Outcome, amount?: string) => void;
-  onAddArrangement?: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onChangeOutcome: (
+    completionArrayIndex: number,
+    outcome: Outcome,
+    amount?: string,
+    arrangementId?: string
+  ) => void;
+  onAddArrangement?: (
+    arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>
+  ) => Promise<string>;
   onComplete?: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string) => void;
 };
 
@@ -678,9 +685,9 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
           state={state}
           preSelectedAddressIndex={showArrangementForm.addressIndex}
           onSave={async (arrangementData) => {
-            await onAddArrangement(arrangementData);
-            // Change the completion outcome to ARR
-            onChangeOutcome(showArrangementForm.completionIndex, "ARR");
+            const arrangementId = await onAddArrangement(arrangementData);
+            // Change the completion outcome to ARR and link the new arrangement
+            onChangeOutcome(showArrangementForm.completionIndex, "ARR", undefined, arrangementId);
             setShowArrangementForm(null);
           }}
           onCancel={() => setShowArrangementForm(null)}
