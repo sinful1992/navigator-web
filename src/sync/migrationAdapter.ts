@@ -285,7 +285,6 @@ export function useUnifiedSync() {
     // Auth methods (always use legacy sync for these)
     resetPassword: legacySync.resetPassword,
     updatePassword: legacySync.updatePassword,
-    updateEmail: legacySync.updateEmail,
 
     // Unified sync methods
     syncData,
