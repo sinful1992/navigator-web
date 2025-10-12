@@ -21,8 +21,8 @@ type MigrationConfig = {
 };
 
 const DEFAULT_CONFIG: MigrationConfig = {
-  mode: 'operations', // 🚀 SWITCHED TO DELTA SYNC (operations mode)
-  rolloutPercentage: 100, // All users on delta sync
+  mode: 'legacy', // Start with legacy mode
+  rolloutPercentage: 0, // No users on new sync initially
   migrationEnabled: true,
 };
 
@@ -282,10 +282,6 @@ export function useUnifiedSync() {
     signUp: activeSync.signUp,
     signOut: activeSync.signOut,
 
-    // Auth methods (always use legacy sync for these)
-    resetPassword: legacySync.resetPassword,
-    updatePassword: legacySync.updatePassword,
-
     // Unified sync methods
     syncData,
     subscribeToData,
@@ -293,7 +289,6 @@ export function useUnifiedSync() {
     // Operations-specific methods (only available in operations mode)
     submitOperation: currentMode === 'operations' ? operationSync.submitOperation : undefined,
     forceSync: currentMode === 'operations' ? operationSync.forceSync : legacySync.forceFullSync,
-    forceFullSync: currentMode === 'operations' ? operationSync.forceSync : legacySync.forceFullSync, // Alias for backwards compatibility
     getStateFromOperations: currentMode === 'operations' ? operationSync.getStateFromOperations : undefined,
 
     // Migration utilities

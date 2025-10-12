@@ -4,8 +4,7 @@ import "./App.css"; // Use the updated modern CSS
 import { useAppState } from "./useAppState";
 import { normalizeState, normalizeBackupData } from "./utils/normalizeState";
 import { SmartUserDetection } from "./utils/userDetection";
-import { useUnifiedSync } from "./sync/migrationAdapter";
-import { mergeStatePreservingActiveIndex } from "./useCloudSync";
+import { useCloudSync, mergeStatePreservingActiveIndex } from "./useCloudSync";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";
 import { Auth } from "./Auth";
@@ -138,9 +137,6 @@ async function uploadBackupToStorage(
   const name = `backup_${dayKey}_${time}_${label}_retry${retryCount}.json`;
   const objectPath = `${userId}/${dayKey}/${name}`;
 
-  // 🚀 CDN OPTIMIZATION: Also save as "latest.json" for cached egress
-  const latestPath = `${userId}/latest.json`;
-
   try {
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json",
@@ -148,36 +144,14 @@ async function uploadBackupToStorage(
 
     logger.info(`Uploading backup to ${objectPath}, size: ${blob.size} bytes`);
 
-    // Upload timestamped backup (for history)
     const uploadRes = await supabase
       .storage
       .from(bucket)
-      .upload(objectPath, blob, {
-        upsert: true,
-        contentType: "application/json",
-        cacheControl: "3600" // Cache for 1 hour
-      });
+      .upload(objectPath, blob, { upsert: true, contentType: "application/json" }); // Changed to upsert: true for reliability
 
     if (uploadRes.error) {
       logger.error("Backup upload failed:", uploadRes.error);
       throw new Error(uploadRes.error.message);
-    }
-
-    // 🚀 CDN OPTIMIZATION: Upload as "latest.json" for CDN caching
-    // This gets served from CDN edge (uses cached egress, not regular egress!)
-    const latestRes = await supabase
-      .storage
-      .from(bucket)
-      .upload(latestPath, blob, {
-        upsert: true,
-        contentType: "application/json",
-        cacheControl: "1800" // Cache for 30 minutes (balance freshness vs caching)
-      });
-
-    if (latestRes.error) {
-      logger.warn("Latest backup upload failed (non-critical):", latestRes.error.message);
-    } else {
-      logger.info("Latest backup (CDN-cached) uploaded:", latestPath);
     }
 
     logger.info("Backup upload successful:", objectPath);
@@ -241,7 +215,7 @@ function StatsCard({ title, value, change, changeType, icon, iconType }: {
 }
 
 export default function App() {
-  const cloudSync = useUnifiedSync(); // 🚀 NOW USING DELTA SYNC!
+  const cloudSync = useCloudSync();
 
   // 🎯 UX IMPROVEMENT: Only show loading screen if actually taking time
   const [showLoading, setShowLoading] = React.useState(false);
@@ -329,7 +303,7 @@ export default function App() {
 }
 
 function AuthedApp() {
-  const cloudSync = useUnifiedSync(); // 🚀 NOW USING DELTA SYNC!
+  const cloudSync = useCloudSync();
 
   const {
     state,
@@ -965,7 +939,11 @@ function AuthedApp() {
       bootstrapLockRef.current = false;
       if (cleanup) cleanup();
     };
+<<<<<<< HEAD
   }, [cloudSync.user?.id, cloudSync.isOnline, loading, alert]);
+=======
+  }, [cloudSync.user, cloudSync.isOnline, loading, alert]);
+>>>>>>> 3c9be1c (Fix critical cloud-sync and settings issues)
 
   // REMOVED: Visibility change handler - was over-engineering after fixing React subscription bug
 
@@ -1025,39 +1003,10 @@ function AuthedApp() {
           }
         }, retryDelay);
       }
-    }, 2000); // 🔧 FIX: Increased from 150ms to 2s to batch rapid changes
+    }, 150);
 
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
-
-  // 🔧 FIX: Periodic sync fallback (in case WebSocket realtime fails)
-  React.useEffect(() => {
-    if (!cloudSync.user || loading || !hydrated) return;
-
-    let lastPeriodicSync = Date.now();
-
-    const periodicSync = async () => {
-      const now = Date.now();
-      const timeSinceLastSync = now - lastPeriodicSync;
-
-      // Only sync if it's been more than 5 minutes since last successful sync
-      if (timeSinceLastSync > 5 * 60 * 1000) {
-        try {
-          logger.sync("⏰ Periodic sync fallback triggered");
-          await cloudSync.syncData(safeState);
-          lastPeriodicSync = now;
-          logger.sync("✅ Periodic sync completed");
-        } catch (error) {
-          logger.error("Periodic sync failed:", error);
-        }
-      }
-    };
-
-    // Check every 5 minutes
-    const syncInterval = setInterval(periodicSync, 5 * 60 * 1000);
-
-    return () => clearInterval(syncInterval);
-  }, [cloudSync, safeState, hydrated, loading]);
 
   // CRITICAL FIX: Periodic backup to prevent data loss (every 5 minutes when data changes)
   React.useEffect(() => {
@@ -1082,8 +1031,8 @@ function AuthedApp() {
       }
     };
 
-    // Run backup every 3 hours to save egress while maintaining safety
-    const interval = setInterval(periodicBackup, 3 * 60 * 60 * 1000);
+    // Run backup every 1 hour
+    const interval = setInterval(periodicBackup, 60 * 60 * 1000);
 
     // Run immediate backup if we have data but no recent backup
     const lastBackup = localStorage.getItem('last_backup_time');

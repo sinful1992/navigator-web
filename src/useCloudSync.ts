@@ -1480,39 +1480,21 @@ export function useCloudSync(): UseCloudSync {
     }
   }, [user]);
 
-  // Track WebSocket retry state
-  const wsRetryCount = useRef<number>(0);
-  const wsRetryTimeout = useRef<NodeJS.Timeout | null>(null);
-  const MAX_WS_RETRIES = 5;
-  const WS_RETRY_DELAY = 5000; // 5 seconds
-
   // ---- Cloud subscribe (pull) with better change detection ----
   const subscribeToData = useCallback(
     (onChange: Dispatch<SetStateAction<AppState>>) => {
       if (!user || !supabase) return () => {};
 
-      // 🔧 FIX: Stop if too many retries
-      if (wsRetryCount.current >= MAX_WS_RETRIES) {
-        console.warn(`⚠️ WebSocket retry limit reached (${MAX_WS_RETRIES}). Realtime sync disabled. Data will still sync via periodic updates.`);
-        setError('Realtime sync temporarily unavailable');
-        return () => {};
-      }
-
       clearError();
-
+      
       const sb = supabase as NonNullable<typeof supabase>;
-      const channel = sb.channel("navigator_state_" + user.id, {
-        config: {
-          broadcast: { self: false },
-          presence: { key: '' },
-        },
-      });
+      const channel = sb.channel("navigator_state_" + user.id);
 
       activeChannelCountRef.current += 1;
       if (import.meta.env.DEV) {
         const topic = (channel as any)?.topic ?? "unknown";
         console.log(
-          `🛰️ subscribeToData: creating channel (#${activeChannelCountRef.current}) [retry: ${wsRetryCount.current}]`,
+          `🛰️ subscribeToData: creating channel (#${activeChannelCountRef.current})`,
           topic
         );
       }
@@ -1696,34 +1678,7 @@ export function useCloudSync(): UseCloudSync {
         }
       );
 
-      // 🔧 FIX: Subscribe with error handling
-      channel
-        .subscribe((status, err) => {
-          if (status === 'SUBSCRIBED') {
-            console.log('✅ Realtime WebSocket connected successfully');
-            // Reset retry count on successful connection
-            wsRetryCount.current = 0;
-            if (wsRetryTimeout.current) {
-              clearTimeout(wsRetryTimeout.current);
-              wsRetryTimeout.current = null;
-            }
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error('❌ Realtime WebSocket error:', err);
-            wsRetryCount.current += 1;
-
-            if (wsRetryCount.current < MAX_WS_RETRIES) {
-              console.log(`🔄 Will retry WebSocket connection in ${WS_RETRY_DELAY/1000}s (attempt ${wsRetryCount.current}/${MAX_WS_RETRIES})`);
-            } else {
-              console.warn('⚠️ Max WebSocket retries reached. Falling back to periodic sync only.');
-              setError('Realtime sync unavailable. Using periodic sync.');
-            }
-          } else if (status === 'TIMED_OUT') {
-            console.warn('⏱️ Realtime WebSocket connection timed out');
-            wsRetryCount.current += 1;
-          } else if (status === 'CLOSED') {
-            console.log('🔌 Realtime WebSocket closed');
-          }
-        });
+      channel.subscribe();
 
       const cleanup = () => {
         if (activeChannelCountRef.current > 0) {
@@ -1740,12 +1695,6 @@ export function useCloudSync(): UseCloudSync {
           sb.removeChannel(channel);
         } catch {
           // ignore
-        }
-
-        // Clear retry timeout on cleanup
-        if (wsRetryTimeout.current) {
-          clearTimeout(wsRetryTimeout.current);
-          wsRetryTimeout.current = null;
         }
       };
 
