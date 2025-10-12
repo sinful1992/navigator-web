@@ -444,6 +444,16 @@ function AuthedApp() {
     [state, addresses, completions, arrangements, daySessions]
   );
 
+  const safeStateRef = React.useRef(safeState);
+  React.useEffect(() => {
+    safeStateRef.current = safeState;
+  }, [safeState]);
+
+  const ownerMetadataRef = React.useRef(ownerMetadata);
+  React.useEffect(() => {
+    ownerMetadataRef.current = ownerMetadata;
+  }, [ownerMetadata]);
+
   // Format date key
   function formatKey(d: Date, tz = "Europe/London") {
     const y = d.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
@@ -581,7 +591,8 @@ function AuthedApp() {
 
   // Cloud sync initialization with session poisoning protection
   React.useEffect(() => {
-    if (!cloudSync.user || loading) return;
+    const user = cloudSync.user;
+    if (!user || loading) return;
 
     // 🔧 CRITICAL FIX: If offline, skip cloud sync and use local data immediately
     if (!cloudSync.isOnline) {
@@ -613,12 +624,15 @@ function AuthedApp() {
     let cancelled = false;
     let cleanup: undefined | (() => void);
 
+    const getSafeState = () => safeStateRef.current;
+    const getOwnerMetadata = () => ownerMetadataRef.current;
+
     (async () => {
       try {
         bootstrapLockRef.current = true;
 
         // 🔒 SECURITY: Validate user ID before any state sync
-        const currentUserId = cloudSync.user!.id;
+        const currentUserId = user.id;
         const expectedUserId = localStorage.getItem('navigator_expected_user_id');
 
         if (expectedUserId && expectedUserId !== currentUserId) {
@@ -629,7 +643,7 @@ function AuthedApp() {
             timestamp: new Date().toISOString(),
             expectedUserId,
             actualUserId: currentUserId,
-            localState: safeState,
+            localState: getSafeState(),
             reason: 'session_poisoning_detected'
           };
           localStorage.setItem(`navigator_emergency_backup_${Date.now()}`, JSON.stringify(emergencyBackup));
@@ -647,8 +661,9 @@ function AuthedApp() {
 
         // 🔒 SECURITY: Check for active protection flag before syncing
         const activeProtection = localStorage.getItem('navigator_active_protection');
-        if (activeProtection && state.activeIndex !== null) {
-          logger.info(`🛡️ ACTIVE PROTECTION: Skipping bootstrap sync - user has active address #${state.activeIndex}`);
+        const activeIndex = getSafeState().activeIndex;
+        if (activeProtection && activeIndex !== null) {
+          logger.info(`🛡️ ACTIVE PROTECTION: Skipping bootstrap sync - user has active address #${activeIndex}`);
           setHydrated(true);
           return;
         }
@@ -679,17 +694,27 @@ function AuthedApp() {
           const cloudState = normalizeState(row.data);
           if (!cancelled) {
             // CRITICAL FIX: Intelligent session restoration with conflict resolution
-            const localHasData = addresses.length > 0 || completions.length > 0 || arrangements.length > 0 || daySessions.length > 0;
+            const localSnapshot = getSafeState();
+            const localAddresses = Array.isArray(localSnapshot.addresses) ? localSnapshot.addresses : [];
+            const localCompletions = Array.isArray(localSnapshot.completions) ? localSnapshot.completions : [];
+            const localArrangements = Array.isArray(localSnapshot.arrangements) ? localSnapshot.arrangements : [];
+            const localSessions = Array.isArray(localSnapshot.daySessions) ? localSnapshot.daySessions : [];
+
+            const localHasData =
+              localAddresses.length > 0 ||
+              localCompletions.length > 0 ||
+              localArrangements.length > 0 ||
+              localSessions.length > 0;
 
             if (localHasData) {
               // Compare local vs cloud data to prevent data loss
-              const localCompletionCount = completions.length;
+              const localCompletionCount = localCompletions.length;
               const cloudCompletionCount = cloudState.completions?.length || 0;
               const cloudUpdatedAt = row.updated_at ? new Date(row.updated_at) : new Date(0);
 
               // Check if local data has recent activity (last 2 hours)
               const recentThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000);
-              const hasRecentLocalActivity = completions.some(comp =>
+              const hasRecentLocalActivity = localCompletions.some(comp =>
                 comp.timestamp && new Date(comp.timestamp) > recentThreshold
               );
 
@@ -704,7 +729,7 @@ function AuthedApp() {
               if (localCompletionCount > cloudCompletionCount || hasRecentLocalActivity) {
                 // Local has more/newer data - merge intelligently
                 logger.sync("🛡️ DATA PROTECTION: Local data appears newer, merging states to prevent loss");
-                const currentLocal = safeState;
+                const currentLocal = getSafeState();
                 const mergedState = mergeStatePreservingActiveIndex(currentLocal, cloudState);
                 setState(mergedState);
                 lastFromCloudRef.current = JSON.stringify(mergedState);
@@ -735,12 +760,18 @@ function AuthedApp() {
             logger.sync("Session restored, version:", row?.version);
           }
         } else {
+          const localSnapshot = getSafeState();
+          const localAddresses = Array.isArray(localSnapshot.addresses) ? localSnapshot.addresses : [];
+          const localCompletions = Array.isArray(localSnapshot.completions) ? localSnapshot.completions : [];
+          const localArrangements = Array.isArray(localSnapshot.arrangements) ? localSnapshot.arrangements : [];
+          const localSessions = Array.isArray(localSnapshot.daySessions) ? localSnapshot.daySessions : [];
+
           const localHasData =
-            addresses.length > 0 ||
-            completions.length > 0 ||
-            arrangements.length > 0 ||
-            daySessions.length > 0;
-            
+            localAddresses.length > 0 ||
+            localCompletions.length > 0 ||
+            localArrangements.length > 0 ||
+            localSessions.length > 0;
+
           if (localHasData) {
             // SMART USER DETECTION: Cloud-based analysis instead of localStorage comparison
             logger.info("Analyzing data ownership for current user...");
@@ -752,41 +783,43 @@ function AuthedApp() {
                 const { data: cloudStateData } = await supabase!
                   .from("navigator_state")
                   .select("data")
-                  .eq("user_id", cloudSync.user!.id)
+                  .eq("user_id", user.id)
                   .maybeSingle();
                 cloudData = cloudStateData?.data;
               } catch (cloudError) {
                 logger.warn("Could not fetch cloud data for analysis:", cloudError);
               }
 
-              // Analyze ownership using multiple signals including owner metadata
               const ownership = SmartUserDetection.analyzeDataOwnership(
-                safeState,
-                cloudSync.user!,
+                getSafeState(),
+                user,
                 cloudData,
-                ownerMetadata
+                getOwnerMetadata()
               );
 
               logger.info("Data ownership analysis:", ownership);
 
               switch (ownership.action) {
-                case 'sync':
+                case 'sync': {
                   logger.sync("Syncing local data to cloud (ownership confirmed)");
-                  await cloudSync.syncData(safeState);
-                  SmartUserDetection.storeDeviceContext(cloudSync.user!);
+                  const latestState = getSafeState();
+                  await cloudSync.syncData(latestState);
+                  SmartUserDetection.storeDeviceContext(user);
                   if (!cancelled) {
-                    lastFromCloudRef.current = JSON.stringify(safeState);
+                    lastFromCloudRef.current = JSON.stringify(latestState);
                     setHydrated(true);
                   }
                   break;
+                }
 
-                case 'backup_and_clear':
+                case 'backup_and_clear': {
                   logger.warn("Creating safety backup before clearing (different user detected)");
 
                   try {
                     const backupKey = `navigator_safety_backup_${Date.now()}_user_switch`;
+                    const latestState = getSafeState();
                     const backupData = {
-                      ...safeState,
+                      ...latestState,
                       _backup_timestamp: new Date().toISOString(),
                       _backup_reason: 'user_switch',
                       _ownership_analysis: ownership
@@ -802,37 +835,39 @@ function AuthedApp() {
                       activeIndex: null,
                       currentListVersion: 1
                     });
-                    SmartUserDetection.storeDeviceContext(cloudSync.user!);
+                    SmartUserDetection.storeDeviceContext(user);
                     if (!cancelled) setHydrated(true);
                   } catch (backupError) {
                     logger.error("Backup failed - preserving data for safety:", backupError);
                     // CRITICAL FIX: Don't auto-sync on error - let user decide
-                    SmartUserDetection.storeDeviceContext(cloudSync.user!);
+                    SmartUserDetection.storeDeviceContext(user);
                     if (!cancelled) setHydrated(true);
                   }
                   break;
+                }
 
                 case 'preserve_and_ask':
                 default:
                   logger.info("Preserving local data (uncertain ownership) - user must decide before syncing");
                   // CRITICAL FIX: Don't auto-sync - store a flag to show prompt
                   localStorage.setItem('navigator_ownership_uncertain', 'true');
-                  SmartUserDetection.storeDeviceContext(cloudSync.user!);
+                  SmartUserDetection.storeDeviceContext(user);
                   if (!cancelled) setHydrated(true);
                   break;
               }
             } catch (analysisError) {
               logger.error("User detection analysis failed - preserving data for safety:", analysisError);
-              await cloudSync.syncData(safeState);
-              SmartUserDetection.storeDeviceContext(cloudSync.user!);
+              const latestState = getSafeState();
+              await cloudSync.syncData(latestState);
+              SmartUserDetection.storeDeviceContext(user);
               if (!cancelled) {
-                lastFromCloudRef.current = JSON.stringify(safeState);
+                lastFromCloudRef.current = JSON.stringify(latestState);
                 setHydrated(true);
               }
             }
           } else {
             // No local data - store device context for future use
-            SmartUserDetection.storeDeviceContext(cloudSync.user!);
+            SmartUserDetection.storeDeviceContext(user);
             if (!cancelled) setHydrated(true);
           }
         }
@@ -894,7 +929,7 @@ function AuthedApp() {
       bootstrapLockRef.current = false;
       if (cleanup) cleanup();
     };
-  }, [cloudSync.user, cloudSync.isOnline, loading, safeState, state.activeIndex, alert]);
+  }, [cloudSync.user?.id, cloudSync.isOnline, loading, alert]);
 
   // REMOVED: Visibility change handler - was over-engineering after fixing React subscription bug
 
