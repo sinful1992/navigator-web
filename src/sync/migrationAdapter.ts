@@ -161,31 +161,23 @@ export function useUnifiedSync() {
         return legacySync.syncData(state);
 
       case 'operations':
-        // Convert state changes to operations and submit them
-        const operations = await migrateStateToOperations(state);
-        for (const operation of operations) {
-          await operationSync.submitOperation({
-            type: operation.type,
-            payload: operation.payload,
-          });
-        }
-        break;
+        // 🔧 FIX: In operations mode, syncData is a no-op
+        // Operations are already auto-synced via operationSync.submitOperation()
+        // which is called directly by app actions (complete address, create arrangement, etc.)
+        // This prevents the bug of converting entire state on every sync
+        logger.debug('Operations mode: syncData is no-op (operations auto-sync)');
+        return Promise.resolve();
 
       case 'hybrid':
         // Try operations first, fall back to legacy on error
         try {
-          const operations = await migrateStateToOperations(state);
-          for (const operation of operations) {
-            await operationSync.submitOperation({
-              type: operation.type,
-              payload: operation.payload,
-            });
-          }
+          // In hybrid mode, still use legacy sync for now
+          // Full operations integration requires app changes
+          return legacySync.syncData(state);
         } catch (error) {
-          logger.warn('Operations sync failed, falling back to legacy:', error);
+          logger.warn('Hybrid sync failed, falling back to legacy:', error);
           return legacySync.syncData(state);
         }
-        break;
     }
   };
 
