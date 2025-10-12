@@ -876,6 +876,7 @@ function AuthedApp() {
           }
         }
 
+        // 🔧 CRITICAL FIX: Respect cancellation before subscribing
         if (cancelled) {
           logger.sync("🛑 Bootstrap sync cancelled before subscribing to cloud updates");
           return;
@@ -938,7 +939,11 @@ function AuthedApp() {
       bootstrapLockRef.current = false;
       if (cleanup) cleanup();
     };
+<<<<<<< HEAD
   }, [cloudSync.user?.id, cloudSync.isOnline, loading, alert]);
+=======
+  }, [cloudSync.user, cloudSync.isOnline, loading, alert]);
+>>>>>>> 3c9be1c (Fix critical cloud-sync and settings issues)
 
   // REMOVED: Visibility change handler - was over-engineering after fixing React subscription bug
 

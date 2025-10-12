@@ -39,6 +39,59 @@ interface SettingsDropdownProps {
   hasSupabase?: boolean;
 }
 
+// CRITICAL FIX: Define components OUTSIDE to prevent remounting on every render
+const ToggleSwitch: React.FC<{
+  checked: boolean;
+  onChange: () => void;
+  id: string;
+}> = ({ checked, onChange, id }) => (
+  <div className="modern-toggle-switch" onClick={onChange}>
+    <input
+      type="checkbox"
+      id={id}
+      checked={checked}
+      onChange={onChange}
+      className="modern-toggle-input"
+    />
+    <div className={`modern-toggle-slider ${checked ? 'checked' : ''}`}>
+      <div className="modern-toggle-thumb"></div>
+    </div>
+  </div>
+);
+
+const CollapsibleSection: React.FC<{
+  title: string;
+  icon: string;
+  sectionKey: string;
+  children: React.ReactNode;
+  isExpanded: boolean;
+  onToggle: (key: string) => void;
+}> = ({ title, icon, sectionKey, children, isExpanded, onToggle }) => {
+  return (
+    <div className="modern-settings-section-container">
+      <button
+        type="button"
+        className="modern-section-header"
+        onClick={() => onToggle(sectionKey)}
+      >
+        <div className="modern-section-title-area">
+          <span className="modern-section-icon">{icon}</span>
+          <span className="modern-section-title">{title}</span>
+        </div>
+        <span className={`modern-section-chevron ${isExpanded ? 'expanded' : ''}`}>
+          ›
+        </span>
+      </button>
+
+      <div className={`modern-section-content ${isExpanded ? 'expanded' : ''}`}>
+        <div className="modern-section-inner">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   trigger,
   reminderSettings,
@@ -67,6 +120,7 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   const [storageInfo, setStorageInfo] = useState<{ usedMB: string; quotaMB: string; percentage: number } | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>('general');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const panelBodyRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const restoreInputRef = useRef<HTMLInputElement>(null);
 
@@ -123,59 +177,7 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   }, [isOpen]);
 
   const toggleSection = (section: string) => {
-    setExpandedSection(expandedSection === section ? null : section);
-  };
-
-  const ToggleSwitch: React.FC<{
-    checked: boolean;
-    onChange: () => void;
-    id: string;
-  }> = ({ checked, onChange, id }) => (
-    <div className="modern-toggle-switch" onClick={onChange}>
-      <input
-        type="checkbox"
-        id={id}
-        checked={checked}
-        onChange={onChange}
-        className="modern-toggle-input"
-      />
-      <div className={`modern-toggle-slider ${checked ? 'checked' : ''}`}>
-        <div className="modern-toggle-thumb"></div>
-      </div>
-    </div>
-  );
-
-  const CollapsibleSection: React.FC<{
-    title: string;
-    icon: string;
-    sectionKey: string;
-    children: React.ReactNode;
-  }> = ({ title, icon, sectionKey, children }) => {
-    const isExpanded = expandedSection === sectionKey;
-
-    return (
-      <div className="modern-settings-section-container">
-        <button
-          type="button"
-          className="modern-section-header"
-          onClick={() => toggleSection(sectionKey)}
-        >
-          <div className="modern-section-title-area">
-            <span className="modern-section-icon">{icon}</span>
-            <span className="modern-section-title">{title}</span>
-          </div>
-          <span className={`modern-section-chevron ${isExpanded ? 'expanded' : ''}`}>
-            ›
-          </span>
-        </button>
-
-        <div className={`modern-section-content ${isExpanded ? 'expanded' : ''}`}>
-          <div className="modern-section-inner">
-            {children}
-          </div>
-        </div>
-      </div>
-    );
+    setExpandedSection(prev => prev === section ? null : section);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -220,9 +222,15 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
             </button>
           </div>
 
-          <div className="modern-panel-body">
+          <div className="modern-panel-body" ref={panelBodyRef}>
             {/* General Settings */}
-            <CollapsibleSection title="General" icon="📱" sectionKey="general">
+            <CollapsibleSection
+              title="General"
+              icon="📱"
+              sectionKey="general"
+              isExpanded={expandedSection === 'general'}
+              onToggle={toggleSection}
+            >
               <div className="modern-setting-row">
                 <div className="modern-setting-info">
                   <div className="modern-setting-label">Dark Mode</div>
@@ -261,7 +269,13 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
             </CollapsibleSection>
 
             {/* Data & Backup */}
-            <CollapsibleSection title="Data & Backup" icon="💾" sectionKey="data">
+            <CollapsibleSection
+              title="Data & Backup"
+              icon="💾"
+              sectionKey="data"
+              isExpanded={expandedSection === 'data'}
+              onToggle={toggleSection}
+            >
               {/* Import/Export */}
               <div className="modern-subsection">
                 <div className="modern-subsection-title">Import & Export</div>
@@ -401,7 +415,13 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
             </CollapsibleSection>
 
             {/* Reminders & SMS */}
-            <CollapsibleSection title="Reminders & SMS" icon="🔔" sectionKey="reminders">
+            <CollapsibleSection
+              title="Reminders & SMS"
+              icon="🔔"
+              sectionKey="reminders"
+              isExpanded={expandedSection === 'reminders'}
+              onToggle={toggleSection}
+            >
               <button
                 className="modern-feature-button"
                 onClick={() => {
@@ -420,15 +440,16 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
             </CollapsibleSection>
 
             {/* Earnings & Bonus */}
-            <CollapsibleSection title="Earnings & Bonus" icon="💰" sectionKey="earnings">
+            <CollapsibleSection
+              title="Earnings & Bonus"
+              icon="💰"
+              sectionKey="earnings"
+              isExpanded={expandedSection === 'earnings'}
+              onToggle={toggleSection}
+            >
               <button
                 className="modern-feature-button"
                 onClick={() => {
-                  console.log('Bonus settings button clicked');
-                  console.log('bonusSettings:', bonusSettings);
-                  console.log('onUpdateBonusSettings:', onUpdateBonusSettings);
-                  console.log('typeof bonusSettings:', typeof bonusSettings);
-                  console.log('typeof onUpdateBonusSettings:', typeof onUpdateBonusSettings);
                   setShowBonusSettings(true);
                   setIsOpen(false);
                 }}
@@ -444,7 +465,13 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
             </CollapsibleSection>
 
             {/* Privacy & Safety */}
-            <CollapsibleSection title="Privacy & Safety" icon="🔒" sectionKey="privacy">
+            <CollapsibleSection
+              title="Privacy & Safety"
+              icon="🔒"
+              sectionKey="privacy"
+              isExpanded={expandedSection === 'privacy'}
+              onToggle={toggleSection}
+            >
               <div className="modern-setting-row">
                 <div className="modern-setting-info">
                   <div className="modern-setting-label">Confirm before deleting</div>
@@ -531,7 +558,13 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
             </CollapsibleSection>
 
             {/* Account */}
-            <CollapsibleSection title="Account" icon="👤" sectionKey="account">
+            <CollapsibleSection
+              title="Account"
+              icon="👤"
+              sectionKey="account"
+              isExpanded={expandedSection === 'account'}
+              onToggle={toggleSection}
+            >
               <div className="modern-subsection">
                 <div className="modern-subsection-title">Account Settings</div>
 
@@ -1460,17 +1493,12 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
 
 // Custom comparison function that prevents re-renders from inline functions
 const arePropsEqual = (prevProps: SettingsDropdownProps, nextProps: SettingsDropdownProps) => {
-  // Only compare primitive values and data that actually affects rendering
   return (
     prevProps.isSyncing === nextProps.isSyncing &&
     prevProps.hasSupabase === nextProps.hasSupabase &&
     prevProps.userEmail === nextProps.userEmail &&
-    // Compare reminder settings by reference (it's a stable object from state)
     prevProps.reminderSettings === nextProps.reminderSettings &&
-    // Compare bonus settings by reference
     prevProps.bonusSettings === nextProps.bonusSettings
-    // Ignore all function props - they change every render but we don't care
-    // Ignore appState - we only use it for export which happens on click, not render
   );
 };
 
