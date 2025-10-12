@@ -1,5 +1,5 @@
-// src/hooks/useSettings.ts
-import { useEffect, useState } from 'react';
+// src/hooks/useSettings.ts - Context Provider Pattern
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
 // Define the settings interface
 export interface Settings {
@@ -34,8 +34,25 @@ const DEFAULT_SETTINGS: Settings = {
 // Key for localStorage
 const SETTINGS_KEY = 'navigator-web:settings';
 
-// Custom hook for managing settings with localStorage persistence
-export const useSettings = () => {
+// Context type
+interface SettingsContextType {
+  settings: Settings;
+  updateSettings: (newSettings: Partial<Settings>) => void;
+  toggleBackup: () => void;
+  toggleDarkMode: () => void;
+  togglePushNotifications: () => void;
+  toggleAutoSync: () => void;
+  toggleConfirmBeforeDelete: () => void;
+  updateReminderText: (text: string) => void;
+  updateKeepDataForMonths: (months: 0 | 3 | 6 | 12) => void;
+  predefinedReminders: typeof PREDEFINED_REMINDERS;
+}
+
+// Create context with undefined default (will throw if used outside provider)
+const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+
+// Provider component
+export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<Settings>(() => {
     // Load from localStorage on init
     if (typeof window !== 'undefined') {
@@ -67,24 +84,40 @@ export const useSettings = () => {
     }
   }, [settings.darkMode]);
 
-  const updateSettings = (newSettings: Partial<Settings>) => {
+  // Memoize functions to prevent unnecessary re-renders
+  const updateSettings = useCallback((newSettings: Partial<Settings>) => {
     setSettings((prev) => ({ ...prev, ...newSettings }));
-  };
+  }, []);
 
-  // Toggle helpers
-  const toggleBackup = () => updateSettings({ backupOnEndOfDay: !settings.backupOnEndOfDay });
-  const toggleDarkMode = () => updateSettings({ darkMode: !settings.darkMode });
-  const togglePushNotifications = () => updateSettings({ pushNotifications: !settings.pushNotifications });
-  const toggleAutoSync = () => updateSettings({ autoSyncOnStart: !settings.autoSyncOnStart });
-  const toggleConfirmBeforeDelete = () => updateSettings({ confirmBeforeDelete: !settings.confirmBeforeDelete });
+  const toggleBackup = useCallback(() => {
+    setSettings((prev) => ({ ...prev, backupOnEndOfDay: !prev.backupOnEndOfDay }));
+  }, []);
 
-  // Update reminder text
-  const updateReminderText = (text: string) => updateSettings({ reminderText: text });
+  const toggleDarkMode = useCallback(() => {
+    setSettings((prev) => ({ ...prev, darkMode: !prev.darkMode }));
+  }, []);
 
-  // Update data retention
-  const updateKeepDataForMonths = (months: 0 | 3 | 6 | 12) => updateSettings({ keepDataForMonths: months });
+  const togglePushNotifications = useCallback(() => {
+    setSettings((prev) => ({ ...prev, pushNotifications: !prev.pushNotifications }));
+  }, []);
 
-  return {
+  const toggleAutoSync = useCallback(() => {
+    setSettings((prev) => ({ ...prev, autoSyncOnStart: !prev.autoSyncOnStart }));
+  }, []);
+
+  const toggleConfirmBeforeDelete = useCallback(() => {
+    setSettings((prev) => ({ ...prev, confirmBeforeDelete: !prev.confirmBeforeDelete }));
+  }, []);
+
+  const updateReminderText = useCallback((text: string) => {
+    setSettings((prev) => ({ ...prev, reminderText: text }));
+  }, []);
+
+  const updateKeepDataForMonths = useCallback((months: 0 | 3 | 6 | 12) => {
+    setSettings((prev) => ({ ...prev, keepDataForMonths: months }));
+  }, []);
+
+  const value = {
     settings,
     updateSettings,
     toggleBackup,
@@ -96,6 +129,21 @@ export const useSettings = () => {
     updateKeepDataForMonths,
     predefinedReminders: PREDEFINED_REMINDERS,
   };
+
+  return (
+    <SettingsContext.Provider value={value}>
+      {children}
+    </SettingsContext.Provider>
+  );
+};
+
+// Custom hook to use settings context
+export const useSettings = () => {
+  const context = useContext(SettingsContext);
+  if (context === undefined) {
+    throw new Error('useSettings must be used within a SettingsProvider');
+  }
+  return context;
 };
 
 // Check if Supabase is configured

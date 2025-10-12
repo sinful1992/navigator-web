@@ -1,6 +1,7 @@
 // src/main.tsx
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { SettingsProvider } from "./hooks/useSettings";
 import "./index.css";
 
 
@@ -28,5 +29,7 @@ if (supabaseUrl) {
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <App />
+  <SettingsProvider>
+    <App />
+  </SettingsProvider>
 );

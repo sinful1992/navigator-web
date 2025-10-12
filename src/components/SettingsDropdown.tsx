@@ -1049,7 +1049,6 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
         .modern-action-button:hover {
           background: #f9fafb;
           border-color: rgba(99, 102, 241, 0.3);
-          transform: translateX(2px);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
         }
 
@@ -1237,7 +1236,6 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
         .modern-feature-button:hover {
           background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.08) 100%);
           border-color: rgba(99, 102, 241, 0.3);
-          transform: translateX(2px);
           box-shadow: 0 4px 16px rgba(99, 102, 241, 0.12);
         }
 
