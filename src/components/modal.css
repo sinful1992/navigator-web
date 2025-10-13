@@ -381,3 +381,471 @@
 .dark-mode .alert-modal.alert-warning .modal-content {
   background: linear-gradient(135deg, var(--surface) 0%, rgba(245, 158, 11, 0.1) 100%);
 }
+
+/* ==== Data Ownership Modal - Modern Design ==== */
+.ownership-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 999998;
+  animation: ownershipBackdropFade 0.3s ease-out;
+}
+
+@keyframes ownershipBackdropFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ownership-modal-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 999999;
+  width: calc(100vw - 2rem);
+  max-width: 540px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #ffffff 0%, #fafbff 100%);
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  border-radius: 24px;
+  box-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.16),
+    0 16px 40px rgba(99, 102, 241, 0.12),
+    0 0 0 1px rgba(99, 102, 241, 0.06);
+  animation: ownershipModalSlide 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes ownershipModalSlide {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Header Section */
+.ownership-modal-header {
+  padding: 2rem 2rem 1.5rem;
+  text-align: center;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(251, 191, 36, 0.05) 100%);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.ownership-warning-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.1) 100%);
+  border: 3px solid rgba(245, 158, 11, 0.3);
+  border-radius: 50%;
+  margin-bottom: 1rem;
+  animation: ownershipPulse 2s ease-in-out infinite;
+}
+
+@keyframes ownershipPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+}
+
+.ownership-warning-icon {
+  font-size: 2.5rem;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.ownership-modal-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.03em;
+}
+
+.ownership-modal-subtitle {
+  font-size: 0.9375rem;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Body Section */
+.ownership-modal-body {
+  padding: 1.75rem 2rem;
+}
+
+/* Account Card */
+.ownership-account-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.05) 100%);
+  border: 1.5px solid rgba(99, 102, 241, 0.2);
+  border-radius: 14px;
+  margin-bottom: 1.5rem;
+}
+
+.ownership-account-icon {
+  font-size: 2rem;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+}
+
+.ownership-account-info {
+  flex: 1;
+}
+
+.ownership-account-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #6366f1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.ownership-account-email {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+  word-break: break-all;
+}
+
+/* Data Summary Section */
+.ownership-data-summary {
+  margin-bottom: 1.5rem;
+}
+
+.ownership-summary-header {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 1rem;
+}
+
+.ownership-summary-icon {
+  font-size: 1.25rem;
+}
+
+.ownership-summary-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.ownership-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.ownership-stat-card {
+  padding: 1rem 0.75rem;
+  background: white;
+  border: 1.5px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.ownership-stat-card:hover {
+  border-color: rgba(99, 102, 241, 0.2);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
+  transform: translateY(-2px);
+}
+
+.ownership-stat-icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.ownership-stat-number {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #6366f1;
+  margin-bottom: 0.25rem;
+  line-height: 1;
+}
+
+.ownership-stat-label {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Info Section */
+.ownership-info-section {
+  padding: 1rem 1.25rem;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 12px;
+  margin-bottom: 1.25rem;
+}
+
+.ownership-info-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.ownership-info-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+.ownership-info-list li {
+  margin-bottom: 0.25rem;
+}
+
+/* Question */
+.ownership-question {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: #111827;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+/* Action Buttons */
+.ownership-modal-actions {
+  padding: 1.5rem 2rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.01) 0%, transparent 100%);
+}
+
+.ownership-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.125rem 1.5rem;
+  border: none;
+  border-radius: 14px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.ownership-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.ownership-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.ownership-btn-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+}
+
+.ownership-btn-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ownership-btn-title {
+  display: block;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.ownership-btn-desc {
+  display: block;
+  font-size: 0.8125rem;
+  opacity: 0.85;
+  font-weight: 500;
+}
+
+/* Keep Button */
+.ownership-btn-keep {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.ownership-btn-keep:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+}
+
+/* Discard Button */
+.ownership-btn-discard {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.ownership-btn-discard:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.35);
+}
+
+/* Later Button */
+.ownership-btn-later {
+  background: white;
+  color: #374151;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.ownership-btn-later:hover {
+  background: #f9fafb;
+  border-color: rgba(99, 102, 241, 0.25);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.12);
+}
+
+.ownership-btn-later .ownership-btn-icon {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.08) 100%);
+}
+
+/* Dark Mode Support */
+.dark-mode .ownership-modal-container {
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.98) 0%, rgba(31, 41, 55, 0.98) 100%);
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.dark-mode .ownership-modal-header {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(251, 191, 36, 0.08) 100%);
+  border-bottom-color: rgba(245, 158, 11, 0.2);
+}
+
+.dark-mode .ownership-modal-title,
+.dark-mode .ownership-account-email,
+.dark-mode .ownership-question {
+  color: #f9fafb;
+}
+
+.dark-mode .ownership-modal-subtitle,
+.dark-mode .ownership-info-title,
+.dark-mode .ownership-info-list {
+  color: #9ca3af;
+}
+
+.dark-mode .ownership-account-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.08) 100%);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.dark-mode .ownership-account-icon {
+  background: rgba(17, 24, 39, 0.8);
+}
+
+.dark-mode .ownership-stat-card {
+  background: rgba(17, 24, 39, 0.6);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .ownership-stat-card:hover {
+  background: rgba(17, 24, 39, 0.8);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.dark-mode .ownership-info-section {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.dark-mode .ownership-btn-later {
+  background: rgba(17, 24, 39, 0.8);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #e5e7eb;
+}
+
+.dark-mode .ownership-btn-later:hover {
+  background: rgba(17, 24, 39, 0.95);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.dark-mode .ownership-btn-icon {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Mobile Responsive */
+@media (max-width: 640px) {
+  .ownership-modal-container {
+    max-width: calc(100vw - 1rem);
+    border-radius: 20px;
+  }
+
+  .ownership-modal-header {
+    padding: 1.5rem 1.5rem 1.25rem;
+  }
+
+  .ownership-warning-badge {
+    width: 60px;
+    height: 60px;
+  }
+
+  .ownership-warning-icon {
+    font-size: 2rem;
+  }
+
+  .ownership-modal-title {
+    font-size: 1.5rem;
+  }
+
+  .ownership-modal-body {
+    padding: 1.25rem 1.5rem;
+  }
+
+  .ownership-modal-actions {
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+
+  .ownership-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 0.625rem;
+  }
+
+  .ownership-btn {
+    padding: 1rem 1.25rem;
+  }
+
+  .ownership-btn-icon {
+    width: 38px;
+    height: 38px;
+    font-size: 1.25rem;
+  }
+
+  .ownership-btn-title {
+    font-size: 0.9375rem;
+  }
+
+  .ownership-btn-desc {
+    font-size: 0.75rem;
+  }
+}

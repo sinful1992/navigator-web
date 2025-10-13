@@ -964,11 +964,18 @@ function AuthedApp() {
 
   // REMOVED: Visibility change handler - was over-engineering after fixing React subscription bug
 
-  // Debounced local to cloud sync (simplified - no visibility blocking)
+  // 🔧 CRITICAL FIX: Update lastFromCloudRef IMMEDIATELY to prevent echo overwrites
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
     const currentStr = JSON.stringify(safeState);
-    if (currentStr === lastFromCloudRef.current) return;
+
+    // 🎯 KEY FIX: Update ref immediately when state changes locally
+    // This prevents incoming cloud updates from overwriting our local changes during debounce
+    const previousRef = lastFromCloudRef.current;
+    lastFromCloudRef.current = currentStr;
+
+    // Skip sync if state hasn't actually changed
+    if (currentStr === previousRef) return;
 
     const t = setTimeout(async () => {
       try {
@@ -988,20 +995,15 @@ function AuthedApp() {
 
         logger.sync("Syncing changes to cloud...");
 
-        // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition
-        // This prevents subscribeToData from overwriting our local changes
-        lastFromCloudRef.current = currentStr;
-
         await cloudSync.syncData(safeState);
 
-        // Success - lastFromCloudRef is already set above
+        // Success - lastFromCloudRef was already set above immediately
         logger.sync("Sync completed successfully");
       } catch (err) {
         logger.error("Sync failed:", err);
 
-        // CRITICAL FIX: On failure, don't update lastFromCloudRef so we can retry
-        // Reset it to trigger retry on next state change
-        lastFromCloudRef.current = '';
+        // CRITICAL FIX: On failure, reset to previous value to trigger retry
+        lastFromCloudRef.current = previousRef;
 
         // CRITICAL FIX: Schedule automatic retry for failed syncs
         const retryDelay = 5000; // 5 seconds
@@ -1020,7 +1022,7 @@ function AuthedApp() {
           }
         }, retryDelay);
       }
-    }, 2000); // 🔧 OPTIMIZATION: Increased from 150ms to 2s to batch rapid changes and reduce egress
+    }, 500); // 🔧 OPTIMIZATION: Reduced to 500ms for faster user action sync
 
     return () => clearTimeout(t);
   }, [safeState, cloudSync, hydrated, loading]);
@@ -1742,6 +1744,10 @@ function AuthedApp() {
               onChangePassword={() => setShowChangePassword(true)}
               onChangeEmail={() => setShowChangeEmail(true)}
               onDeleteAccount={() => setShowDeleteAccount(true)}
+              onResolveDataOwnership={() => {
+                setShowOwnershipPrompt(true);
+              }}
+              hasOwnershipIssue={localStorage.getItem('navigator_ownership_uncertain') === 'true'}
               appState={state}
               userEmail={cloudSync.user?.email}
               onImportExcel={async (file) => {
@@ -2435,29 +2441,81 @@ function AuthedApp() {
       {/* Toast Notifications */}
       <ToastContainer />
 
-      {/* Ownership Uncertainty Prompt */}
+      {/* Ownership Uncertainty Prompt - Modern Design */}
       {showOwnershipPrompt && (
-        <div className="modal-overlay" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-            <h2 style={{ marginBottom: '1rem', color: 'var(--warning)' }}>⚠️ Data Ownership Unclear</h2>
-            <p style={{ marginBottom: '1rem' }}>
-              We found local data on this device, but we cannot determine if it belongs to your account.
-            </p>
-            <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              This can happen when:
-            </p>
-            <ul style={{ marginBottom: '1rem', paddingLeft: '1.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              <li>You're using a shared device</li>
-              <li>Another user previously used this browser</li>
-              <li>You're signing in from a different account</li>
-            </ul>
-            <p style={{ marginBottom: '1.5rem', fontWeight: 500 }}>
-              What would you like to do with the local data?
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <>
+          <div
+            className="ownership-modal-backdrop"
+            onClick={() => setShowOwnershipPrompt(false)}
+          />
+          <div className="ownership-modal-container">
+            {/* Header with Warning Badge */}
+            <div className="ownership-modal-header">
+              <div className="ownership-warning-badge">
+                <span className="ownership-warning-icon">⚠️</span>
+              </div>
+              <h2 className="ownership-modal-title">Data Ownership Unclear</h2>
+              <p className="ownership-modal-subtitle">
+                We found local data that may not belong to your current account
+              </p>
+            </div>
+
+            {/* Content Body */}
+            <div className="ownership-modal-body">
+              {/* Current Account Card */}
+              <div className="ownership-account-card">
+                <div className="ownership-account-icon">👤</div>
+                <div className="ownership-account-info">
+                  <div className="ownership-account-label">Currently logged in as</div>
+                  <div className="ownership-account-email">{cloudSync.user?.email || 'Unknown'}</div>
+                </div>
+              </div>
+
+              {/* Data Summary Cards */}
+              <div className="ownership-data-summary">
+                <div className="ownership-summary-header">
+                  <span className="ownership-summary-icon">📊</span>
+                  <span className="ownership-summary-title">Local data found on this device</span>
+                </div>
+                <div className="ownership-stats-grid">
+                  <div className="ownership-stat-card">
+                    <div className="ownership-stat-icon">📍</div>
+                    <div className="ownership-stat-number">{safeState.addresses.length}</div>
+                    <div className="ownership-stat-label">Addresses</div>
+                  </div>
+                  <div className="ownership-stat-card">
+                    <div className="ownership-stat-icon">✅</div>
+                    <div className="ownership-stat-number">{safeState.completions.length}</div>
+                    <div className="ownership-stat-label">Completions</div>
+                  </div>
+                  <div className="ownership-stat-card">
+                    <div className="ownership-stat-icon">📅</div>
+                    <div className="ownership-stat-number">{safeState.arrangements.length}</div>
+                    <div className="ownership-stat-label">Arrangements</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Info Section */}
+              <div className="ownership-info-section">
+                <div className="ownership-info-title">This can happen when:</div>
+                <ul className="ownership-info-list">
+                  <li>You're using a shared device</li>
+                  <li>Another user previously used this browser</li>
+                  <li>You're signing in from a different account</li>
+                </ul>
+              </div>
+
+              {/* Question */}
+              <div className="ownership-question">
+                What would you like to do with this local data?
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="ownership-modal-actions">
               <button
-                className="btn btn-primary"
-                style={{ width: '100%' }}
+                className="ownership-btn ownership-btn-keep"
                 onClick={async () => {
                   // User confirmed ownership - sync to cloud
                   localStorage.removeItem('navigator_ownership_uncertain');
@@ -2481,11 +2539,14 @@ function AuthedApp() {
                   }
                 }}
               >
-                Keep & Sync to My Account
+                <span className="ownership-btn-icon">✓</span>
+                <span className="ownership-btn-text">
+                  <span className="ownership-btn-title">Keep & Sync to My Account</span>
+                  <span className="ownership-btn-desc">This data belongs to me</span>
+                </span>
               </button>
               <button
-                className="btn"
-                style={{ width: '100%', background: 'var(--gray-200)' }}
+                className="ownership-btn ownership-btn-discard"
                 onClick={async () => {
                   // User wants to discard local data
                   const confirmed = await confirm({
@@ -2533,11 +2594,14 @@ function AuthedApp() {
                   }
                 }}
               >
-                Discard Local Data
+                <span className="ownership-btn-icon">🗑️</span>
+                <span className="ownership-btn-text">
+                  <span className="ownership-btn-title">Discard Local Data</span>
+                  <span className="ownership-btn-desc">Clear it and use cloud data</span>
+                </span>
               </button>
               <button
-                className="btn btn-ghost"
-                style={{ width: '100%' }}
+                className="ownership-btn ownership-btn-later"
                 onClick={() => {
                   // User wants to decide later - keep modal available
                   setShowOwnershipPrompt(false);
@@ -2548,11 +2612,15 @@ function AuthedApp() {
                   });
                 }}
               >
-                Decide Later
+                <span className="ownership-btn-icon">⏱️</span>
+                <span className="ownership-btn-text">
+                  <span className="ownership-btn-title">Decide Later</span>
+                  <span className="ownership-btn-desc">Access from Settings later</span>
+                </span>
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* PWA Install Prompt */}

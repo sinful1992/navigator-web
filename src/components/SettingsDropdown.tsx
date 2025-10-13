@@ -23,6 +23,8 @@ interface SettingsDropdownProps {
   onChangePassword?: () => void;
   onChangeEmail?: () => void;
   onDeleteAccount?: () => void;
+  onResolveDataOwnership?: () => void;
+  hasOwnershipIssue?: boolean;
   appState?: AppState;
   userEmail?: string;
 
@@ -101,6 +103,8 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   onChangePassword,
   onChangeEmail,
   onDeleteAccount,
+  onResolveDataOwnership,
+  hasOwnershipIssue,
   appState,
   userEmail,
   onImportExcel,
@@ -617,6 +621,24 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                   >
                     <span className="modern-button-icon">🚪</span>
                     <span className="modern-button-text">Sign Out</span>
+                  </button>
+                )}
+
+                {onResolveDataOwnership && hasOwnershipIssue && (
+                  <button
+                    className="modern-action-button"
+                    style={{
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      borderColor: 'rgba(245, 158, 11, 0.3)',
+                      color: '#b45309'
+                    }}
+                    onClick={() => {
+                      onResolveDataOwnership();
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="modern-button-icon">⚠️</span>
+                    <span className="modern-button-text">Resolve Data Ownership</span>
                   </button>
                 )}
               </div>
