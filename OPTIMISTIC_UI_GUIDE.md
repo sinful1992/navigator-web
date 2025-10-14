@@ -135,16 +135,23 @@ Device A: Complete Address #5 → Cloud → Device A receives update
 
 ### Method 1: Via Browser Console (Testing)
 
+The app includes dev tools accessible via the global `NavDev` object:
+
 ```javascript
-// Import the config manager
-const { enable } = await import('./src/services/optimisticUIConfig.ts');
+// Show all available commands
+NavDev.help();
+
+// Run quick smoke test (30 seconds)
+await NavDev.runSmokeTest();
 
 // Enable the system
-await enable();
+await NavDev.enable();
 
 // Verify it's enabled
-const { isEnabled } = await import('./src/services/optimisticUIConfig.ts');
-console.log('Optimistic UI enabled:', isEnabled()); // Should log: true
+NavDev.isEnabled(); // Should return: true
+
+// View statistics
+await NavDev.getStats();
 ```
 
 ### Method 2: Via Code (Production)
@@ -255,10 +262,8 @@ const complete = React.useCallback(
 ### Example 3: Checking System Status
 
 ```typescript
-import { getSystemStats } from './services/optimisticUIConfig';
-
-// Get detailed statistics
-const stats = await getSystemStats();
+// In browser console - Get detailed statistics
+const stats = await NavDev.getStats();
 console.log('System Status:', stats);
 
 /* Output:
@@ -313,36 +318,31 @@ console.log('System Status:', stats);
 ### Updating Configuration
 
 ```typescript
-import { updateConfig, getConfig } from './services/optimisticUIConfig';
+// In browser console
 
 // Get current config
-const currentConfig = getConfig();
-console.log('Current config:', currentConfig);
+const stats = await NavDev.getStats();
+console.log('Current config:', stats.config);
 
-// Update specific settings
-await updateConfig({
-  changeTracker: {
-    ttlMs: 10 * 60 * 1000, // Increase to 10 minutes
-  },
-  optimisticUI: {
-    maxRetries: 5, // More retries
-  },
-});
+// Apply preset configurations
+await NavDev.applyPreset('conservative');  // Safer, longer timeouts
+await NavDev.applyPreset('aggressive');    // Faster, shorter timeouts
+await NavDev.applyPreset('balanced');      // Default settings
 ```
 
 ### Presets
 
 ```typescript
-import { applyPreset } from './services/optimisticUIConfig';
+// In browser console
 
 // Conservative: Safer, longer timeouts
-await applyPreset('conservative');
+await NavDev.applyPreset('conservative');
 
 // Aggressive: Faster, shorter timeouts
-await applyPreset('aggressive');
+await NavDev.applyPreset('aggressive');
 
 // Balanced: Default settings
-await applyPreset('balanced');
+await NavDev.applyPreset('balanced');
 ```
 
 ## Testing Checklist
@@ -362,7 +362,7 @@ await applyPreset('balanced');
 ### After Activation
 
 - [ ] Monitor console logs for echo detection
-- [ ] Check statistics periodically: `await getSystemStats()`
+- [ ] Check statistics periodically: `await NavDev.getStats()`
 - [ ] Verify no duplicate completions appearing
 - [ ] Verify timer doesn't flicker on Start
 - [ ] Test multi-device sync still works
@@ -371,23 +371,25 @@ await applyPreset('balanced');
 
 ### Troubleshooting
 
-```typescript
+```javascript
+// In browser console
+
 // If something goes wrong, disable immediately:
-import { disable } from './services/optimisticUIConfig';
-await disable();
+await NavDev.disable();
 
 // Clear all optimistic UI state:
-import { clearOptimisticUIState } from './services/optimisticUIIntegration';
-await clearOptimisticUIState();
+await NavDev.clearAll();
 
 // Check for stale changes in IndexedDB:
-import { changeTracker } from './services/changeTracker';
-const allChanges = await changeTracker.getAllChanges();
+const allChanges = await NavDev.changeTracker.getAllChanges();
 console.log('Tracked changes:', allChanges);
 
 // Force cleanup:
-const removed = await changeTracker.cleanup();
+const removed = await NavDev.changeTracker.cleanup();
 console.log('Cleaned up', removed, 'old changes');
+
+// View all available commands:
+NavDev.help();
 ```
 
 ## Performance Considerations
@@ -422,10 +424,9 @@ When `import.meta.env.DEV` is true, the system logs:
 - 🛡️ Protection flags active
 
 ### Statistics
-```typescript
-import { getOptimisticUIStats } from './services/optimisticUIIntegration';
-
-const stats = getOptimisticUIStats();
+```javascript
+// In browser console
+const stats = NavDev.getOptimisticStats();
 console.log('Statistics:', stats);
 
 /* Output:
@@ -458,11 +459,11 @@ console.log('Statistics:', stats);
 - Error logged for debugging
 
 ### Manual Rollback
-```typescript
-import { rollbackAllOptimisticUpdates } from './services/optimisticUIIntegration';
+```javascript
+// In browser console
 
 // Emergency rollback of all pending updates
-const rollbackStates = rollbackAllOptimisticUpdates();
+const rollbackStates = NavDev.optimisticUI.rollbackAll();
 console.log('Rolled back', rollbackStates.length, 'updates');
 ```
 
