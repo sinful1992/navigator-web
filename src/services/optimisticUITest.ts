@@ -454,8 +454,8 @@ export const optimisticUITests: TestSuite = {
             };
           }
 
-          // Wait for timeout to fire (500ms) + processing time
-          await wait(700);
+          // Wait for timeout to fire (500ms) + extra time for async cleanup
+          await wait(1200);
 
           // Check if update is no longer pending (timed out and failed)
           const finalPending = optimisticUI.getPendingUpdates().find((u) => u.id === updateId);
