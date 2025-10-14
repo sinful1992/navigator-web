@@ -91,14 +91,19 @@ export async function filterEcho(
   cloudState: AppState,
   options?: EchoFilterOptions
 ): Promise<EchoFilterResult> {
+  function recordAndReturn(result: EchoFilterResult): EchoFilterResult {
+    recordFilterResult(result);
+    return result;
+  }
+
   // If change tracker is disabled, never filter
   if (!changeTracker.isEnabled()) {
-    return {
+    return recordAndReturn({
       isEcho: false,
       reason: 'Change tracker disabled - applying all updates',
       confidence: 1.0,
       shouldApply: true,
-    };
+    });
   }
 
   // Check #1: Device ID matching
@@ -108,7 +113,7 @@ export async function filterEcho(
       if (import.meta.env.DEV) {
         logger.info('🔍 Echo filter: Device ID match', deviceResult);
       }
-      return deviceResult;
+      return recordAndReturn(deviceResult);
     }
   }
 
@@ -119,7 +124,7 @@ export async function filterEcho(
       if (import.meta.env.DEV) {
         logger.info('🔍 Echo filter: Timestamp heuristic', timestampResult);
       }
-      return timestampResult;
+      return recordAndReturn(timestampResult);
     }
   }
 
@@ -130,21 +135,21 @@ export async function filterEcho(
   });
 
   if (isTrackedEcho) {
-    return {
+    return recordAndReturn({
       isEcho: true,
       reason: 'Change tracker detected this as a local change',
       confidence: 1.0,
       shouldApply: false,
-    };
+    });
   }
 
   // Not an echo - apply the update
-  return {
+  return recordAndReturn({
     isEcho: false,
     reason: 'No echo indicators found - genuine cloud update',
     confidence: 1.0,
     shouldApply: true,
-  };
+  });
 }
 
 /**
