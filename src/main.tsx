@@ -3,7 +3,10 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { SettingsProvider } from "./hooks/useSettings";
 import "./index.css";
+import { installDevTools } from "./devTools";
 
+// Install dev tools for console access
+installDevTools();
 
 /**
  * Warm up the connection to Supabase to reduce first-RPC latency.
