@@ -97,6 +97,33 @@ export function wait(ms: number): Promise<void> {
 }
 
 /**
+ * Clean up test state (run after each test)
+ */
+async function cleanupTestState(): Promise<void> {
+  try {
+    // Clear all pending updates and timeouts
+    optimisticUI.clearAll();
+
+    // Clear change tracker
+    await changeTracker.clearAll();
+
+    // Reset to default config
+    optimisticUI.updateConfig({
+      enabled: true,
+      maxPendingUpdates: 100,
+      updateTimeoutMs: 30 * 1000,
+      autoRetry: true,
+      maxRetries: 3,
+    });
+
+    // Small delay to ensure cleanup completes
+    await wait(50);
+  } catch (error) {
+    logger.error('Error during test cleanup:', error);
+  }
+}
+
+/**
  * Test Suite 1: Change Tracking
  */
 export const changeTrackingTests: TestSuite = {
@@ -319,6 +346,11 @@ export const optimisticUITests: TestSuite = {
             await optimisticUI.enable();
           }
 
+          // Disable autoRetry for this test to prevent background timeouts
+          optimisticUI.updateConfig({
+            autoRetry: false,
+          });
+
           const previousState = createMockState();
           const newState = createMockState({
             completions: [createMockCompletion()],
@@ -342,18 +374,27 @@ export const optimisticUITests: TestSuite = {
           // Get rollback state before failing
           const rollbackState = optimisticUI.getRollbackState(updateId);
 
+          if (!rollbackState) {
+            return {
+              passed: false,
+              message: 'No rollback state available before failUpdate',
+              duration: Date.now() - startTime,
+            };
+          }
+
           // Fail the update
           await optimisticUI.failUpdate(updateId, 'Test failure');
 
-          // Wait for cleanup
-          await wait(2000);
+          // Verify update is no longer pending after failure (since autoRetry is off)
+          const stillPending = optimisticUI.getPendingUpdates().find(u => u.id === updateId);
 
           return {
-            passed: !!rollbackState,
-            message: rollbackState
-              ? 'Rollback state retrieved successfully'
-              : 'No rollback state available',
-            details: { updateId, hadRollbackState: !!rollbackState },
+            passed: !!rollbackState && !stillPending,
+            message:
+              !!rollbackState && !stillPending
+                ? 'Rollback state retrieved and update failed correctly'
+                : 'Rollback or cleanup did not work as expected',
+            details: { updateId, hadRollbackState: !!rollbackState, stillPending: !!stillPending },
             duration: Date.now() - startTime,
           };
         } catch (error: any) {
@@ -372,11 +413,16 @@ export const optimisticUITests: TestSuite = {
         const startTime = Date.now();
 
         try {
+          // Clear any pending updates from previous tests first
+          optimisticUI.clearAll();
+          await wait(50);
+
           // Temporarily set a short timeout for testing
           optimisticUI.updateConfig({
             enabled: true,
             updateTimeoutMs: 500, // 500ms timeout
             maxRetries: 0, // No retries for this test
+            autoRetry: true, // Keep autoRetry on to test timeout → retry → fail flow
           });
 
           const previousState = createMockState();
@@ -398,33 +444,35 @@ export const optimisticUITests: TestSuite = {
             };
           }
 
-          // Wait for timeout
-          await wait(1000);
+          // Verify update is initially pending
+          const initialPending = optimisticUI.getPendingUpdates().find((u) => u.id === updateId);
+          if (!initialPending) {
+            return {
+              passed: false,
+              message: 'Update was not added to pending list',
+              duration: Date.now() - startTime,
+            };
+          }
 
-          // Check if update is no longer pending (timed out)
-          const pending = optimisticUI.getPendingUpdates();
-          const stillPending = pending.find((u) => u.id === updateId);
+          // Wait for timeout to fire (500ms) + processing time
+          await wait(700);
 
-          // Restore normal timeout
-          optimisticUI.updateConfig({
-            updateTimeoutMs: 30 * 1000,
-            maxRetries: 3,
-          });
+          // Check if update is no longer pending (timed out and failed)
+          const finalPending = optimisticUI.getPendingUpdates().find((u) => u.id === updateId);
 
           return {
-            passed: !stillPending,
-            message: stillPending
-              ? 'Update did not timeout'
-              : 'Update timed out correctly',
+            passed: !finalPending,
+            message: finalPending
+              ? 'Update did not timeout and fail as expected'
+              : 'Update timed out and failed correctly',
+            details: {
+              updateId,
+              wasInitiallyPending: !!initialPending,
+              isFinallyPending: !!finalPending,
+            },
             duration: Date.now() - startTime,
           };
         } catch (error: any) {
-          // Restore normal timeout
-          optimisticUI.updateConfig({
-            updateTimeoutMs: 30 * 1000,
-            maxRetries: 3,
-          });
-
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -714,6 +762,9 @@ export async function runTestSuite(suite: TestSuite): Promise<{
 
     const status = result.passed ? '✅' : '❌';
     logger.info(`  ${status} ${result.message}`);
+
+    // Clean up state after each test
+    await cleanupTestState();
   }
 
   const passed = results.filter((r) => r.passed).length;
@@ -734,6 +785,10 @@ export async function runAllTests(): Promise<void> {
   logger.info('🧪 Starting Optimistic UI Test Suite');
   logger.info('═══════════════════════════════════════');
 
+  // Initial cleanup to ensure clean state
+  logger.info('🧹 Cleaning up test environment...');
+  await cleanupTestState();
+
   const suites = [
     changeTrackingTests,
     optimisticUITests,
@@ -748,6 +803,9 @@ export async function runAllTests(): Promise<void> {
     allResults.push(result);
     logger.info('');
   }
+
+  // Final cleanup
+  await cleanupTestState();
 
   // Summary
   logger.info('═══════════════════════════════════════');
@@ -784,6 +842,9 @@ export async function runSmokeTest(): Promise<boolean> {
   logger.info('🧪 Running smoke test...');
 
   try {
+    // Initial cleanup
+    await cleanupTestState();
+
     // Test 1: Enable system
     await enable();
     if (!changeTracker.isEnabled() || !optimisticUI.isEnabled()) {
@@ -825,11 +886,14 @@ export async function runSmokeTest(): Promise<boolean> {
     // Cleanup
     await optimisticUI.confirmUpdate(updateId);
     await wait(100);
+    await cleanupTestState();
 
     logger.info('🎉 Smoke test passed!');
     return true;
   } catch (error: any) {
     logger.error('❌ Smoke test failed:', error.message);
+    // Clean up even on failure
+    await cleanupTestState();
     return false;
   }
 }
