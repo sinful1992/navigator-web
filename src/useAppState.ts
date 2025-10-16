@@ -358,7 +358,16 @@ function applyOptimisticUpdates(
           case "address":
             hasAddressChanges = true;
             if (update.operation === "create") {
-              result.addresses = [...result.addresses, update.data];
+              // 🔧 FIX: Check for duplicate addresses before adding
+              const isDuplicate = result.addresses.some(a =>
+                a.address?.trim()?.toLowerCase() === update.data.address?.trim()?.toLowerCase()
+              );
+
+              if (!isDuplicate) {
+                result.addresses = [...result.addresses, update.data];
+              } else {
+                logger.warn('Skipping duplicate address in optimistic update:', update.data.address);
+              }
             } else if (update.operation === "update") {
               // bulk import path: update carries { addresses, bumpVersion, preserveCompletions }
               if (update.data?.addresses) {
