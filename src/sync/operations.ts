@@ -125,12 +125,43 @@ export function createOperation<T extends Operation>(
   } as T;
 }
 
-// Utility to generate next sequence number
-let localSequence = 0;
-export function nextSequence(): number {
-  return ++localSequence;
+// Thread-safe sequence generator to prevent race conditions
+class SequenceGenerator {
+  private sequence = 0;
+  private lock = Promise.resolve();
+
+  async next(): Promise<number> {
+    // Queue this request and wait for previous ones to complete
+    const myTurn = this.lock;
+    let release: () => void = () => {};
+    this.lock = new Promise<void>(resolve => { release = resolve; });
+
+    await myTurn; // Wait for previous sequence requests
+
+    try {
+      const seq = ++this.sequence;
+      return seq;
+    } finally {
+      release(); // Let next request proceed
+    }
+  }
+
+  set(seq: number): void {
+    this.sequence = Math.max(this.sequence, seq);
+  }
+
+  get current(): number {
+    return this.sequence;
+  }
+}
+
+const sequenceGenerator = new SequenceGenerator();
+
+// Utility to generate next sequence number (thread-safe)
+export function nextSequence(): Promise<number> {
+  return sequenceGenerator.next();
 }
 
 export function setSequence(seq: number): void {
-  localSequence = Math.max(localSequence, seq);
+  sequenceGenerator.set(seq);
 }

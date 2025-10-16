@@ -224,6 +224,14 @@ export function useUnifiedSync() {
     }
 
     try {
+      // CRITICAL: Force legacy sync to complete before migrating
+      // This ensures no unsaved changes are lost during mode switch
+      logger.info('Forcing legacy sync before migration...');
+      await legacySync.forceFullSync();
+
+      // Wait a bit for sync to settle
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       // Get current state from legacy sync
       const currentState = operationSync.getStateFromOperations(); // This will be empty initially
 

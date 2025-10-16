@@ -4,7 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import type { AppState } from "../types";
 import type { Operation } from "./operations";
-import { OperationLogManager, getOperationLog } from "./operationLog";
+import { OperationLogManager, getOperationLog, clearOperationLogsForUser } from "./operationLog";
 import { reconstructState } from "./reducer";
 import { processOperationsWithConflictResolution } from "./conflictResolution";
 import { logger } from "../utils/logger";
@@ -75,8 +75,9 @@ export function useOperationSync(): UseOperationSync {
         }
         deviceId.current = storedDeviceId;
 
-        // Initialize operation log
-        operationLog.current = getOperationLog(storedDeviceId);
+        // Initialize operation log (will be re-initialized with user ID when user signs in)
+        // Using 'local' as placeholder until user is authenticated
+        operationLog.current = getOperationLog(storedDeviceId, 'local');
         await operationLog.current.load();
 
         // Reconstruct state from operations
@@ -157,6 +158,39 @@ export function useOperationSync(): UseOperationSync {
     };
   }, [user]);
 
+  // Operation batching for backpressure control
+  const batchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingBatchRef = useRef<boolean>(false);
+
+  // Trigger batch sync with debouncing
+  const scheduleBatchSync = useCallback(() => {
+    if (batchTimerRef.current) {
+      clearTimeout(batchTimerRef.current);
+    }
+
+    if (pendingBatchRef.current) {
+      return; // Already syncing
+    }
+
+    batchTimerRef.current = setTimeout(async () => {
+      if (!isOnline || !user || !operationLog.current) return;
+
+      const unsyncedCount = operationLog.current.getUnsyncedOperations().length;
+
+      // Only sync if we have operations to sync
+      if (unsyncedCount > 0) {
+        try {
+          pendingBatchRef.current = true;
+          await syncOperationsToCloud();
+        } catch (err) {
+          logger.warn('Batch sync failed:', err);
+        } finally {
+          pendingBatchRef.current = false;
+        }
+      }
+    }, 2000); // 2 second debounce
+  }, [isOnline, user]);
+
   // Submit a new operation
   const submitOperation = useCallback(async (
     operationData: Omit<Operation, 'id' | 'timestamp' | 'clientId' | 'sequence'>
@@ -181,21 +215,16 @@ export function useOperationSync(): UseOperationSync {
     const newState = reconstructState(INITIAL_STATE, operationLog.current.getAllOperations());
     setCurrentState(newState);
 
-    // Sync to cloud if online
+    // Schedule batched sync instead of immediate sync
     if (isOnline && user) {
-      try {
-        await syncOperationsToCloud();
-      } catch (err) {
-        logger.warn('Failed to sync operation to cloud:', err);
-        // Operation is still saved locally and will sync later
-      }
+      scheduleBatchSync();
     }
 
     logger.debug('Submitted operation:', {
       type: persistedOperation.type,
       id: persistedOperation.id,
     });
-  }, [isOnline, user]);
+  }, [isOnline, user, scheduleBatchSync]);
 
   // Sync operations to cloud
   const syncOperationsToCloud = useCallback(async () => {
@@ -311,6 +340,13 @@ export function useOperationSync(): UseOperationSync {
     (onOperations: (operations: Operation[]) => void) => {
       if (!user || !supabase) return () => {};
 
+      // Clean up existing subscription first to prevent duplicates
+      if (subscriptionCleanup.current) {
+        logger.debug('Cleaning up existing subscription before creating new one');
+        subscriptionCleanup.current();
+        subscriptionCleanup.current = null;
+      }
+
       const channel = supabase.channel(`navigator_operations_${user.id}`);
 
       channel.on(
@@ -391,30 +427,32 @@ export function useOperationSync(): UseOperationSync {
       subscriptionCleanup.current = null;
     }
     if (!supabase) return;
+
+    // Clear operation logs for this user BEFORE signing out
+    if (user?.id) {
+      clearOperationLogsForUser(user.id);
+    }
+
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
 
-    // Clear local operation log on sign out
+    // Clear local operation log reference
     if (operationLog.current) {
       await operationLog.current.clear();
+      operationLog.current = null;
     }
     setCurrentState(INITIAL_STATE);
-  }, []);
+  }, [user]);
 
-  // Auto-sync on state changes
+  // Cleanup batch timer on unmount
   useEffect(() => {
-    if (!user || !isOnline || !operationLog.current) return;
-
-    const syncTimer = setTimeout(async () => {
-      try {
-        await syncOperationsToCloud();
-      } catch (err) {
-        // Sync errors are already handled in syncOperationsToCloud
+    return () => {
+      if (batchTimerRef.current) {
+        clearTimeout(batchTimerRef.current);
+        batchTimerRef.current = null;
       }
-    }, 1000);
-
-    return () => clearTimeout(syncTimer);
-  }, [user, isOnline, syncOperationsToCloud]);
+    };
+  }, []);
 
   return useMemo<UseOperationSync>(
     () => ({

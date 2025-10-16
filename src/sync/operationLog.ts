@@ -64,7 +64,8 @@ export class OperationLogManager {
       await this.load();
     }
 
-    const sequence = nextSequence();
+    // Get sequence number (now async and thread-safe)
+    const sequence = await nextSequence();
     const fullOperation = {
       ...operation,
       sequence,
@@ -122,49 +123,74 @@ export class OperationLogManager {
   /**
    * Add operations received from cloud sync
    * This handles merging remote operations with local ones
+   * Uses transaction-like approach - all or nothing
    */
   async mergeRemoteOperations(remoteOps: Operation[]): Promise<Operation[]> {
     if (!this.isLoaded) {
       await this.load();
     }
 
-    const newOperations: Operation[] = [];
+    // Create snapshot for rollback
+    const originalLog = {
+      operations: [...this.log.operations],
+      lastSequence: this.log.lastSequence,
+      lastSyncSequence: this.log.lastSyncSequence,
+      checksum: this.log.checksum,
+    };
 
-    for (const remoteOp of remoteOps) {
-      // Skip operations from this device (we already have them)
-      if (remoteOp.clientId === this.deviceId) {
-        continue;
+    try {
+      const newOperations: Operation[] = [];
+
+      for (const remoteOp of remoteOps) {
+        // Skip operations from this device (we already have them)
+        if (remoteOp.clientId === this.deviceId) {
+          continue;
+        }
+
+        // Check if we already have this operation
+        const exists = this.log.operations.some(localOp =>
+          localOp.id === remoteOp.id
+        );
+
+        if (!exists) {
+          this.log.operations.push(remoteOp);
+          newOperations.push(remoteOp);
+
+          // Update sequence tracking
+          this.log.lastSequence = Math.max(this.log.lastSequence, remoteOp.sequence);
+          setSequence(this.log.lastSequence);
+        }
       }
 
-      // Check if we already have this operation
-      const exists = this.log.operations.some(localOp =>
-        localOp.id === remoteOp.id
-      );
+      if (newOperations.length > 0) {
+        // Sort operations by sequence to maintain order
+        this.log.operations.sort((a, b) => a.sequence - b.sequence);
+        this.log.checksum = this.computeChecksum();
 
-      if (!exists) {
-        this.log.operations.push(remoteOp);
-        newOperations.push(remoteOp);
+        // Persist atomically - if this fails, we'll rollback
+        await this.persist();
 
-        // Update sequence tracking
-        this.log.lastSequence = Math.max(this.log.lastSequence, remoteOp.sequence);
-        setSequence(this.log.lastSequence);
+        logger.info('Merged remote operations:', {
+          newOperationCount: newOperations.length,
+          totalOperationCount: this.log.operations.length,
+        });
       }
+
+      return newOperations;
+    } catch (error) {
+      // Rollback on error
+      logger.error('Failed to merge remote operations, rolling back:', error);
+      this.log = originalLog;
+
+      // Try to persist rollback state
+      try {
+        await this.persist();
+      } catch (persistError) {
+        logger.error('Failed to persist rollback state:', persistError);
+      }
+
+      throw new Error(`Merge failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-
-    if (newOperations.length > 0) {
-      // Sort operations by sequence to maintain order
-      this.log.operations.sort((a, b) => a.sequence - b.sequence);
-      this.log.checksum = this.computeChecksum();
-
-      await this.persist();
-
-      logger.info('Merged remote operations:', {
-        newOperationCount: newOperations.length,
-        totalOperationCount: this.log.operations.length,
-      });
-    }
-
-    return newOperations;
   }
 
   /**
@@ -227,18 +253,70 @@ export class OperationLogManager {
   }
 
   private computeChecksum(): string {
-    // Simple checksum based on operation count and last sequence
-    // In production, you'd want a proper hash of the operations
-    return `${this.log.operations.length}-${this.log.lastSequence}`;
+    // Compute proper hash of operation log for data integrity
+    // Uses a simple but effective hash of operation IDs and sequences
+    if (this.log.operations.length === 0) {
+      return '0';
+    }
+
+    // Create deterministic string from operations
+    const operationsStr = this.log.operations
+      .sort((a, b) => a.sequence - b.sequence) // Ensure consistent ordering
+      .map(op => `${op.id}:${op.sequence}:${op.type}`)
+      .join('|');
+
+    // Simple but effective hash function (FNV-1a)
+    let hash = 2166136261; // FNV offset basis
+    for (let i = 0; i < operationsStr.length; i++) {
+      hash ^= operationsStr.charCodeAt(i);
+      hash = Math.imul(hash, 16777619); // FNV prime
+    }
+
+    // Convert to unsigned 32-bit hex
+    return (hash >>> 0).toString(16).padStart(8, '0');
   }
 }
 
-// Global operation log instance
-let operationLogManager: OperationLogManager | null = null;
+// User-isolated operation log instances to prevent data leakage between accounts
+const operationLogManagers = new Map<string, OperationLogManager>();
 
-export function getOperationLog(deviceId: string): OperationLogManager {
-  if (!operationLogManager) {
-    operationLogManager = new OperationLogManager(deviceId);
+/**
+ * Get operation log for a specific user+device combination
+ * @param deviceId - Device identifier
+ * @param userId - User identifier (optional, defaults to 'local')
+ */
+export function getOperationLog(deviceId: string, userId: string = 'local'): OperationLogManager {
+  const key = `${userId}_${deviceId}`;
+
+  if (!operationLogManagers.has(key)) {
+    operationLogManagers.set(key, new OperationLogManager(deviceId));
   }
-  return operationLogManager;
+
+  return operationLogManagers.get(key)!;
+}
+
+/**
+ * Clear operation logs for a specific user (call on sign out)
+ * This prevents data leakage when a different user signs in
+ */
+export function clearOperationLogsForUser(userId: string): void {
+  const keysToDelete: string[] = [];
+
+  for (const [key, manager] of operationLogManagers.entries()) {
+    if (key.startsWith(`${userId}_`)) {
+      manager.clear().catch(err =>
+        logger.error('Failed to clear operation log:', err)
+      );
+      keysToDelete.push(key);
+    }
+  }
+
+  keysToDelete.forEach(key => operationLogManagers.delete(key));
+
+  if (keysToDelete.length > 0) {
+    logger.info('Cleared operation logs for user:', {
+      userId,
+      clearedCount: keysToDelete.length,
+    });
+  }
 }

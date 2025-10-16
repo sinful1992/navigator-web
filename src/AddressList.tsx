@@ -239,8 +239,31 @@ const AddressListComponent = function AddressList({
     );
   }
 
+  // Get the first visible address for "Navigate to Next" button
+  const nextAddress = visible.length > 0 ? visible[0] : null;
+  const nextMapHref = nextAddress ? makeMapsHref(nextAddress.a) : "";
+
   return (
     <>
+      {/* Navigate to Next Button */}
+      {nextAddress && (
+        <div className="navigate-next-container">
+          <a
+            className="navigate-next-btn"
+            href={nextMapHref}
+            target="_blank"
+            rel="noreferrer"
+            title="Navigate to next address"
+          >
+            <span className="next-icon">🧭</span>
+            <div className="next-content">
+              <span className="next-label">Navigate to Next</span>
+              <span className="next-address">{nextAddress.a.address}</span>
+            </div>
+          </a>
+        </div>
+      )}
+
       {/* View Toggle */}
       <div className="view-toggle-container">
         <button
@@ -660,6 +683,118 @@ const AddressListComponent = function AddressList({
       )}
 
       <style>{`
+        /* Navigate to Next Button Styles */
+        .navigate-next-container {
+          margin-bottom: 1rem;
+        }
+
+        .navigate-next-btn {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          width: 100%;
+          padding: 1rem 1.25rem;
+          background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+          color: white;
+          border: none;
+          border-radius: var(--radius-lg);
+          font-weight: 600;
+          font-size: 1rem;
+          cursor: pointer;
+          text-decoration: none;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 12px rgba(0, 123, 255, 0.25);
+          position: relative;
+          overflow: hidden;
+        }
+
+        .navigate-next-btn::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -100%;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+          transition: left 0.5s ease;
+        }
+
+        .navigate-next-btn:hover::before {
+          left: 100%;
+        }
+
+        .navigate-next-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(0, 123, 255, 0.35);
+        }
+
+        .navigate-next-btn:active {
+          transform: translateY(0);
+          box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+        }
+
+        .next-icon {
+          font-size: 2rem;
+          animation: compassSpin 3s linear infinite;
+        }
+
+        @keyframes compassSpin {
+          0%, 90% {
+            transform: rotate(0deg);
+          }
+          95% {
+            transform: rotate(10deg);
+          }
+          100% {
+            transform: rotate(0deg);
+          }
+        }
+
+        .next-content {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .next-label {
+          font-size: 0.875rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          opacity: 0.95;
+          margin-bottom: 0.25rem;
+        }
+
+        .next-address {
+          font-size: 0.938rem;
+          font-weight: 500;
+          opacity: 0.9;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          width: 100%;
+        }
+
+        @media (max-width: 768px) {
+          .navigate-next-btn {
+            padding: 0.875rem 1rem;
+          }
+
+          .next-icon {
+            font-size: 1.5rem;
+          }
+
+          .next-label {
+            font-size: 0.75rem;
+          }
+
+          .next-address {
+            font-size: 0.813rem;
+          }
+        }
+
         /* Elapsed Timer Styles */
         .elapsed-timer {
           display: inline-flex;

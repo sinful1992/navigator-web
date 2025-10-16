@@ -82,17 +82,17 @@ function detectConflictBetween(
     case 'ACTIVE_INDEX_SET':
       if (op2.type === 'ACTIVE_INDEX_SET') {
         // Concurrent active index changes
-        const timeDiff = Math.abs(
-          new Date(op1.timestamp).getTime() - new Date(op2.timestamp).getTime()
-        );
+        // Use sequence difference instead of time - more reliable for detecting conflicts
+        const sequenceDiff = Math.abs(op1.sequence - op2.sequence);
 
-        // If within 5 seconds, consider it a race condition
-        if (timeDiff < 5000) {
+        // If sequences are very close (within 5 operations), consider it a race condition
+        // This is more reliable than time-based detection
+        if (sequenceDiff < 5) {
           return {
             operation1: op1,
             operation2: op2,
             conflictType: 'race_condition',
-            description: 'Concurrent active index changes',
+            description: `Concurrent active index changes (sequence diff: ${sequenceDiff})`,
           };
         }
       }
