@@ -248,7 +248,6 @@ export function mergeStatePreservingActiveIndex(
         : [incomingAddresses, currentAddresses];
 
       // Check if the longer list contains all addresses from the shorter list
-      const shorterAddressStrings = new Set(shorterList.map(a => a.address?.trim()?.toLowerCase()));
       const allShorterInLonger = shorterList.every(shortAddr =>
         longerList.some(longAddr =>
           longAddr.address?.trim()?.toLowerCase() === shortAddr.address?.trim()?.toLowerCase()
