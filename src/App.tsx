@@ -1960,7 +1960,7 @@ function AuthedApp() {
             <RoutePlanning 
               user={cloudSync.user}
               onAddressesReady={(newAddresses) => {
-                setAddresses(newAddresses, false);
+                setAddresses(newAddresses);
               }}
             />
           )}
