@@ -238,6 +238,39 @@ export function mergeStatePreservingActiveIndex(
       };
     }
 
+    // 🔧 FIX: When versions are the same, check for manual address additions
+    // If one list has exactly 1 more address than the other, merge them
+    const lengthDiff = Math.abs(currentAddresses.length - incomingAddresses.length);
+
+    if (lengthDiff === 1 && currentListVersion === incomingListVersion) {
+      const [longerList, shorterList] = currentAddresses.length > incomingAddresses.length
+        ? [currentAddresses, incomingAddresses]
+        : [incomingAddresses, currentAddresses];
+
+      // Check if the longer list contains all addresses from the shorter list
+      const shorterAddressStrings = new Set(shorterList.map(a => a.address?.trim()?.toLowerCase()));
+      const allShorterInLonger = shorterList.every(shortAddr =>
+        longerList.some(longAddr =>
+          longAddr.address?.trim()?.toLowerCase() === shortAddr.address?.trim()?.toLowerCase()
+        )
+      );
+
+      if (allShorterInLonger) {
+        // This is a manual address addition - use the longer list
+        if (import.meta.env.DEV) {
+          console.log('🔧 SYNC FIX: Detected manual address addition, using longer list', {
+            longerListLength: longerList.length,
+            shorterListLength: shorterList.length
+          });
+        }
+
+        return {
+          addresses: longerList,
+          listVersion: currentListVersion,
+        };
+      }
+    }
+
     const useIncoming = incomingAddresses.length >= currentAddresses.length;
 
     return {
