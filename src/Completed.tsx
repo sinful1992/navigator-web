@@ -281,10 +281,6 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
   const [editingPifAmount, setEditingPifAmount] = React.useState<number | null>(null);
   const [tempPifAmount, setTempPifAmount] = React.useState<string>("");
 
-  // Track which enforcement fees are being edited
-  const [editingEnfFees, setEditingEnfFees] = React.useState<number | null>(null);
-  const [tempEnfFees, setTempEnfFees] = React.useState<string[]>([]);
-
   // Track which completion is showing arrangement form for ARR outcome
   const [showArrangementForm, setShowArrangementForm] = React.useState<{
     completionIndex: number;
@@ -607,7 +603,7 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
                                           {/* Display enforcement fees (NEW: array format) */}
                                           {comp.enforcementFees && comp.enforcementFees.length > 0 && (
                                             <span style={{ marginLeft: 8 }}>
-                                              · Enf Fees: {comp.enforcementFees.map((fee, idx) => `£${fee.toFixed(2)}`).join(", ")}
+                                              · Enf Fees: {comp.enforcementFees.map((fee: number) => `£${fee.toFixed(2)}`).join(", ")}
                                               {comp.numberOfCases && comp.numberOfCases > comp.enforcementFees.length && (
                                                 <span style={{ color: "var(--primary)", fontWeight: 600, marginLeft: 4 }}>
                                                   + {comp.numberOfCases - comp.enforcementFees.length} linked (£10 each)

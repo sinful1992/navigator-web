@@ -130,8 +130,6 @@ export function calculateComplexBonus(
     smallPifBonus,
     linkedCaseBonus,
     dailyThreshold,
-    complianceFeePerCase,
-    complianceFeeFixed,
   } = settings.complexSettings;
 
   let totalBonus = 0;

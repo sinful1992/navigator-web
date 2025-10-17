@@ -1,0 +1,176 @@
+/* Reminder Settings Modal Styles */
+
+/* Template Editor Layout */
+.template-editor-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 1.5rem;
+  min-height: 500px;
+}
+
+@media (max-width: 1024px) {
+  .template-editor-layout {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .variable-reference-panel {
+    order: -1;
+    max-height: 300px !important;
+  }
+}
+
+/* Variable Reference Panel */
+.variable-reference-panel {
+  background: var(--gray-50, #f8f9fa);
+  border: 1px solid var(--gray-200, #e9ecef);
+  border-radius: var(--radius-md, 8px);
+  padding: 1.25rem;
+  font-size: 0.875rem;
+  max-height: 500px;
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+}
+
+.variable-group {
+  margin-bottom: 1.5rem;
+}
+
+.variable-group:last-child {
+  margin-bottom: 0;
+}
+
+.variable-group h5 {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--primary, #0ea5e9);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.variable-item {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  background: white;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--gray-100, #f3f4f6);
+}
+
+.variable-item:last-child {
+  margin-bottom: 0;
+}
+
+.variable-item code {
+  color: var(--primary, #0ea5e9);
+  font-weight: 600;
+  background: var(--primary-light, #e0f2fe);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.variable-item div {
+  color: var(--text-muted, #6b7280);
+  font-size: 0.8125rem;
+  margin-top: 0.375rem;
+  line-height: 1.4;
+}
+
+/* Templates List */
+.templates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.template-item {
+  border: 1px solid var(--gray-200, #e5e7eb);
+  border-radius: var(--radius-lg, 12px);
+  overflow: hidden;
+}
+
+.template-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: var(--gray-50, #f9fafb);
+  border-bottom: 1px solid var(--gray-200, #e5e7eb);
+}
+
+.template-editor {
+  padding: 1.5rem;
+  background: white;
+}
+
+/* Schedule Options */
+.schedule-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.custom-days-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-light);
+}
+
+.custom-days-section h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Dark Mode Support */
+.dark-mode .variable-reference-panel {
+  background: var(--gray-700, #374151);
+  border-color: var(--gray-600, #4b5563);
+  color: var(--gray-100, #f3f4f6);
+}
+
+.dark-mode .variable-group h5 {
+  color: var(--primary-light, #38bdf8);
+}
+
+.dark-mode .variable-item {
+  background: var(--gray-800, #1f2937);
+  border-color: var(--gray-600, #4b5563);
+}
+
+.dark-mode .variable-item code {
+  background: var(--primary-dark, #0c4a6e);
+  color: var(--primary-light, #38bdf8);
+}
+
+.dark-mode .variable-item div {
+  color: var(--gray-300, #d1d5db);
+}
+
+/* Template Items Dark Mode */
+.dark-mode .template-item {
+  border-color: var(--gray-600, #4b5563);
+  background: var(--gray-800, #1f2937);
+}
+
+.dark-mode .template-header {
+  background: var(--gray-700, #374151);
+  border-bottom-color: var(--gray-600, #4b5563);
+  color: var(--gray-100, #f3f4f6);
+}
+
+.dark-mode .template-editor {
+  background: var(--gray-800, #1f2937);
+}
+
+.dark-mode .template-item strong {
+  color: var(--gray-100, #f3f4f6);
+}
+
+.dark-mode .template-header strong {
+  color: var(--gray-100, #f3f4f6);
+}

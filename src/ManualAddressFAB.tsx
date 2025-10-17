@@ -1,6 +1,6 @@
 // src/ManualAddressFAB.tsx
 import * as React from "react";
-import { createPortal } from "react-dom";
+import { Modal } from "./components/Modal";
 import type { AddressRow } from "./types";
 
 type Props = {
@@ -70,7 +70,6 @@ export default function ManualAddressFAB({ onAdd, inline }: Props) {
       type="button"
       onClick={() => setOpen(true)}
       aria-label="Add address"
-      style={fabStyle}
       className="fab-add-address"
     >
       +
@@ -81,131 +80,77 @@ export default function ManualAddressFAB({ onAdd, inline }: Props) {
     <>
       {trigger}
 
-      {open &&
-        createPortal(
-          <div style={overlayStyle} role="dialog" aria-modal="true">
-            <div style={modalStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h3 style={{ margin: 0 }}>Add Address</h3>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    reset();
-                    setOpen(false);
-                  }}
-                  disabled={busy}
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-              </div>
+      <Modal
+        isOpen={open}
+        onClose={() => {
+          reset();
+          setOpen(false);
+        }}
+        title="Add Address"
+        size="md"
+      >
+        <form onSubmit={submit}>
+          <div className="form-group">
+            <label htmlFor="manual-address">Address *</label>
+            <textarea
+              id="manual-address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              rows={3}
+              placeholder="e.g. 10 Example St, City, POSTCODE"
+              required
+            />
+          </div>
 
-              <form onSubmit={submit} style={{ marginTop: "0.5rem" }}>
-                <label className="label" htmlFor="manual-address">Address *</label>
-                <textarea
-                  id="manual-address"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="input"
-                  rows={3}
-                  placeholder="e.g. 10 Example St, City, POSTCODE"
-                  required
-                />
-
-                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                  <div style={{ flex: 1 }}>
-                    <label className="label" htmlFor="manual-lat">Lat (optional)</label>
-                    <input
-                      id="manual-lat"
-                      type="text"
-                      inputMode="decimal"
-                      value={lat}
-                      onChange={(e) => setLat(e.target.value)}
-                      className="input"
-                      placeholder="51.5034"
-                    />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label className="label" htmlFor="manual-lng">Lng (optional)</label>
-                    <input
-                      id="manual-lng"
-                      type="text"
-                      inputMode="decimal"
-                      value={lng}
-                      onChange={(e) => setLng(e.target.value)}
-                      className="input"
-                      placeholder="-0.1276"
-                    />
-                  </div>
-                </div>
-
-                {err && (
-                  <div style={{ color: "var(--danger)", fontSize: "0.875rem", marginTop: "0.5rem" }}>
-                    {err}
-                  </div>
-                )}
-
-                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", justifyContent: "flex-end" }}>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => {
-                      reset();
-                      setOpen(false);
-                    }}
-                    disabled={busy}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn" disabled={busy}>
-                    {busy ? "Adding..." : "Add"}
-                  </button>
-                </div>
-              </form>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div className="form-group">
+              <label htmlFor="manual-lat">Lat (optional)</label>
+              <input
+                id="manual-lat"
+                type="text"
+                inputMode="decimal"
+                value={lat}
+                onChange={(e) => setLat(e.target.value)}
+                placeholder="51.5034"
+              />
             </div>
-          </div>,
-          document.body
-        )}
+            <div className="form-group">
+              <label htmlFor="manual-lng">Lng (optional)</label>
+              <input
+                id="manual-lng"
+                type="text"
+                inputMode="decimal"
+                value={lng}
+                onChange={(e) => setLng(e.target.value)}
+                placeholder="-0.1276"
+              />
+            </div>
+          </div>
+
+          {err && (
+            <div className="info-box info-box-error" style={{ marginTop: "0.5rem" }}>
+              {err}
+            </div>
+          )}
+
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                reset();
+                setOpen(false);
+              }}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={busy}>
+              {busy ? "Adding..." : "Add"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </>
   );
 }
-
-/* Styles */
-const fabStyle: React.CSSProperties = {
-  position: "fixed",
-  right: 16,
-  bottom: `calc(16px + env(safe-area-inset-bottom, 0))`,
-  width: 56,
-  height: 56,
-  borderRadius: "50%",
-  border: "none",
-  background: "var(--primary)",
-  color: "#fff",
-  fontSize: 28,
-  lineHeight: "56px",
-  textAlign: "center",
-  boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
-  cursor: "pointer",
-  zIndex: 4000, // well above any transformed/stacking contexts
-};
-
-const overlayStyle: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.35)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 12,
-  zIndex: 4100,
-};
-
-const modalStyle: React.CSSProperties = {
-  width: "100%",
-  maxWidth: 520,
-  background: "var(--surface)",
-  borderRadius: 14,
-  padding: 14,
-  border: "1px solid var(--border-light)",
-  boxShadow: "var(--shadow-lg)",
-};
