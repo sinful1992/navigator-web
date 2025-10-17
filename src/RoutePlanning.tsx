@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useState, useCallback, startTransition, useRef, useEffect } from "react";
+import { useState, useCallback, startTransition, useRef } from "react";
 import type { AddressRow } from "./types";
 import { SubscriptionGuard } from "./SubscriptionGuard";
 import { AddressAutocomplete } from "./components/AddressAutocomplete";
