@@ -130,6 +130,8 @@ export function calculateComplexBonus(
     smallPifBonus,
     linkedCaseBonus,
     dailyThreshold,
+    complianceFeePerCase,
+    complianceFeeFixed,
   } = settings.complexSettings;
 
   let totalBonus = 0;
@@ -138,37 +140,59 @@ export function calculateComplexBonus(
     if (completion.outcome !== 'PIF') continue;
 
     const amount = parseFloat(completion.amount || '0');
-    // Always use actual number of cases for debt calculation (affects compliance fees)
     const actualCases = completion.numberOfCases || 1;
-    const totalEnforcementFees = completion.totalEnforcementFees;
 
-    // Determine bonus per PIF based on amount
-    let bonusForThisPif = 0;
+    // Check if we have individual enforcement fees
+    if (completion.enforcementFees && completion.enforcementFees.length > 0) {
+      // NEW: Calculate bonus for each enforcement fee individually
+      for (const enfFee of completion.enforcementFees) {
+        // Calculate debt for this specific enforcement fee
+        // D = E - 235, then reverse to get original debt using enforcement fee formula
+        // If E > 235, then D > 1500, so: E = 235 + 0.075 × (D - 1500)
+        // Solving: D = (E - 235) / 0.075 + 1500
+        let debt: number;
+        if (enfFee <= 235) {
+          debt = 1000; // Assume mid-range debt for standard enforcement fee
+        } else {
+          debt = (enfFee - 235) / 0.075 + 1500;
+        }
 
-    if (amount === 0) {
-      // Linked case with 0 fee
-      bonusForThisPif = linkedCaseBonus;
-    } else if (amount < 100) {
-      // Small PIF (balance < £100)
-      bonusForThisPif = smallPifBonus;
+        // Calculate bonus based on debt
+        if (debt > largePifThreshold) {
+          const additionalBonus = largePifPercentage * (debt - largePifThreshold);
+          totalBonus += Math.min(basePifBonus + additionalBonus, largePifCap);
+        } else {
+          totalBonus += basePifBonus;
+        }
+      }
+
+      // Add bonus for linked cases (cases without enforcement fees)
+      const linkedCases = actualCases - completion.enforcementFees.length;
+      if (linkedCases > 0) {
+        totalBonus += linkedCases * linkedCaseBonus;
+      }
     } else {
-      // Calculate debt from total using reverse formula with actual case count
-      // This ensures compliance fees (£75 × N) are correctly accounted for
-      const debt = calculateDebtFromTotal(amount, actualCases, totalEnforcementFees);
+      // LEGACY: Backward compatibility - use old calculation method
+      const totalEnforcementFees = completion.totalEnforcementFees;
 
-      if (debt > largePifThreshold) {
-        // Large PIF: £100 + 2.5% of 7.5% over £1500
-        const additionalBonus = largePifPercentage * (debt - largePifThreshold);
-        bonusForThisPif = Math.min(basePifBonus + additionalBonus, largePifCap);
+      if (amount === 0) {
+        // Linked case with 0 fee
+        totalBonus += linkedCaseBonus;
+      } else if (amount < 100) {
+        // Small PIF (balance < £100)
+        totalBonus += smallPifBonus;
       } else {
-        // Standard PIF
-        bonusForThisPif = basePifBonus;
+        // Calculate debt from total using reverse formula
+        const debt = calculateDebtFromTotal(amount, actualCases, totalEnforcementFees);
+
+        if (debt > largePifThreshold) {
+          const additionalBonus = largePifPercentage * (debt - largePifThreshold);
+          totalBonus += Math.min(basePifBonus + additionalBonus, largePifCap);
+        } else {
+          totalBonus += basePifBonus;
+        }
       }
     }
-
-    // Count as 1 PIF per debtor (don't multiply by number of cases)
-    // Only 1 enforcement fee is charged per debtor, so only 1 PIF bonus
-    totalBonus += bonusForThisPif;
   }
 
   // Subtract daily threshold
@@ -338,18 +362,44 @@ export function calculateBonusBreakdown(
         linkedCaseBonus,
       } = settings.complexSettings;
 
-      if (amount === 0) {
-        bonusForThisPif = linkedCaseBonus;
-      } else if (amount < 100) {
-        bonusForThisPif = smallPifBonus;
+      // Check if we have individual enforcement fees
+      if (completion.enforcementFees && completion.enforcementFees.length > 0) {
+        // Calculate bonus for each enforcement fee
+        for (const enfFee of completion.enforcementFees) {
+          let debt: number;
+          if (enfFee <= 235) {
+            debt = 1000;
+          } else {
+            debt = (enfFee - 235) / 0.075 + 1500;
+          }
+
+          if (debt > largePifThreshold) {
+            const additionalBonus = largePifPercentage * (debt - largePifThreshold);
+            bonusForThisPif += Math.min(basePifBonus + additionalBonus, largePifCap);
+          } else {
+            bonusForThisPif += basePifBonus;
+          }
+        }
+
+        // Add bonus for linked cases
+        const linkedCases = actualCases - completion.enforcementFees.length;
+        if (linkedCases > 0) {
+          bonusForThisPif += linkedCases * linkedCaseBonus;
+        }
       } else {
-        // Use actual cases for debt calculation (compliance fees matter)
-        debtAmount = calculateDebtFromTotal(amount, actualCases, totalEnforcementFees);
-        if (debtAmount > largePifThreshold) {
-          const additionalBonus = largePifPercentage * (debtAmount - largePifThreshold);
-          bonusForThisPif = Math.min(basePifBonus + additionalBonus, largePifCap);
+        // Legacy calculation
+        if (amount === 0) {
+          bonusForThisPif = linkedCaseBonus;
+        } else if (amount < 100) {
+          bonusForThisPif = smallPifBonus;
         } else {
-          bonusForThisPif = basePifBonus;
+          debtAmount = calculateDebtFromTotal(amount, actualCases, totalEnforcementFees);
+          if (debtAmount > largePifThreshold) {
+            const additionalBonus = largePifPercentage * (debtAmount - largePifThreshold);
+            bonusForThisPif = Math.min(basePifBonus + additionalBonus, largePifCap);
+          } else {
+            bonusForThisPif = basePifBonus;
+          }
         }
       }
     } else if (settings.calculationType === 'custom' && settings.customFormula) {

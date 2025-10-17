@@ -10,7 +10,7 @@ type Props = {
   state: AppState;
   setActive: (index: number) => void;
   cancelActive: () => void;
-  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, totalEnforcementFees?: number) => void;
+  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, enforcementFees?: number[]) => void;
   onAddArrangement?: (
     arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>
   ) => Promise<string>;
@@ -170,7 +170,7 @@ const AddressListComponent = function AddressList({
   const [pifAmount, setPifAmount] = React.useState<string>("");
   const [caseReference, setCaseReference] = React.useState<string>("");
   const [numberOfCases, setNumberOfCases] = React.useState<string>("1");
-  const [totalEnforcementFees, setTotalEnforcementFees] = React.useState<string>("");
+  const [enforcementFees, setEnforcementFees] = React.useState<string[]>([""]);
   const [showCaseRefPrompt, setShowCaseRefPrompt] = React.useState<number | null>(null);
 
   // Prevent double submissions with Promise-based locking
@@ -187,7 +187,7 @@ const AddressListComponent = function AddressList({
       setPifAmount("");
       setCaseReference("");
       setNumberOfCases("1");
-      setTotalEnforcementFees("");
+      setEnforcementFees([""]);
       setShowCaseRefPrompt(null);
       setShowArrangementForm(null);
       setSubmittingIndex(null);
@@ -195,7 +195,7 @@ const AddressListComponent = function AddressList({
   }, [activeIndex]);
 
   // Robust completion handler with Promise-based locking
-  const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseRef?: string, numCases?: number, enfFees?: number) => {
+  const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseRef?: string, numCases?: number, enfFees?: number[]) => {
     // Check if there's already a pending completion for this index
     const existingPromise = pendingCompletions.current.get(index);
     if (existingPromise) {
@@ -618,51 +618,60 @@ const AddressListComponent = function AddressList({
                 </small>
               </div>
               <div className="case-ref-input-wrapper" style={{ marginTop: '1rem' }}>
-                <label htmlFor="enf-fees-input">Total Enforcement Fees (Optional)</label>
-                <input
-                  id="enf-fees-input"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  inputMode="decimal"
-                  className="case-ref-input"
-                  placeholder="e.g. 582.50"
-                  value={totalEnforcementFees}
-                  onChange={(e) => setTotalEnforcementFees(e.target.value)}
-                  autoComplete="off"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const caseRefNum = Number(caseReference);
-                      const numCases = Number(numberOfCases);
-                      const enfFees = totalEnforcementFees ? Number(totalEnforcementFees) : undefined;
-                      if (!caseReference || !caseReference.trim()) {
-                        alert("Please enter a case reference number");
-                        return;
-                      }
-                      if (!Number.isFinite(caseRefNum) || caseRefNum <= 0 || !Number.isInteger(caseRefNum)) {
-                        alert("Case reference must be a valid whole number");
-                        return;
-                      }
-                      if (!Number.isFinite(numCases) || numCases <= 0 || !Number.isInteger(numCases)) {
-                        alert("Number of cases must be a valid whole number");
-                        return;
-                      }
-                      if (enfFees !== undefined && (!Number.isFinite(enfFees) || enfFees < 0)) {
-                        alert("Total enforcement fees must be a valid non-negative number");
-                        return;
-                      }
-                      handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim(), numCases, enfFees);
-                      setShowCaseRefPrompt(null);
-                      setCaseReference("");
-                      setNumberOfCases("1");
-                      setTotalEnforcementFees("");
-                      setPifAmount("");
-                    }
-                  }}
-                />
-                <small style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.25rem' }}>
-                  Leave blank to use automatic calculation
+                <label>Enforcement Fees (Optional)</label>
+                <small style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginBottom: '0.5rem', display: 'block' }}>
+                  Add enforcement fees for cases that have them. Linked cases without fees receive £10 bonus each.
                 </small>
+
+                {enforcementFees.map((fee, index) => (
+                  <div key={index} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      inputMode="decimal"
+                      className="case-ref-input"
+                      placeholder="e.g. 272.50"
+                      value={fee}
+                      onChange={(e) => {
+                        const newFees = [...enforcementFees];
+                        newFees[index] = e.target.value;
+                        setEnforcementFees(newFees);
+                      }}
+                      autoComplete="off"
+                      style={{ flex: 1 }}
+                    />
+                    {enforcementFees.length > 1 && (
+                      <button
+                        type="button"
+                        className="modal-btn modal-btn-cancel"
+                        onClick={() => {
+                          const newFees = enforcementFees.filter((_, i) => i !== index);
+                          setEnforcementFees(newFees);
+                        }}
+                        style={{ flex: '0 0 auto', padding: '0.5rem 0.75rem' }}
+                        title="Remove this enforcement fee"
+                      >
+                        ➖
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  className="modal-btn modal-btn-save"
+                  onClick={() => setEnforcementFees([...enforcementFees, ""])}
+                  style={{ marginTop: '0.5rem', width: '100%' }}
+                >
+                  ➕ Add Another Enf Fee
+                </button>
+
+                {numberOfCases && Number(numberOfCases) > 0 && (
+                  <small style={{ fontSize: '0.75rem', color: 'var(--primary)', marginTop: '0.5rem', display: 'block', fontWeight: 600 }}>
+                    ℹ️ {Math.max(0, Number(numberOfCases) - enforcementFees.filter(f => f && f.trim()).length)} linked case(s) (£10 bonus each)
+                  </small>
+                )}
               </div>
             </div>
             <div className="case-ref-modal-footer">
@@ -672,7 +681,7 @@ const AddressListComponent = function AddressList({
                   setShowCaseRefPrompt(null);
                   setCaseReference("");
                   setNumberOfCases("1");
-                  setTotalEnforcementFees("");
+                  setEnforcementFees([""]);
                 }}
               >
                 Cancel
@@ -683,7 +692,12 @@ const AddressListComponent = function AddressList({
                 onClick={() => {
                   const caseRefNum = Number(caseReference);
                   const numCases = Number(numberOfCases);
-                  const enfFees = totalEnforcementFees ? Number(totalEnforcementFees) : undefined;
+
+                  // Parse and validate enforcement fees
+                  const parsedEnfFees = enforcementFees
+                    .filter(f => f && f.trim())
+                    .map(f => parseFloat(f));
+
                   if (!caseReference || !caseReference.trim()) {
                     alert("Please enter a case reference number");
                     return;
@@ -696,15 +710,21 @@ const AddressListComponent = function AddressList({
                     alert("Number of cases must be a valid whole number");
                     return;
                   }
-                  if (enfFees !== undefined && (!Number.isFinite(enfFees) || enfFees < 0)) {
-                    alert("Total enforcement fees must be a valid non-negative number");
+
+                  // Validate all enforcement fees are valid non-negative numbers
+                  if (parsedEnfFees.some(f => !Number.isFinite(f) || f < 0)) {
+                    alert("All enforcement fees must be valid non-negative numbers");
                     return;
                   }
-                  handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim(), numCases, enfFees);
+
+                  // Pass array to handleCompletion (or undefined if no fees entered)
+                  const enfFeesArray = parsedEnfFees.length > 0 ? parsedEnfFees : undefined;
+
+                  handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim(), numCases, enfFeesArray);
                   setShowCaseRefPrompt(null);
                   setCaseReference("");
                   setNumberOfCases("1");
-                  setTotalEnforcementFees("");
+                  setEnforcementFees([""]);
                   setPifAmount("");
                 }}
               >

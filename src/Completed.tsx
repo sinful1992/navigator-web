@@ -19,7 +19,7 @@ type Props = {
     arrangementId?: string,
     caseReference?: string,
     numberOfCases?: number,
-    totalEnforcementFees?: number
+    enforcementFees?: number[]
   ) => void;
   onAddArrangement?: (
     arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>
@@ -283,7 +283,7 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
 
   // Track which enforcement fees are being edited
   const [editingEnfFees, setEditingEnfFees] = React.useState<number | null>(null);
-  const [tempEnfFees, setTempEnfFees] = React.useState<string>("");
+  const [tempEnfFees, setTempEnfFees] = React.useState<string[]>([]);
 
   // Track which completion is showing arrangement form for ARR outcome
   const [showArrangementForm, setShowArrangementForm] = React.useState<{
@@ -522,7 +522,7 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
                                               if (e.key === "Enter") {
                                                 const amount = parseFloat(tempPifAmount);
                                                 if (isFinite(amount) && amount >= 0) {
-                                                  onChangeOutcome(compIndex, "PIF", amount.toFixed(2), comp.arrangementId, comp.caseReference, comp.numberOfCases, comp.totalEnforcementFees);
+                                                  onChangeOutcome(compIndex, "PIF", amount.toFixed(2), comp.arrangementId, comp.caseReference, comp.numberOfCases, comp.enforcementFees);
                                                   setEditingPifAmount(null);
                                                   setTempPifAmount("");
                                                 }
@@ -546,7 +546,7 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
                                             onClick={() => {
                                               const amount = parseFloat(tempPifAmount);
                                               if (isFinite(amount) && amount >= 0) {
-                                                onChangeOutcome(compIndex, "PIF", amount.toFixed(2), comp.arrangementId, comp.caseReference, comp.numberOfCases, comp.totalEnforcementFees);
+                                                onChangeOutcome(compIndex, "PIF", amount.toFixed(2), comp.arrangementId, comp.caseReference, comp.numberOfCases, comp.enforcementFees);
                                                 setEditingPifAmount(null);
                                                 setTempPifAmount("");
                                               }
@@ -604,104 +604,21 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
                                               · {comp.numberOfCases} cases
                                             </span>
                                           )}
-                                          {comp.totalEnforcementFees !== undefined && comp.totalEnforcementFees !== null && (
-                                            <span style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                              {editingEnfFees === compIndex ? (
-                                                <>
-                                                  <span>· Enf: £</span>
-                                                  <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    min="0"
-                                                    inputMode="decimal"
-                                                    style={{
-                                                      width: 70,
-                                                      padding: "2px 4px",
-                                                      fontSize: 12,
-                                                      border: "1px solid var(--border)",
-                                                      borderRadius: 3,
-                                                      background: "var(--surface)"
-                                                    }}
-                                                    value={tempEnfFees}
-                                                    onChange={(e) => setTempEnfFees(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                      if (e.key === "Enter") {
-                                                        const enfFees = parseFloat(tempEnfFees);
-                                                        if (isFinite(enfFees) && enfFees >= 0) {
-                                                          onChangeOutcome(compIndex, comp.outcome, comp.amount, comp.arrangementId, comp.caseReference, comp.numberOfCases, enfFees);
-                                                          setEditingEnfFees(null);
-                                                          setTempEnfFees("");
-                                                        }
-                                                      } else if (e.key === "Escape") {
-                                                        setEditingEnfFees(null);
-                                                        setTempEnfFees("");
-                                                      }
-                                                    }}
-                                                    autoFocus
-                                                  />
-                                                  <button
-                                                    style={{
-                                                      fontSize: 10,
-                                                      padding: "2px 6px",
-                                                      background: "var(--success)",
-                                                      color: "white",
-                                                      border: "none",
-                                                      borderRadius: 3,
-                                                      cursor: "pointer"
-                                                    }}
-                                                    onClick={() => {
-                                                      const enfFees = parseFloat(tempEnfFees);
-                                                      if (isFinite(enfFees) && enfFees >= 0) {
-                                                        onChangeOutcome(compIndex, comp.outcome, comp.amount, comp.arrangementId, comp.caseReference, comp.numberOfCases, enfFees);
-                                                        setEditingEnfFees(null);
-                                                        setTempEnfFees("");
-                                                      }
-                                                    }}
-                                                  >
-                                                    ✓
-                                                  </button>
-                                                  <button
-                                                    style={{
-                                                      fontSize: 10,
-                                                      padding: "2px 6px",
-                                                      background: "var(--danger)",
-                                                      color: "white",
-                                                      border: "none",
-                                                      borderRadius: 3,
-                                                      cursor: "pointer"
-                                                    }}
-                                                    onClick={() => {
-                                                      setEditingEnfFees(null);
-                                                      setTempEnfFees("");
-                                                    }}
-                                                  >
-                                                    ✕
-                                                  </button>
-                                                </>
-                                              ) : (
-                                                <>
-                                                  <span>· Enf: £{comp.totalEnforcementFees.toFixed(2)}</span>
-                                                  <button
-                                                    style={{
-                                                      fontSize: 10,
-                                                      padding: "2px 6px",
-                                                      background: "var(--primary)",
-                                                      color: "white",
-                                                      border: "none",
-                                                      borderRadius: 3,
-                                                      cursor: "pointer",
-                                                      marginLeft: 4
-                                                    }}
-                                                    onClick={() => {
-                                                      setEditingEnfFees(compIndex);
-                                                      setTempEnfFees(String(comp.totalEnforcementFees));
-                                                    }}
-                                                    title="Edit enforcement fees"
-                                                  >
-                                                    ✏️
-                                                  </button>
-                                                </>
+                                          {/* Display enforcement fees (NEW: array format) */}
+                                          {comp.enforcementFees && comp.enforcementFees.length > 0 && (
+                                            <span style={{ marginLeft: 8 }}>
+                                              · Enf Fees: {comp.enforcementFees.map((fee, idx) => `£${fee.toFixed(2)}`).join(", ")}
+                                              {comp.numberOfCases && comp.numberOfCases > comp.enforcementFees.length && (
+                                                <span style={{ color: "var(--primary)", fontWeight: 600, marginLeft: 4 }}>
+                                                  + {comp.numberOfCases - comp.enforcementFees.length} linked (£10 each)
+                                                </span>
                                               )}
+                                            </span>
+                                          )}
+                                          {/* Legacy: Display total enforcement fees (backward compatibility) */}
+                                          {!comp.enforcementFees && comp.totalEnforcementFees !== undefined && comp.totalEnforcementFees !== null && (
+                                            <span style={{ marginLeft: 8 }}>
+                                              · Enf: £{comp.totalEnforcementFees.toFixed(2)}
                                             </span>
                                           )}
                                         </>
@@ -761,7 +678,7 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
                                         addressIndex: comp.index
                                       });
                                     } else {
-                                      onChangeOutcome(compIndex, newOutcome, comp.amount, comp.arrangementId, comp.caseReference, comp.numberOfCases, comp.totalEnforcementFees);
+                                      onChangeOutcome(compIndex, newOutcome, comp.amount, comp.arrangementId, comp.caseReference, comp.numberOfCases, comp.enforcementFees);
                                     }
                                   }}
                                   className="input"

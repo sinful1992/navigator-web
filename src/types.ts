@@ -24,7 +24,9 @@ export type Completion = {
   timeSpentSeconds?: number;
   /** Number of cases paid in full (for linked cases - e.g., 1 debtor, 3 cases). */
   numberOfCases?: number;
-  /** Total enforcement fees charged across all cases (for multiple cases with different debts). */
+  /** Individual enforcement fees for each case that has one (e.g., [272.50, 310.00] for 2 cases with fees, remaining are linked cases with £10 bonus). */
+  enforcementFees?: number[];
+  /** @deprecated Legacy field - use enforcementFees array instead. Total enforcement fees charged across all cases. */
   totalEnforcementFees?: number;
 };
 
