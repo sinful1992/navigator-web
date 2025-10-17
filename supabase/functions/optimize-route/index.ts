@@ -13,6 +13,7 @@ interface RouteOptimizationRequest {
     lng: number;
   }>;
   startLocation?: [number, number]; // [lng, lat] - Optional starting point
+  avoidTolls?: boolean; // Whether to avoid toll roads
 }
 
 interface RouteOptimizationResult {
@@ -79,7 +80,7 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { addresses, startLocation }: RouteOptimizationRequest = await req.json()
+    const { addresses, startLocation, avoidTolls = false }: RouteOptimizationRequest = await req.json()
 
     if (!addresses || !Array.isArray(addresses)) {
       throw new Error('Invalid request: addresses array required')
@@ -187,8 +188,14 @@ serve(async (req) => {
     const vehicles = [{
       id: 1,
       profile: 'driving-car',
-      start: defaultStart
+      start: defaultStart,
       // Omit 'end' for one-way routes (VROOM will find best route without returning to start)
+      // Add options to avoid tolls if requested
+      ...(avoidTolls ? {
+        options: {
+          avoid_features: ['tollways']
+        }
+      } : {})
     }]
 
     const requestBody = {

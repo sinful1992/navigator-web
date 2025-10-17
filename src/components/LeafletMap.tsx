@@ -57,6 +57,7 @@ interface LeafletMapProps {
   optimizedOrder?: number[];
   showRouteLines?: boolean;
   confidences?: (number | undefined)[];  // Optional confidence scores for each address
+  avoidTolls?: boolean; // Whether to avoid toll roads in route directions
 }
 
 // Component to fit map bounds to markers (recenters when addresses change)
@@ -90,7 +91,8 @@ export function LeafletMap({
   onStartingPointChange,
   optimizedOrder,
   showRouteLines = false,
-  confidences
+  confidences,
+  avoidTolls = false
 }: LeafletMapProps) {
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
@@ -145,7 +147,7 @@ export function LeafletMap({
           ? [addresses[startingPointIndex].lng!, addresses[startingPointIndex].lat!] as [number, number]
           : undefined;
 
-        const result = await getOptimizedRouteDirections(addresses, optimizedOrder, startLocation);
+        const result = await getOptimizedRouteDirections(addresses, optimizedOrder, startLocation, avoidTolls);
 
         if (result.success) {
           setRouteSegments(result.routeSegments);
@@ -163,7 +165,7 @@ export function LeafletMap({
     }
 
     loadRouteDirections();
-  }, [showRouteLines, optimizedOrder, addresses.length, startingPointIndex]); // Use addresses.length instead of addresses
+  }, [showRouteLines, optimizedOrder, addresses.length, startingPointIndex, avoidTolls]); // Use addresses.length instead of addresses
 
   // Handle starting point selection
   const handleSetStartingPoint = (index: number) => {

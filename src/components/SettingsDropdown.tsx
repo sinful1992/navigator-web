@@ -135,6 +135,7 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
     togglePushNotifications,
     toggleAutoSync,
     toggleConfirmBeforeDelete,
+    toggleAvoidTolls,
     updateKeepDataForMonths,
   } = useSettings();
 
@@ -416,6 +417,27 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                   </button>
                 </div>
               )}
+            </CollapsibleSection>
+
+            {/* Route Planning */}
+            <CollapsibleSection
+              title="Route Planning"
+              icon="🗺️"
+              sectionKey="routing"
+              isExpanded={expandedSection === 'routing'}
+              onToggle={toggleSection}
+            >
+              <div className="modern-setting-row">
+                <div className="modern-setting-info">
+                  <div className="modern-setting-label">Avoid Tolls</div>
+                  <div className="modern-setting-desc">Route optimization will avoid toll roads when possible</div>
+                </div>
+                <ToggleSwitch
+                  id="avoid-tolls"
+                  checked={settings.avoidTolls}
+                  onChange={toggleAvoidTolls}
+                />
+              </div>
             </CollapsibleSection>
 
             {/* Reminders & SMS */}

@@ -154,7 +154,8 @@ export async function searchAddresses(
 export async function optimizeRoute(
   addresses: AddressRow[],
   startLocation?: [number, number],
-  endLocation?: [number, number]
+  endLocation?: [number, number],
+  avoidTolls?: boolean
 ): Promise<RouteOptimizationResult> {
   if (!supabase) {
     throw new Error('Supabase client not available');
@@ -205,7 +206,8 @@ export async function optimizeRoute(
           lng: addr.lng!
         })),
         startLocation,
-        endLocation
+        endLocation,
+        avoidTolls
       }
     });
 

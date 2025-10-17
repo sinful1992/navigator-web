@@ -120,7 +120,8 @@ export async function searchAddresses(
  */
 export async function optimizeRoute(
   addresses: AddressRow[],
-  startLocation?: [number, number]
+  startLocation?: [number, number],
+  avoidTolls?: boolean
 ): Promise<RouteOptimizationResult> {
   if (!supabase) {
     throw new Error('Supabase client not available');
@@ -169,8 +170,9 @@ export async function optimizeRoute(
         lat: addr.lat!,
         lng: addr.lng!
       })),
-      startLocation
+      startLocation,
       // NOTE: No endLocation - VROOM will optimize a one-way route
+      avoidTolls
     };
 
     console.log('Route optimization request:', {
@@ -344,7 +346,8 @@ export async function optimizeRoute(
 export async function getOptimizedRouteDirections(
   addresses: AddressRow[],
   optimizedOrder: number[],
-  startLocation?: [number, number]
+  startLocation?: [number, number],
+  avoidTolls?: boolean
 ): Promise<{
   success: boolean;
   routeSegments: Array<{
@@ -393,7 +396,8 @@ export async function getOptimizedRouteDirections(
     const { data, error } = await supabase.functions.invoke('get-route-directions', {
       body: {
         coordinates: waypoints,
-        profile: 'driving-car'
+        profile: 'driving-car',
+        avoidTolls
       }
     });
 

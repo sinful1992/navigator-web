@@ -5,6 +5,7 @@ import { SubscriptionGuard } from "./SubscriptionGuard";
 import { AddressAutocomplete } from "./components/AddressAutocomplete";
 import { LeafletMap } from "./components/LeafletMap";
 import { ImportExcel } from "./ImportExcel";
+import { useSettings } from "./hooks/useSettings";
 import {
   geocodeAddresses,
   addressRowToGeocodingResult,
@@ -24,6 +25,9 @@ interface RoutePlanningProps {
 }
 
 const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
+  // Settings
+  const { settings } = useSettings();
+
   // State management
   const [addresses, setAddresses] = useState<GeocodingResult[]>([]);
   const [newAddress, setNewAddress] = useState("");
@@ -244,7 +248,7 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
       }
 
       // ALWAYS one-way route - VROOM will find the best route ending at the last optimized stop
-      const result = await optimizeRoute(addressRows, startLocation);
+      const result = await optimizeRoute(addressRows, startLocation, settings.avoidTolls);
 
       setOptimizationResult({
         optimizedOrder: result.optimizedOrder,
@@ -427,6 +431,7 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
                   optimizedOrder={optimizationResult?.optimizedOrder}
                   showRouteLines={!!optimizationResult && !optimizationResult.error}
                   confidences={addresses.map(addr => addr.confidence)}
+                  avoidTolls={settings.avoidTolls}
                 />
               </div>
             )}

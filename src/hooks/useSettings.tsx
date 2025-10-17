@@ -10,6 +10,7 @@ export interface Settings {
   autoSyncOnStart: boolean;
   confirmBeforeDelete: boolean;
   keepDataForMonths: 0 | 3 | 6 | 12; // 0 = forever
+  avoidTolls: boolean; // Route planning: avoid toll roads
 }
 
 // Pre-defined reminder texts for SMS
@@ -29,6 +30,7 @@ const DEFAULT_SETTINGS: Settings = {
   autoSyncOnStart: true,
   confirmBeforeDelete: true,
   keepDataForMonths: 6,
+  avoidTolls: false, // Don't avoid tolls by default
 };
 
 // Key for localStorage
@@ -43,6 +45,7 @@ interface SettingsContextType {
   togglePushNotifications: () => void;
   toggleAutoSync: () => void;
   toggleConfirmBeforeDelete: () => void;
+  toggleAvoidTolls: () => void;
   updateReminderText: (text: string) => void;
   updateKeepDataForMonths: (months: 0 | 3 | 6 | 12) => void;
   predefinedReminders: typeof PREDEFINED_REMINDERS;
@@ -109,6 +112,10 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setSettings((prev) => ({ ...prev, confirmBeforeDelete: !prev.confirmBeforeDelete }));
   }, []);
 
+  const toggleAvoidTolls = useCallback(() => {
+    setSettings((prev) => ({ ...prev, avoidTolls: !prev.avoidTolls }));
+  }, []);
+
   const updateReminderText = useCallback((text: string) => {
     setSettings((prev) => ({ ...prev, reminderText: text }));
   }, []);
@@ -125,6 +132,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     togglePushNotifications,
     toggleAutoSync,
     toggleConfirmBeforeDelete,
+    toggleAvoidTolls,
     updateReminderText,
     updateKeepDataForMonths,
     predefinedReminders: PREDEFINED_REMINDERS,

@@ -9,6 +9,7 @@ const corsHeaders = {
 interface RouteDirectionsRequest {
   coordinates: [number, number][]; // [lng, lat] pairs in order
   profile?: string; // driving-car, foot-walking, etc.
+  avoidTolls?: boolean; // Whether to avoid toll roads
 }
 
 interface RouteSegment {
@@ -66,7 +67,7 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { coordinates, profile = 'driving-car' }: RouteDirectionsRequest = await req.json()
+    const { coordinates, profile = 'driving-car', avoidTolls = false }: RouteDirectionsRequest = await req.json()
 
     if (!coordinates || !Array.isArray(coordinates) || coordinates.length < 2) {
       throw new Error('Invalid request: need at least 2 coordinates')
@@ -81,7 +82,13 @@ serve(async (req) => {
     // This avoids rate limiting and is more efficient
     const directionsBody = {
       coordinates: coordinates,
-      instructions: false
+      instructions: false,
+      // Add options to avoid tolls if requested
+      ...(avoidTolls ? {
+        options: {
+          avoid_features: ['tollways']
+        }
+      } : {})
     }
 
     const response = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}`, {
