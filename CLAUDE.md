@@ -8,15 +8,16 @@ Navigator Web is a React + TypeScript PWA for managing address lists and trackin
 
 ## Common Commands
 
+**IMPORTANT: DO NOT run `npm run build` or any build commands! Never run builds.**
+
 ```bash
 # Development
 npm run dev        # Start development server with HMR
-npm run build      # TypeScript compilation + production build
-npm run preview    # Preview production build locally
-npm run deploy     # Deploy to GitHub Pages
 
-# No test framework is currently configured
-# No lint command defined (ESLint config exists but no npm script)
+# Testing
+npm test           # Run tests (OK to run)
+
+# Deployment is handled via GitHub Actions - DO NOT run build or deploy commands
 ```
 
 ## Architecture

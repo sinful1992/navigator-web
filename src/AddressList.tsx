@@ -10,7 +10,7 @@ type Props = {
   state: AppState;
   setActive: (index: number) => void;
   cancelActive: () => void;
-  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number) => void;
+  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, totalEnforcementFees?: number) => void;
   onAddArrangement?: (
     arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>
   ) => Promise<string>;
@@ -170,6 +170,7 @@ const AddressListComponent = function AddressList({
   const [pifAmount, setPifAmount] = React.useState<string>("");
   const [caseReference, setCaseReference] = React.useState<string>("");
   const [numberOfCases, setNumberOfCases] = React.useState<string>("1");
+  const [totalEnforcementFees, setTotalEnforcementFees] = React.useState<string>("");
   const [showCaseRefPrompt, setShowCaseRefPrompt] = React.useState<number | null>(null);
 
   // Prevent double submissions with Promise-based locking
@@ -186,6 +187,7 @@ const AddressListComponent = function AddressList({
       setPifAmount("");
       setCaseReference("");
       setNumberOfCases("1");
+      setTotalEnforcementFees("");
       setShowCaseRefPrompt(null);
       setShowArrangementForm(null);
       setSubmittingIndex(null);
@@ -193,7 +195,7 @@ const AddressListComponent = function AddressList({
   }, [activeIndex]);
 
   // Robust completion handler with Promise-based locking
-  const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseRef?: string, numCases?: number) => {
+  const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseRef?: string, numCases?: number, enfFees?: number) => {
     // Check if there's already a pending completion for this index
     const existingPromise = pendingCompletions.current.get(index);
     if (existingPromise) {
@@ -206,7 +208,7 @@ const AddressListComponent = function AddressList({
     const completionPromise = (async () => {
       try {
         setSubmittingIndex(index);
-        await onComplete(index, outcome, amount, arrangementId, caseRef, numCases);
+        await onComplete(index, outcome, amount, arrangementId, caseRef, numCases, enfFees);
         setOutcomeOpenFor(null);
       } catch (error) {
         console.error('Completion failed:', error);
@@ -610,10 +612,29 @@ const AddressListComponent = function AddressList({
                   value={numberOfCases}
                   onChange={(e) => setNumberOfCases(e.target.value)}
                   autoComplete="off"
+                />
+                <small style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.25rem' }}>
+                  If 1 debtor has 3 linked cases, enter 3
+                </small>
+              </div>
+              <div className="case-ref-input-wrapper" style={{ marginTop: '1rem' }}>
+                <label htmlFor="enf-fees-input">Total Enforcement Fees (Optional)</label>
+                <input
+                  id="enf-fees-input"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  className="case-ref-input"
+                  placeholder="e.g. 582.50"
+                  value={totalEnforcementFees}
+                  onChange={(e) => setTotalEnforcementFees(e.target.value)}
+                  autoComplete="off"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       const caseRefNum = Number(caseReference);
                       const numCases = Number(numberOfCases);
+                      const enfFees = totalEnforcementFees ? Number(totalEnforcementFees) : undefined;
                       if (!caseReference || !caseReference.trim()) {
                         alert("Please enter a case reference number");
                         return;
@@ -626,16 +647,21 @@ const AddressListComponent = function AddressList({
                         alert("Number of cases must be a valid whole number");
                         return;
                       }
-                      handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim(), numCases);
+                      if (enfFees !== undefined && (!Number.isFinite(enfFees) || enfFees < 0)) {
+                        alert("Total enforcement fees must be a valid non-negative number");
+                        return;
+                      }
+                      handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim(), numCases, enfFees);
                       setShowCaseRefPrompt(null);
                       setCaseReference("");
                       setNumberOfCases("1");
+                      setTotalEnforcementFees("");
                       setPifAmount("");
                     }
                   }}
                 />
                 <small style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.25rem' }}>
-                  If 1 debtor has 3 linked cases, enter 3
+                  Leave blank to use automatic calculation
                 </small>
               </div>
             </div>
@@ -646,6 +672,7 @@ const AddressListComponent = function AddressList({
                   setShowCaseRefPrompt(null);
                   setCaseReference("");
                   setNumberOfCases("1");
+                  setTotalEnforcementFees("");
                 }}
               >
                 Cancel
@@ -656,6 +683,7 @@ const AddressListComponent = function AddressList({
                 onClick={() => {
                   const caseRefNum = Number(caseReference);
                   const numCases = Number(numberOfCases);
+                  const enfFees = totalEnforcementFees ? Number(totalEnforcementFees) : undefined;
                   if (!caseReference || !caseReference.trim()) {
                     alert("Please enter a case reference number");
                     return;
@@ -668,10 +696,15 @@ const AddressListComponent = function AddressList({
                     alert("Number of cases must be a valid whole number");
                     return;
                   }
-                  handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim(), numCases);
+                  if (enfFees !== undefined && (!Number.isFinite(enfFees) || enfFees < 0)) {
+                    alert("Total enforcement fees must be a valid non-negative number");
+                    return;
+                  }
+                  handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim(), numCases, enfFees);
                   setShowCaseRefPrompt(null);
                   setCaseReference("");
                   setNumberOfCases("1");
+                  setTotalEnforcementFees("");
                   setPifAmount("");
                 }}
               >

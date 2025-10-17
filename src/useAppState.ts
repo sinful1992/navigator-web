@@ -884,7 +884,7 @@ export function useAppState(userId?: string) {
   }, []);
 
   const complete = React.useCallback(
-    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number): Promise<string> => {
+    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, totalEnforcementFees?: number): Promise<string> => {
       // Validate index is a valid number
       if (!Number.isInteger(index) || index < 0) {
         const error = `Invalid index: ${index}. Index must be a non-negative integer.`;
@@ -960,6 +960,7 @@ export function useAppState(userId?: string) {
         caseReference,
         timeSpentSeconds,
         numberOfCases,
+        totalEnforcementFees,
       };
 
       const operationId = generateOperationId(

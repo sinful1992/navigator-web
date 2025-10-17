@@ -1192,9 +1192,9 @@ function AuthedApp() {
   }, [setAddresses]);
 
   const handleComplete = React.useCallback(
-    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number) => {
+    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, totalEnforcementFees?: number) => {
       try {
-        await complete(index, outcome, amount, arrangementId, caseReference, numberOfCases);
+        await complete(index, outcome, amount, arrangementId, caseReference, numberOfCases, totalEnforcementFees);
 
         // FIXED: Reduced backup - only cloud backup + local storage (no file downloads)
         try {
@@ -1403,7 +1403,10 @@ function AuthedApp() {
       targetCompletionIndex: number,
       outcome: Outcome,
       amount?: string,
-      arrangementId?: string
+      arrangementId?: string,
+      caseReference?: string,
+      numberOfCases?: number,
+      totalEnforcementFees?: number
     ) => {
       setState((s) => {
         if (
@@ -1421,6 +1424,15 @@ function AuthedApp() {
         };
         if (arrangementId !== undefined) {
           updatedCompletion.arrangementId = arrangementId;
+        }
+        if (caseReference !== undefined) {
+          updatedCompletion.caseReference = caseReference;
+        }
+        if (numberOfCases !== undefined) {
+          updatedCompletion.numberOfCases = numberOfCases;
+        }
+        if (totalEnforcementFees !== undefined) {
+          updatedCompletion.totalEnforcementFees = totalEnforcementFees;
         }
         comps[targetCompletionIndex] = updatedCompletion;
         return { ...s, completions: comps };
