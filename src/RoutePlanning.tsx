@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useState, useCallback, startTransition } from "react";
+import { useState, useCallback, startTransition, useRef, useEffect } from "react";
 import type { AddressRow } from "./types";
 import { SubscriptionGuard } from "./SubscriptionGuard";
 import { AddressAutocomplete } from "./components/AddressAutocomplete";
@@ -27,6 +27,9 @@ interface RoutePlanningProps {
 const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
   // Settings
   const { settings } = useSettings();
+
+  // Ref for address input to support auto-focus
+  const addressInputRef = useRef<HTMLInputElement>(null);
 
   // State management
   const [addresses, setAddresses] = useState<GeocodingResult[]>([]);
@@ -77,6 +80,9 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
       setNewAddress("");
       setOptimizationResult(null);
     });
+
+    // Auto-focus the input for adding more addresses
+    setTimeout(() => addressInputRef.current?.focus(), 0);
   };
 
   // Add address from autocomplete
@@ -97,6 +103,9 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
       setNewAddress("");
       setOptimizationResult(null);
     });
+
+    // Auto-focus the input for adding more addresses
+    setTimeout(() => addressInputRef.current?.focus(), 0);
   };
 
   // Remove address
@@ -450,6 +459,7 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
           {/* Address Input */}
           <div style={{ marginBottom: '1rem' }}>
             <AddressAutocomplete
+              ref={addressInputRef}
               id="manual-address-input"
               value={newAddress}
               onChange={setNewAddress}
@@ -536,6 +546,38 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
             </button>
           )}
         </div>
+
+        {/* Action Buttons (Export & Clear) - Moved above address list */}
+        {addresses.length > 0 && (
+          <div style={{
+            display: 'flex',
+            gap: '0.75rem',
+            marginBottom: '1rem'
+          }}>
+            <button
+              className="btn btn-success"
+              onClick={handleExportToMainList}
+              style={{
+                flex: 1,
+                padding: '0.875rem',
+                fontSize: '1rem',
+                fontWeight: '600'
+              }}
+            >
+              📤 Export to Main List
+            </button>
+            <button
+              className="btn btn-ghost"
+              onClick={handleClearAll}
+              style={{
+                padding: '0.875rem',
+                fontSize: '1rem'
+              }}
+            >
+              🗑️
+            </button>
+          </div>
+        )}
 
         {/* Address List */}
         {addresses.length > 0 && (
@@ -851,38 +893,6 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
               );
             })}
             </div>
-          </div>
-        )}
-
-        {/* Action Buttons (Export & Clear) */}
-        {addresses.length > 0 && (
-          <div style={{
-            display: 'flex',
-            gap: '0.75rem',
-            marginBottom: '1rem'
-          }}>
-            <button
-              className="btn btn-success"
-              onClick={handleExportToMainList}
-              style={{
-                flex: 1,
-                padding: '0.875rem',
-                fontSize: '1rem',
-                fontWeight: '600'
-              }}
-            >
-              📤 Export to Main List
-            </button>
-            <button
-              className="btn btn-ghost"
-              onClick={handleClearAll}
-              style={{
-                padding: '0.875rem',
-                fontSize: '1rem'
-              }}
-            >
-              🗑️
-            </button>
           </div>
         )}
 

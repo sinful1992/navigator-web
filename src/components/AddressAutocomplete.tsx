@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, startTransition } from "react";
+import { useState, useEffect, useRef, useCallback, startTransition, forwardRef, useImperativeHandle } from "react";
 import { searchAddresses, isHybridRoutingAvailable } from "../services/hybridRouting";
 import { resolveSelectedPlace } from "../services/geocoding";
 import type { AddressAutocompleteResult } from "../services/hybridRouting";
@@ -13,7 +13,7 @@ interface AddressAutocompleteProps {
   className?: string;
 }
 
-export function AddressAutocomplete({
+export const AddressAutocomplete = forwardRef<HTMLInputElement, AddressAutocompleteProps>(({
   id,
   value,
   onChange,
@@ -21,7 +21,7 @@ export function AddressAutocomplete({
   placeholder = "Start typing an address...",
   disabled = false,
   className = "input"
-}: AddressAutocompleteProps) {
+}, ref) => {
   const [suggestions, setSuggestions] = useState<AddressAutocompleteResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -30,6 +30,9 @@ export function AddressAutocomplete({
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Expose the input ref to parent component
+  useImperativeHandle(ref, () => inputRef.current as HTMLInputElement);
 
   // Debounced search function
   const debouncedSearch = useCallback(async (query: string) => {
@@ -334,4 +337,4 @@ export function AddressAutocomplete({
       )}
     </div>
   );
-}
+});

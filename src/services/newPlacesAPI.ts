@@ -3,6 +3,8 @@
  * This replaces the Maps JavaScript API with the new Places API (New)
  */
 
+import { get, set } from 'idb-keyval';
+
 export interface PlaceAutocompleteResult {
   place_id: string;
   description: string;
@@ -24,6 +26,118 @@ export interface PlaceDetails {
     };
   };
   types: string[];
+}
+
+// Cache types
+type AutocompleteCache = {
+  [cacheKey: string]: {
+    results: PlaceAutocompleteResult[];
+    timestamp: number;
+  };
+};
+
+type PlaceDetailsCache = {
+  [placeId: string]: {
+    details: PlaceDetails;
+    timestamp: number;
+  };
+};
+
+const AUTOCOMPLETE_CACHE_KEY = 'places-autocomplete-cache';
+const PLACE_DETAILS_CACHE_KEY = 'places-details-cache';
+const AUTOCOMPLETE_CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+const PLACE_DETAILS_CACHE_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+// In-memory cache with IndexedDB persistence
+let autocompleteCache: AutocompleteCache = {};
+let placeDetailsCache: PlaceDetailsCache = {};
+let cachesLoaded = false;
+
+/**
+ * Load caches from IndexedDB
+ */
+async function loadCaches(): Promise<void> {
+  if (cachesLoaded) return;
+
+  try {
+    const [autoCache, detailsCache] = await Promise.all([
+      get(AUTOCOMPLETE_CACHE_KEY),
+      get(PLACE_DETAILS_CACHE_KEY)
+    ]);
+
+    if (autoCache) {
+      autocompleteCache = autoCache;
+    }
+    if (detailsCache) {
+      placeDetailsCache = detailsCache;
+    }
+
+    cachesLoaded = true;
+    console.log('Places API caches loaded:', {
+      autocomplete: Object.keys(autocompleteCache).length,
+      details: Object.keys(placeDetailsCache).length
+    });
+  } catch (error) {
+    console.warn('Failed to load Places API caches:', error);
+    cachesLoaded = true; // Continue even if loading fails
+  }
+}
+
+/**
+ * Save autocomplete cache to IndexedDB
+ */
+async function saveAutocompleteCache(): Promise<void> {
+  try {
+    await set(AUTOCOMPLETE_CACHE_KEY, autocompleteCache);
+  } catch (error) {
+    console.warn('Failed to save autocomplete cache:', error);
+  }
+}
+
+/**
+ * Save place details cache to IndexedDB
+ */
+async function savePlaceDetailsCache(): Promise<void> {
+  try {
+    await set(PLACE_DETAILS_CACHE_KEY, placeDetailsCache);
+  } catch (error) {
+    console.warn('Failed to save place details cache:', error);
+  }
+}
+
+/**
+ * Clean expired entries from caches
+ */
+function cleanExpiredEntries(): void {
+  const now = Date.now();
+
+  // Clean autocomplete cache
+  for (const [key, entry] of Object.entries(autocompleteCache)) {
+    if (now - entry.timestamp > AUTOCOMPLETE_CACHE_DURATION_MS) {
+      delete autocompleteCache[key];
+    }
+  }
+
+  // Clean place details cache
+  for (const [key, entry] of Object.entries(placeDetailsCache)) {
+    if (now - entry.timestamp > PLACE_DETAILS_CACHE_DURATION_MS) {
+      delete placeDetailsCache[key];
+    }
+  }
+}
+
+/**
+ * Generate cache key for autocomplete request
+ */
+function generateAutocompleteCacheKey(
+  input: string,
+  countryCode?: string,
+  types?: string[]
+): string {
+  const normalized = input.trim().toLowerCase();
+  const country = countryCode || 'GB';
+  const typesStr = types?.sort().join(',') || '';
+  return `${normalized}|${country}|${typesStr}`;
 }
 
 /**
@@ -50,6 +164,7 @@ const sessionManager = new SessionManager();
 
 /**
  * Get place autocomplete predictions using the new Places API
+ * Results are cached for 24 hours to minimize API calls
  */
 export async function getPlaceAutocomplete(
   input: string,
@@ -66,6 +181,23 @@ export async function getPlaceAutocomplete(
 
   if (!input.trim() || input.length < 3) {
     return [];
+  }
+
+  // Load cache if not already loaded
+  await loadCaches();
+
+  // Generate cache key
+  const cacheKey = generateAutocompleteCacheKey(
+    input,
+    options.componentRestrictions?.country,
+    options.types
+  );
+
+  // Check cache first
+  const cached = autocompleteCache[cacheKey];
+  if (cached && Date.now() - cached.timestamp < AUTOCOMPLETE_CACHE_DURATION_MS) {
+    console.log(`Using cached autocomplete results for: "${input}"`);
+    return cached.results;
   }
 
   try {
@@ -109,8 +241,9 @@ export async function getPlaceAutocomplete(
     console.log('Places API response:', data);
 
     // Transform the new API response to match our expected format
+    let results: PlaceAutocompleteResult[] = [];
     if (data.suggestions) {
-      return data.suggestions
+      results = data.suggestions
         .filter((suggestion: any) => suggestion.placePrediction)
         .map((suggestion: any) => ({
           place_id: suggestion.placePrediction.placeId,
@@ -123,7 +256,15 @@ export async function getPlaceAutocomplete(
         }));
     }
 
-    return [];
+    // Cache the results
+    autocompleteCache[cacheKey] = {
+      results,
+      timestamp: Date.now()
+    };
+    saveAutocompleteCache().catch(console.warn);
+    cleanExpiredEntries();
+
+    return results;
   } catch (error) {
     console.error('Places API autocomplete failed:', error);
     throw error;
@@ -132,6 +273,7 @@ export async function getPlaceAutocomplete(
 
 /**
  * Get place details using the new Places API
+ * Results are cached for 30 days to minimize API calls
  */
 export async function getPlaceDetailsNew(
   placeId: string,
@@ -140,6 +282,20 @@ export async function getPlaceDetailsNew(
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
     throw new Error('Google Maps API key not configured');
+  }
+
+  // Load cache if not already loaded
+  await loadCaches();
+
+  // Check cache first
+  const cached = placeDetailsCache[placeId];
+  if (cached && Date.now() - cached.timestamp < PLACE_DETAILS_CACHE_DURATION_MS) {
+    console.log(`Using cached place details for: ${placeId}`);
+    // Still clear session token even when using cache
+    if (sessionToken) {
+      sessionManager.clearToken();
+    }
+    return cached.details;
   }
 
   try {
@@ -169,7 +325,7 @@ export async function getPlaceDetailsNew(
     }
 
     if (data.id && data.location) {
-      return {
+      const placeDetails: PlaceDetails = {
         place_id: data.id,
         name: data.displayName?.text || '',
         formatted_address: data.formattedAddress || '',
@@ -181,6 +337,16 @@ export async function getPlaceDetailsNew(
         },
         types: data.types || []
       };
+
+      // Cache the result
+      placeDetailsCache[placeId] = {
+        details: placeDetails,
+        timestamp: Date.now()
+      };
+      savePlaceDetailsCache().catch(console.warn);
+      cleanExpiredEntries();
+
+      return placeDetails;
     }
 
     return null;
@@ -213,4 +379,62 @@ export function getCurrentSessionToken(): string | null {
  */
 export function clearCurrentSessionToken(): void {
   sessionManager.clearToken();
+}
+
+/**
+ * Get cache statistics for debugging
+ */
+export function getPlacesCacheStats(): {
+  autocomplete: { total: number; valid: number; expired: number };
+  placeDetails: { total: number; valid: number; expired: number };
+} {
+  const now = Date.now();
+
+  // Autocomplete cache stats
+  let autoValid = 0;
+  let autoExpired = 0;
+  for (const entry of Object.values(autocompleteCache)) {
+    if (now - entry.timestamp < AUTOCOMPLETE_CACHE_DURATION_MS) {
+      autoValid++;
+    } else {
+      autoExpired++;
+    }
+  }
+
+  // Place details cache stats
+  let detailsValid = 0;
+  let detailsExpired = 0;
+  for (const entry of Object.values(placeDetailsCache)) {
+    if (now - entry.timestamp < PLACE_DETAILS_CACHE_DURATION_MS) {
+      detailsValid++;
+    } else {
+      detailsExpired++;
+    }
+  }
+
+  return {
+    autocomplete: {
+      total: Object.keys(autocompleteCache).length,
+      valid: autoValid,
+      expired: autoExpired
+    },
+    placeDetails: {
+      total: Object.keys(placeDetailsCache).length,
+      valid: detailsValid,
+      expired: detailsExpired
+    }
+  };
+}
+
+/**
+ * Clear all Places API caches
+ */
+export async function clearPlacesCaches(): Promise<void> {
+  autocompleteCache = {};
+  placeDetailsCache = {};
+  await Promise.all([
+    saveAutocompleteCache(),
+    savePlaceDetailsCache()
+  ]);
+  console.log('Places API caches cleared');
 }

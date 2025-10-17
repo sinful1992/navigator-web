@@ -27,7 +27,7 @@ type GeocodeCache = {
 };
 
 const CACHE_KEY = 'geocode-cache';
-const CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const CACHE_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
 class GeocodingService {
   private cache: GeocodeCache = {};
