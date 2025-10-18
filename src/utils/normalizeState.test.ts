@@ -37,6 +37,7 @@ describe('normalizeState', () => {
       bonusSettings: {
         enabled: false,
         calculationType: 'simple',
+        adjustForWorkingDays: false,
       },
     };
 

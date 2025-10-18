@@ -38,7 +38,6 @@ import { usePWAInit } from "./hooks/usePWAInit";
 import { useDataCleanup } from "./hooks/useDataCleanup";
 import { reconcileSessionState } from "./services/sessionReconciliation";
 import { formatDateKey } from "./utils/dateFormatter";
-import { getUserInitials } from "./utils/userUtils";
 import { useStats } from "./hooks/useStats";
 import { OwnershipPrompt } from "./components/OwnershipPrompt";
 import { Sidebar } from "./components/Sidebar";
@@ -1646,7 +1645,7 @@ function AuthedApp() {
                   handleImportExcel(out);
                   logger.info(`✅ Successfully imported ${out.length} addresses!`);
                 } catch (err) {
-                  logger.error(err);
+                  logger.error(err as Error);
                   alert({ message: "❌ Failed to read Excel file. Please ensure it's a valid .xlsx or .xls file." });
                 }
               }}

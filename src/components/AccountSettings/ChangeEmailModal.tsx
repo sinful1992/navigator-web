@@ -1,5 +1,4 @@
 // src/components/AccountSettings/ChangeEmailModal.tsx
-import * as React from 'react';
 import { supabase } from '../../lib/supabaseClient';
 
 export interface ChangeEmailModalProps {

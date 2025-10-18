@@ -1,5 +1,4 @@
 // src/components/AccountSettings/DeleteAccountModal.tsx
-import * as React from 'react';
 import { supabase } from '../../lib/supabaseClient';
 
 export interface DeleteAccountModalProps {

@@ -88,10 +88,10 @@ export function ImportExcel({ onImported }: Props) {
       
       // Use a subtle notification instead of alert
       logger.info(message);
-      
+
       // You could implement a toast notification here instead
     } catch (err) {
-      logger.error(err);
+      logger.error(err as Error);
       alert("❌ Failed to read Excel file. Please ensure it's a valid .xlsx or .xls file.");
     } finally {
       loadingRef.current = false;

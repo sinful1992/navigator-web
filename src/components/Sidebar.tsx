@@ -1,5 +1,4 @@
 // src/components/Sidebar.tsx
-import * as React from 'react';
 import { getUserInitials } from '../utils/userUtils';
 import type { Tab } from '../App';
 

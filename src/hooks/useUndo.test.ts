@@ -35,7 +35,8 @@ describe('useUndo', () => {
     it('should generate unique action IDs', () => {
       const { result } = renderHook(() => useUndo());
 
-      let id1: string, id2: string;
+      let id1!: string;
+      let id2!: string;
 
       act(() => {
         id1 = result.current.pushUndo('completion', { test: 'data1' });

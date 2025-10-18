@@ -1,5 +1,4 @@
 // src/components/OwnershipPrompt.tsx
-import * as React from 'react';
 import { useModalContext } from './ModalProvider';
 import { SmartUserDetection } from '../utils/userDetection';
 import { logger } from '../utils/logger';

@@ -38,6 +38,7 @@ describe('dataCleanup', () => {
     bonusSettings: {
       enabled: false,
       calculationType: 'simple',
+      adjustForWorkingDays: false,
     },
   });
 
