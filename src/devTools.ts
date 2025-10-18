@@ -23,6 +23,8 @@ import { changeTracker } from './services/changeTracker';
 import { optimisticUI } from './services/optimisticUI';
 import { getEchoFilterStats, resetEchoFilterStats } from './utils/echoFilter';
 
+import { logger } from './utils/logger';
+
 // Define the type for our dev tools
 export interface NavigatorDevTools {
   // Testing
@@ -59,7 +61,7 @@ export interface NavigatorDevTools {
  * Help text
  */
 function showHelp() {
-  console.log(`
+  logger.info(`
 ╔═══════════════════════════════════════════════════════════════╗
 ║          Navigator Web - Optimistic UI Dev Tools              ║
 ╚═══════════════════════════════════════════════════════════════╝
@@ -142,7 +144,7 @@ export const devTools: NavigatorDevTools = {
 export function installDevTools() {
   if (typeof window !== 'undefined') {
     (window as any).NavDev = devTools;
-    console.log('✅ Navigator Dev Tools installed - Type "NavDev.help()" for commands');
+    logger.info('✅ Navigator Dev Tools installed - Type "NavDev.help()" for commands');
   }
 }
 

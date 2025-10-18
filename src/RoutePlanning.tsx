@@ -19,6 +19,8 @@ import {
 } from "./services/hybridRouting";
 import type { User } from "@supabase/supabase-js";
 
+import { logger } from './utils/logger';
+
 interface RoutePlanningProps {
   user: User | null;
   onAddressesReady: (addresses: AddressRow[]) => void;
@@ -153,7 +155,7 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
       setAddresses(updatedAddresses);
       setOptimizationResult(null);
     } catch (error) {
-      console.error('Single geocoding failed:', error);
+      logger.error('Single geocoding failed:', error);
       alert('Geocoding failed. Please check your connection and subscription.');
     }
   };
@@ -211,7 +213,7 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
       setOptimizationResult(null);
 
     } catch (error) {
-      console.error('Batch geocoding failed:', error);
+      logger.error('Batch geocoding failed:', error);
       alert('Geocoding failed. Please check your connection and subscription.');
     } finally {
       setIsGeocoding(false);
@@ -290,7 +292,7 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
       }
 
     } catch (error) {
-      console.error('Route optimization failed:', error);
+      logger.error('Route optimization failed:', error);
       setOptimizationResult({
         optimizedOrder: [],
         totalDistance: 0,

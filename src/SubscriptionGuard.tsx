@@ -2,6 +2,8 @@ import React from "react";
 import type { User } from "@supabase/supabase-js";
 import { useSubscription } from "./useSubscription";
 
+import { logger } from './utils/logger';
+
 interface SubscriptionGuardProps {
   user: User | null;
   fallback?: React.ReactNode;
@@ -58,7 +60,7 @@ export function SubscriptionGuard({ user, fallback, children }: SubscriptionGuar
       featureName="Premium Feature"
       onUpgrade={() => {
         // This could open a subscription modal or redirect to pricing
-        console.log('Upgrade clicked - implement subscription flow');
+        logger.info('Upgrade clicked - implement subscription flow');
       }}
     />
   );
@@ -79,7 +81,7 @@ export function withSubscriptionGuard<P extends object>(
           <FeatureLocked 
             featureName={featureName || "Premium Feature"}
             onUpgrade={() => {
-              console.log('Upgrade clicked for', featureName);
+              logger.info('Upgrade clicked for', featureName);
             }}
           />
         }
@@ -96,7 +98,7 @@ export function useSubscriptionGuard(user: User | null) {
   
   const requiresSubscription = (featureName?: string) => {
     if (!subscription.hasAccess) {
-      console.warn(`Feature "${featureName || 'unknown'}" requires subscription (or owner access)`);
+      logger.warn(`Feature "${featureName || 'unknown'}" requires subscription (or owner access)`);
       return false;
     }
     return true;

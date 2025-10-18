@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
 
+import { logger } from './utils/logger';
+
 interface AdminUser {
   id: string;
   user_id: string;
@@ -112,7 +114,7 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
         .rpc('is_admin', { user_uuid: user.id });
 
       if (adminCheckError) {
-        console.error('Admin check error:', adminCheckError);
+        logger.error('Admin check error:', adminCheckError);
         throw adminCheckError;
       }
 
@@ -135,7 +137,7 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
         .rpc('get_admin_subscription_overview');
 
       if (subsError) {
-        console.error('Subscription overview error:', subsError);
+        logger.error('Subscription overview error:', subsError);
         throw subsError;
       }
       setSubscriptions(subsData || []);
@@ -157,13 +159,13 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
           .limit(20);
 
         if (actionsError) {
-          console.warn('Admin actions table not found or error:', actionsError);
+          logger.warn('Admin actions table not found or error:', actionsError);
           actionsData = [];
         } else {
           actionsData = data || [];
         }
       } catch (e) {
-        console.warn('Failed to load admin actions:', e);
+        logger.warn('Failed to load admin actions:', e);
         actionsData = [];
       }
       
@@ -182,7 +184,7 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
       if (!deletionsError) {
         setUpcomingDeletions(deletionsData || []);
       } else {
-        console.warn('Failed to load upcoming deletions:', deletionsError);
+        logger.warn('Failed to load upcoming deletions:', deletionsError);
       }
 
     } catch (e: any) {

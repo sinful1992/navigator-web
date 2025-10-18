@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from './lib/supabaseClient';
 
+import { logger } from './utils/logger';
+
 interface AdminUser {
   id: string;
   user_id: string;
@@ -65,7 +67,7 @@ export function useAdmin(user: User | null): UseAdmin {
           .rpc('is_owner', { user_uuid: user.id });
 
         if (ownerCheckError) {
-          console.warn('Failed to check owner status:', ownerCheckError);
+          logger.warn('Failed to check owner status:', ownerCheckError);
         } else {
           setIsOwner(ownerCheck || false);
         }
@@ -78,7 +80,7 @@ export function useAdmin(user: User | null): UseAdmin {
           .single();
 
         if (adminError) {
-          console.warn('Failed to fetch admin user details:', adminError);
+          logger.warn('Failed to fetch admin user details:', adminError);
         } else {
           setAdminUser(adminData);
         }
@@ -89,7 +91,7 @@ export function useAdmin(user: User | null): UseAdmin {
 
     } catch (e: any) {
       // Don't set error for permission issues - just not admin
-      console.log('Admin check failed:', e.message);
+      logger.info('Admin check failed:', e.message);
       setIsAdmin(false);
       setIsOwner(false);
       setAdminUser(null);

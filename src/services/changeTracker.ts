@@ -10,6 +10,8 @@
 
 import { get, set, del, entries } from 'idb-keyval';
 
+import { logger } from '../utils/logger';
+
 export type ChangeType =
   | 'set_active'
   | 'complete'
@@ -108,7 +110,7 @@ class ChangeTrackerService {
         this.config = { ...DEFAULT_CONFIG, ...stored };
       }
     } catch (err) {
-      console.warn('Failed to load change tracker config:', err);
+      logger.warn('Failed to load change tracker config:', err);
     }
   }
 
@@ -119,9 +121,9 @@ class ChangeTrackerService {
     this.config = { ...this.config, ...updates };
     try {
       await set(CONFIG_KEY, this.config);
-      console.log('✅ Change tracker config updated:', this.config);
+      logger.info('✅ Change tracker config updated:', this.config);
     } catch (err) {
-      console.error('Failed to save change tracker config:', err);
+      logger.error('Failed to save change tracker config:', err);
     }
   }
 
@@ -138,7 +140,7 @@ class ChangeTrackerService {
   async enable(): Promise<void> {
     await this.updateConfig({ enabled: true });
     this.startCleanupInterval();
-    console.log('✅ Change tracking ENABLED');
+    logger.info('✅ Change tracking ENABLED');
   }
 
   /**
@@ -147,7 +149,7 @@ class ChangeTrackerService {
   async disable(): Promise<void> {
     await this.updateConfig({ enabled: false });
     this.stopCleanupInterval();
-    console.log('❌ Change tracking DISABLED');
+    logger.info('❌ Change tracking DISABLED');
   }
 
   /**
@@ -188,7 +190,7 @@ class ChangeTrackerService {
       await set(key, change);
 
       if (import.meta.env.DEV) {
-        console.log('📝 Change tracked:', {
+        logger.info('📝 Change tracked:', {
           id: changeId,
           type,
           deviceId: this.deviceId,
@@ -202,7 +204,7 @@ class ChangeTrackerService {
 
       return changeId;
     } catch (err) {
-      console.error('Failed to track change:', err);
+      logger.error('Failed to track change:', err);
       return '';
     }
   }
@@ -223,11 +225,11 @@ class ChangeTrackerService {
         await set(key, change);
 
         if (import.meta.env.DEV) {
-          console.log('✅ Change marked as synced:', changeId);
+          logger.info('✅ Change marked as synced:', changeId);
         }
       }
     } catch (err) {
-      console.error('Failed to mark change as synced:', err);
+      logger.error('Failed to mark change as synced:', err);
     }
   }
 
@@ -282,7 +284,7 @@ class ChangeTrackerService {
 
         if (matches) {
           if (import.meta.env.DEV) {
-            console.log('🔍 Echo detected! Cloud update matches local change:', {
+            logger.info('🔍 Echo detected! Cloud update matches local change:', {
               changeId: change.id,
               changeType: change.type,
               age: `${now - change.timestamp}ms ago`,
@@ -294,7 +296,7 @@ class ChangeTrackerService {
 
       return false;
     } catch (err) {
-      console.error('Failed to check for echo:', err);
+      logger.error('Failed to check for echo:', err);
       return false; // On error, allow the update (safer)
     }
   }
@@ -310,7 +312,7 @@ class ChangeTrackerService {
         .map(([, change]) => change)
         .sort((a, b) => b.timestamp - a.timestamp); // Newest first
     } catch (err) {
-      console.error('Failed to get all changes:', err);
+      logger.error('Failed to get all changes:', err);
       return [];
     }
   }
@@ -357,12 +359,12 @@ class ChangeTrackerService {
       }
 
       if (import.meta.env.DEV && removed > 0) {
-        console.log(`🧹 Cleaned up ${removed} expired change(s)`);
+        logger.info(`🧹 Cleaned up ${removed} expired change(s)`);
       }
 
       return removed;
     } catch (err) {
-      console.error('Failed to cleanup changes:', err);
+      logger.error('Failed to cleanup changes:', err);
       return 0;
     }
   }
@@ -385,11 +387,11 @@ class ChangeTrackerService {
         }
 
         if (import.meta.env.DEV) {
-          console.log(`🧹 Enforced max changes limit, removed ${toRemove.length} old change(s)`);
+          logger.info(`🧹 Enforced max changes limit, removed ${toRemove.length} old change(s)`);
         }
       }
     } catch (err) {
-      console.error('Failed to enforce max changes:', err);
+      logger.error('Failed to enforce max changes:', err);
     }
   }
 
@@ -404,9 +406,9 @@ class ChangeTrackerService {
           await del(key);
         }
       }
-      console.log('🧹 All change tracking cleared');
+      logger.info('🧹 All change tracking cleared');
     } catch (err) {
-      console.error('Failed to clear all changes:', err);
+      logger.error('Failed to clear all changes:', err);
     }
   }
 
@@ -419,12 +421,12 @@ class ChangeTrackerService {
     // Run cleanup every minute
     this.cleanupInterval = setInterval(() => {
       this.cleanup().catch(err => {
-        console.error('Cleanup interval failed:', err);
+        logger.error('Cleanup interval failed:', err);
       });
     }, 60 * 1000);
 
     if (import.meta.env.DEV) {
-      console.log('🧹 Change tracker cleanup interval started');
+      logger.info('🧹 Change tracker cleanup interval started');
     }
   }
 
@@ -436,7 +438,7 @@ class ChangeTrackerService {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
       if (import.meta.env.DEV) {
-        console.log('🧹 Change tracker cleanup interval stopped');
+        logger.info('🧹 Change tracker cleanup interval stopped');
       }
     }
   }

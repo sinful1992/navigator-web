@@ -2,6 +2,8 @@ import * as React from 'react';
 import { format, parseISO } from 'date-fns';
 import { LoadingButton } from './LoadingButton';
 import { ReminderSettings as ReminderSettingsModal } from './ReminderSettings';
+import { logger } from '../utils/logger';
+
 import type { 
   AppState, 
   ReminderNotification, 
@@ -60,7 +62,7 @@ export function ReminderDashboard({
       await onSendReminder(arrangement);
       onUpdateReminderNotification(reminder.id, 'sent');
     } catch (error) {
-      console.error('Failed to send reminder:', error);
+      logger.error('Failed to send reminder:', error);
       alert('Failed to send reminder. Please try again.');
     } finally {
       setSendingReminders(prev => {

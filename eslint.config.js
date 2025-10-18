@@ -19,5 +19,18 @@ export default tseslint.config([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Prevent console usage - use logger instead
+      'no-console': ['error', {
+        allow: [] // No console methods allowed (use logger.* instead)
+      }],
+    },
+  },
+  // Allow console in test files and logger.ts itself
+  {
+    files: ['**/*.test.{ts,tsx}', '**/setupTests.ts', '**/logger.ts', '**/scripts/**'],
+    rules: {
+      'no-console': 'off',
+    },
   },
 ])

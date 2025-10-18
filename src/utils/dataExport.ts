@@ -3,6 +3,8 @@
 
 import type { AppState } from '../types';
 
+import { logger } from './logger';
+
 /**
  * Export all user data as JSON (GDPR Article 20 - Right to Data Portability)
  */
@@ -215,10 +217,10 @@ export async function clearLocalCaches(): Promise<void> {
       await Promise.all(mapCaches.map(name => caches.delete(name)));
     }
 
-    console.log(`Cleared ${geocodingKeys.length} geocoding cache entries`);
+    logger.info(`Cleared ${geocodingKeys.length} geocoding cache entries`);
     alert(`Cache cleared successfully!\n\nRemoved:\n- ${geocodingKeys.length} geocoding entries\n- Map tile caches`);
   } catch (error) {
-    console.error('Failed to clear caches:', error);
+    logger.error('Failed to clear caches:', error);
     alert('Failed to clear some caches. See console for details.');
   }
 }

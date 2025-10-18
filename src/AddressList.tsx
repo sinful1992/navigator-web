@@ -4,6 +4,8 @@ import type { AppState, Outcome, AddressRow, Arrangement } from "./types";
 import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
+import { logger } from './utils/logger';
+
 import "leaflet/dist/leaflet.css";
 
 type Props = {
@@ -211,7 +213,7 @@ const AddressListComponent = function AddressList({
         await onComplete(index, outcome, amount, arrangementId, caseRef, numCases, enfFees);
         setOutcomeOpenFor(null);
       } catch (error) {
-        console.error('Completion failed:', error);
+        logger.error('Completion failed:', error);
         throw error;
       } finally {
         setSubmittingIndex(null);

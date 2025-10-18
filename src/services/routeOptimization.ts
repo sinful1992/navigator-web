@@ -1,5 +1,7 @@
 import type { AddressRow } from "../types";
 
+import { logger } from '../utils/logger';
+
 // OpenRouteService API configuration
 const ORS_BASE_URL = "https://api.openrouteservice.org/v2";
 
@@ -117,7 +119,7 @@ export async function optimizeRoute(
       vehicles
     };
 
-    console.log('Sending optimization request to OpenRouteService:', requestBody);
+    logger.info('Sending optimization request to OpenRouteService:', requestBody);
 
     const response = await fetch(`${ORS_BASE_URL}/optimization`, {
       method: 'POST',
@@ -135,7 +137,7 @@ export async function optimizeRoute(
     }
 
     const data: OptimizationResponse = await response.json();
-    console.log('Received optimization response:', data);
+    logger.info('Received optimization response:', data);
 
     if (data.code !== 0) {
       throw new Error(`Optimization failed with code: ${data.code}`);
@@ -176,7 +178,7 @@ export async function optimizeRoute(
     };
 
   } catch (error) {
-    console.error('Route optimization failed:', error);
+    logger.error('Route optimization failed:', error);
     return {
       success: false,
       optimizedOrder: [],
@@ -225,7 +227,7 @@ export async function getDirections(
       duration: route.summary.duration  // seconds
     };
   } catch (error) {
-    console.error('Failed to get directions:', error);
+    logger.error('Failed to get directions:', error);
     return null;
   }
 }

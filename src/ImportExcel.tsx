@@ -4,6 +4,8 @@ import * as XLSX from "xlsx";
 import type { AddressRow } from "./types";
 import { LoadingButton } from "./components/LoadingButton";
 
+import { logger } from './utils/logger';
+
 type Props = {
   onImported: (rows: AddressRow[]) => void;
 };
@@ -85,11 +87,11 @@ export function ImportExcel({ onImported }: Props) {
       }!`;
       
       // Use a subtle notification instead of alert
-      console.log(message);
+      logger.info(message);
       
       // You could implement a toast notification here instead
     } catch (err) {
-      console.error(err);
+      logger.error(err);
       alert("❌ Failed to read Excel file. Please ensure it's a valid .xlsx or .xls file.");
     } finally {
       loadingRef.current = false;

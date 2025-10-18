@@ -55,7 +55,7 @@ class GeocodingService {
         this.cleanExpiredEntries();
       }
     } catch (error) {
-      console.warn('Failed to load geocoding cache:', error);
+      logger.warn('Failed to load geocoding cache:', error);
       // Don't overwrite existing cache on error
     } finally {
       this.isLoadingCache = false;
@@ -67,7 +67,7 @@ class GeocodingService {
     try {
       await set(CACHE_KEY, this.cache);
     } catch (error) {
-      console.warn('Failed to save geocoding cache:', error);
+      logger.warn('Failed to save geocoding cache:', error);
     }
   }
 
@@ -128,7 +128,7 @@ class GeocodingService {
 
     // Try JavaScript SDK first (bypasses referer restrictions)
     try {
-      console.log(`Geocoding with Google Maps SDK: "${address}"`);
+      logger.info(`Geocoding with Google Maps SDK: "${address}"`);
       const { geocodeAddressSDK, isGoogleMapsSDKAvailable } = await import('./googleMapsSDK');
 
       if (isGoogleMapsSDKAvailable()) {
@@ -140,7 +140,7 @@ class GeocodingService {
             result,
             timestamp: Date.now(),
           };
-          this.saveCache().catch(console.warn);
+          this.saveCache().catch(logger.warn);
           return result;
         } else {
           // Cache negative results too to avoid repeated SDK calls
@@ -148,11 +148,11 @@ class GeocodingService {
             result,
             timestamp: Date.now(),
           };
-          this.saveCache().catch(console.warn);
+          this.saveCache().catch(logger.warn);
         }
       }
     } catch (sdkError) {
-      console.warn('JavaScript SDK geocoding failed, falling back to Supabase Edge Function:', sdkError);
+      logger.warn('JavaScript SDK geocoding failed, falling back to Supabase Edge Function:', sdkError);
     }
 
     // Return failure - fallback to Supabase Edge Function will be handled in the calling function
@@ -217,7 +217,7 @@ export async function geocodeAddress(
       return result;
     }
   } catch (error) {
-    console.warn('Direct Google Maps API failed, trying Supabase Edge Function:', error);
+    logger.warn('Direct Google Maps API failed, trying Supabase Edge Function:', error);
   }
 
   // Fallback to Supabase Edge Function if direct API fails
@@ -228,7 +228,7 @@ export async function geocodeAddress(
       return results[0];
     }
   } catch (error) {
-    console.warn('Centralized geocoding also failed:', error);
+    logger.warn('Centralized geocoding also failed:', error);
   }
 
   // Return unsuccessful result if both fail
@@ -277,7 +277,7 @@ export async function geocodeAddresses(
   // If many addresses failed, try Supabase Edge Function as fallback
   const failedCount = results.filter(r => !r.success).length;
   if (failedCount > addresses.length * 0.5) { // If more than 50% failed
-    console.warn(`${failedCount}/${addresses.length} addresses failed with direct API, trying Supabase Edge Function...`);
+    logger.warn(`${failedCount}/${addresses.length} addresses failed with direct API, trying Supabase Edge Function...`);
     try {
       const { geocodeAddresses: centralizedGeocode } = await import('./centralizedRouting');
       const fallbackResults = await centralizedGeocode(addresses, onProgress);
@@ -287,7 +287,7 @@ export async function geocodeAddresses(
         result.success ? result : fallbackResults[idx]
       );
     } catch (error) {
-      console.warn('Centralized batch geocoding also failed:', error);
+      logger.warn('Centralized batch geocoding also failed:', error);
     }
   }
 
@@ -295,6 +295,8 @@ export async function geocodeAddresses(
 }
 
 import { getPlaceAutocomplete, getPlaceDetailsNew, isNewPlacesAPIAvailable, getCurrentSessionToken, clearCurrentSessionToken } from './newPlacesAPI';
+
+import { logger } from '../utils/logger';
 
 // Legacy session token management - now handled by newPlacesAPI service
 
@@ -314,7 +316,7 @@ export async function searchAddresses(
   // Try Google Places API directly first
   if (isNewPlacesAPIAvailable()) {
     try {
-      console.log(`Searching addresses with Google Places API: "${query}"`);
+      logger.info(`Searching addresses with Google Places API: "${query}"`);
 
       const predictions = await getPlaceAutocomplete(query, {
         componentRestrictions: { country: countryCode.toLowerCase() },
@@ -331,7 +333,7 @@ export async function searchAddresses(
       }
 
     } catch (error) {
-      console.warn('Google Places API search failed, trying Supabase Edge Function:', error);
+      logger.warn('Google Places API search failed, trying Supabase Edge Function:', error);
     }
   }
 
@@ -343,7 +345,7 @@ export async function searchAddresses(
       return results;
     }
   } catch (error) {
-    console.warn('Centralized address search also failed:', error);
+    logger.warn('Centralized address search also failed:', error);
   }
 
   // Final fallback to basic geocoding
@@ -359,7 +361,7 @@ export async function searchAddresses(
         }];
       }
     } catch (fallbackError) {
-      console.warn('Direct geocoding fallback also failed:', fallbackError);
+      logger.warn('Direct geocoding fallback also failed:', fallbackError);
     }
   }
 
@@ -397,7 +399,7 @@ export async function resolveSelectedPlace(placeId: string): Promise<{
       }
     } catch (error) {
       clearCurrentSessionToken(); // Clear on error too
-      console.error('Failed to resolve place details with new API:', error);
+      logger.error('Failed to resolve place details with new API:', error);
     }
   }
 
@@ -414,7 +416,7 @@ export async function resolveSelectedPlace(placeId: string): Promise<{
         };
       }
     } catch (error) {
-      console.warn('Geocoding fallback for place resolution failed:', error);
+      logger.warn('Geocoding fallback for place resolution failed:', error);
     }
   }
 

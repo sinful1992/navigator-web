@@ -4,6 +4,8 @@ import L from "leaflet";
 import type { AddressRow } from "../types";
 import { getOptimizedRouteDirections } from "../services/hybridRouting";
 
+import { logger } from '../utils/logger';
+
 // Create numbered marker icon
 function createNumberedIcon(number: number, isStart: boolean, isGeocoded: boolean, confidence?: number): L.DivIcon {
   let pinClass = 'marker-pin';
@@ -128,7 +130,7 @@ export function LeafletMap({
       // Validate that optimizedOrder indices are valid for addresses array
       const invalidIndices = optimizedOrder.filter(idx => idx < 0 || idx >= addresses.length);
       if (invalidIndices.length > 0) {
-        console.error('Invalid optimizedOrder indices:', invalidIndices);
+        logger.error('Invalid optimizedOrder indices:', invalidIndices);
         setRouteSegments([]);
         return;
       }
@@ -153,11 +155,11 @@ export function LeafletMap({
           setRouteSegments(result.routeSegments);
           lastFetchedOrderRef.current = routeKey; // Mark as fetched
         } else {
-          console.error('Route directions failed:', result.error);
+          logger.error('Route directions failed:', result.error);
           setRouteSegments([]);
         }
       } catch (error) {
-        console.error('Route directions error:', error);
+        logger.error('Route directions error:', error);
         setRouteSegments([]);
       } finally {
         setIsLoadingRoute(false);

@@ -2,6 +2,8 @@ import React from 'react';
 import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome } from '../types';
 import { LoadingButton } from './LoadingButton';
 import { addWeeks, addMonths, format, parseISO } from 'date-fns';
+import { logger } from '../utils/logger';
+
 import './arrangementForm.css';
 
 type PreviousPayment = {
@@ -94,7 +96,7 @@ export default function UnifiedArrangementForm({
     try {
       localStorage.setItem('uaf-collapsed-sections', JSON.stringify(collapsed));
     } catch (e) {
-      console.error('Failed to save collapse preferences:', e);
+      logger.error('Failed to save collapse preferences:', e);
     }
   }, [collapsed]);
 
@@ -366,13 +368,13 @@ export default function UnifiedArrangementForm({
           try {
             onComplete(finalAddressIndex, "PIF", payment.amount);
           } catch (error) {
-            console.error('Error recording previous payment:', error);
+            logger.error('Error recording previous payment:', error);
           }
         }
       }
 
     } catch (error) {
-      console.error('Error saving arrangement:', error);
+      logger.error('Error saving arrangement:', error);
       alert(`Failed to save arrangement: ${error instanceof Error ? error.message : 'Please try again.'}`);
     } finally {
       setIsSubmitting(false);

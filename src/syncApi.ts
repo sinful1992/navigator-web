@@ -3,6 +3,8 @@ import type { SyncOp, ApplyOpsResult, ApplyOpsConflict } from "./syncTypes";
 // 🔧 FIXED: Changed import to use the correct supabase client
 import { supabase } from "./lib/supabaseClient";
 
+import { logger } from './utils/logger';
+
 type RpcResponse = {
   ok?: boolean;
   conflicts?: any[]; // JSONB array from SQL
@@ -19,7 +21,7 @@ export async function applyOps(ops: SyncOp[]): Promise<ApplyOpsResult> {
     );
 
     if (error) {
-      console.warn("[applyOps] RPC error:", error);
+      logger.warn("[applyOps] RPC error:", error);
       return { ok: false, retryAfterMs: 1000 };
     }
 
@@ -29,7 +31,7 @@ export async function applyOps(ops: SyncOp[]): Promise<ApplyOpsResult> {
       try {
         resp = JSON.parse(resp) as RpcResponse;
       } catch (parseError) {
-        console.warn("[applyOps] Failed to parse response string:", parseError);
+        logger.warn("[applyOps] Failed to parse response string:", parseError);
       }
     }
 
@@ -44,7 +46,7 @@ export async function applyOps(ops: SyncOp[]): Promise<ApplyOpsResult> {
 
     return { ok: !!resp?.ok, ...(conflicts && conflicts.length ? { conflicts } : {}) };
   } catch (e) {
-    console.warn("[applyOps] exception:", e);
+    logger.warn("[applyOps] exception:", e);
     return { ok: false, retryAfterMs: 1500 };
   }
 }

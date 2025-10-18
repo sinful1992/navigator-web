@@ -3,6 +3,8 @@ import * as React from "react";
 import type { AddressRow, Completion, DaySession, Outcome, Arrangement, AppState } from "./types";
 import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
 
+import { logger } from './utils/logger';
+
 type AppStateSlice = {
   addresses: AddressRow[];
   completions: Completion[];
@@ -67,7 +69,7 @@ function safeDurationSeconds(s: DaySession): number {
       const en = new Date(s.end).getTime();
       if (isFinite(st) && isFinite(en) && en > st) return Math.floor((en - st) / 1000);
     } catch (error) {
-      console.warn("Failed to calculate duration:", error);
+      logger.warn("Failed to calculate duration:", error);
     }
   }
   return 0;

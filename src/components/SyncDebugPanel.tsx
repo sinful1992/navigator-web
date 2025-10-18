@@ -5,6 +5,8 @@ import { getOperationLog } from '../sync/operationLog';
 import { setSyncModeOverride } from '../sync/migrationAdapter';
 import type { Operation } from '../sync/operations';
 
+import { logger } from '../utils/logger';
+
 type Props = {
   visible?: boolean;
   position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
@@ -265,7 +267,7 @@ export function SyncDebugPanel({
           </button>
           <button
             style={buttonStyle}
-            onClick={() => console.log('AppState:', appState)}
+            onClick={() => logger.info('AppState:', appState)}
           >
             Log to Console
           </button>

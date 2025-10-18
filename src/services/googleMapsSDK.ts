@@ -5,6 +5,8 @@
 
 /// <reference types="google.maps" />
 
+import { logger } from '../utils/logger';
+
 declare global {
   interface Window {
     google: typeof google;
@@ -113,7 +115,7 @@ export async function getPlacesPredictions(
       } else if (status === window.google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
         resolve([]);
       } else {
-        console.error(`Places service error: ${status}`);
+        logger.error(`Places service error: ${status}`);
         reject(new Error(`Places service error: ${status}`));
       }
     });
@@ -149,10 +151,10 @@ export async function getPlaceDetails(
 
     let cleanupAttempted = false;
     const cleanupTempDiv = () => {
-      console.debug('[GoogleMapsSDK] Attempting temp div cleanup');
+      logger.debug('[GoogleMapsSDK] Attempting temp div cleanup');
 
       if (cleanupAttempted) {
-        console.debug('[GoogleMapsSDK] Cleanup already attempted, skipping');
+        logger.debug('[GoogleMapsSDK] Cleanup already attempted, skipping');
         return;
       }
       cleanupAttempted = true;
@@ -166,53 +168,53 @@ export async function getPlaceDetails(
             ? parent.contains(tempDiv)
             : false;
 
-      console.debug('[GoogleMapsSDK] Temp div attachment status:', {
+      logger.debug('[GoogleMapsSDK] Temp div attachment status:', {
         hasParentNode: parent instanceof Node,
         isAttached
       });
 
       if (!isAttached) {
-        console.debug('[GoogleMapsSDK] Temp div already detached, nothing to clean up');
+        logger.debug('[GoogleMapsSDK] Temp div already detached, nothing to clean up');
         return;
       }
 
       if (typeof tempDiv.remove === 'function') {
-        console.debug('[GoogleMapsSDK] Removing temp div via Element.remove()');
+        logger.debug('[GoogleMapsSDK] Removing temp div via Element.remove()');
         tempDiv.remove();
         return;
       }
 
       if (!(parent instanceof Node)) {
-        console.debug('[GoogleMapsSDK] Current parent is not a Node, aborting fallback removal');
+        logger.debug('[GoogleMapsSDK] Current parent is not a Node, aborting fallback removal');
         return;
       }
 
       if (!parent.contains(tempDiv)) {
-        console.debug('[GoogleMapsSDK] Current parent no longer contains temp div, aborting fallback removal');
+        logger.debug('[GoogleMapsSDK] Current parent no longer contains temp div, aborting fallback removal');
         return;
       }
 
       try {
         parent.removeChild(tempDiv);
-        console.debug('[GoogleMapsSDK] Fallback removal via removeChild() succeeded');
+        logger.debug('[GoogleMapsSDK] Fallback removal via removeChild() succeeded');
       } catch (error) {
         if (error instanceof DOMException && error.name === 'NotFoundError') {
-          console.debug('[GoogleMapsSDK] Fallback removal skipped: temp div already detached');
+          logger.debug('[GoogleMapsSDK] Fallback removal skipped: temp div already detached');
           return;
         }
-        console.debug('Temp div cleanup encountered an unexpected error:', error);
+        logger.debug('Temp div cleanup encountered an unexpected error:', error);
       }
     };
 
     const deferCleanup = () => {
-      console.debug('[GoogleMapsSDK] Scheduling deferred temp div cleanup');
+      logger.debug('[GoogleMapsSDK] Scheduling deferred temp div cleanup');
       const runCleanup = () => {
-        console.debug('[GoogleMapsSDK] Running deferred temp div cleanup');
+        logger.debug('[GoogleMapsSDK] Running deferred temp div cleanup');
         try {
           cleanupTempDiv();
         } catch (error) {
           // Ignore cleanup errors - div might already be removed by SDK
-          console.debug('Deferred temp div cleanup error (ignoring):', error);
+          logger.debug('Deferred temp div cleanup error (ignoring):', error);
         }
       };
 
@@ -288,7 +290,7 @@ export async function geocodeAddressSDK(address: string): Promise<{
             error: 'No geocoding results found'
           });
         } else {
-          console.warn(`Geocoding failed with status: ${status}`);
+          logger.warn(`Geocoding failed with status: ${status}`);
           resolve({
             success: false,
             address,
@@ -299,7 +301,7 @@ export async function geocodeAddressSDK(address: string): Promise<{
       });
     });
   } catch (error) {
-    console.error('SDK geocoding error:', error);
+    logger.error('SDK geocoding error:', error);
     return {
       success: false,
       address,

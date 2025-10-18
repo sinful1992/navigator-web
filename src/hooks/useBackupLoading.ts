@@ -1,6 +1,8 @@
 // src/hooks/useBackupLoading.ts
 import { useState, useRef } from 'react';
 
+import { logger } from '../utils/logger';
+
 // Hook for managing backup loading state with timeout and cancellation
 export const useBackupLoading = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -8,7 +10,7 @@ export const useBackupLoading = () => {
 
   const executeBackup = async (backupFn: () => Promise<void>) => {
     if (isLoading) {
-      console.warn('Backup already in progress, ignoring duplicate request');
+      logger.warn('Backup already in progress, ignoring duplicate request');
       return;
     }
 
@@ -16,15 +18,15 @@ export const useBackupLoading = () => {
 
     // CRITICAL FIX: Add safety timeout to prevent permanent button disable
     timeoutRef.current = setTimeout(() => {
-      console.error('Backup timeout reached - forcing reset');
+      logger.error('Backup timeout reached - forcing reset');
       setIsLoading(false);
     }, 60000); // 60 second maximum backup time
 
     try {
       await backupFn();
-      console.log('Backup completed successfully');
+      logger.info('Backup completed successfully');
     } catch (error) {
-      console.error('Backup failed:', error);
+      logger.error('Backup failed:', error);
       throw error; // Re-throw so calling code can handle it
     } finally {
       // Clear timeout and reset loading state
@@ -38,7 +40,7 @@ export const useBackupLoading = () => {
 
   // Emergency reset function for stuck states
   const forceReset = () => {
-    console.warn('Force resetting backup loading state');
+    logger.warn('Force resetting backup loading state');
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;

@@ -6,6 +6,8 @@ import { useSettings } from "./hooks/useSettings";
 import { Modal } from "./components/Modal";
 import { LoadingSpinner } from "./components/LoadingButton";
 
+import { logger } from './utils/logger';
+
 type Props = {
   sessions: DaySession[];
   completions: Completion[];
@@ -110,7 +112,7 @@ const DayPanelComponent = function DayPanel({
       }
       endDay();
     } catch (error) {
-      console.error('Failed to complete backup during end day:', error);
+      logger.error('Failed to complete backup during end day:', error);
       // CRITICAL FIX: Always end the day even if backup fails/times out
       // This prevents permanent button disable on backup failure
       endDay();
@@ -322,7 +324,7 @@ const DayPanelComponent = function DayPanel({
         isOpen={isLoading}
         onClose={() => {
           // CRITICAL FIX: Allow emergency escape - graceful reset instead of page reload
-          console.warn('Emergency backup escape triggered by user');
+          logger.warn('Emergency backup escape triggered by user');
           forceReset(); // Graceful reset of loading state
         }}
         title="Backing up data"

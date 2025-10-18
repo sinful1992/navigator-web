@@ -1,5 +1,7 @@
 import * as React from 'react';
 import { LoadingButton } from './LoadingButton';
+import { logger } from '../utils/logger';
+
 import type { 
   ReminderSettings, 
   MessageTemplate, 
@@ -52,7 +54,7 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
       await onUpdateSettings(localSettings);
       onClose();
     } catch (error) {
-      console.error('Failed to save settings:', error);
+      logger.error('Failed to save settings:', error);
       alert('Failed to save settings. Please try again.');
     } finally {
       setIsSaving(false);
@@ -142,7 +144,7 @@ export function ReminderSettings({ settings, onUpdateSettings, onClose }: Props)
       setPreviewMessage(message);
       setShowPreview(true);
     } catch (error) {
-      console.error('Preview failed:', error);
+      logger.error('Preview failed:', error);
       alert('Failed to generate preview. Please check your template.');
     }
   };

@@ -3,6 +3,8 @@ import type { User } from "@supabase/supabase-js";
 import { useSubscription } from "./useSubscription";
 import { useAdmin } from "./useAdmin";
 
+import { logger } from './utils/logger';
+
 interface SubscriptionManagerProps {
   user: User;
   onClose?: () => void;
@@ -147,7 +149,7 @@ export function SubscriptionManager({ user, onClose }: SubscriptionManagerProps)
                 className="btn-primary"
                 onClick={() => {
                   // This could open admin dashboard if not already open
-                  console.log('Redirect to admin dashboard');
+                  logger.info('Redirect to admin dashboard');
                   if (onClose) onClose();
                 }}
               >

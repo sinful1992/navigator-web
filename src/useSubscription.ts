@@ -121,7 +121,7 @@ export function useSubscription(user: User | null): UseSubscription {
 
   // Debug access calculation
   if (import.meta.env.DEV) {
-    console.log("Access check:", {
+    logger.info("Access check:", {
       isOwner,
       isActive,
       isExpired,
@@ -136,7 +136,7 @@ export function useSubscription(user: User | null): UseSubscription {
   const refreshSubscription = useCallback(async () => {
     if (!user || !supabase) {
       if (import.meta.env.DEV) {
-        console.log("No user or supabase in refreshSubscription");
+        logger.info("No user or supabase in refreshSubscription");
       }
       setSubscription(null);
       setIsLoading(false);
@@ -148,7 +148,7 @@ export function useSubscription(user: User | null): UseSubscription {
       clearError();
 
       if (import.meta.env.DEV) {
-        console.log("Loading subscription for user:", user.id);
+        logger.info("Loading subscription for user:", user.id);
       }
       const { data, error: fetchError } = await supabase
         .from('user_subscriptions')
@@ -212,7 +212,7 @@ export function useSubscription(user: User | null): UseSubscription {
 
       // Only check server access if trial is recent (within 25 hours to allow for clock drift)
       if (hoursSinceCreation > 25) {
-        console.log('Trial too old, clearing localStorage');
+        logger.info('Trial too old, clearing localStorage');
         localStorage.removeItem('navigator_trial_created');
         localStorage.removeItem('navigator_trial_user_id');
         setServerTrialAccess(false);
@@ -224,12 +224,12 @@ export function useSubscription(user: User | null): UseSubscription {
         .rpc('check_trial_access', { target_user_id: trialUserId });
 
       if (error) {
-        console.warn('Server trial access check failed:', error);
+        logger.warn('Server trial access check failed:', error);
         setServerTrialAccess(false);
         return;
       }
 
-      console.log('Server trial access result:', data);
+      logger.info('Server trial access result:', data);
       setServerTrialAccess(data?.hasAccess || false);
 
       // Clean up localStorage if server says no access
@@ -239,7 +239,7 @@ export function useSubscription(user: User | null): UseSubscription {
       }
 
     } catch (err) {
-      console.warn('Server trial access check error:', err);
+      logger.warn('Server trial access check error:', err);
       setServerTrialAccess(false);
     }
   }, []);

@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { geocodeAddress, getCacheStats } from '../services/geocoding';
 import type { AddressRow } from '../types';
 
+import { logger } from '../utils/logger';
+
 export interface GeocodingProgress {
   current: number;
   total: number;
@@ -34,7 +36,7 @@ export function useGeocodingIntegration() {
         };
       }
     } catch (error) {
-      console.warn(`Failed to geocode address "${address.address}":`, error);
+      logger.warn(`Failed to geocode address "${address.address}":`, error);
     }
 
     return address;
@@ -63,7 +65,7 @@ export function useGeocodingIntegration() {
         !isNaN(addr.lat) && !isNaN(addr.lng)
       );
 
-      console.log(`Geocoding ${needsGeocoding.length}/${addresses.length} addresses (${alreadyGeocoded.length} already have coordinates)`);
+      logger.info(`Geocoding ${needsGeocoding.length}/${addresses.length} addresses (${alreadyGeocoded.length} already have coordinates)`);
 
       // Process addresses that need geocoding in small batches
       const batchSize = 3;
@@ -97,7 +99,7 @@ export function useGeocodingIntegration() {
         }
       }
 
-      console.log(`Geocoding completed. Cache stats:`, getCacheStats());
+      logger.info(`Geocoding completed. Cache stats:`, getCacheStats());
       return results;
 
     } finally {

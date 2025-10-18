@@ -31,53 +31,20 @@ import { isProtectionActive } from "./utils/protectionFlags";
 import { PrivacyConsent } from "./components/PrivacyConsent";
 import { EnhancedOfflineIndicator } from "./components/EnhancedOfflineIndicator";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
-import { pwaManager } from "./utils/pwaManager";
-import { shouldRunCleanup, performDataCleanup, applyDataCleanup } from "./services/dataCleanup";
 import { useSettings } from "./hooks/useSettings";
+import { ChangePasswordModal, ChangeEmailModal, DeleteAccountModal } from "./components/AccountSettings";
+import { useTabNavigation } from "./hooks/useTabNavigation";
+import { usePWAInit } from "./hooks/usePWAInit";
+import { useDataCleanup } from "./hooks/useDataCleanup";
+import { reconcileSessionState } from "./services/sessionReconciliation";
+import { formatDateKey } from "./utils/dateFormatter";
+import { getUserInitials } from "./utils/userUtils";
+import { useStats } from "./hooks/useStats";
+import { OwnershipPrompt } from "./components/OwnershipPrompt";
+import { Sidebar } from "./components/Sidebar";
 
-type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
+export type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
-
-// ARCHITECTURAL FIX: Post-restore session reconciliation
-async function reconcileSessionState(cloudSync: any, setState: any, supabase: any) {
-  if (!cloudSync.user || !supabase) return;
-
-  // 🔧 CRITICAL FIX: Check if restore is in progress before reconciling (using centralized protection manager)
-  if (isProtectionActive('navigator_restore_in_progress')) {
-    logger.info('🛡️ RESTORE PROTECTION: Skipping session reconciliation to prevent data loss');
-    return;
-  }
-
-  try {
-    logger.info('Post-restore: Reconciling session state with cloud...');
-
-    // Fetch latest state from cloud to get current session info
-    const { data: cloudState, error } = await supabase
-      .from("navigator_state")
-      .select("data")
-      .eq("user_id", cloudSync.user.id)
-      .maybeSingle();
-
-    if (error || !cloudState?.data) {
-      logger.warn('No cloud state found for session reconciliation');
-      return;
-    }
-
-    const normalized = normalizeState(cloudState.data);
-    const cloudSessions = normalized.daySessions || [];
-
-    // Update local state with cloud session data only
-    setState((currentState: any) => ({
-      ...currentState,
-      daySessions: cloudSessions
-    }));
-
-    logger.info('Session state reconciled with cloud successfully');
-  } catch (error) {
-    logger.error('Failed to reconcile session state:', error);
-    // Don't throw - this is a nice-to-have, not critical
-  }
-}
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; msg?: string }
@@ -366,31 +333,13 @@ function AuthedApp() {
   const [showDeleteAccount, setShowDeleteAccount] = React.useState(false);
   const [showOwnershipPrompt, setShowOwnershipPrompt] = React.useState(false);
 
-  // Initialize tab from URL hash or default to "list"
-  const getInitialTab = (): Tab => {
-    const hash = window.location.hash.slice(1);
-    const validTabs: Tab[] = ["list", "completed", "arrangements", "earnings", "planning"];
-    return validTabs.includes(hash as Tab) ? (hash as Tab) : "list";
-  };
-
-  const [tab, setTab] = React.useState<Tab>(getInitialTab);
-  const [search, setSearch] = React.useState("");
+  // Tab navigation with URL hash sync and browser history support
+  const { tab, navigateToTab, search, setSearch } = useTabNavigation();
   const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
     React.useState<number | null>(null);
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
-
-  // Browser back button navigation support
-  React.useEffect(() => {
-    const handlePopState = () => {
-      const newTab = getInitialTab();
-      setTab(newTab);
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   // Check for ownership uncertainty flag
   React.useEffect(() => {
@@ -400,45 +349,10 @@ function AuthedApp() {
   }, [hydrated]);
 
   // PWA initialization - request persistent storage
-  React.useEffect(() => {
-    const initPWA = async () => {
-      try {
-        await pwaManager.requestPersistentStorage();
-        logger.info('PWA initialized successfully');
-      } catch (error) {
-        logger.error('PWA initialization failed:', error);
-      }
-    };
-
-    initPWA();
-  }, []); // Run only once on mount
+  usePWAInit();
 
   // Data retention cleanup (runs once per day on app start)
-  React.useEffect(() => {
-    const runCleanup = async () => {
-      if (!shouldRunCleanup()) return;
-
-      const result = await performDataCleanup(state, settings.keepDataForMonths);
-      if (result && (result.deletedCompletions > 0 || result.deletedArrangements > 0)) {
-        // Apply cleanup to state
-        const cleanedState = applyDataCleanup(state, settings.keepDataForMonths);
-        setState(cleanedState);
-
-        // Log cleanup (silent - no user notification)
-        console.log(`Data cleanup completed: ${result.deletedCompletions} completions, ${result.deletedArrangements} arrangements, ${result.deletedSessions} sessions removed`);
-      }
-    };
-
-    runCleanup();
-  }, []); // Run only once on mount
-
-  // Function to change tab with history support
-  const navigateToTab = React.useCallback((newTab: Tab) => {
-    if (newTab !== tab) {
-      setTab(newTab);
-      window.history.pushState({ tab: newTab }, '', `#${newTab}`);
-    }
-  }, [tab]);
+  useDataCleanup(state, setState, settings);
 
   // REMOVED: Page visibility tracking - was over-engineering after fixing React subscription bug
 
@@ -475,14 +389,6 @@ function AuthedApp() {
     ownerMetadataRef.current = ownerMetadata;
   }, [ownerMetadata]);
 
-  // Format date key
-  function formatKey(d: Date, tz = "Europe/London") {
-    const y = d.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
-    const m = d.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
-    const dd = d.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
-    return `${y}-${m}-${dd}`;
-  }
-
   // Load recent cloud backups
   const loadRecentCloudBackups = React.useCallback(async () => {
     if (!supabase) {
@@ -500,8 +406,8 @@ function AuthedApp() {
       const start = new Date();
       start.setDate(start.getDate() - 6);
 
-      const fromKey = formatKey(start);
-      const toKey = formatKey(end);
+      const fromKey = formatDateKey(start);
+      const toKey = formatDateKey(end);
 
       const q = await supabase
         .from("backups")
@@ -1143,47 +1049,8 @@ function AuthedApp() {
     return () => clearInterval(integrityInterval);
   }, [safeState, cloudSync.user, cloudSync.isSyncing, cloudSync.lastSyncTime, hydrated, loading]);
 
-  // Stats calculation
-  const stats = React.useMemo(() => {
-    const currentVer = state.currentListVersion;
-    const completedIdx = new Set(
-      completions
-        .filter((c) => c.listVersion === currentVer)
-        .map((c) => c.index)
-    );
-    const total = addresses.length;
-    const pending = total - completedIdx.size;
-    const pifCount = completions.filter(
-      (c) => c.listVersion === currentVer && c.outcome === "PIF"
-    ).length;
-    const doneCount = completions.filter(
-      (c) => c.listVersion === currentVer && c.outcome === "Done"
-    ).length;
-    const daCount = completions.filter(
-      (c) => c.listVersion === currentVer && c.outcome === "DA"
-    ).length;
-    const arrCount = completions.filter(
-      (c) => c.listVersion === currentVer && c.outcome === "ARR"
-    ).length;
-    const completed = completedIdx.size;
-    
-    const pendingArrangements = arrangements.filter(arr => 
-      arr.status !== "Completed" && arr.status !== "Cancelled"
-    ).length;
-
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const todaysPIF = completions
-      .filter((c) => 
-        c.outcome === "PIF" && 
-        (c.timestamp || "").slice(0, 10) === todayStr
-      )
-      .reduce((sum, c) => sum + parseFloat(c.amount || "0"), 0);
-    
-    return { 
-      total, pending, completed, pifCount, doneCount, 
-      daCount, arrCount, pendingArrangements, todaysPIF 
-    };
-  }, [addresses, completions, arrangements, state.currentListVersion]);
+  // Calculate application statistics
+  const stats = useStats(addresses, completions, arrangements, state.currentListVersion);
 
   // Handlers
   const handleImportExcel = React.useCallback((rows: AddressRow[]) => {
@@ -1578,32 +1445,6 @@ function AuthedApp() {
     };
   }, [safeState, cloudSync.user, hydrated]);
 
-  const getUserInitials = () => {
-    const email = cloudSync.user?.email || "";
-    const parts = email.split("@")[0].split(".");
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return email.slice(0, 2).toUpperCase();
-  };
-
-  // Sync status now handled by SyncStatusIcon component
-  /*
-  const getSyncStatus = () => {
-    if (cloudSync.isSyncing) {
-      return { text: "Syncing", color: "var(--warning)" };
-    }
-    if (!cloudSync.isOnline) {
-      return { text: "Offline", color: "var(--danger)" };
-    }
-    if (cloudSync.error) {
-      return { text: "Sync Error", color: "var(--danger)" };
-    }
-    return { text: "Online", color: "var(--success)" };
-  };
-  const syncStatus = getSyncStatus();
-  */
-
   if (loading) {
     return (
       <div className="app-wrapper">
@@ -1803,9 +1644,9 @@ function AuthedApp() {
                   }
 
                   handleImportExcel(out);
-                  console.log(`✅ Successfully imported ${out.length} addresses!`);
+                  logger.info(`✅ Successfully imported ${out.length} addresses!`);
                 } catch (err) {
-                  console.error(err);
+                  logger.error(err);
                   alert({ message: "❌ Failed to read Excel file. Please ensure it's a valid .xlsx or .xls file." });
                 }
               }}
@@ -1983,78 +1824,22 @@ function AuthedApp() {
       </main>
 
       {/* Right Sidebar */}
-      <aside className={`sidebar-right ${sidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-header">
-          <div className="user-profile-section">
-            <div className="user-avatar">{getUserInitials()}</div>
-            <div className="user-info">
-              <div className="user-name">{cloudSync.user?.email?.split("@")[0]}</div>
-              <div className="user-plan">
-                {isOwner ? "Owner Access" : hasAccess ? "Premium Plan" : "Free Trial"}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <nav className="nav-menu">
-          <div className="nav-section">
-            <div className="nav-section-title">Main</div>
-            <div
-              className={`nav-item ${tab === 'list' ? 'active' : ''}`}
-              onClick={() => { navigateToTab('list'); setSidebarOpen(false); }}
-            >
-              <span className="nav-icon">📋</span>
-              <span>Address List</span>
-              <span className="nav-badge">{stats.pending}</span>
-            </div>
-            <div
-              className={`nav-item ${tab === 'completed' ? 'active' : ''}`}
-              onClick={() => { navigateToTab('completed'); setSidebarOpen(false); }}
-            >
-              <span className="nav-icon">✅</span>
-              <span>Completed</span>
-              <span className="nav-badge">{stats.completed}</span>
-            </div>
-            <div
-              className={`nav-item ${tab === 'arrangements' ? 'active' : ''}`}
-              onClick={() => { navigateToTab('arrangements'); setSidebarOpen(false); }}
-            >
-              <span className="nav-icon">📅</span>
-              <span>Arrangements</span>
-              <span className="nav-badge">{stats.pendingArrangements}</span>
-            </div>
-          </div>
-
-          <div className="nav-section">
-            <div className="nav-section-title">Analytics</div>
-            <div
-              className={`nav-item ${tab === 'earnings' ? 'active' : ''}`}
-              onClick={() => { navigateToTab('earnings'); setSidebarOpen(false); }}
-            >
-              <span className="nav-icon">💰</span>
-              <span>Earnings</span>
-            </div>
-            <div
-              className={`nav-item ${tab === 'planning' ? 'active' : ''}`}
-              onClick={() => { navigateToTab('planning'); setSidebarOpen(false); }}
-            >
-              <span className="nav-icon">🗺️</span>
-              <span>Route Planning</span>
-            </div>
-          </div>
-
-          {/* Admin section - only visible for admins */}
-          {isAdmin && (
-            <div className="nav-section">
-              <div className="nav-section-title">Admin</div>
-              <div className="nav-item" onClick={() => { setShowAdmin(true); setSidebarOpen(false); }}>
-                <span className="nav-icon">👑</span>
-                <span>Admin Panel</span>
-              </div>
-            </div>
-          )}
-        </nav>
-      </aside>
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        user={cloudSync.user}
+        isOwner={isOwner}
+        hasAccess={hasAccess}
+        isAdmin={isAdmin}
+        currentTab={tab}
+        onTabChange={navigateToTab}
+        stats={{
+          pending: stats.pending,
+          completed: stats.completed,
+          pendingArrangements: stats.pendingArrangements
+        }}
+        onShowAdmin={() => setShowAdmin(true)}
+      />
 
       {/* Sidebar Overlay for Mobile */}
       <div 
@@ -2196,444 +1981,53 @@ function AuthedApp() {
         </div>
       )}
 
-      {/* Change Password Modal */}
-      {showChangePassword && (
-        <div className="modal-overlay" onClick={() => setShowChangePassword(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '1.5rem',
-              paddingBottom: '1rem',
-              borderBottom: '1px solid var(--gray-200)'
-            }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-primary)' }}>Change Password</h2>
-                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                  Update your account password
-                </p>
-              </div>
-              <button
-                onClick={() => setShowChangePassword(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '1.5rem',
-                  cursor: 'pointer',
-                  color: 'var(--text-secondary)',
-                  padding: '0.25rem',
-                  lineHeight: 1
-                }}
-              >
-                ✕
-              </button>
-            </div>
+      {/* Account Settings Modals */}
+      <ChangePasswordModal
+        open={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+        onUpdatePassword={async (newPassword) => {
+          await cloudSync.updatePassword(newPassword);
+        }}
+      />
 
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const form = e.target as HTMLFormElement;
-              const newPassword = (form.elements.namedItem('newPassword') as HTMLInputElement).value;
-              const confirmPassword = (form.elements.namedItem('confirmPassword') as HTMLInputElement).value;
+      <ChangeEmailModal
+        open={showChangeEmail}
+        onClose={() => setShowChangeEmail(false)}
+      />
 
-              if (newPassword !== confirmPassword) {
-                await alert({
-                  title: 'Password Mismatch',
-                  message: 'The passwords you entered do not match. Please try again.',
-                  type: 'error'
-                });
-                return;
-              }
+      <DeleteAccountModal
+        open={showDeleteAccount}
+        onClose={() => setShowDeleteAccount(false)}
+        onConfirm={async () => {
+          await cloudSync.signOut();
+        }}
+      />
 
-              if (newPassword.length < 6) {
-                await alert({
-                  title: 'Password Too Short',
-                  message: 'Password must be at least 6 characters long.',
-                  type: 'error'
-                });
-                return;
-              }
-
-              try {
-                await cloudSync.updatePassword(newPassword);
-                setShowChangePassword(false);
-                await alert({
-                  title: 'Password Updated',
-                  message: 'Your password has been updated successfully!',
-                  type: 'success'
-                });
-              } catch (err: any) {
-                await alert({
-                  title: 'Update Failed',
-                  message: err.message || 'Failed to update password. Please try again.',
-                  type: 'error'
-                });
-              }
-            }}>
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{
-                  display: 'block',
-                  marginBottom: '0.5rem',
-                  fontWeight: 500,
-                  fontSize: '0.9375rem',
-                  color: 'var(--text-primary)'
-                }}>
-                  New Password
-                </label>
-                <input
-                  type="password"
-                  name="newPassword"
-                  className="input"
-                  required
-                  minLength={6}
-                  placeholder="Enter new password"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    borderRadius: '8px',
-                    border: '1.5px solid var(--gray-300)',
-                    fontSize: '1rem'
-                  }}
-                />
-                <p style={{
-                  margin: '0.5rem 0 0 0',
-                  fontSize: '0.8125rem',
-                  color: 'var(--text-secondary)'
-                }}>
-                  Must be at least 6 characters
-                </p>
-              </div>
-
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{
-                  display: 'block',
-                  marginBottom: '0.5rem',
-                  fontWeight: 500,
-                  fontSize: '0.9375rem',
-                  color: 'var(--text-primary)'
-                }}>
-                  Confirm Password
-                </label>
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  className="input"
-                  required
-                  minLength={6}
-                  placeholder="Re-enter new password"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    borderRadius: '8px',
-                    border: '1.5px solid var(--gray-300)',
-                    fontSize: '1rem'
-                  }}
-                />
-              </div>
-
-              <div style={{
-                display: 'flex',
-                gap: '0.75rem',
-                marginTop: '1.5rem',
-                paddingTop: '1rem',
-                borderTop: '1px solid var(--gray-200)'
-              }}>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{
-                    flex: 1,
-                    padding: '0.875rem',
-                    fontSize: '1rem',
-                    fontWeight: 600
-                  }}
-                >
-                  Update Password
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => setShowChangePassword(false)}
-                  style={{
-                    padding: '0.875rem 1.5rem',
-                    fontSize: '1rem'
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Change Email Modal */}
-      {showChangeEmail && (
-        <div className="modal-overlay" onClick={() => setShowChangeEmail(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
-            <h2 style={{ marginBottom: '1rem' }}>Change Email</h2>
-            <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-              Note: You'll need to confirm your new email address.
-            </p>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const form = e.target as HTMLFormElement;
-              const newEmail = (form.elements.namedItem('newEmail') as HTMLInputElement).value;
-
-              try {
-                if (!supabase) throw new Error('Supabase not configured');
-                const { error } = await supabase.auth.updateUser({ email: newEmail });
-                if (error) throw error;
-                window.alert('Confirmation email sent! Please check your inbox.');
-                setShowChangeEmail(false);
-              } catch (err: any) {
-                window.alert('Error: ' + err.message);
-              }
-            }}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>New Email</label>
-                <input type="email" name="newEmail" className="input" required />
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Update Email</button>
-                <button type="button" className="btn btn-ghost" onClick={() => setShowChangeEmail(false)}>Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Account Modal */}
-      {showDeleteAccount && (
-        <div className="modal-overlay" onClick={() => setShowDeleteAccount(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
-            <h2 style={{ marginBottom: '1rem', color: 'var(--danger)' }}>Delete Account</h2>
-            <p style={{ marginBottom: '1rem' }}>
-              ⚠️ This action cannot be undone. All your data will be permanently deleted.
-            </p>
-            <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              Type <strong>DELETE</strong> to confirm:
-            </p>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const form = e.target as HTMLFormElement;
-              const confirmation = (form.elements.namedItem('confirmation') as HTMLInputElement).value;
-
-              if (confirmation !== 'DELETE') {
-                window.alert('Please type DELETE to confirm');
-                return;
-              }
-
-              try {
-                if (!supabase) throw new Error('Supabase not configured');
-
-                // Delete user account
-                const { error } = await supabase.rpc('delete_user_account');
-                if (error) throw error;
-
-                await cloudSync.signOut();
-                window.alert('Account deleted successfully');
-                setShowDeleteAccount(false);
-              } catch (err: any) {
-                window.alert('Error: ' + err.message);
-              }
-            }}>
-              <div style={{ marginBottom: '1rem' }}>
-                <input type="text" name="confirmation" className="input" required placeholder="Type DELETE" />
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="submit" className="btn" style={{ flex: 1, background: 'var(--danger)', color: 'white' }}>Delete Account</button>
-                <button type="button" className="btn btn-ghost" onClick={() => setShowDeleteAccount(false)}>Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Toast Notifications */}
       <ToastContainer />
 
       {/* Ownership Uncertainty Prompt - Modern Design */}
-      {showOwnershipPrompt && (
-        <>
-          <div
-            className="ownership-modal-backdrop"
-            onClick={() => setShowOwnershipPrompt(false)}
-          />
-          <div className="ownership-modal-container">
-            {/* Header with Warning Badge */}
-            <div className="ownership-modal-header">
-              <div className="ownership-warning-badge">
-                <span className="ownership-warning-icon">⚠️</span>
-              </div>
-              <h2 className="ownership-modal-title">Data Ownership Unclear</h2>
-              <p className="ownership-modal-subtitle">
-                We found local data that may not belong to your current account
-              </p>
-            </div>
-
-            {/* Content Body */}
-            <div className="ownership-modal-body">
-              {/* Current Account Card */}
-              <div className="ownership-account-card">
-                <div className="ownership-account-icon">👤</div>
-                <div className="ownership-account-info">
-                  <div className="ownership-account-label">Currently logged in as</div>
-                  <div className="ownership-account-email">{cloudSync.user?.email || 'Unknown'}</div>
-                </div>
-              </div>
-
-              {/* Data Summary Cards */}
-              <div className="ownership-data-summary">
-                <div className="ownership-summary-header">
-                  <span className="ownership-summary-icon">📊</span>
-                  <span className="ownership-summary-title">Local data found on this device</span>
-                </div>
-                <div className="ownership-stats-grid">
-                  <div className="ownership-stat-card">
-                    <div className="ownership-stat-icon">📍</div>
-                    <div className="ownership-stat-number">{safeState.addresses.length}</div>
-                    <div className="ownership-stat-label">Addresses</div>
-                  </div>
-                  <div className="ownership-stat-card">
-                    <div className="ownership-stat-icon">✅</div>
-                    <div className="ownership-stat-number">{safeState.completions.length}</div>
-                    <div className="ownership-stat-label">Completions</div>
-                  </div>
-                  <div className="ownership-stat-card">
-                    <div className="ownership-stat-icon">📅</div>
-                    <div className="ownership-stat-number">{safeState.arrangements.length}</div>
-                    <div className="ownership-stat-label">Arrangements</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Info Section */}
-              <div className="ownership-info-section">
-                <div className="ownership-info-title">This can happen when:</div>
-                <ul className="ownership-info-list">
-                  <li>You're using a shared device</li>
-                  <li>Another user previously used this browser</li>
-                  <li>You're signing in from a different account</li>
-                </ul>
-              </div>
-
-              {/* Question */}
-              <div className="ownership-question">
-                What would you like to do with this local data?
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="ownership-modal-actions">
-              <button
-                className="ownership-btn ownership-btn-keep"
-                onClick={async () => {
-                  // User confirmed ownership - sync to cloud
-                  localStorage.removeItem('navigator_ownership_uncertain');
-                  setShowOwnershipPrompt(false);
-                  try {
-                    await cloudSync.syncData(safeState);
-                    SmartUserDetection.storeDeviceContext(cloudSync.user!);
-                    lastFromCloudRef.current = JSON.stringify(safeState);
-                    await alert({
-                      title: "Success",
-                      message: "Your data has been synced to the cloud.",
-                      type: "success"
-                    });
-                  } catch (err) {
-                    logger.error("Failed to sync data:", err);
-                    await alert({
-                      title: "Sync Failed",
-                      message: "Failed to sync data to cloud. Please try again.",
-                      type: "error"
-                    });
-                  }
-                }}
-              >
-                <span className="ownership-btn-icon">✓</span>
-                <span className="ownership-btn-text">
-                  <span className="ownership-btn-title">Keep & Sync to My Account</span>
-                  <span className="ownership-btn-desc">This data belongs to me</span>
-                </span>
-              </button>
-              <button
-                className="ownership-btn ownership-btn-discard"
-                onClick={async () => {
-                  // User wants to discard local data
-                  const confirmed = await confirm({
-                    title: "Discard Local Data?",
-                    message: "This will permanently delete the local data and load your cloud data instead. This action cannot be undone.",
-                    confirmText: "Discard Local Data",
-                    cancelText: "Cancel",
-                    type: "warning"
-                  });
-
-                  if (confirmed) {
-                    localStorage.removeItem('navigator_ownership_uncertain');
-
-                    // Create safety backup before clearing
-                    try {
-                      const backupKey = `navigator_safety_backup_${Date.now()}_user_choice_discard`;
-                      localStorage.setItem(backupKey, JSON.stringify({
-                        ...safeState,
-                        _backup_timestamp: new Date().toISOString(),
-                        _backup_reason: 'user_chose_discard'
-                      }));
-                      logger.info(`Safety backup created: ${backupKey}`);
-                    } catch (err) {
-                      logger.warn("Failed to create safety backup:", err);
-                    }
-
-                    // Clear local state
-                    setState({
-                      addresses: [],
-                      completions: [],
-                      arrangements: [],
-                      daySessions: [],
-                      activeIndex: null,
-                      currentListVersion: 1
-                    });
-
-                    SmartUserDetection.storeDeviceContext(cloudSync.user!);
-                    setShowOwnershipPrompt(false);
-
-                    await alert({
-                      title: "Data Cleared",
-                      message: "Local data has been cleared. Your cloud data will now load.",
-                      type: "success"
-                    });
-                  }
-                }}
-              >
-                <span className="ownership-btn-icon">🗑️</span>
-                <span className="ownership-btn-text">
-                  <span className="ownership-btn-title">Discard Local Data</span>
-                  <span className="ownership-btn-desc">Clear it and use cloud data</span>
-                </span>
-              </button>
-              <button
-                className="ownership-btn ownership-btn-later"
-                onClick={() => {
-                  // User wants to decide later - keep modal available
-                  setShowOwnershipPrompt(false);
-                  alert({
-                    title: "Decision Deferred",
-                    message: "You can access this prompt again from Settings > Account > Resolve Data Ownership",
-                    type: "info"
-                  });
-                }}
-              >
-                <span className="ownership-btn-icon">⏱️</span>
-                <span className="ownership-btn-text">
-                  <span className="ownership-btn-title">Decide Later</span>
-                  <span className="ownership-btn-desc">Access from Settings later</span>
-                </span>
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      <OwnershipPrompt
+        isOpen={showOwnershipPrompt}
+        onClose={() => setShowOwnershipPrompt(false)}
+        safeState={safeState}
+        user={cloudSync.user}
+        onKeepData={async (state) => {
+          await cloudSync.syncData(state);
+          lastFromCloudRef.current = JSON.stringify(state);
+        }}
+        onDiscardData={() => {
+          setState({
+            addresses: [],
+            completions: [],
+            arrangements: [],
+            daySessions: [],
+            activeIndex: null,
+            currentListVersion: 1
+          });
+        }}
+      />
 
       {/* PWA Install Prompt */}
       <PWAInstallPrompt />

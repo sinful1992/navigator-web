@@ -1,6 +1,8 @@
 import { supabase } from "../lib/supabaseClient";
 import type { AddressRow } from "../types";
 
+import { logger } from '../utils/logger';
+
 // Centralized routing service that uses Supabase Edge Functions
 // No API key required - handled server-side
 
@@ -43,7 +45,7 @@ export async function geocodeAddresses(
   }
 
   try {
-    console.log(`Geocoding ${addresses.length} addresses via centralized service`);
+    logger.info(`Geocoding ${addresses.length} addresses via centralized service`);
 
     // For progress tracking, we'll process in smaller batches
     const results: GeocodingResult[] = [];
@@ -60,7 +62,7 @@ export async function geocodeAddresses(
       });
 
       if (error) {
-        console.error('Geocoding batch error:', error);
+        logger.error('Geocoding batch error:', error);
         // Create error results for this batch
         const errorResults = batch.map(address => ({
           success: false,
@@ -72,7 +74,7 @@ export async function geocodeAddresses(
       } else if (data?.results) {
         results.push(...data.results);
       } else {
-        console.error('Unexpected geocoding response:', data);
+        logger.error('Unexpected geocoding response:', data);
         const errorResults = batch.map(address => ({
           success: false,
           address,
@@ -88,11 +90,11 @@ export async function geocodeAddresses(
       }
     }
 
-    console.log(`Geocoding completed: ${results.filter(r => r.success).length}/${results.length} successful`);
+    logger.info(`Geocoding completed: ${results.filter(r => r.success).length}/${results.length} successful`);
     return results;
 
   } catch (error) {
-    console.error('Geocoding service failed:', error);
+    logger.error('Geocoding service failed:', error);
     // Return error results for all addresses
     return addresses.map(address => ({
       success: false,
@@ -116,7 +118,7 @@ export async function searchAddresses(
   focusLon?: number,
 ): Promise<AddressAutocompleteResult[]> {
   if (!supabase) {
-    console.error('Supabase client not available for address search');
+    logger.error('Supabase client not available for address search');
     return [];
   }
 
@@ -135,14 +137,14 @@ export async function searchAddresses(
     });
 
     if (error) {
-      console.error('Address search error:', error);
+      logger.error('Address search error:', error);
       return [];
     }
 
     return data?.results || [];
 
   } catch (error) {
-    console.error('Address search failed:', error);
+    logger.error('Address search failed:', error);
     return [];
   }
 }
@@ -196,7 +198,7 @@ export async function optimizeRoute(
       };
     }
 
-    console.log(`Optimizing route for ${validAddresses.length} addresses via centralized service`);
+    logger.info(`Optimizing route for ${validAddresses.length} addresses via centralized service`);
 
     const { data, error } = await supabase.functions.invoke('optimize-route', {
       body: {
@@ -212,7 +214,7 @@ export async function optimizeRoute(
     });
 
     if (error) {
-      console.error('Route optimization error:', error);
+      logger.error('Route optimization error:', error);
       return {
         success: false,
         optimizedOrder: [],
@@ -234,11 +236,11 @@ export async function optimizeRoute(
       };
     }
 
-    console.log(`Route optimization completed: ${data.optimizedOrder?.length || 0} addresses optimized`);
+    logger.info(`Route optimization completed: ${data.optimizedOrder?.length || 0} addresses optimized`);
     return data;
 
   } catch (error) {
-    console.error('Route optimization failed:', error);
+    logger.error('Route optimization failed:', error);
     return {
       success: false,
       optimizedOrder: [],

@@ -5,6 +5,8 @@
 
 import { get, set } from 'idb-keyval';
 
+import { logger } from '../utils/logger';
+
 export interface PlaceAutocompleteResult {
   place_id: string;
   description: string;
@@ -73,12 +75,12 @@ async function loadCaches(): Promise<void> {
     }
 
     cachesLoaded = true;
-    console.log('Places API caches loaded:', {
+    logger.info('Places API caches loaded:', {
       autocomplete: Object.keys(autocompleteCache).length,
       details: Object.keys(placeDetailsCache).length
     });
   } catch (error) {
-    console.warn('Failed to load Places API caches:', error);
+    logger.warn('Failed to load Places API caches:', error);
     cachesLoaded = true; // Continue even if loading fails
   }
 }
@@ -90,7 +92,7 @@ async function saveAutocompleteCache(): Promise<void> {
   try {
     await set(AUTOCOMPLETE_CACHE_KEY, autocompleteCache);
   } catch (error) {
-    console.warn('Failed to save autocomplete cache:', error);
+    logger.warn('Failed to save autocomplete cache:', error);
   }
 }
 
@@ -101,7 +103,7 @@ async function savePlaceDetailsCache(): Promise<void> {
   try {
     await set(PLACE_DETAILS_CACHE_KEY, placeDetailsCache);
   } catch (error) {
-    console.warn('Failed to save place details cache:', error);
+    logger.warn('Failed to save place details cache:', error);
   }
 }
 
@@ -196,7 +198,7 @@ export async function getPlaceAutocomplete(
   // Check cache first
   const cached = autocompleteCache[cacheKey];
   if (cached && Date.now() - cached.timestamp < AUTOCOMPLETE_CACHE_DURATION_MS) {
-    console.log(`Using cached autocomplete results for: "${input}"`);
+    logger.info(`Using cached autocomplete results for: "${input}"`);
     return cached.results;
   }
 
@@ -216,7 +218,7 @@ export async function getPlaceAutocomplete(
       })
     };
 
-    console.log('Making Places API (New) autocomplete request:', requestBody);
+    logger.info('Making Places API (New) autocomplete request:', requestBody);
 
     const response = await fetch(
       `https://places.googleapis.com/v1/places:autocomplete`,
@@ -233,12 +235,12 @@ export async function getPlaceAutocomplete(
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('Places API error:', response.status, errorData);
+      logger.error('Places API error:', response.status, errorData);
       throw new Error(`Places API error: ${response.status} - ${errorData}`);
     }
 
     const data = await response.json();
-    console.log('Places API response:', data);
+    logger.info('Places API response:', data);
 
     // Transform the new API response to match our expected format
     let results: PlaceAutocompleteResult[] = [];
@@ -261,12 +263,12 @@ export async function getPlaceAutocomplete(
       results,
       timestamp: Date.now()
     };
-    saveAutocompleteCache().catch(console.warn);
+    saveAutocompleteCache().catch(logger.warn);
     cleanExpiredEntries();
 
     return results;
   } catch (error) {
-    console.error('Places API autocomplete failed:', error);
+    logger.error('Places API autocomplete failed:', error);
     throw error;
   }
 }
@@ -290,7 +292,7 @@ export async function getPlaceDetailsNew(
   // Check cache first
   const cached = placeDetailsCache[placeId];
   if (cached && Date.now() - cached.timestamp < PLACE_DETAILS_CACHE_DURATION_MS) {
-    console.log(`Using cached place details for: ${placeId}`);
+    logger.info(`Using cached place details for: ${placeId}`);
     // Still clear session token even when using cache
     if (sessionToken) {
       sessionManager.clearToken();
@@ -299,7 +301,7 @@ export async function getPlaceDetailsNew(
   }
 
   try {
-    console.log('Getting place details for:', placeId);
+    logger.info('Getting place details for:', placeId);
 
     const url = `https://places.googleapis.com/v1/places/${placeId}`;
     const response = await fetch(url, {
@@ -312,12 +314,12 @@ export async function getPlaceDetailsNew(
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('Place details API error:', response.status, errorData);
+      logger.error('Place details API error:', response.status, errorData);
       throw new Error(`Place details API error: ${response.status} - ${errorData}`);
     }
 
     const data = await response.json();
-    console.log('Place details response:', data);
+    logger.info('Place details response:', data);
 
     // Clear session token after successful place details call
     if (sessionToken) {
@@ -343,7 +345,7 @@ export async function getPlaceDetailsNew(
         details: placeDetails,
         timestamp: Date.now()
       };
-      savePlaceDetailsCache().catch(console.warn);
+      savePlaceDetailsCache().catch(logger.warn);
       cleanExpiredEntries();
 
       return placeDetails;
@@ -351,7 +353,7 @@ export async function getPlaceDetailsNew(
 
     return null;
   } catch (error) {
-    console.error('Place details failed:', error);
+    logger.error('Place details failed:', error);
     // Clear session token on error too
     if (sessionToken) {
       sessionManager.clearToken();
@@ -436,5 +438,5 @@ export async function clearPlacesCaches(): Promise<void> {
     saveAutocompleteCache(),
     savePlaceDetailsCache()
   ]);
-  console.log('Places API caches cleared');
+  logger.info('Places API caches cleared');
 }

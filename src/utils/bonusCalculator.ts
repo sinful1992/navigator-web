@@ -1,6 +1,8 @@
 // src/utils/bonusCalculator.ts
 import type { BonusSettings, Completion } from '../types';
 
+import { logger } from './logger';
+
 /**
  * Default bonus settings based on the Taking Control of Goods (Fees) Regulations 2014
  */
@@ -226,7 +228,7 @@ export function evaluateCustomFormula(
 
     return typeof result === 'number' && isFinite(result) ? Math.max(0, result) : 0;
   } catch (error) {
-    console.error('Error evaluating custom bonus formula:', error);
+    logger.error('Error evaluating custom bonus formula:', error);
     return 0;
   }
 }

@@ -1,6 +1,8 @@
 // src/utils/protectionFlags.ts
 // Centralized protection flag manager to prevent race conditions
 
+import { logger } from './logger';
+
 type ProtectionFlag =
   | 'navigator_restore_in_progress'
   | 'navigator_import_in_progress'
@@ -92,7 +94,7 @@ export async function executeWithProtection<T>(
 ): Promise<T | null> {
   if (isProtectionActive(flag)) {
     const remaining = getProtectionTimeRemaining(flag);
-    console.warn(`Protection flag ${flag} is active. ${Math.round(remaining / 1000)}s remaining.`);
+    logger.warn(`Protection flag ${flag} is active. ${Math.round(remaining / 1000)}s remaining.`);
     return null;
   }
 

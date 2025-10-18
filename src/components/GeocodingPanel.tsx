@@ -2,6 +2,8 @@ import React from 'react';
 import { useGeocodingIntegration } from '../hooks/useGeocodingIntegration';
 import type { AddressRow } from '../types';
 
+import { logger } from '../utils/logger';
+
 interface GeocodingPanelProps {
   addresses: AddressRow[];
   onAddressesUpdated: (addresses: AddressRow[]) => void;
@@ -29,12 +31,12 @@ export function GeocodingPanel({ addresses, onAddressesUpdated, className = '' }
 
     try {
       const geocodedAddresses = await geocodeBatch(addresses, (processed, total) => {
-        console.log(`Geocoding progress: ${processed}/${total}`);
+        logger.info(`Geocoding progress: ${processed}/${total}`);
       });
       onAddressesUpdated(geocodedAddresses);
       setCacheStats(getCacheStats());
     } catch (error) {
-      console.error('Geocoding failed:', error);
+      logger.error('Geocoding failed:', error);
       alert('Geocoding failed. Please check your Google Maps API key and internet connection.');
     }
   };

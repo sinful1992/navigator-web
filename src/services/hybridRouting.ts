@@ -2,6 +2,8 @@ import { supabase } from "../lib/supabaseClient";
 import type { AddressRow } from "../types";
 import { geocodeAddresses as googleGeocodeAddresses, searchAddresses as googleSearchAddresses, type GeocodingResult } from "./geocoding";
 
+import { logger } from '../utils/logger';
+
 // Re-export types and utility functions from centralizedRouting
 export type { GeocodingResult } from "./geocoding";
 export {
@@ -38,17 +40,17 @@ export async function geocodeAddresses(
   addresses: string[],
   onProgress?: (completed: number, total: number, currentAddress: string) => void
 ): Promise<GeocodingResult[]> {
-  console.log(`Geocoding ${addresses.length} addresses via Google Maps (hybrid service)`);
+  logger.info(`Geocoding ${addresses.length} addresses via Google Maps (hybrid service)`);
 
   try {
     // Use our cached Google Maps geocoding service
     const results = await googleGeocodeAddresses(addresses, undefined, onProgress);
 
-    console.log(`Google Maps geocoding completed: ${results.filter(r => r.success).length}/${results.length} successful`);
+    logger.info(`Google Maps geocoding completed: ${results.filter(r => r.success).length}/${results.length} successful`);
     return results;
 
   } catch (error) {
-    console.error('Google Maps geocoding service failed:', error);
+    logger.error('Google Maps geocoding service failed:', error);
     // Return error results for all addresses
     return addresses.map(address => ({
       success: false,
@@ -78,12 +80,12 @@ export async function searchAddresses(
       return googleResults.slice(0, limit);
     }
   } catch (error) {
-    console.warn('Google Maps search failed, falling back to centralized service:', error);
+    logger.warn('Google Maps search failed, falling back to centralized service:', error);
   }
 
   // Fallback to centralized service (OpenRouteService)
   if (!supabase) {
-    console.error('No search services available');
+    logger.error('No search services available');
     return [];
   }
 
@@ -102,14 +104,14 @@ export async function searchAddresses(
     });
 
     if (error) {
-      console.error('Address search error:', error);
+      logger.error('Address search error:', error);
       return [];
     }
 
     return data?.results || [];
 
   } catch (error) {
-    console.error('Address search failed:', error);
+    logger.error('Address search failed:', error);
     return [];
   }
 }
@@ -162,7 +164,7 @@ export async function optimizeRoute(
       };
     }
 
-    console.log(`Optimizing route for ${validAddresses.length} addresses via OpenRouteService (hybrid service)`);
+    logger.info(`Optimizing route for ${validAddresses.length} addresses via OpenRouteService (hybrid service)`);
 
     const requestBody = {
       addresses: validAddresses.map(addr => ({
@@ -175,7 +177,7 @@ export async function optimizeRoute(
       avoidTolls
     };
 
-    console.log('Route optimization request:', {
+    logger.info('Route optimization request:', {
       addressCount: requestBody.addresses.length,
       hasStartLocation: !!startLocation,
       firstAddress: requestBody.addresses[0]
@@ -211,7 +213,7 @@ export async function optimizeRoute(
       const functionUrl = `${supabaseUrl}/functions/v1/optimize-route`;
       const userToken = (await supabase.auth.getSession()).data.session?.access_token;
 
-      console.log('Making direct request to Edge Function:', {
+      logger.info('Making direct request to Edge Function:', {
         url: functionUrl,
         hasAuthToken: !!userToken,
         requestBodySize: JSON.stringify(requestBody).length
@@ -232,7 +234,7 @@ export async function optimizeRoute(
         body: JSON.stringify(requestBody)
       });
 
-      console.log('Edge Function response status:', {
+      logger.info('Edge Function response status:', {
         status: response.status,
         statusText: response.statusText,
         ok: response.ok,
@@ -241,7 +243,7 @@ export async function optimizeRoute(
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Edge Function error response:', {
+        logger.error('Edge Function error response:', {
           status: response.status,
           statusText: response.statusText,
           body: errorText
@@ -258,7 +260,7 @@ export async function optimizeRoute(
         data = await response.json();
       }
     } catch (fetchError) {
-      console.error('Failed to make direct request to Edge Function:', fetchError);
+      logger.error('Failed to make direct request to Edge Function:', fetchError);
       // Fallback to original Supabase method
       const result = await supabase.functions.invoke('optimize-route', {
         body: requestBody
@@ -268,7 +270,7 @@ export async function optimizeRoute(
     }
 
     if (error) {
-      console.error('Route optimization error details:', {
+      logger.error('Route optimization error details:', {
         error,
         errorMessage: error.message,
         errorName: error.name,
@@ -305,14 +307,14 @@ export async function optimizeRoute(
       };
     }
 
-    console.log('Route optimization response received:', {
+    logger.info('Route optimization response received:', {
       hasData: !!data,
       dataKeys: data ? Object.keys(data) : null,
       success: data?.success
     });
 
     if (!data) {
-      console.error('Route optimization: No data received from Edge Function');
+      logger.error('Route optimization: No data received from Edge Function');
       return {
         success: false,
         optimizedOrder: [],
@@ -323,11 +325,11 @@ export async function optimizeRoute(
       };
     }
 
-    console.log(`Route optimization completed: ${data.optimizedOrder?.length || 0} addresses optimized`);
+    logger.info(`Route optimization completed: ${data.optimizedOrder?.length || 0} addresses optimized`);
     return data;
 
   } catch (error) {
-    console.error('Route optimization failed:', error);
+    logger.error('Route optimization failed:', error);
     return {
       success: false,
       optimizedOrder: [],
@@ -402,7 +404,7 @@ export async function getOptimizedRouteDirections(
     });
 
     if (error) {
-      console.error('Route directions error:', error);
+      logger.error('Route directions error:', error);
       return {
         success: false,
         routeSegments: [],
@@ -417,7 +419,7 @@ export async function getOptimizedRouteDirections(
     };
 
   } catch (error) {
-    console.error('Failed to get route directions:', error);
+    logger.error('Failed to get route directions:', error);
     return {
       success: false,
       routeSegments: [],

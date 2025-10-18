@@ -2,6 +2,8 @@
 import { useState, useCallback } from 'react';
 import type { AddressRow, Completion, Arrangement, DaySession } from '../types';
 
+import { logger } from '../utils/logger';
+
 interface UndoAction {
   id: string;
   type: 'completion' | 'address' | 'arrangement' | 'day_session';
@@ -37,7 +39,7 @@ export const useUndo = (): UndoHookReturn => {
       try {
         localStorage.setItem('undo_stack', JSON.stringify(newStack));
       } catch (e) {
-        console.warn('Failed to persist undo stack:', e);
+        logger.warn('Failed to persist undo stack:', e);
       }
       return newStack;
     });
@@ -59,7 +61,7 @@ export const useUndo = (): UndoHookReturn => {
       try {
         localStorage.setItem('undo_stack', JSON.stringify(newStack));
       } catch (e) {
-        console.warn('Failed to update undo stack:', e);
+        logger.warn('Failed to update undo stack:', e);
       }
 
       return newStack;
@@ -73,7 +75,7 @@ export const useUndo = (): UndoHookReturn => {
     try {
       localStorage.removeItem('undo_stack');
     } catch (e) {
-      console.warn('Failed to clear undo stack:', e);
+      logger.warn('Failed to clear undo stack:', e);
     }
   }, []);
 

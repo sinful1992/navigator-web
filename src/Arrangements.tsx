@@ -5,6 +5,8 @@ import { LoadingButton } from "./components/LoadingButton";
 import { generateReminderMessage } from "./services/reminderScheduler";
 import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
 
+import { logger } from './utils/logger';
+
 type Props = {
   state: AppState;
   onAddArrangement: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>; // Returns the arrangement ID
@@ -127,7 +129,7 @@ const ArrangementsComponent = function Arrangements({
       }, 3000);
 
     } catch (error) {
-      console.error("Failed to send reminder:", error);
+      logger.error("Failed to send reminder:", error);
       alert("Failed to update reminder information. Please try again.");
     } finally {
       setLoadingStates(prev => ({
@@ -352,7 +354,7 @@ const ArrangementsComponent = function Arrangements({
         try {
           onComplete(arrangementData.addressIndex, "ARR");
         } catch (completionError) {
-          console.error('Error recording ARR completion:', completionError);
+          logger.error('Error recording ARR completion:', completionError);
           alert('Arrangement created successfully, but there was an issue recording the completion. You may need to manually mark this address as ARR.');
         }
       }
@@ -360,7 +362,7 @@ const ArrangementsComponent = function Arrangements({
       setShowAddForm(false);
       setEditingId(null);
     } catch (error) {
-      console.error('Error saving arrangement:', error);
+      logger.error('Error saving arrangement:', error);
       alert(`Failed to save arrangement: ${error instanceof Error ? error.message : 'Please try again.'}`);
     } finally {
       setLoadingStates(prev => ({ ...prev, saving: false }));
@@ -373,7 +375,7 @@ const ArrangementsComponent = function Arrangements({
       await onUpdateArrangement(id, arrangementData);
       setEditingId(null);
     } catch (error) {
-      console.error('Error updating arrangement:', error);
+      logger.error('Error updating arrangement:', error);
       alert('Failed to update arrangement. Please try again.');
     } finally {
       setLoadingStates(prev => ({ ...prev, updating: false }));

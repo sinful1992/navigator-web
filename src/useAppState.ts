@@ -933,7 +933,7 @@ export function useAppState(userId?: string) {
           return Promise.reject(); // Exit early but maintain function signature
         }
 
-        console.log(`🔄 RE-COMPLETING: Address "${address.address}" was previously completed ${new Date(existingCompletion.timestamp).toLocaleString()}, allowing new completion`);
+        logger.info(`🔄 RE-COMPLETING: Address "${address.address}" was previously completed ${new Date(existingCompletion.timestamp).toLocaleString()}, allowing new completion`);
       }
 
       const nowISO = new Date().toISOString();
@@ -1324,7 +1324,7 @@ export function useAppState(userId?: string) {
   const restoreState = React.useCallback(
     async (obj: unknown, mergeStrategy: "replace" | "merge" = "replace") => {
       if (!isValidState(obj)) {
-        console.error('🚨 RESTORE VALIDATION FAILED:', {
+        logger.error('🚨 RESTORE VALIDATION FAILED:', {
           hasObj: !!obj,
           type: typeof obj,
           hasAddresses: obj && Array.isArray((obj as any).addresses),
@@ -1345,7 +1345,7 @@ export function useAppState(userId?: string) {
       const isMobile = /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-      console.log('📁 RESTORE DATA ANALYSIS:', {
+      logger.info('📁 RESTORE DATA ANALYSIS:', {
         addressCount: obj.addresses.length,
         completionCount: obj.completions.length,
         arrangementCount: obj.arrangements?.length || 0,
@@ -1367,7 +1367,7 @@ export function useAppState(userId?: string) {
         currentListVersion: version,
       };
 
-      console.log('📁 RESTORED STATE PREPARED:', {
+      logger.info('📁 RESTORED STATE PREPARED:', {
         addressCount: restoredState.addresses.length,
         completionCount: restoredState.completions.length,
         arrangementCount: restoredState.arrangements.length,
@@ -1457,7 +1457,7 @@ export function useAppState(userId?: string) {
       try {
         const stateToSave = { ...restoredState, _schemaVersion: CURRENT_SCHEMA_VERSION };
 
-        console.log('💾 PERSISTING RESTORED STATE:', {
+        logger.info('💾 PERSISTING RESTORED STATE:', {
           addressCount: stateToSave.addresses.length,
           completionCount: stateToSave.completions.length,
           arrangementCount: stateToSave.arrangements.length,
@@ -1471,14 +1471,14 @@ export function useAppState(userId?: string) {
         if ('storage' in navigator && 'persist' in navigator.storage) {
           try {
             const isPersistent = await navigator.storage.persist();
-            console.log('📱 PERSISTENT STORAGE:', isPersistent ? 'GRANTED' : 'DENIED');
+            logger.info('📱 PERSISTENT STORAGE:', isPersistent ? 'GRANTED' : 'DENIED');
           } catch (error) {
-            console.warn('📱 PERSISTENT STORAGE REQUEST FAILED:', error);
+            logger.warn('📱 PERSISTENT STORAGE REQUEST FAILED:', error);
           }
         }
 
         await storageManager.queuedSet(STORAGE_KEY, stateToSave);
-        console.log('✅ RESTORED STATE PERSISTED TO INDEXEDDB');
+        logger.info('✅ RESTORED STATE PERSISTED TO INDEXEDDB');
 
         // Check storage quota (mobile issue detection)
         if ('storage' in navigator && 'estimate' in navigator.storage) {
@@ -1487,19 +1487,19 @@ export function useAppState(userId?: string) {
             const percentUsed = estimate.usage && estimate.quota
               ? Math.round((estimate.usage / estimate.quota) * 100)
               : 'unknown';
-            console.log('📊 STORAGE QUOTA:', {
+            logger.info('📊 STORAGE QUOTA:', {
               used: estimate.usage ? `${Math.round(estimate.usage / 1024 / 1024)}MB` : 'unknown',
               total: estimate.quota ? `${Math.round(estimate.quota / 1024 / 1024)}MB` : 'unknown',
               percentUsed: `${percentUsed}%`
             });
           } catch (error) {
-            console.warn('📊 STORAGE QUOTA CHECK FAILED:', error);
+            logger.warn('📊 STORAGE QUOTA CHECK FAILED:', error);
           }
         }
 
         // Verify the state was actually saved
         const verifyState = await storageManager.queuedGet(STORAGE_KEY);
-        console.log('🔍 VERIFICATION READ FROM INDEXEDDB:', {
+        logger.info('🔍 VERIFICATION READ FROM INDEXEDDB:', {
           success: !!verifyState,
           addressCount: verifyState?.addresses?.length || 0,
           completionCount: verifyState?.completions?.length || 0,
@@ -1510,7 +1510,7 @@ export function useAppState(userId?: string) {
         // Use 30 second protection window for testing
         const restoreTime = Date.now();
         localStorage.setItem('navigator_restore_in_progress', restoreTime.toString());
-        console.log('🛡️ RESTORE PROTECTION ACTIVATED:', new Date(restoreTime).toISOString());
+        logger.info('🛡️ RESTORE PROTECTION ACTIVATED:', new Date(restoreTime).toISOString());
 
         // Also set a backup protection flag that lasts longer
         localStorage.setItem('navigator_last_restore', restoreTime.toString());
@@ -1531,7 +1531,7 @@ export function useAppState(userId?: string) {
       if (lastRestore) {
         const timeSinceRestore = Date.now() - parseInt(lastRestore);
         if (timeSinceRestore < 3600000) { // Log for 1 hour after restore
-          console.log('⚠️ STATE CHANGE AFTER RESTORE:', {
+          logger.info('⚠️ STATE CHANGE AFTER RESTORE:', {
             timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
             newStateType: typeof newState,
             isFunction: typeof newState === 'function',

@@ -3,6 +3,8 @@ import { searchAddresses, isHybridRoutingAvailable } from "../services/hybridRou
 import { resolveSelectedPlace } from "../services/geocoding";
 import type { AddressAutocompleteResult } from "../services/hybridRouting";
 
+import { logger } from '../utils/logger';
+
 interface AddressAutocompleteProps {
   id?: string;
   value: string;
@@ -53,7 +55,7 @@ export const AddressAutocomplete = forwardRef<HTMLInputElement, AddressAutocompl
         setSelectedIndex(-1);
       });
     } catch (error) {
-      console.error('Address search failed:', error);
+      logger.error('Address search failed:', error);
       startTransition(() => {
         setSuggestions([]);
         setShowSuggestions(false);
@@ -95,7 +97,7 @@ export const AddressAutocomplete = forwardRef<HTMLInputElement, AddressAutocompl
           onSelect(suggestion.label, 0, 0);
         }
       } catch (error) {
-        console.error('Failed to resolve place details:', error);
+        logger.error('Failed to resolve place details:', error);
         onChange(suggestion.label);
         onSelect(suggestion.label, 0, 0);
       } finally {
@@ -176,7 +178,7 @@ export const AddressAutocomplete = forwardRef<HTMLInputElement, AddressAutocompl
         }
       } catch (error) {
         // Ignore DOM errors during click outside detection
-        console.debug('Click outside detection error (ignoring):', error);
+        logger.debug('Click outside detection error (ignoring):', error);
       }
     };
 
@@ -186,7 +188,7 @@ export const AddressAutocomplete = forwardRef<HTMLInputElement, AddressAutocompl
         document.removeEventListener('mousedown', handleClickOutside);
       } catch (error) {
         // Ignore cleanup errors
-        console.debug('Event listener cleanup error (ignoring):', error);
+        logger.debug('Event listener cleanup error (ignoring):', error);
       }
     };
   }, []);

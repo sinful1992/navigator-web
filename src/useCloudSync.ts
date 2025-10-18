@@ -7,6 +7,8 @@ import type { AppState } from "./types";
 import { generateChecksum } from "./utils/checksum";
 import { isProtectionActive } from "./utils/protectionFlags";
 
+import { logger } from './utils/logger';
+
 // Initialize a new user with default subscription
 async function initializeNewUser(userId: string): Promise<void> {
   if (!supabase) {
@@ -14,7 +16,7 @@ async function initializeNewUser(userId: string): Promise<void> {
   }
 
   if (import.meta.env.DEV) {
-    console.log("Creating trial subscription for user:", userId);
+    logger.info("Creating trial subscription for user:", userId);
   }
 
   // Use the database function to create trial subscription (bypasses RLS)
@@ -22,18 +24,18 @@ async function initializeNewUser(userId: string): Promise<void> {
     .rpc('create_trial_subscription', { target_user_id: userId });
 
   if (import.meta.env.DEV) {
-    console.log("Trial subscription creation result:", { data, error });
+    logger.info("Trial subscription creation result:", { data, error });
   }
 
   if (error) {
     // If error is about existing subscription, that's fine - user already has one
     if (error.message?.includes('already has a subscription')) {
       if (import.meta.env.DEV) {
-        console.log("User already has a subscription, skipping trial creation");
+        logger.info("User already has a subscription, skipping trial creation");
       }
       return;
     }
-    console.error("Failed to create trial subscription:", error);
+    logger.error("Failed to create trial subscription:", error);
     throw error;
   }
 
@@ -41,16 +43,16 @@ async function initializeNewUser(userId: string): Promise<void> {
     // If the error message indicates subscription already exists, that's fine
     if (data.message?.includes('already has a subscription')) {
       if (import.meta.env.DEV) {
-        console.log("User already has a subscription (from data), skipping trial creation");
+        logger.info("User already has a subscription (from data), skipping trial creation");
       }
       return;
     }
-    console.error("Trial subscription creation failed:", data.message);
+    logger.error("Trial subscription creation failed:", data.message);
     throw new Error(data.message);
   }
 
   if (import.meta.env.DEV) {
-    console.log("Trial subscription created successfully:", data);
+    logger.info("Trial subscription created successfully:", data);
   }
 }
 
@@ -257,7 +259,7 @@ export function mergeStatePreservingActiveIndex(
       if (allShorterInLonger) {
         // This is a manual address addition - use the longer list
         if (import.meta.env.DEV) {
-          console.log('🔧 SYNC FIX: Detected manual address addition, using longer list', {
+          logger.info('🔧 SYNC FIX: Detected manual address addition, using longer list', {
             longerListLength: longerList.length,
             shorterListLength: shorterList.length
           });
@@ -431,11 +433,11 @@ export function useCloudSync(): UseCloudSync {
           if (entry.operation.retries < 3) {
             // Keep in queue for retry (don't mark as processed)
             if (import.meta.env.DEV) {
-              console.log(`Retrying operation ${entry.operation.id}, attempt ${entry.operation.retries}`);
+              logger.info(`Retrying operation ${entry.operation.id}, attempt ${entry.operation.retries}`);
             }
           } else {
             // Max retries exceeded - remove from queue
-            console.warn(`Operation ${entry.operation.id} failed after max retries:`, opError);
+            logger.warn(`Operation ${entry.operation.id} failed after max retries:`, opError);
             processedIds.add(entry.operation.id); // Remove from queue
             entry.reject(opError);
           }
@@ -449,7 +451,7 @@ export function useCloudSync(): UseCloudSync {
       
     } catch (batchError: any) {
       // Don't remove any items on batch error - they'll be retried
-      console.error('Sync batch error:', batchError);
+      logger.error('Sync batch error:', batchError);
       setError(batchError?.message || 'Sync batch failed');
     } finally {
       isProcessingQueue.current = false;
@@ -480,7 +482,7 @@ export function useCloudSync(): UseCloudSync {
 
       if (isDuplicate) {
         if (import.meta.env.DEV) {
-          console.log(`Skipping exact duplicate operation: ${operationKey}`);
+          logger.info(`Skipping exact duplicate operation: ${operationKey}`);
         }
         resolve(); // Resolve immediately for exact duplicates
         return;
@@ -505,7 +507,7 @@ export function useCloudSync(): UseCloudSync {
       
       // Limit queue size to prevent memory issues
       if (syncQueue.current.length > 1000) {
-        console.warn('Sync queue size limit reached, removing oldest entries');
+        logger.warn('Sync queue size limit reached, removing oldest entries');
         const removed = syncQueue.current.splice(0, 100);
         removed.forEach(oldEntry => {
           oldEntry.reject(new Error('Queue overflow - operation cancelled'));
@@ -528,7 +530,7 @@ export function useCloudSync(): UseCloudSync {
         // 🔧 CRITICAL FIX: If offline, skip cloud validation and finish loading quickly
         if (!navigator.onLine) {
           if (import.meta.env.DEV) {
-            console.log('🔌 OFFLINE: Skipping session validation, will use cached session');
+            logger.info('🔌 OFFLINE: Skipping session validation, will use cached session');
           }
 
           // 🔧 CRITICAL FIX: Check if user was previously authenticated
@@ -542,13 +544,13 @@ export function useCloudSync(): UseCloudSync {
               if (mounted && data.session?.user) {
                 setUser(data.session.user);
                 if (import.meta.env.DEV) {
-                  console.log('🔌 OFFLINE: Restored session from cache');
+                  logger.info('🔌 OFFLINE: Restored session from cache');
                 }
               } else if (wasAuthenticated === 'true' && lastUserId) {
                 // 🔧 OFFLINE MODE: Create pseudo-user for offline access
                 // This allows access to local data without valid session
                 if (import.meta.env.DEV) {
-                  console.log('🔌 OFFLINE MODE: Creating pseudo-user for offline access');
+                  logger.info('🔌 OFFLINE MODE: Creating pseudo-user for offline access');
                 }
                 const pseudoUser = {
                   id: lastUserId,
@@ -571,7 +573,7 @@ export function useCloudSync(): UseCloudSync {
               // If session restoration fails but user was authenticated, use pseudo-user
               if (wasAuthenticated === 'true' && lastUserId && mounted) {
                 if (import.meta.env.DEV) {
-                  console.log('🔌 OFFLINE MODE: Session restoration failed, using pseudo-user');
+                  logger.info('🔌 OFFLINE MODE: Session restoration failed, using pseudo-user');
                 }
                 const pseudoUser = {
                   id: lastUserId,
@@ -625,7 +627,7 @@ export function useCloudSync(): UseCloudSync {
         // This reduces the frequency of "restoring session" messages while maintaining security
         if (timeSinceLastValidation > 900000 || !lastSessionValidation) {
           if (import.meta.env.DEV) {
-            console.log('🔒 SECURITY: Validating session integrity...');
+            logger.info('🔒 SECURITY: Validating session integrity...');
           }
 
           // Check for session token tampering
@@ -636,7 +638,7 @@ export function useCloudSync(): UseCloudSync {
               const currentUserId = sessionData?.user?.id;
 
               if (storedExpectedUserId && currentUserId && currentUserId !== storedExpectedUserId) {
-                console.error('🚨 SESSION TAMPERING DETECTED: Session user ID does not match expected user ID');
+                logger.error('🚨 SESSION TAMPERING DETECTED: Session user ID does not match expected user ID');
 
                 // Clear ALL auth storage to prevent contamination
                 localStorage.removeItem(`sb-${window.location.hostname.replace(/\./g, '-')}-auth-token`);
@@ -648,7 +650,7 @@ export function useCloudSync(): UseCloudSync {
                 return;
               }
             } catch (parseError) {
-              console.warn('Could not parse session data for validation:', parseError);
+              logger.warn('Could not parse session data for validation:', parseError);
             }
           }
 
@@ -665,7 +667,7 @@ export function useCloudSync(): UseCloudSync {
 
         // Handle auth callback errors
         if (errorParam) {
-          console.error('Auth callback error:', errorParam, errorDescription);
+          logger.error('Auth callback error:', errorParam, errorDescription);
           const errorMsg = `Email confirmation failed: ${errorDescription || errorParam}`;
           setError(errorMsg);
           alert(errorMsg); // Show visible error to user
@@ -677,7 +679,7 @@ export function useCloudSync(): UseCloudSync {
 
         if (accessToken && type) {
           if (import.meta.env.DEV) {
-            console.log('Detected auth callback:', type, {
+            logger.info('Detected auth callback:', type, {
               hasAccessToken: !!accessToken,
               hasRefreshToken: !!refreshToken
             });
@@ -691,13 +693,13 @@ export function useCloudSync(): UseCloudSync {
             });
 
             if (sessionError) {
-              console.error('Error setting session from URL:', sessionError);
+              logger.error('Error setting session from URL:', sessionError);
               const errorMsg = 'Failed to confirm email: ' + sessionError.message;
               setError(errorMsg);
               alert(errorMsg + '\n\nPlease try signing in manually or contact support.');
             } else if (sessionData.session) {
               if (import.meta.env.DEV) {
-                console.log('Email confirmed successfully, session established:', {
+                logger.info('Email confirmed successfully, session established:', {
                   userId: sessionData.session.user.id,
                   email: sessionData.session.user.email
                 });
@@ -711,21 +713,21 @@ export function useCloudSync(): UseCloudSync {
               // This handles the case where email confirmation was required
               try {
                 if (import.meta.env.DEV) {
-                  console.log('Checking if user needs trial subscription...');
+                  logger.info('Checking if user needs trial subscription...');
                 }
                 await initializeNewUser(sessionData.session.user.id);
               } catch (initError: any) {
                 // Don't block login if trial creation fails
-                console.warn('Trial subscription creation failed (may already exist):', initError);
+                logger.warn('Trial subscription creation failed (may already exist):', initError);
               }
             } else {
-              console.warn('Session data missing after setSession');
+              logger.warn('Session data missing after setSession');
               const errorMsg = 'Email confirmation incomplete. Please try signing in with your email and password.';
               setError(errorMsg);
               alert(errorMsg);
             }
           } catch (e: any) {
-            console.error('Exception during session setup:', e);
+            logger.error('Exception during session setup:', e);
             setError('Error confirming email: ' + (e?.message || String(e)));
           }
 
@@ -738,7 +740,7 @@ export function useCloudSync(): UseCloudSync {
 
           // 🔒 SECURITY: Validate user ID consistency
           if (data.user && storedExpectedUserId && data.user.id !== storedExpectedUserId) {
-            console.error(`🚨 USER ID MISMATCH: Expected ${storedExpectedUserId}, got ${data.user.id}`);
+            logger.error(`🚨 USER ID MISMATCH: Expected ${storedExpectedUserId}, got ${data.user.id}`);
 
             // This is a critical security issue - different user session loaded
             setError(`Security error: Session user mismatch. Signing out for safety.`);
@@ -776,14 +778,14 @@ export function useCloudSync(): UseCloudSync {
         const newUserId = session?.user?.id;
 
         if (storedExpectedUserId && newUserId && storedExpectedUserId !== newUserId) {
-          console.error(`🚨 AUTH STATE CHANGE: User ID changed from ${storedExpectedUserId} to ${newUserId}`);
+          logger.error(`🚨 AUTH STATE CHANGE: User ID changed from ${storedExpectedUserId} to ${newUserId}`);
 
           // Only set user if this is a legitimate user switch (SIGNED_IN event)
           if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-            console.log('🔒 SECURITY: Legitimate user change, updating expected user ID');
+            logger.info('🔒 SECURITY: Legitimate user change, updating expected user ID');
             localStorage.setItem('navigator_expected_user_id', newUserId);
           } else {
-            console.error('🚨 SECURITY: Unexpected user ID change on event:', event);
+            logger.error('🚨 SECURITY: Unexpected user ID change on event:', event);
             // Don't update user state - this might be session poisoning
             return;
           }
@@ -801,7 +803,7 @@ export function useCloudSync(): UseCloudSync {
           clearError();
 
           if (import.meta.env.DEV) {
-            console.log('Auth state changed:', event);
+            logger.info('Auth state changed:', event);
           }
         }
 
@@ -833,7 +835,7 @@ export function useCloudSync(): UseCloudSync {
       // 🔧 OFFLINE PROTECTION: Process any queued offline states
       setTimeout(async () => {
         if (import.meta.env.DEV) {
-          console.log('🔌 OFFLINE PROTECTION: Back online, checking for queued states...');
+          logger.info('🔌 OFFLINE PROTECTION: Back online, checking for queued states...');
         }
 
         const offlineKeys = Object.keys(localStorage).filter(key =>
@@ -842,7 +844,7 @@ export function useCloudSync(): UseCloudSync {
 
         if (offlineKeys.length > 0) {
           if (import.meta.env.DEV) {
-            console.log(`🔌 OFFLINE PROTECTION: Found ${offlineKeys.length} queued offline states, processing...`);
+            logger.info(`🔌 OFFLINE PROTECTION: Found ${offlineKeys.length} queued offline states, processing...`);
           }
 
           for (const key of offlineKeys) {
@@ -850,7 +852,7 @@ export function useCloudSync(): UseCloudSync {
               const offlineData = JSON.parse(localStorage.getItem(key) || '{}');
               if (offlineData.state) {
                 if (import.meta.env.DEV) {
-                  console.log(`🔌 OFFLINE PROTECTION: Retrying sync for offline state from ${offlineData.timestamp}`);
+                  logger.info(`🔌 OFFLINE PROTECTION: Retrying sync for offline state from ${offlineData.timestamp}`);
                 }
 
                 // Try to sync the queued state
@@ -859,16 +861,16 @@ export function useCloudSync(): UseCloudSync {
                 // If successful, remove from queue
                 localStorage.removeItem(key);
                 if (import.meta.env.DEV) {
-                  console.log(`🔌 OFFLINE PROTECTION: Successfully synced queued state, removed from queue`);
+                  logger.info(`🔌 OFFLINE PROTECTION: Successfully synced queued state, removed from queue`);
                 }
               }
             } catch (retryError) {
-              console.error(`🔌 OFFLINE PROTECTION: Failed to sync queued state ${key}:`, retryError);
+              logger.error(`🔌 OFFLINE PROTECTION: Failed to sync queued state ${key}:`, retryError);
               // Keep in queue for next online session
             }
           }
         } else if (import.meta.env.DEV) {
-          console.log('🔌 OFFLINE PROTECTION: No queued offline states found');
+          logger.info('🔌 OFFLINE PROTECTION: No queued offline states found');
         }
       }, 2000); // Wait 2 seconds after coming online to ensure connection is stable
     };
@@ -876,7 +878,7 @@ export function useCloudSync(): UseCloudSync {
     const handleOffline = () => {
       setIsOnline(false);
       if (import.meta.env.DEV) {
-        console.log('🔌 OFFLINE PROTECTION: Gone offline, future syncs will be queued');
+        logger.info('🔌 OFFLINE PROTECTION: Gone offline, future syncs will be queued');
       }
     };
 
@@ -927,7 +929,7 @@ export function useCloudSync(): UseCloudSync {
       // First, ensure we're signed out completely to prevent session conflicts
       try {
         if (import.meta.env.DEV) {
-          console.log("Pre-signup: clearing all sessions and storage...");
+          logger.info("Pre-signup: clearing all sessions and storage...");
         }
 
         // Clear all auth storage manually
@@ -947,22 +949,22 @@ export function useCloudSync(): UseCloudSync {
         // Verify we're signed out
         const { data: sessionCheck } = await supabase.auth.getSession();
         if (import.meta.env.DEV) {
-          console.log("Session after cleanup:", sessionCheck.session ? "EXISTS" : "NULL");
+          logger.info("Session after cleanup:", sessionCheck.session ? "EXISTS" : "NULL");
         }
 
         if (sessionCheck.session) {
-          console.warn("Session still exists after cleanup, forcing removal...");
+          logger.warn("Session still exists after cleanup, forcing removal...");
           await supabase.auth.signOut();
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
       } catch (signOutError) {
-        console.warn("Error during pre-signup signout:", signOutError);
+        logger.warn("Error during pre-signup signout:", signOutError);
       }
 
       if (import.meta.env.DEV) {
-        console.log("Attempting signup for email:", email);
-        console.log("Supabase configured:", !!supabase);
+        logger.info("Attempting signup for email:", email);
+        logger.info("Supabase configured:", !!supabase);
       }
 
       // Use current origin for redirect (works for any deployment URL)
@@ -980,10 +982,10 @@ export function useCloudSync(): UseCloudSync {
       });
 
       if (import.meta.env.DEV) {
-        console.log("Signup response data:", data);
-        console.log("Signup error:", err);
-        console.log("User created:", data.user?.id, data.user?.email);
-        console.log("Session created:", data.session?.access_token ? "YES" : "NO");
+        logger.info("Signup response data:", data);
+        logger.info("Signup error:", err);
+        logger.info("User created:", data.user?.id, data.user?.email);
+        logger.info("Session created:", data.session?.access_token ? "YES" : "NO");
       }
 
       if (err) {
@@ -993,32 +995,32 @@ export function useCloudSync(): UseCloudSync {
 
       if (data.user) {
         if (import.meta.env.DEV) {
-          console.log("New user created:", data.user.email, "ID:", data.user.id);
+          logger.info("New user created:", data.user.email, "ID:", data.user.id);
         }
 
         // Initialize new user with trial subscription
         try {
           await initializeNewUser(data.user.id);
           if (import.meta.env.DEV) {
-            console.log("Successfully initialized new user with trial subscription");
+            logger.info("Successfully initialized new user with trial subscription");
           }
 
           // Set trial access flags for unconfirmed users
           localStorage.setItem('navigator_trial_created', Date.now().toString());
           localStorage.setItem('navigator_trial_user_id', data.user.id);
           if (import.meta.env.DEV) {
-            console.log("Set trial access flags for unconfirmed user");
+            logger.info("Set trial access flags for unconfirmed user");
           }
 
         } catch (initError) {
-          console.error("Failed to initialize new user:", initError);
+          logger.error("Failed to initialize new user:", initError);
           // Don't throw - user is created, just missing subscription setup
         }
 
         // If no session was created, email confirmation is required
         if (!data.session) {
           if (import.meta.env.DEV) {
-            console.log("No session created during signup - email confirmation required");
+            logger.info("No session created during signup - email confirmation required");
           }
 
           // Email confirmation is enabled - inform user to check email
@@ -1087,10 +1089,10 @@ export function useCloudSync(): UseCloudSync {
       keysToRemove.forEach(key => localStorage.removeItem(key));
       sessionStorage.clear(); // Clear sessionStorage
       if (import.meta.env.DEV) {
-        console.log("Cleared all navigator data on signout");
+        logger.info("Cleared all navigator data on signout");
       }
     } catch (clearError) {
-      console.warn("Error clearing local data:", clearError);
+      logger.warn("Error clearing local data:", clearError);
     }
 
     setUser(null);
@@ -1163,7 +1165,7 @@ export function useCloudSync(): UseCloudSync {
       // Skip if state hasn't changed
       if (stateStr === lastSyncedState.current) {
         if (import.meta.env.DEV) {
-          console.log('🚫 SYNC SKIPPED: State unchanged since last successful sync', {
+          logger.info('🚫 SYNC SKIPPED: State unchanged since last successful sync', {
             completions: state.completions?.length || 0,
             addresses: state.addresses?.length || 0,
             lastSyncTime: syncMetadata.current.lastSyncAt
@@ -1173,7 +1175,7 @@ export function useCloudSync(): UseCloudSync {
       }
 
       if (import.meta.env.DEV) {
-        console.log('🔄 Syncing to cloud:', {
+        logger.info('🔄 Syncing to cloud:', {
           completions: state.completions?.length || 0,
           addresses: state.addresses?.length || 0
         });
@@ -1200,7 +1202,7 @@ export function useCloudSync(): UseCloudSync {
         // Conflict resolution if server has newer data
         if (currentData && currentData.updated_at > syncMetadata.current.lastSyncAt) {
           if (import.meta.env.DEV) {
-            console.log('Conflict detected, resolving...');
+            logger.info('Conflict detected, resolving...');
           }
 
           // Simple merge strategy: prefer local changes for recent items
@@ -1226,12 +1228,12 @@ export function useCloudSync(): UseCloudSync {
           .single();
 
         if (err) {
-          console.error('Cloud sync database error:', err);
+          logger.error('Cloud sync database error:', err);
 
           // If this is a version conflict, try to refetch and resolve
           if (err.code === '23505' || err.message?.includes('conflict')) {
             if (import.meta.env.DEV) {
-              console.log('Detected sync conflict, attempting resolution...');
+              logger.info('Detected sync conflict, attempting resolution...');
             }
             // Force a fresh sync on next attempt
             syncMetadata.current.lastSyncAt = '';
@@ -1250,7 +1252,7 @@ export function useCloudSync(): UseCloudSync {
           .single();
 
         if (verifyError) {
-          console.error('Sync verification failed:', verifyError);
+          logger.error('Sync verification failed:', verifyError);
           throw new Error(`Sync verification failed: ${verifyError.message}`);
         }
 
@@ -1265,7 +1267,7 @@ export function useCloudSync(): UseCloudSync {
           // - JSON serialization order differences
           // - Database type coercion (timestamps, etc)
           // - Postgres triggers/functions modifying data
-          console.warn('Checksum mismatch (likely harmless serialization difference)', {
+          logger.warn('Checksum mismatch (likely harmless serialization difference)', {
             expectedChecksum: finalChecksum,
             actualChecksum: verifyChecksum,
             expectedCompletions: finalState.completions?.length || 0,
@@ -1293,12 +1295,12 @@ export function useCloudSync(): UseCloudSync {
         if (e?.message !== 'Auth session missing!') {
           setError(e?.message || String(e));
         }
-        console.error('Sync failed:', e);
+        logger.error('Sync failed:', e);
 
         // 🔧 OFFLINE PROTECTION: If we're offline, queue this state for later sync
         if (!isOnline || e?.message?.includes('fetch')) {
           if (import.meta.env.DEV) {
-            console.log('🔌 OFFLINE PROTECTION: Network issues detected, queuing state for retry when online');
+            logger.info('🔌 OFFLINE PROTECTION: Network issues detected, queuing state for retry when online');
           }
 
           // Store the failed sync state with timestamp
@@ -1313,10 +1315,10 @@ export function useCloudSync(): UseCloudSync {
           try {
             localStorage.setItem(offlineKey, JSON.stringify(offlineData));
             if (import.meta.env.DEV) {
-              console.log('🔌 OFFLINE PROTECTION: State queued successfully for when connection returns');
+              logger.info('🔌 OFFLINE PROTECTION: State queued successfully for when connection returns');
             }
           } catch (storageError) {
-            console.error('Failed to queue offline state:', storageError);
+            logger.error('Failed to queue offline state:', storageError);
           }
         }
       } finally {
@@ -1329,12 +1331,12 @@ export function useCloudSync(): UseCloudSync {
   // Enhanced conflict resolution strategy
   const resolveConflicts = useCallback(async (localState: AppState, serverState: AppState): Promise<AppState> => {
     if (import.meta.env.DEV) {
-      console.log('🔧 Resolving conflicts between local and server state');
+      logger.info('🔧 Resolving conflicts between local and server state');
     }
 
     // 🔧 CRITICAL FIX: Check if restore is in progress (using centralized protection manager)
     if (isProtectionActive('navigator_restore_in_progress')) {
-      console.log('🛡️ RESTORE PROTECTION: Preferring local state to prevent data loss');
+      logger.info('🛡️ RESTORE PROTECTION: Preferring local state to prevent data loss');
       const localVersion =
         typeof localState.currentListVersion === "number"
           ? localState.currentListVersion
@@ -1353,7 +1355,7 @@ export function useCloudSync(): UseCloudSync {
 
     // 🔧 CRITICAL FIX: Check if import is in progress (using centralized protection manager)
     if (isProtectionActive('navigator_import_in_progress')) {
-      console.log('🛡️ IMPORT PROTECTION: Preferring local state to prevent import override');
+      logger.info('🛡️ IMPORT PROTECTION: Preferring local state to prevent import override');
       const localVersion =
         typeof localState.currentListVersion === "number"
           ? localState.currentListVersion
@@ -1381,7 +1383,7 @@ export function useCloudSync(): UseCloudSync {
       const serverCompletions = serverState.completions.length;
 
       if (import.meta.env.DEV) {
-        console.log('🛡️ OFFLINE PROTECTION: Recent local work detected, preserving local completions', {
+        logger.info('🛡️ OFFLINE PROTECTION: Recent local work detected, preserving local completions', {
           localCompletions,
           serverCompletions,
           recentWorkThreshold: recentThreshold.toISOString(),
@@ -1392,7 +1394,7 @@ export function useCloudSync(): UseCloudSync {
       // If local has more completions and recent work, strongly favor local state
       if (localCompletions > serverCompletions) {
         if (import.meta.env.DEV) {
-          console.log('🛡️ OFFLINE PROTECTION: Local has more completions, preserving local state entirely');
+          logger.info('🛡️ OFFLINE PROTECTION: Local has more completions, preserving local state entirely');
         }
         return {
           ...localState,
@@ -1438,7 +1440,7 @@ export function useCloudSync(): UseCloudSync {
     );
 
     if (import.meta.env.DEV) {
-      console.log(`Merged completions: local=${localState.completions.length}, server=${serverState.completions.length}, resolved=${resolved.completions.length}`);
+      logger.info(`Merged completions: local=${localState.completions.length}, server=${serverState.completions.length}, resolved=${resolved.completions.length}`);
     }
 
     // Merge arrangements (prefer local for recent changes, server for older)
@@ -1509,12 +1511,12 @@ export function useCloudSync(): UseCloudSync {
 
         if (!error && data) {
           if (import.meta.env.DEV) {
-            console.log('🔄 FORCE SYNC: Fetched latest state from server');
+            logger.info('🔄 FORCE SYNC: Fetched latest state from server');
           }
           // Return value removed to match Promise<void>
         }
       } catch (e) {
-        console.warn('Force sync failed:', e);
+        logger.warn('Force sync failed:', e);
       }
     }
   }, [user]);
@@ -1532,7 +1534,7 @@ export function useCloudSync(): UseCloudSync {
       activeChannelCountRef.current += 1;
       if (import.meta.env.DEV) {
         const topic = (channel as any)?.topic ?? "unknown";
-        console.log(
+        logger.info(
           `🛰️ subscribeToData: creating channel (#${activeChannelCountRef.current})`,
           topic
         );
@@ -1549,14 +1551,14 @@ export function useCloudSync(): UseCloudSync {
             // 🔒 SECURITY: Validate that the data is for the correct user
             const storedExpectedUserId = localStorage.getItem('navigator_expected_user_id');
             if (storedExpectedUserId && row.user_id && row.user_id !== storedExpectedUserId) {
-              console.error(`🚨 SUBSCRIPTION DATA CONTAMINATION: Received data for user ${row.user_id} but expected ${storedExpectedUserId}`);
+              logger.error(`🚨 SUBSCRIPTION DATA CONTAMINATION: Received data for user ${row.user_id} but expected ${storedExpectedUserId}`);
               return; // Ignore data from wrong user
             }
 
             // 🔒 SECURITY: Validate data ownership
             const dataObj: AppState = row.data;
             if (dataObj._ownerUserId && dataObj._ownerUserId !== user.id) {
-              console.error(`🚨 DATA OWNERSHIP MISMATCH: Data belongs to ${dataObj._ownerUserId} but current user is ${user.id}`);
+              logger.error(`🚨 DATA OWNERSHIP MISMATCH: Data belongs to ${dataObj._ownerUserId} but current user is ${user.id}`);
               return; // Ignore data with wrong ownership
             }
 
@@ -1590,7 +1592,7 @@ export function useCloudSync(): UseCloudSync {
               localStorage.setItem(checksumMismatchKey, newMismatchCount.toString());
               localStorage.setItem(lastMismatchKey, Date.now().toString());
 
-              console.warn(`⚠️ CHECKSUM MISMATCH (${newMismatchCount}) - Data integrity issue detected`, {
+              logger.warn(`⚠️ CHECKSUM MISMATCH (${newMismatchCount}) - Data integrity issue detected`, {
                 expected: expectedChecksum.substring(0, 16) + '...',
                 actual: serverChecksum.substring(0, 16) + '...',
                 serverVersion,
@@ -1600,7 +1602,7 @@ export function useCloudSync(): UseCloudSync {
 
               // Only reset after 3 consecutive mismatches (silent recovery)
               if (newMismatchCount >= 3) {
-                console.error('❌ PERSISTENT CHECKSUM MISMATCH - Forcing full sync (silent recovery)');
+                logger.error('❌ PERSISTENT CHECKSUM MISMATCH - Forcing full sync (silent recovery)');
                 // 🔧 FIX: Don't show error to user - they can't do anything about it
                 // Just silently force a full sync to recover
                 localStorage.removeItem(checksumMismatchKey);
@@ -1621,7 +1623,7 @@ export function useCloudSync(): UseCloudSync {
             const activeProtection = localStorage.getItem('navigator_active_protection');
             if (activeProtection) {
               if (import.meta.env.DEV) {
-                console.log('🛡️ ACTIVE PROTECTION: Blocking cloud update - user is working on address');
+                logger.info('🛡️ ACTIVE PROTECTION: Blocking cloud update - user is working on address');
               }
               return;
             }
@@ -1640,7 +1642,7 @@ export function useCloudSync(): UseCloudSync {
               // If restore was within the last 30 seconds, skip cloud updates
               if (timeSinceRestore < 30000) {
                 if (import.meta.env.DEV) {
-                  console.log('🛡️ RESTORE PROTECTION: Skipping cloud state update to prevent data loss', {
+                  logger.info('🛡️ RESTORE PROTECTION: Skipping cloud state update to prevent data loss', {
                     timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
                     restoreTime: new Date(restoreTime).toISOString()
                   });
@@ -1649,7 +1651,7 @@ export function useCloudSync(): UseCloudSync {
               } else {
                 // Clear the flag after timeout
                 if (import.meta.env.DEV) {
-                  console.log('🛡️ RESTORE PROTECTION: Timeout reached, clearing flag');
+                  logger.info('🛡️ RESTORE PROTECTION: Timeout reached, clearing flag');
                 }
                 localStorage.removeItem('navigator_restore_in_progress');
               }
@@ -1664,7 +1666,7 @@ export function useCloudSync(): UseCloudSync {
               // If import was within the last 2 seconds, skip cloud updates
               if (timeSinceImport < 2000) {
                 if (import.meta.env.DEV) {
-                  console.log('🛡️ IMPORT PROTECTION: Skipping cloud state update to prevent import override', {
+                  logger.info('🛡️ IMPORT PROTECTION: Skipping cloud state update to prevent import override', {
                     timeSinceImport: `${Math.round(timeSinceImport/1000)}s`,
                     importTime: new Date(importTime).toISOString()
                   });
@@ -1673,14 +1675,14 @@ export function useCloudSync(): UseCloudSync {
               } else {
                 // Clear the flag after timeout
                 if (import.meta.env.DEV) {
-                  console.log('🛡️ IMPORT PROTECTION: Timeout reached, clearing flag');
+                  logger.info('🛡️ IMPORT PROTECTION: Timeout reached, clearing flag');
                 }
                 localStorage.removeItem('navigator_import_in_progress');
               }
             }
 
             if (import.meta.env.DEV) {
-              console.log('🔄 FORCE UPDATE: Applying cloud state update from another device');
+              logger.info('🔄 FORCE UPDATE: Applying cloud state update from another device');
             }
 
             // FORCE UPDATE: Apply cloud updates immediately for personal use case
@@ -1697,9 +1699,9 @@ export function useCloudSync(): UseCloudSync {
                 );
 
                 if (newCompletions.length > 0 && import.meta.env.DEV) {
-                  console.log(`📱 NEW COMPLETIONS DETECTED: ${newCompletions.length} new completion(s) from other device(s)`);
+                  logger.info(`📱 NEW COMPLETIONS DETECTED: ${newCompletions.length} new completion(s) from other device(s)`);
                   newCompletions.forEach(comp => {
-                    console.log(`   • "${comp.address}" completed at ${new Date(comp.timestamp).toLocaleString()}`);
+                    logger.info(`   • "${comp.address}" completed at ${new Date(comp.timestamp).toLocaleString()}`);
                   });
                 }
 
@@ -1711,7 +1713,7 @@ export function useCloudSync(): UseCloudSync {
             }
             setLastSyncTime(new Date(updatedAt));
           } catch (e: any) {
-            console.warn("subscribeToData handler error:", e?.message || e);
+            logger.warn("subscribeToData handler error:", e?.message || e);
             setError("Sync error: " + (e?.message || e));
           }
         }
@@ -1725,7 +1727,7 @@ export function useCloudSync(): UseCloudSync {
         }
         if (import.meta.env.DEV) {
           const topic = (channel as any)?.topic ?? "unknown";
-          console.log(
+          logger.info(
             `🛰️ subscribeToData: cleaning up channel (remaining #${activeChannelCountRef.current})`,
             topic
           );
