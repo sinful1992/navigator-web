@@ -54,8 +54,8 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, isLoading, error, on
       return;
     }
 
-    if (password.length < 6) {
-      setValidationError("Password must be at least 6 characters");
+    if (password.length < 8) {
+      setValidationError("Password must be at least 8 characters");
       return;
     }
 
@@ -65,7 +65,11 @@ export function Auth({ onSignIn, onSignUp, onResetPassword, isLoading, error, on
     }
 
     // Check for common weak passwords
-    const weakPasswords = ["password", "123456", "qwerty", "abc123", "password123"];
+    const weakPasswords = [
+      "password", "123456", "qwerty", "abc123", "password123",
+      "12345678", "111111", "123123", "1234567890", "password1",
+      "welcome", "admin", "admin123", "letmein", "trustno1"
+    ];
     if (weakPasswords.includes(password.toLowerCase())) {
       setValidationError("Please choose a stronger password");
       return;

@@ -1074,7 +1074,14 @@ export function useCloudSync(): UseCloudSync {
         'navigator_import_in_progress', // Clear import protection
         'navigator_was_authenticated', // 🔧 CRITICAL: Clear authentication flag
         'navigator_last_user_email', // Clear last user email
-        'navigator_offline_mode' // Clear offline mode flag
+        'navigator_offline_mode', // Clear offline mode flag
+        // 🔒 SECURITY FIX: Clear additional sensitive data on logout
+        'navigator_state_v5', // Main application state
+        'navigator_device_id', // Device identifier
+        'navigator_address_view_mode', // View mode preferences
+        'undo_stack', // Undo history
+        'navigator_pwa_prompt_dismissed', // PWA install prompt state
+        'navigator_ownership_uncertain' // Ownership uncertainty flag
       ];
 
       keysToRemove.forEach(key => localStorage.removeItem(key));

@@ -17,6 +17,32 @@
     <meta name="apple-mobile-web-app-title" content="Address Navigator" />
     <meta name="format-detection" content="telephone=no" />
 
+    <!-- Security Headers (Report-Only Mode - Monitor for violations before enforcing) -->
+    <meta http-equiv="Content-Security-Policy-Report-Only" content="
+      default-src 'self';
+      script-src 'self' https://maps.googleapis.com https://maps.gstatic.com 'unsafe-eval';
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      img-src 'self' data: https: blob:;
+      font-src 'self' https://fonts.gstatic.com;
+      connect-src 'self'
+        https://*.supabase.co
+        wss://*.supabase.co
+        https://maps.googleapis.com
+        https://places.googleapis.com
+        https://api.openrouteservice.org
+        https://tile.openstreetmap.org
+        https://a.tile.openstreetmap.org
+        https://b.tile.openstreetmap.org
+        https://c.tile.openstreetmap.org;
+      frame-src 'none';
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+    ">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+
     <!-- Manifest & icons (relative paths so dev and GH Pages both work) -->
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon-180.png" />
