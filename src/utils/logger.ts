@@ -212,3 +212,8 @@ export const devConsole = {
   warn: logger.warn,
   error: logger.error
 };
+
+// Expose logger globally for browser console access
+if (typeof window !== 'undefined') {
+  (window as any).logger = logger;
+}
