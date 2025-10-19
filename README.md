@@ -172,6 +172,15 @@ public/                 # Static assets and PWA files
    - Update manifest.json with your domain
    - Test service worker functionality
 
+## 📚 Documentation
+
+For detailed technical documentation and recent fixes, see:
+
+- **[Route Planning Completion Fix](ROUTE_PLANNING_COMPLETION_FIX.md)** - Critical fix for completion preservation during route optimization
+- **[Security Fixes Summary](SECURITY_FIXES_SUMMARY.md)** - CVE patches, CSP headers, password policy
+- **[Architecture Summary](ARCHITECTURE_SUMMARY.md)** - Overall system architecture
+- **[Optimistic UI Guide](OPTIMISTIC_UI_GUIDE.md)** - Change tracking and echo filtering
+
 ## 🤝 Contributing
 
 1. Fork the repository

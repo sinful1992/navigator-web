@@ -64,6 +64,35 @@ npm test           # Run tests (OK to run)
 - Responsive design with mobile-first approach
 - Error boundaries for graceful failure handling
 
+## Critical Implementation Notes
+
+### ⚠️ Route Planning Completion Matching (IMPORTANT)
+
+**Background**: When users optimize routes and export to main list during an active day, completions must remain visible even though indices change and list versions bump.
+
+**Implementation** (`AddressList.tsx:143-165`):
+```typescript
+// TWO-STRATEGY MATCHING - DO NOT SIMPLIFY
+const hasCompletion = completions.some(c =>
+  // Strategy 1: Index + ListVersion (normal workflow)
+  (c.index === index && (c.listVersion || state.currentListVersion) === state.currentListVersion)
+  ||
+  // Strategy 2: Address string (route planning workflow)
+  (c.address === addr.address)
+);
+```
+
+**Why both strategies?**
+- Strategy 1: Strict matching for normal imports (prevents stale completions)
+- Strategy 2: Lenient matching for route optimization (preserves completions across reordering)
+
+**DO NOT**:
+- Remove address-based matching (Strategy 2) - breaks route planning
+- Remove index-based matching (Strategy 1) - allows stale completions on new lists
+- "Simplify" to only one strategy - both are needed for different workflows
+
+**Documentation**: See `ROUTE_PLANNING_COMPLETION_FIX.md` for full details
+
 ## Environment Setup
 
 Create `.env.local` for development:
