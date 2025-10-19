@@ -8,6 +8,28 @@ const SENSITIVE_FIELDS = [
   'creditCard', 'cvv', 'pin', 'privateKey'
 ];
 
+// Log levels
+type LogLevel = 'silent' | 'normal' | 'verbose';
+
+/**
+ * Get current log level from localStorage or return default
+ */
+function getLogLevel(): LogLevel {
+  if (typeof window === 'undefined') return 'normal';
+
+  try {
+    const stored = localStorage.getItem('logLevel') as LogLevel;
+    if (stored && ['silent', 'normal', 'verbose'].includes(stored)) {
+      return stored;
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  // Default: normal in development, silent in production
+  return IS_DEVELOPMENT ? 'normal' : 'silent';
+}
+
 /**
  * Check if debug mode is enabled in production
  * Can be enabled via URL parameter (?debug=true) or localStorage
@@ -32,9 +54,20 @@ function isDebugModeEnabled(): boolean {
 }
 
 /**
- * Determine if logging should be enabled
+ * Determine if verbose logging should be enabled
  */
-const shouldLog = (): boolean => IS_DEVELOPMENT || isDebugModeEnabled();
+const shouldLogVerbose = (): boolean => {
+  const level = getLogLevel();
+  return level === 'verbose' || (IS_DEVELOPMENT && isDebugModeEnabled());
+};
+
+/**
+ * Determine if normal logging should be enabled
+ */
+const shouldLogNormal = (): boolean => {
+  const level = getLogLevel();
+  return level !== 'silent';
+};
 
 /**
  * Sanitize data to remove sensitive information before logging
@@ -87,29 +120,31 @@ function sanitizeArgs(args: any[]): any[] {
 export const logger = {
   /**
    * Debug logging (with sanitization)
-   * Shown in development or when debug mode is enabled
+   * Only shown when log level is 'verbose'
    */
   debug: (message: string, ...args: any[]) => {
-    if (shouldLog()) {
+    if (shouldLogVerbose()) {
       console.log(`[DEBUG] ${message}`, ...sanitizeArgs(args));
     }
   },
 
   /**
    * Information logging (with sanitization)
-   * Shown in development or when debug mode is enabled
+   * Only shown when log level is 'verbose'
    */
   info: (message: string, ...args: any[]) => {
-    if (shouldLog()) {
+    if (shouldLogVerbose()) {
       console.log(`[INFO] ${message}`, ...sanitizeArgs(args));
     }
   },
 
   /**
-   * Warning messages (shown in both dev and production, with sanitization)
+   * Warning messages (shown in normal and verbose modes, with sanitization)
    */
   warn: (message: string, ...args: any[]) => {
-    console.warn(`[WARN] ${message}`, ...sanitizeArgs(args));
+    if (shouldLogNormal()) {
+      console.warn(`[WARN] ${message}`, ...sanitizeArgs(args));
+    }
   },
 
   /**
@@ -121,58 +156,78 @@ export const logger = {
 
   /**
    * Success messages (with sanitization)
-   * Shown in development or when debug mode is enabled
+   * Only shown when log level is 'verbose'
    */
   success: (message: string, ...args: any[]) => {
-    if (shouldLog()) {
+    if (shouldLogVerbose()) {
       console.log(`[SUCCESS] ✅ ${message}`, ...sanitizeArgs(args));
     }
   },
 
   /**
    * Sync-related logging (with sanitization)
-   * Shown in development or when debug mode is enabled
+   * Only shown when log level is 'verbose'
    */
   sync: (message: string, ...args: any[]) => {
-    if (shouldLog()) {
+    if (shouldLogVerbose()) {
       console.log(`[SYNC] 🔄 ${message}`, ...sanitizeArgs(args));
     }
   },
 
   /**
    * Performance timing
-   * Shown in development or when debug mode is enabled
+   * Only shown when log level is 'verbose'
    */
   time: (label: string) => {
-    if (shouldLog()) {
+    if (shouldLogVerbose()) {
       console.time(label);
     }
   },
 
   timeEnd: (label: string) => {
-    if (shouldLog()) {
+    if (shouldLogVerbose()) {
       console.timeEnd(label);
     }
   },
 
   /**
    * Group logging
-   * Shown in development or when debug mode is enabled
+   * Only shown when log level is 'verbose'
    */
   group: (label: string) => {
-    if (shouldLog()) {
+    if (shouldLogVerbose()) {
       console.group(label);
     }
   },
 
   groupEnd: () => {
-    if (shouldLog()) {
+    if (shouldLogVerbose()) {
       console.groupEnd();
     }
   },
 
   /**
-   * Enable debug mode in production
+   * Set log level
+   * @param level - 'silent' (errors only), 'normal' (errors + warnings), 'verbose' (everything)
+   */
+  setLevel: (level: LogLevel) => {
+    try {
+      localStorage.setItem('logLevel', level);
+      console.log(`[LOG LEVEL] Set to '${level}' - Refresh the page to apply`);
+    } catch (e) {
+      console.error('[LOG LEVEL] Failed to set:', e);
+    }
+  },
+
+  /**
+   * Get current log level
+   */
+  getLevel: (): LogLevel => {
+    return getLogLevel();
+  },
+
+  /**
+   * Enable debug mode in production (LEGACY - use setLevel('verbose') instead)
    * Sets localStorage flag and logs confirmation
    */
   enableDebugMode: () => {
@@ -185,7 +240,7 @@ export const logger = {
   },
 
   /**
-   * Disable debug mode
+   * Disable debug mode (LEGACY - use setLevel('normal') instead)
    * Removes localStorage flag and logs confirmation
    */
   disableDebugMode: () => {
