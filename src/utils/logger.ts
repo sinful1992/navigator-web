@@ -9,6 +9,34 @@ const SENSITIVE_FIELDS = [
 ];
 
 /**
+ * Check if debug mode is enabled in production
+ * Can be enabled via URL parameter (?debug=true) or localStorage
+ */
+function isDebugModeEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  // Check URL parameter
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('debug') === 'true') return true;
+  } catch {
+    // Ignore errors
+  }
+
+  // Check localStorage
+  try {
+    return localStorage.getItem('debugMode') === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Determine if logging should be enabled
+ */
+const shouldLog = (): boolean => IS_DEVELOPMENT || isDebugModeEnabled();
+
+/**
  * Sanitize data to remove sensitive information before logging
  */
 function sanitize(data: any): any {
@@ -58,19 +86,21 @@ function sanitizeArgs(args: any[]): any[] {
 
 export const logger = {
   /**
-   * Development-only debug logging (with sanitization)
+   * Debug logging (with sanitization)
+   * Shown in development or when debug mode is enabled
    */
   debug: (message: string, ...args: any[]) => {
-    if (IS_DEVELOPMENT) {
+    if (shouldLog()) {
       console.log(`[DEBUG] ${message}`, ...sanitizeArgs(args));
     }
   },
 
   /**
-   * Information logging (shown in development, minimal in production, with sanitization)
+   * Information logging (with sanitization)
+   * Shown in development or when debug mode is enabled
    */
   info: (message: string, ...args: any[]) => {
-    if (IS_DEVELOPMENT) {
+    if (shouldLog()) {
       console.log(`[INFO] ${message}`, ...sanitizeArgs(args));
     }
   },
@@ -90,51 +120,88 @@ export const logger = {
   },
 
   /**
-   * Success messages (development only, with sanitization)
+   * Success messages (with sanitization)
+   * Shown in development or when debug mode is enabled
    */
   success: (message: string, ...args: any[]) => {
-    if (IS_DEVELOPMENT) {
+    if (shouldLog()) {
       console.log(`[SUCCESS] ✅ ${message}`, ...sanitizeArgs(args));
     }
   },
 
   /**
-   * Sync-related logging (development only, with sanitization)
+   * Sync-related logging (with sanitization)
+   * Shown in development or when debug mode is enabled
    */
   sync: (message: string, ...args: any[]) => {
-    if (IS_DEVELOPMENT) {
+    if (shouldLog()) {
       console.log(`[SYNC] 🔄 ${message}`, ...sanitizeArgs(args));
     }
   },
 
   /**
    * Performance timing
+   * Shown in development or when debug mode is enabled
    */
   time: (label: string) => {
-    if (IS_DEVELOPMENT) {
+    if (shouldLog()) {
       console.time(label);
     }
   },
 
   timeEnd: (label: string) => {
-    if (IS_DEVELOPMENT) {
+    if (shouldLog()) {
       console.timeEnd(label);
     }
   },
 
   /**
-   * Group logging (development only)
+   * Group logging
+   * Shown in development or when debug mode is enabled
    */
   group: (label: string) => {
-    if (IS_DEVELOPMENT) {
+    if (shouldLog()) {
       console.group(label);
     }
   },
 
   groupEnd: () => {
-    if (IS_DEVELOPMENT) {
+    if (shouldLog()) {
       console.groupEnd();
     }
+  },
+
+  /**
+   * Enable debug mode in production
+   * Sets localStorage flag and logs confirmation
+   */
+  enableDebugMode: () => {
+    try {
+      localStorage.setItem('debugMode', 'true');
+      console.log('[DEBUG MODE] ✅ Enabled - Refresh the page to see all logs');
+    } catch (e) {
+      console.error('[DEBUG MODE] ❌ Failed to enable:', e);
+    }
+  },
+
+  /**
+   * Disable debug mode
+   * Removes localStorage flag and logs confirmation
+   */
+  disableDebugMode: () => {
+    try {
+      localStorage.removeItem('debugMode');
+      console.log('[DEBUG MODE] ❌ Disabled - Refresh the page');
+    } catch (e) {
+      console.error('[DEBUG MODE] Failed to disable:', e);
+    }
+  },
+
+  /**
+   * Check if debug mode is currently active
+   */
+  isDebugMode: (): boolean => {
+    return isDebugModeEnabled();
   }
 };
 
