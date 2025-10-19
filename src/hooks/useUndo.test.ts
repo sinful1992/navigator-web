@@ -4,6 +4,14 @@ import { renderHook, act } from '@testing-library/react';
 import { useUndo } from './useUndo';
 import type { Completion, AddressRow, Arrangement, DaySession } from '../types';
 
+// Helper function to create test Completion objects
+const createTestCompletion = (index: number, address?: string): Completion => ({
+  index,
+  address: address || `Test Address ${index}`,
+  outcome: 'PIF',
+  timestamp: new Date(`2025-01-01T00:${String(index).padStart(2, '0')}:00Z`).toISOString(),
+});
+
 describe('useUndo', () => {
   beforeEach(() => {
     // Clear localStorage before each test
@@ -39,8 +47,8 @@ describe('useUndo', () => {
       let id2!: string;
 
       act(() => {
-        id1 = result.current.pushUndo('completion', { test: 'data1' });
-        id2 = result.current.pushUndo('completion', { test: 'data2' });
+        id1 = result.current.pushUndo('completion', createTestCompletion(1));
+        id2 = result.current.pushUndo('completion', createTestCompletion(2));
       });
 
       expect(id1).toBeDefined();
@@ -55,7 +63,7 @@ describe('useUndo', () => {
       const beforeTime = Date.now();
 
       act(() => {
-        result.current.pushUndo('completion', { test: 'data' });
+        result.current.pushUndo('completion', createTestCompletion(1));
       });
 
       const afterTime = Date.now();
@@ -70,7 +78,7 @@ describe('useUndo', () => {
       act(() => {
         // Add 15 items
         for (let i = 0; i < 15; i++) {
-          result.current.pushUndo('completion', { index: i });
+          result.current.pushUndo('completion', createTestCompletion(i));
         }
       });
 
@@ -116,7 +124,7 @@ describe('useUndo', () => {
 
       // Should not throw, just warn
       act(() => {
-        result.current.pushUndo('completion', { test: 'data' });
+        result.current.pushUndo('completion', createTestCompletion(1));
       });
 
       // Stack should still be updated in memory
@@ -209,7 +217,7 @@ describe('useUndo', () => {
       let actionId!: string;
 
       act(() => {
-        actionId = result.current.pushUndo('completion', { test: 'data' });
+        actionId = result.current.pushUndo('completion', createTestCompletion(1));
       });
 
       expect(result.current.undoStack).toHaveLength(1);
@@ -304,10 +312,10 @@ describe('useUndo', () => {
     it('should handle localStorage failures during undo gracefully', () => {
       const { result } = renderHook(() => useUndo());
 
-      let actionId: string;
+      let actionId!: string;
 
       act(() => {
-        actionId = result.current.pushUndo('completion', { test: 'data' });
+        actionId = result.current.pushUndo('completion', createTestCompletion(1));
       });
 
       // Mock localStorage.setItem to throw an error
@@ -331,12 +339,12 @@ describe('useUndo', () => {
     it('should only remove the specified action from multi-item stack', () => {
       const { result } = renderHook(() => useUndo());
 
-      let id1: string, id2: string, id3: string;
+      let id1!: string, id2!: string, id3!: string;
 
       act(() => {
-        id1 = result.current.pushUndo('completion', { order: 1 });
-        id2 = result.current.pushUndo('completion', { order: 2 });
-        id3 = result.current.pushUndo('completion', { order: 3 });
+        id1 = result.current.pushUndo('completion', createTestCompletion(1));
+        id2 = result.current.pushUndo('completion', createTestCompletion(2));
+        id3 = result.current.pushUndo('completion', createTestCompletion(3));
       });
 
       act(() => {
@@ -396,9 +404,9 @@ describe('useUndo', () => {
       const { result } = renderHook(() => useUndo());
 
       act(() => {
-        result.current.pushUndo('completion', { order: 1 });
-        result.current.pushUndo('completion', { order: 2 });
-        result.current.pushUndo('completion', { order: 3 });
+        result.current.pushUndo('completion', createTestCompletion(1));
+        result.current.pushUndo('completion', createTestCompletion(2));
+        result.current.pushUndo('completion', createTestCompletion(3));
       });
 
       expect(result.current.undoStack).toHaveLength(3);
@@ -414,7 +422,7 @@ describe('useUndo', () => {
       const { result } = renderHook(() => useUndo());
 
       act(() => {
-        result.current.pushUndo('completion', { test: 'data' });
+        result.current.pushUndo('completion', createTestCompletion(1));
       });
 
       expect(localStorage.getItem('undo_stack')).toBeTruthy();
@@ -430,7 +438,7 @@ describe('useUndo', () => {
       const { result } = renderHook(() => useUndo());
 
       act(() => {
-        result.current.pushUndo('completion', { test: 'data' });
+        result.current.pushUndo('completion', createTestCompletion(1));
       });
 
       // Mock localStorage.removeItem to throw an error
@@ -528,14 +536,14 @@ describe('useUndo', () => {
       const { result } = renderHook(() => useUndo());
 
       act(() => {
-        result.current.pushUndo('completion', { step: 1 });
+        result.current.pushUndo('completion', createTestCompletion(1));
       });
 
       let stored1 = JSON.parse(localStorage.getItem('undo_stack')!);
       expect(stored1).toHaveLength(1);
 
       act(() => {
-        result.current.pushUndo('completion', { step: 2 });
+        result.current.pushUndo('completion', createTestCompletion(2));
       });
 
       let stored2 = JSON.parse(localStorage.getItem('undo_stack')!);
@@ -564,8 +572,10 @@ describe('useUndo', () => {
         outcome: 'PIF',
         timestamp: '2025-01-01T12:34:56.789Z',
         listVersion: 5,
-        notes: 'Special handling required',
-        paymentMethod: 'Cash',
+        caseReference: 'CASE-12345',
+        timeSpentSeconds: 1800,
+        numberOfCases: 2,
+        enforcementFees: [272.50, 310.00],
         amount: '150.50',
       };
 
@@ -583,7 +593,7 @@ describe('useUndo', () => {
       });
 
       expect(pushedAction!.data).toEqual(complexCompletion);
-      expect((pushedAction!.data as Completion).notes).toBe('Special handling required');
+      expect((pushedAction!.data as Completion).caseReference).toBe('CASE-12345');
       expect((pushedAction!.data as Completion).amount).toBe('150.50');
 
       // Verify it was removed
