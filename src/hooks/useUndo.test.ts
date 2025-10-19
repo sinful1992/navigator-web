@@ -77,9 +77,9 @@ describe('useUndo', () => {
       // Should only keep the latest 10
       expect(result.current.undoStack).toHaveLength(10);
       // Most recent should be first (index 14)
-      expect(result.current.undoStack[0].data.index).toBe(14);
+      expect((result.current.undoStack[0].data as Completion).index).toBe(14);
       // Oldest kept should be index 5 (14 down to 5 = 10 items)
-      expect(result.current.undoStack[9].data.index).toBe(5);
+      expect((result.current.undoStack[9].data as Completion).index).toBe(5);
     });
 
     it('should persist to localStorage', () => {

@@ -1,5 +1,4 @@
 // src/components/AccountSettings/ChangePasswordModal.tsx
-import { useState } from 'react';
 import { useModalContext } from '../ModalProvider';
 
 export interface ChangePasswordModalProps {

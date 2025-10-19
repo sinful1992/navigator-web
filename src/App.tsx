@@ -1645,7 +1645,7 @@ function AuthedApp() {
                   handleImportExcel(out);
                   logger.info(`✅ Successfully imported ${out.length} addresses!`);
                 } catch (err) {
-                  logger.error(err as Error);
+                  logger.error('Excel import failed:', err);
                   alert({ message: "❌ Failed to read Excel file. Please ensure it's a valid .xlsx or .xls file." });
                 }
               }}

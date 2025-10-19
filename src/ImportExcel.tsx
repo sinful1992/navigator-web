@@ -91,9 +91,9 @@ export function ImportExcel({ onImported }: Props) {
 
       // You could implement a toast notification here instead
     } catch (err) {
-      logger.error(err as Error);
+      logger.error('Excel import failed:', err);
       alert("❌ Failed to read Excel file. Please ensure it's a valid .xlsx or .xls file.");
-    } finally {
+    } finally{
       loadingRef.current = false;
       setLoading(false);
       // Clear file input

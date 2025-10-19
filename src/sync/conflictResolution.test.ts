@@ -51,9 +51,7 @@ describe('conflictResolution', () => {
         },
         timestamp: '2025-01-01T00:00:00Z',
         clientId: 'device1',
-        userId: 'user1',
         sequence: 1,
-        version: 1,
       };
 
       const existing: Operation[] = [operation];
@@ -80,9 +78,7 @@ describe('conflictResolution', () => {
         },
         timestamp: '2025-01-01T00:00:00Z',
         clientId: 'device1',
-        userId: 'user1',
         sequence: 1,
-        version: 1,
       };
 
       const operation2: Operation = {
@@ -99,9 +95,7 @@ describe('conflictResolution', () => {
         },
         timestamp: '2025-01-01T00:00:05Z',
         clientId: 'device2',
-        userId: 'user1',
         sequence: 2,
-        version: 1,
       };
 
       const conflicts = detectConflicts(operation2, [operation1], mockState);
@@ -118,9 +112,7 @@ describe('conflictResolution', () => {
         payload: { index: 10 },
         timestamp: '2025-01-01T00:00:00Z',
         clientId: 'device1',
-        userId: 'user1',
         sequence: 100,
-        version: 1,
       };
 
       const operation2: Operation = {
@@ -129,9 +121,7 @@ describe('conflictResolution', () => {
         payload: { index: 15 },
         timestamp: '2025-01-01T00:00:01Z',
         clientId: 'device2',
-        userId: 'user1',
         sequence: 102, // Within 5 sequence numbers
-        version: 1,
       };
 
       const conflicts = detectConflicts(operation2, [operation1], mockState);
@@ -155,9 +145,7 @@ describe('conflictResolution', () => {
         },
         timestamp: '2025-01-01T00:00:00Z',
         clientId: 'device1',
-        userId: 'user1',
         sequence: 1,
-        version: 1,
       };
 
       const operation2: Operation = {
@@ -176,9 +164,7 @@ describe('conflictResolution', () => {
         },
         timestamp: '2025-01-01T00:00:05Z',
         clientId: 'device2',
-        userId: 'user1',
         sequence: 2,
-        version: 1,
       };
 
       const conflicts = detectConflicts(operation2, [operation1], mockState);
@@ -202,9 +188,7 @@ describe('conflictResolution', () => {
         },
         timestamp: '2025-01-01T00:00:00Z',
         clientId: 'device1',
-        userId: 'user1',
         sequence: 1,
-        version: 1,
       };
 
       const conflicts = [
@@ -230,9 +214,7 @@ describe('conflictResolution', () => {
         payload: { index: 10 },
         timestamp: '2025-01-01T00:00:00Z',
         clientId: 'device1',
-        userId: 'user1',
         sequence: 100,
-        version: 1,
       };
 
       const newer: Operation = {
@@ -241,9 +223,7 @@ describe('conflictResolution', () => {
         payload: { index: 15 },
         timestamp: '2025-01-01T00:00:05Z',
         clientId: 'device2',
-        userId: 'user1',
         sequence: 102,
-        version: 1,
       };
 
       const conflicts = [
@@ -279,9 +259,7 @@ describe('conflictResolution', () => {
         },
         timestamp: '2025-01-01T00:00:00Z',
         clientId: 'device1',
-        userId: 'user1',
         sequence: 1,
-        version: 1,
       };
 
       const op2: Operation = {
@@ -298,9 +276,7 @@ describe('conflictResolution', () => {
         },
         timestamp: '2025-01-01T00:00:05Z',
         clientId: 'device2',
-        userId: 'user1',
         sequence: 2,
-        version: 1,
       };
 
       const conflicts = [
