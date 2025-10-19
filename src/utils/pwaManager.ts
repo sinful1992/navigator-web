@@ -342,25 +342,9 @@ class PWAManager {
       return false;
     }
 
-    try {
-      // Detect environment and use correct manifest path
-      // Production (GitHub Pages): /navigator-web/manifest.webmanifest
-      // Development: /manifest.webmanifest
-      const manifestPath = window.location.pathname.startsWith('/navigator-web/')
-        ? '/navigator-web/manifest.webmanifest'
-        : '/manifest.webmanifest';
-
-      const response = await fetch(manifestPath, {
-        method: 'HEAD',
-        cache: 'no-cache'
-      });
-
-      return response.ok;
-    } catch {
-      // Fallback to navigator.onLine instead of returning false
-      // This prevents false "offline" status when manifest check fails
-      return navigator.onLine;
-    }
+    // Simple connectivity check - just return navigator.onLine status
+    // Avoid manifest fetch as it may fail on custom domains or cause unnecessary errors
+    return navigator.onLine;
   }
 }
 

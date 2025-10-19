@@ -3,6 +3,8 @@
 ## Overview
 This document provides comprehensive testing procedures for the security fixes implemented on **2025-10-18**.
 
+**Last Updated**: 2025-10-19 - Revised Test 2 for meta tag corrections and connectivity check fixes.
+
 ## Fixes Implemented
 
 ### ✅ Phase 1: xlsx Library Security Update
@@ -10,13 +12,12 @@ This document provides comprehensive testing procedures for the security fixes i
 - **After**: xlsx@0.20.2 from https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz
 - **Status**: ✅ 0 vulnerabilities confirmed by `npm audit`
 
-### ✅ Phase 2: Content Security Policy (CSP)
-- **Mode**: Report-Only (for monitoring before enforcement)
-- **Protections Added**:
-  - XSS attack prevention
-  - Clickjacking protection (X-Frame-Options: DENY)
+### ✅ Phase 2: Security Headers (REVISED 2025-10-19)
+- **Update**: Removed CSP-Report-Only and X-Frame-Options (invalid in meta tags)
+- **Protections Kept**:
   - MIME-sniffing protection (X-Content-Type-Options: nosniff)
-  - Referrer policy for privacy
+  - Referrer policy for privacy (strict-origin-when-cross-origin)
+- **Note**: Full CSP/X-Frame-Options require HTTP headers (CDN configuration)
 
 ### ✅ Phase 3: Password Policy Strengthening
 - **Before**: Minimum 6 characters
@@ -66,37 +67,41 @@ This document provides comprehensive testing procedures for the security fixes i
 
 ---
 
-### Test 2: Content Security Policy Monitoring
-**Purpose**: Ensure CSP doesn't block legitimate functionality
+### Test 2: Browser Console Error Check (REVISED 2025-10-19)
+**Purpose**: Verify no console errors from meta tags or connectivity checks
 
-**Setup**: Open browser DevTools → Console → Filter for "CSP" or "violation"
+**Setup**: Open browser DevTools → Console → Look for errors
 
 **Test Cases**:
-- [ ] **Test 2.1**: Login/Signup
-  - Login with credentials
-  - ✅ **Expected**: Login succeeds, no CSP violations
+- [ ] **Test 2.1**: Page load - no meta tag errors
+  - Load application
+  - ✅ **Expected**: No "Content-Security-Policy" or "X-Frame-Options" meta tag errors
 
-- [ ] **Test 2.2**: Google Maps geocoding
+- [ ] **Test 2.2**: Connectivity check - no manifest errors
+  - Check browser console for "manifest.webmanifest" fetch errors
+  - ✅ **Expected**: No 404 errors for manifest from wrong domain
+
+- [ ] **Test 2.3**: Google Maps geocoding
   - Import addresses
   - Click "Geocode All"
-  - ✅ **Expected**: Geocoding works, no CSP violations
+  - ✅ **Expected**: Geocoding works, no errors
 
-- [ ] **Test 2.3**: Address autocomplete (Places API)
+- [ ] **Test 2.4**: Address autocomplete (Places API)
   - Click "Add Address" manually
   - Type in address field
-  - ✅ **Expected**: Autocomplete suggestions appear, no CSP violations
+  - ✅ **Expected**: Autocomplete suggestions appear, no errors
 
-- [ ] **Test 2.4**: OpenStreetMap tiles
+- [ ] **Test 2.5**: OpenStreetMap tiles
   - View addresses in map mode
   - Pan/zoom map
-  - ✅ **Expected**: Tiles load, no CSP violations
+  - ✅ **Expected**: Tiles load, no errors
 
-- [ ] **Test 2.5**: Route optimization
+- [ ] **Test 2.6**: Route optimization
   - Go to "Planning" tab
   - Click "Optimize Route"
-  - ✅ **Expected**: Route calculates, no CSP violations
+  - ✅ **Expected**: Route calculates, no errors
 
-- [ ] **Test 2.6**: Supabase real-time sync
+- [ ] **Test 2.7**: Supabase real-time sync
   - Make changes on one device
   - Check sync on another device/tab
   - ✅ **Expected**: Changes sync, no websocket CSP violations
