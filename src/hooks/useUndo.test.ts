@@ -381,12 +381,12 @@ describe('useUndo', () => {
         timestamp: '2025-01-01T00:02:00Z',
       };
 
-      let _id1!: string, id2!: string, _id3!: string;
+      let id2!: string;
 
       act(() => {
-        _id1 = result.current.pushUndo('completion', completion1);
+        result.current.pushUndo('completion', completion1);
         id2 = result.current.pushUndo('completion', completion2);
-        _id3 = result.current.pushUndo('completion', completion3);
+        result.current.pushUndo('completion', completion3);
       });
 
       act(() => {
@@ -504,11 +504,11 @@ describe('useUndo', () => {
         timestamp: '2025-01-01T00:03:00Z',
       };
 
-      let _id1!: string, _id2!: string, id3!: string;
+      let id3!: string;
 
       act(() => {
-        _id1 = result.current.pushUndo('completion', completion1);
-        _id2 = result.current.pushUndo('completion', completion2);
+        result.current.pushUndo('completion', completion1);
+        result.current.pushUndo('completion', completion2);
         id3 = result.current.pushUndo('completion', completion3);
       });
 
