@@ -4,15 +4,17 @@ import type { AddressRow, Completion, Arrangement, DaySession } from '../types';
 
 import { logger } from '../utils/logger';
 
+type UndoData = AddressRow | Completion | Arrangement | DaySession;
+
 interface UndoAction {
   id: string;
   type: 'completion' | 'address' | 'arrangement' | 'day_session';
-  data: AddressRow | Completion | Arrangement | DaySession;
+  data: UndoData;
   timestamp: number;
 }
 
 interface UndoHookReturn {
-  pushUndo: (type: UndoAction['type'], data: any) => string;
+  pushUndo: (type: UndoAction['type'], data: UndoData) => string;
   undo: (actionId: string) => UndoAction | null;
   undoStack: UndoAction[];
   clearUndoStack: () => void;
@@ -23,7 +25,7 @@ const MAX_UNDO_SIZE = 10;
 export const useUndo = (): UndoHookReturn => {
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
 
-  const pushUndo = useCallback((type: UndoAction['type'], data: any): string => {
+  const pushUndo = useCallback((type: UndoAction['type'], data: UndoData): string => {
     const actionId = `undo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     const action: UndoAction = {

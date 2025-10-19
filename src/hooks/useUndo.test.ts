@@ -169,15 +169,36 @@ describe('useUndo', () => {
     it('should add newest items to front of stack', () => {
       const { result } = renderHook(() => useUndo());
 
+      const completion1: Completion = {
+        index: 1,
+        address: 'Test Address 1',
+        outcome: 'PIF',
+        timestamp: '2025-01-01T00:00:00Z',
+      };
+
+      const completion2: Completion = {
+        index: 2,
+        address: 'Test Address 2',
+        outcome: 'DA',
+        timestamp: '2025-01-01T00:01:00Z',
+      };
+
+      const completion3: Completion = {
+        index: 3,
+        address: 'Test Address 3',
+        outcome: 'Done',
+        timestamp: '2025-01-01T00:02:00Z',
+      };
+
       act(() => {
-        result.current.pushUndo('completion', { order: 1 });
-        result.current.pushUndo('completion', { order: 2 });
-        result.current.pushUndo('completion', { order: 3 });
+        result.current.pushUndo('completion', completion1);
+        result.current.pushUndo('completion', completion2);
+        result.current.pushUndo('completion', completion3);
       });
 
-      expect((result.current.undoStack[0].data as any).order).toBe(3);
-      expect((result.current.undoStack[1].data as any).order).toBe(2);
-      expect((result.current.undoStack[2].data as any).order).toBe(1);
+      expect((result.current.undoStack[0].data as Completion).index).toBe(3);
+      expect((result.current.undoStack[1].data as Completion).index).toBe(2);
+      expect((result.current.undoStack[2].data as Completion).index).toBe(1);
     });
   });
 
@@ -248,11 +269,25 @@ describe('useUndo', () => {
     it('should update localStorage after undo', () => {
       const { result } = renderHook(() => useUndo());
 
+      const completion1: Completion = {
+        index: 1,
+        address: 'Test Address 1',
+        outcome: 'PIF',
+        timestamp: '2025-01-01T00:00:00Z',
+      };
+
+      const completion2: Completion = {
+        index: 2,
+        address: 'Test Address 2',
+        outcome: 'DA',
+        timestamp: '2025-01-01T00:01:00Z',
+      };
+
       let actionId1!: string, actionId2!: string;
 
       act(() => {
-        actionId1 = result.current.pushUndo('completion', { order: 1 });
-        actionId2 = result.current.pushUndo('completion', { order: 2 });
+        actionId1 = result.current.pushUndo('completion', completion1);
+        actionId2 = result.current.pushUndo('completion', completion2);
       });
 
       act(() => {
@@ -317,12 +352,33 @@ describe('useUndo', () => {
     it('should maintain stack order after removing middle item', () => {
       const { result } = renderHook(() => useUndo());
 
+      const completion1: Completion = {
+        index: 1,
+        address: 'Test Address 1',
+        outcome: 'PIF',
+        timestamp: '2025-01-01T00:00:00Z',
+      };
+
+      const completion2: Completion = {
+        index: 2,
+        address: 'Test Address 2',
+        outcome: 'DA',
+        timestamp: '2025-01-01T00:01:00Z',
+      };
+
+      const completion3: Completion = {
+        index: 3,
+        address: 'Test Address 3',
+        outcome: 'Done',
+        timestamp: '2025-01-01T00:02:00Z',
+      };
+
       let _id1!: string, id2!: string, _id3!: string;
 
       act(() => {
-        _id1 = result.current.pushUndo('completion', { order: 1 });
-        id2 = result.current.pushUndo('completion', { order: 2 });
-        _id3 = result.current.pushUndo('completion', { order: 3 });
+        _id1 = result.current.pushUndo('completion', completion1);
+        id2 = result.current.pushUndo('completion', completion2);
+        _id3 = result.current.pushUndo('completion', completion3);
       });
 
       act(() => {
@@ -330,8 +386,8 @@ describe('useUndo', () => {
       });
 
       // Order should still be newest first
-      expect((result.current.undoStack[0].data as any).order).toBe(3);
-      expect((result.current.undoStack[1].data as any).order).toBe(1);
+      expect((result.current.undoStack[0].data as Completion).index).toBe(3);
+      expect((result.current.undoStack[1].data as Completion).index).toBe(1);
     });
   });
 
@@ -412,19 +468,47 @@ describe('useUndo', () => {
     it('should handle multiple push and undo operations', () => {
       const { result } = renderHook(() => useUndo());
 
+      const completion1: Completion = {
+        index: 1,
+        address: 'Test Address 1',
+        outcome: 'PIF',
+        timestamp: '2025-01-01T00:00:00Z',
+      };
+
+      const completion2: Completion = {
+        index: 2,
+        address: 'Test Address 2',
+        outcome: 'DA',
+        timestamp: '2025-01-01T00:01:00Z',
+      };
+
+      const completion3: Completion = {
+        index: 3,
+        address: 'Test Address 3',
+        outcome: 'Done',
+        timestamp: '2025-01-01T00:02:00Z',
+      };
+
+      const completion4: Completion = {
+        index: 4,
+        address: 'Test Address 4',
+        outcome: 'ARR',
+        timestamp: '2025-01-01T00:03:00Z',
+      };
+
       let _id1!: string, _id2!: string, id3!: string;
 
       act(() => {
-        _id1 = result.current.pushUndo('completion', { index: 1 });
-        _id2 = result.current.pushUndo('completion', { index: 2 });
-        id3 = result.current.pushUndo('completion', { index: 3 });
+        _id1 = result.current.pushUndo('completion', completion1);
+        _id2 = result.current.pushUndo('completion', completion2);
+        id3 = result.current.pushUndo('completion', completion3);
       });
 
       expect(result.current.undoStack).toHaveLength(3);
 
       // Verify action exists before undoing
       const actionToUndo = result.current.undoStack.find(a => a.id === id3);
-      expect((actionToUndo?.data as any)?.index).toBe(3);
+      expect((actionToUndo?.data as Completion)?.index).toBe(3);
 
       act(() => {
         result.current.undo(id3);
@@ -433,11 +517,11 @@ describe('useUndo', () => {
       expect(result.current.undoStack).toHaveLength(2);
 
       act(() => {
-        result.current.pushUndo('completion', { index: 4 });
+        result.current.pushUndo('completion', completion4);
       });
 
       expect(result.current.undoStack).toHaveLength(3);
-      expect((result.current.undoStack[0].data as any).index).toBe(4);
+      expect((result.current.undoStack[0].data as Completion).index).toBe(4);
     });
 
     it('should persist state across multiple operations', () => {
