@@ -175,9 +175,9 @@ describe('useUndo', () => {
         result.current.pushUndo('completion', { order: 3 });
       });
 
-      expect(result.current.undoStack[0].data.order).toBe(3);
-      expect(result.current.undoStack[1].data.order).toBe(2);
-      expect(result.current.undoStack[2].data.order).toBe(1);
+      expect((result.current.undoStack[0].data as any).order).toBe(3);
+      expect((result.current.undoStack[1].data as any).order).toBe(2);
+      expect((result.current.undoStack[2].data as any).order).toBe(1);
     });
   });
 
@@ -185,7 +185,7 @@ describe('useUndo', () => {
     it('should remove an action from the stack by ID', () => {
       const { result } = renderHook(() => useUndo());
 
-      let actionId: string;
+      let actionId!: string;
 
       act(() => {
         actionId = result.current.pushUndo('completion', { test: 'data' });
@@ -210,7 +210,7 @@ describe('useUndo', () => {
         timestamp: '2025-01-01T00:00:00Z',
       };
 
-      let actionId: string;
+      let actionId!: string;
 
       act(() => {
         actionId = result.current.pushUndo('completion', completion);
@@ -248,7 +248,7 @@ describe('useUndo', () => {
     it('should update localStorage after undo', () => {
       const { result } = renderHook(() => useUndo());
 
-      let actionId1: string, actionId2: string;
+      let actionId1!: string, actionId2!: string;
 
       act(() => {
         actionId1 = result.current.pushUndo('completion', { order: 1 });
@@ -317,12 +317,12 @@ describe('useUndo', () => {
     it('should maintain stack order after removing middle item', () => {
       const { result } = renderHook(() => useUndo());
 
-      let id1: string, id2: string, id3: string;
+      let _id1!: string, id2!: string, _id3!: string;
 
       act(() => {
-        id1 = result.current.pushUndo('completion', { order: 1 });
+        _id1 = result.current.pushUndo('completion', { order: 1 });
         id2 = result.current.pushUndo('completion', { order: 2 });
-        id3 = result.current.pushUndo('completion', { order: 3 });
+        _id3 = result.current.pushUndo('completion', { order: 3 });
       });
 
       act(() => {
@@ -330,8 +330,8 @@ describe('useUndo', () => {
       });
 
       // Order should still be newest first
-      expect(result.current.undoStack[0].data.order).toBe(3);
-      expect(result.current.undoStack[1].data.order).toBe(1);
+      expect((result.current.undoStack[0].data as any).order).toBe(3);
+      expect((result.current.undoStack[1].data as any).order).toBe(1);
     });
   });
 
@@ -412,11 +412,11 @@ describe('useUndo', () => {
     it('should handle multiple push and undo operations', () => {
       const { result } = renderHook(() => useUndo());
 
-      let id1: string, id2: string, id3: string;
+      let _id1!: string, _id2!: string, id3!: string;
 
       act(() => {
-        id1 = result.current.pushUndo('completion', { index: 1 });
-        id2 = result.current.pushUndo('completion', { index: 2 });
+        _id1 = result.current.pushUndo('completion', { index: 1 });
+        _id2 = result.current.pushUndo('completion', { index: 2 });
         id3 = result.current.pushUndo('completion', { index: 3 });
       });
 
@@ -424,7 +424,7 @@ describe('useUndo', () => {
 
       // Verify action exists before undoing
       const actionToUndo = result.current.undoStack.find(a => a.id === id3);
-      expect(actionToUndo?.data.index).toBe(3);
+      expect((actionToUndo?.data as any)?.index).toBe(3);
 
       act(() => {
         result.current.undo(id3);
@@ -437,7 +437,7 @@ describe('useUndo', () => {
       });
 
       expect(result.current.undoStack).toHaveLength(3);
-      expect(result.current.undoStack[0].data.index).toBe(4);
+      expect((result.current.undoStack[0].data as any).index).toBe(4);
     });
 
     it('should persist state across multiple operations', () => {
@@ -482,10 +482,10 @@ describe('useUndo', () => {
         listVersion: 5,
         notes: 'Special handling required',
         paymentMethod: 'Cash',
-        amount: 150.50,
+        amount: '150.50',
       };
 
-      let actionId: string;
+      let actionId!: string;
 
       act(() => {
         actionId = result.current.pushUndo('completion', complexCompletion);
@@ -499,8 +499,8 @@ describe('useUndo', () => {
       });
 
       expect(pushedAction!.data).toEqual(complexCompletion);
-      expect(pushedAction!.data.notes).toBe('Special handling required');
-      expect(pushedAction!.data.amount).toBe(150.50);
+      expect((pushedAction!.data as Completion).notes).toBe('Special handling required');
+      expect((pushedAction!.data as Completion).amount).toBe('150.50');
 
       // Verify it was removed
       expect(result.current.undoStack).toHaveLength(0);
