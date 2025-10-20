@@ -4,6 +4,7 @@ import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome, Rec
 import { LoadingButton } from "./components/LoadingButton";
 import { generateReminderMessage } from "./services/reminderScheduler";
 import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
+import { QuickPaymentModal } from "./components/QuickPaymentModal";
 
 import { logger } from './utils/logger';
 
@@ -33,6 +34,7 @@ const ArrangementsComponent = function Arrangements({
   const [viewMode, setViewMode] = React.useState<ViewMode>("thisWeek");
   const [showAddForm, setShowAddForm] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [quickPaymentArrangementId, setQuickPaymentArrangementId] = React.useState<string | null>(null);
   const [loadingStates, setLoadingStates] = React.useState<{
     saving: boolean;
     updating: boolean;
@@ -283,8 +285,11 @@ const ArrangementsComponent = function Arrangements({
       updatedAt: new Date().toISOString()
     });
 
-    // Create completion record with PIF outcome and arrangement reference
-    onComplete(arrangement.addressIndex, "PIF", amount, arrangement.id);
+    // Determine outcome: ARR for installment payments, PIF for single payment or final payment
+    const outcome: Outcome = (isRecurring && !isLastPayment) ? "ARR" : "PIF";
+
+    // Create completion record with appropriate outcome and arrangement reference
+    onComplete(arrangement.addressIndex, outcome, amount, arrangement.id);
 
     // Create next payment arrangement if this is recurring and not the last payment
     if (isRecurring && !isLastPayment) {
@@ -382,6 +387,29 @@ const ArrangementsComponent = function Arrangements({
     }
   };
 
+  // Handle quick payment from modal
+  const handleQuickPayment = async (amount: string, date: string, notes?: string) => {
+    if (!quickPaymentArrangementId) return;
+
+    setLoadingStates(prev => ({
+      ...prev,
+      markingPaid: new Set([...prev.markingPaid, quickPaymentArrangementId])
+    }));
+
+    try {
+      await markAsPaid(quickPaymentArrangementId, amount);
+      setQuickPaymentArrangementId(null);
+    } catch (error) {
+      logger.error('Error recording quick payment:', error);
+      alert('Failed to record payment. Please try again.');
+    } finally {
+      setLoadingStates(prev => ({
+        ...prev,
+        markingPaid: new Set([...prev.markingPaid].filter(id => id !== quickPaymentArrangementId))
+      }));
+    }
+  };
+
   return (
     <div className="arrangements-wrap">
       {/* Header with view toggle */}
@@ -453,6 +481,16 @@ const ArrangementsComponent = function Arrangements({
           isLoading={loadingStates.saving || loadingStates.updating}
           onComplete={onComplete}
           fullscreen={true}
+        />
+      )}
+
+      {/* Quick Payment Modal */}
+      {quickPaymentArrangementId && (
+        <QuickPaymentModal
+          arrangement={state.arrangements.find(a => a.id === quickPaymentArrangementId)!}
+          onConfirm={handleQuickPayment}
+          onCancel={() => setQuickPaymentArrangementId(null)}
+          isLoading={loadingStates.markingPaid.has(quickPaymentArrangementId)}
         />
       )}
 
@@ -588,37 +626,14 @@ const ArrangementsComponent = function Arrangements({
                     </div>
 
                     <div className="arrangement-actions">
-                      {/* Show "Confirm Payment" only for non-recurring or final payments */}
-                      {arrangement.status === "Scheduled" &&
-                       (!arrangement.recurrenceType || arrangement.recurrenceType === "none" ||
-                        (arrangement.paymentsMade && arrangement.totalPayments && arrangement.paymentsMade >= (arrangement.totalPayments - 1))) && (
-                        <LoadingButton
-                          className="btn btn-sm btn-success"
-                          isLoading={loadingStates.markingPaid.has(arrangement.id)}
-                          loadingText="Processing..."
-                          onClick={async () => {
-                            const actualAmount = window.prompt(
-                              `Payment received:\n\nExpected: £${arrangement.amount || '0.00'}\nEnter actual amount received:`,
-                              arrangement.amount || ''
-                            );
-                            if (actualAmount !== null && actualAmount.trim()) {
-                              setLoadingStates(prev => ({
-                                ...prev,
-                                markingPaid: new Set([...prev.markingPaid, arrangement.id])
-                              }));
-                              try {
-                                await markAsPaid(arrangement.id, actualAmount.trim());
-                              } finally {
-                                setLoadingStates(prev => ({
-                                  ...prev,
-                                  markingPaid: new Set([...prev.markingPaid].filter(id => id !== arrangement.id))
-                                }));
-                              }
-                            }
-                          }}
+                      {/* NEW: Quick Payment Button */}
+                      {(arrangement.status === "Scheduled" || arrangement.status === "Confirmed") && (
+                        <button
+                          className="btn btn-sm btn-payment"
+                          onClick={() => setQuickPaymentArrangementId(arrangement.id)}
                         >
-                          ✅ Confirm Payment
-                        </LoadingButton>
+                          💰 Add Payment
+                        </button>
                       )}
 
                       {(arrangement.status === "Scheduled" || arrangement.status === "Confirmed") && (
@@ -669,38 +684,6 @@ const ArrangementsComponent = function Arrangements({
                                 </div>
                               )}
                             </div>
-                          )}
-
-                          {/* Show "Continue Plan" only for recurring payments that are not the final payment */}
-                          {arrangement.recurrenceType && arrangement.recurrenceType !== "none" &&
-                           (!arrangement.paymentsMade || !arrangement.totalPayments || arrangement.paymentsMade < (arrangement.totalPayments - 1)) && (
-                            <LoadingButton
-                              className="btn btn-sm btn-success"
-                              isLoading={loadingStates.markingPaid.has(arrangement.id)}
-                              loadingText="Processing..."
-                              onClick={async () => {
-                                const actualAmount = window.prompt(
-                                  `Continue with payment plan:\n\nExpected: £${arrangement.amount || '0.00'}\nEnter actual amount received:`,
-                                  arrangement.amount || ''
-                                );
-                                if (actualAmount !== null && actualAmount.trim()) {
-                                  setLoadingStates(prev => ({
-                                    ...prev,
-                                    markingPaid: new Set([...prev.markingPaid, arrangement.id])
-                                  }));
-                                  try {
-                                    await markAsPaid(arrangement.id, actualAmount.trim());
-                                  } finally {
-                                    setLoadingStates(prev => ({
-                                      ...prev,
-                                      markingPaid: new Set([...prev.markingPaid].filter(id => id !== arrangement.id))
-                                    }));
-                                  }
-                                }
-                              }}
-                            >
-                              ✅ Continue Plan
-                            </LoadingButton>
                           )}
 
                           <LoadingButton
@@ -1283,6 +1266,30 @@ const ArrangementsComponent = function Arrangements({
         .dark-mode .arrangement-actions .btn-ghost:hover {
           background: var(--gray-200);
           color: var(--gray-800);
+        }
+
+        /* Quick Payment Button Styles */
+        .btn-payment {
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white;
+          border: 2px solid #10b981;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+          font-weight: 600;
+        }
+
+        .btn-payment:hover {
+          background: linear-gradient(135deg, #059669 0%, #047857 100%);
+          transform: translateY(-1px);
+          box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+        }
+
+        .dark-mode .btn-payment {
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          border-color: #10b981;
+        }
+
+        .dark-mode .btn-payment:hover {
+          background: linear-gradient(135deg, #059669 0%, #047857 100%);
         }
 
         .detail-icon {

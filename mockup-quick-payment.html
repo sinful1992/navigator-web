@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design 1: Quick Payment Button & Modal</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 2rem;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 2rem;
+    }
+
+    .header h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .header p {
+      opacity: 0.9;
+      font-size: 1.1rem;
+    }
+
+    .design-section {
+      background: white;
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .badge {
+      background: #10b981;
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-new {
+      background: #f59e0b;
+    }
+
+    /* Arrangement Card Styles */
+    .arrangement-card {
+      background: linear-gradient(135deg, white 0%, #f9fafb 100%);
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .arrangement-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #0ea5e9 0%, #10b981 100%);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.25rem;
+      gap: 1rem;
+    }
+
+    .address-info {
+      flex: 1;
+    }
+
+    .address-index {
+      background: #0ea5e9;
+      color: white;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 0.5rem;
+    }
+
+    .address-text {
+      font-weight: 600;
+      font-size: 1.1rem;
+      color: #1f2937;
+    }
+
+    .customer-name {
+      color: #6b7280;
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
+    }
+
+    .status-badge {
+      background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+      color: #1e40af;
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      border: 1px solid #93c5fd;
+    }
+
+    .card-body {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .detail-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: #f9fafb;
+      border-radius: 8px;
+    }
+
+    .detail-icon {
+      font-size: 1.1rem;
+    }
+
+    .detail-content {
+      flex: 1;
+    }
+
+    .detail-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.25rem;
+    }
+
+    .detail-value {
+      font-size: 0.9rem;
+      color: #1f2937;
+      font-weight: 500;
+    }
+
+    .amount-value {
+      color: #059669;
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding-top: 1.25rem;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .btn {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-success {
+      background: #10b981;
+      color: white;
+      border-color: #10b981;
+    }
+
+    .btn-success:hover {
+      background: #059669;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-primary {
+      background: #0ea5e9;
+      color: white;
+      border-color: #0ea5e9;
+    }
+
+    .btn-primary:hover {
+      background: #0284c7;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: #6b7280;
+      border-color: #d1d5db;
+    }
+
+    .btn-ghost:hover {
+      background: #f3f4f6;
+    }
+
+    /* NEW: Quick Payment Button Highlight */
+    .btn-payment {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      border: 2px solid #10b981;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      }
+      50% {
+        box-shadow: 0 4px 20px rgba(16, 185, 129, 0.5);
+      }
+    }
+
+    .btn-payment:hover {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+    }
+
+    /* Modal Overlay */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    /* Quick Payment Modal */
+    .payment-modal {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+      width: 100%;
+      max-width: 500px;
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .modal-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid #e5e7eb;
+      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #065f46;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .modal-body {
+      padding: 1.5rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 0.5rem;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.2s ease;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #10b981;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    }
+
+    .amount-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .amount-symbol {
+      position: absolute;
+      left: 1rem;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #10b981;
+      pointer-events: none;
+    }
+
+    .amount-input {
+      padding-left: 2.5rem !important;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #059669;
+      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+      border-color: #86efac;
+    }
+
+    .amount-input:focus {
+      background: white;
+      border-color: #10b981;
+    }
+
+    .info-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .info-box-title {
+      font-weight: 600;
+      color: #1e40af;
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .info-box-content {
+      font-size: 0.875rem;
+      color: #1e40af;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 0.75rem;
+      padding: 1.5rem;
+      border-top: 1px solid #e5e7eb;
+      background: #f9fafb;
+    }
+
+    .modal-actions .btn {
+      flex: 1;
+      justify-content: center;
+    }
+
+    .annotation {
+      background: #fef3c7;
+      border: 2px dashed #f59e0b;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+      color: #92400e;
+      font-weight: 500;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .comparison-item {
+      padding: 1rem;
+      border-radius: 8px;
+      border: 2px solid;
+    }
+
+    .comparison-before {
+      background: #fee2e2;
+      border-color: #ef4444;
+    }
+
+    .comparison-after {
+      background: #d1fae5;
+      border-color: #10b981;
+    }
+
+    .comparison-title {
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .comparison {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>💰 Design 1: Quick Payment Button & Modal</h1>
+      <p>One-click payment recording from arrangement cards</p>
+    </div>
+
+    <!-- Current vs New Comparison -->
+    <div class="design-section">
+      <h2 class="section-title">📊 The Problem</h2>
+      <div class="comparison">
+        <div class="comparison-item comparison-before">
+          <div class="comparison-title">❌ Current Flow</div>
+          <ol style="margin-left: 1.25rem; line-height: 1.8;">
+            <li>Click "Edit" button</li>
+            <li>Wait for form to load</li>
+            <li>Scroll through entire form</li>
+            <li>Find payment section</li>
+            <li>Add payment details</li>
+            <li>Click "Save"</li>
+          </ol>
+          <div style="margin-top: 0.75rem; font-weight: 600; color: #dc2626;">
+            ⏱️ 6 steps, ~30 seconds
+          </div>
+        </div>
+        <div class="comparison-item comparison-after">
+          <div class="comparison-title">✅ New Flow</div>
+          <ol style="margin-left: 1.25rem; line-height: 1.8;">
+            <li>Click "Add Payment" button</li>
+            <li>Enter amount</li>
+            <li>Click "Record Payment"</li>
+          </ol>
+          <div style="margin-top: 0.75rem; font-weight: 600; color: #10b981;">
+            ⚡ 3 steps, ~5 seconds
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrangement Card with New Button -->
+    <div class="design-section">
+      <h2 class="section-title">
+        🎨 Arrangement Card with New Button
+        <span class="badge badge-new">NEW</span>
+      </h2>
+
+      <div class="arrangement-card">
+        <div class="card-header">
+          <div class="address-info">
+            <span class="address-index">#47</span>
+            <div class="address-text">123 High Street, London, SE1 9SG</div>
+            <div class="customer-name">👤 John Smith</div>
+          </div>
+          <div class="status-badge">
+            📅 Scheduled
+          </div>
+        </div>
+
+        <div class="card-body">
+          <div class="detail-item">
+            <span class="detail-icon">📅</span>
+            <div class="detail-content">
+              <div class="detail-label">Date</div>
+              <div class="detail-value">2025-10-23</div>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <span class="detail-icon">💰</span>
+            <div class="detail-content">
+              <div class="detail-label">Amount</div>
+              <div class="detail-value amount-value">£150.00</div>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <span class="detail-icon">📞</span>
+            <div class="detail-content">
+              <div class="detail-label">Phone</div>
+              <div class="detail-value">07700 900123</div>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <span class="detail-icon">🔄</span>
+            <div class="detail-content">
+              <div class="detail-label">Recurrence</div>
+              <div class="detail-value">
+                Monthly
+                <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.25rem;">
+                  Payment 1 of 4
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-actions">
+          <!-- NEW BUTTON - Highlighted -->
+          <button class="btn btn-payment">
+            💰 Add Payment
+          </button>
+
+          <!-- Existing buttons -->
+          <button class="btn btn-primary">
+            📱 Send SMS
+          </button>
+          <button class="btn btn-ghost">
+            ✏️ Edit
+          </button>
+        </div>
+
+        <div class="annotation">
+          <strong>✨ NEW:</strong> The "Add Payment" button opens a quick modal (see below) for fast payment recording without navigating through the full form.
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Payment Modal -->
+    <div class="design-section">
+      <h2 class="section-title">
+        🚀 Quick Payment Modal
+        <span class="badge badge-new">NEW</span>
+      </h2>
+
+      <div style="position: relative; padding: 2rem; background: #f9fafb; border-radius: 12px;">
+        <div class="payment-modal">
+          <div class="modal-header">
+            <h3>💰 Record Payment</h3>
+          </div>
+
+          <div class="modal-body">
+            <!-- Context Info -->
+            <div class="info-box">
+              <div class="info-box-title">📍 Payment For</div>
+              <div class="info-box-content">
+                <div><strong>Address:</strong> 123 High Street, London, SE1 9SG</div>
+                <div><strong>Customer:</strong> John Smith</div>
+                <div><strong>Expected:</strong> £150.00</div>
+                <div><strong>Payment:</strong> 1 of 4 (Monthly)</div>
+              </div>
+            </div>
+
+            <!-- Amount Input -->
+            <div class="form-group">
+              <label class="form-label">Payment Amount *</label>
+              <div class="amount-input-wrapper">
+                <span class="amount-symbol">£</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  class="form-input amount-input"
+                  value="150.00"
+                  placeholder="0.00"
+                >
+              </div>
+            </div>
+
+            <!-- Date Input -->
+            <div class="form-group">
+              <label class="form-label">Payment Date</label>
+              <input
+                type="date"
+                class="form-input"
+                value="2025-10-23"
+              >
+            </div>
+
+            <!-- Notes Input -->
+            <div class="form-group">
+              <label class="form-label">Notes (Optional)</label>
+              <textarea
+                class="form-input"
+                rows="2"
+                placeholder="Payment method, receipt number, etc..."
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn btn-ghost">Cancel</button>
+            <button class="btn btn-success">✅ Record Payment</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="annotation">
+        <strong>⚡ Benefits:</strong> Quick access, pre-filled data, simple interface. Payment recorded in seconds, not minutes.
+      </div>
+    </div>
+
+    <!-- Key Features -->
+    <div class="design-section">
+      <h2 class="section-title">✨ Key Features</h2>
+      <div style="display: grid; gap: 1rem;">
+        <div style="padding: 1rem; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 6px;">
+          <strong style="color: #065f46;">✅ Pre-filled Amount:</strong> Expected payment amount auto-populated, but editable for partial payments
+        </div>
+        <div style="padding: 1rem; background: #eff6ff; border-left: 4px solid #0ea5e9; border-radius: 6px;">
+          <strong style="color: #1e40af;">📋 Context Display:</strong> Shows address, customer, and payment schedule info at the top
+        </div>
+        <div style="padding: 1rem; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px;">
+          <strong style="color: #92400e;">⚡ Fast Access:</strong> One click from arrangement card, no form navigation needed
+        </div>
+        <div style="padding: 1rem; background: #fce7f3; border-left: 4px solid #ec4899; border-radius: 6px;">
+          <strong style="color: #9f1239;">🎯 Smart Recording:</strong> Automatically marks as "ARR" for installments, "PIF" for final payment
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

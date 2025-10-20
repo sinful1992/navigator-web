@@ -39,6 +39,8 @@ npm test           # Run tests (OK to run)
 - `AddressList.tsx`: Displays addresses with filtering and completion actions
 - `Completed.tsx`: Shows completion history with outcome modification
 - `Arrangements.tsx`: Manages scheduled visits and customer interactions
+  - `UnifiedArrangementForm.tsx`: Create/edit arrangement form with case reference and payment schedule
+  - `QuickPaymentModal.tsx`: Fast payment recording modal (5-second payment entry)
 - `Auth.tsx`: Supabase authentication flow
 - `DayPanel.tsx`: Time tracking and session management
 
@@ -92,6 +94,34 @@ const hasCompletion = completions.some(c =>
 - "Simplify" to only one strategy - both are needed for different workflows
 
 **Documentation**: See `ROUTE_PLANNING_COMPLETION_FIX.md` for full details
+
+### ⚠️ Arrangements Payment Recording (IMPORTANT)
+
+**Background**: Arrangements support payment plans with multiple installments. Outcome tracking must correctly differentiate between installment payments and final payments.
+
+**Critical Logic** (`Arrangements.tsx:267-291`):
+```typescript
+// Determine outcome: ARR for installment payments, PIF for final payment
+const outcome: Outcome = (isRecurring && !isLastPayment) ? "ARR" : "PIF";
+```
+
+**Payment Outcome Rules**:
+- **Installment payments** (e.g., payment 1 of 4) → Record as **"ARR"** (Arrangement)
+- **Final payment** (e.g., payment 4 of 4) → Record as **"PIF"** (Paid In Full)
+- **Single payments** (non-recurring) → Record as **"PIF"**
+
+**DO NOT**:
+- Always use "PIF" for arrangement payments - breaks installment tracking
+- Remove the outcome determination logic - required for accurate statistics
+- Mark installments as "PIF" - creates incorrect completion counts
+
+**Features**:
+- **Quick Payment Modal**: Fast payment recording via `QuickPaymentModal.tsx`
+- **Payment Schedule Dropdown**: Single dropdown with options: Single/Weekly/Bi-weekly/Monthly
+- **Case Reference Tracking**: All arrangements capture case reference numbers
+- **Smart Outcome Detection**: Automatically determines correct outcome based on payment position
+
+**Documentation**: See `ARRANGEMENTS_IMPROVEMENTS_SUMMARY.md` for complete details
 
 ## Environment Setup
 

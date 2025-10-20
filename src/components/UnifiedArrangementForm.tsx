@@ -52,6 +52,7 @@ export default function UnifiedArrangementForm({
     // Customer details
     customerName: arrangement?.customerName ?? "",
     phoneNumber: arrangement?.phoneNumber ?? "",
+    caseReference: "", // NEW: Case reference field
 
     // Payment details
     totalAmount: arrangement?.amount ?? "",
@@ -63,9 +64,8 @@ export default function UnifiedArrangementForm({
     // Previous payments (made before creating arrangement)
     previousPayments: [] as PreviousPayment[],
 
-    // Optional recurring setup
-    isRecurring: false,
-    recurrenceType: 'weekly' as 'weekly' | 'biweekly' | 'monthly',
+    // Payment schedule - single dropdown instead of checkbox + frequency
+    paymentFrequency: 'single' as 'single' | 'weekly' | 'biweekly' | 'monthly',
     recurrenceInterval: 1,
     totalPayments: 4,
   });
@@ -122,7 +122,7 @@ export default function UnifiedArrangementForm({
 
   // Calculate payment timeline for recurring payments
   const paymentTimeline = React.useMemo(() => {
-    if (!formData.isRecurring || formData.totalPayments < 2) return [];
+    if (formData.paymentFrequency === 'single' || formData.totalPayments < 2) return [];
 
     const dates: string[] = [];
     const startDate = parseISO(formData.scheduledDate);
@@ -130,11 +130,11 @@ export default function UnifiedArrangementForm({
     for (let i = 0; i < formData.totalPayments; i++) {
       let nextDate = startDate;
 
-      if (formData.recurrenceType === 'weekly') {
+      if (formData.paymentFrequency === 'weekly') {
         nextDate = addWeeks(startDate, i * formData.recurrenceInterval);
-      } else if (formData.recurrenceType === 'biweekly') {
+      } else if (formData.paymentFrequency === 'biweekly') {
         nextDate = addWeeks(startDate, i * 2);
-      } else if (formData.recurrenceType === 'monthly') {
+      } else if (formData.paymentFrequency === 'monthly') {
         nextDate = addMonths(startDate, i * formData.recurrenceInterval);
       }
 
@@ -142,7 +142,7 @@ export default function UnifiedArrangementForm({
     }
 
     return dates;
-  }, [formData.isRecurring, formData.scheduledDate, formData.recurrenceType, formData.recurrenceInterval, formData.totalPayments]);
+  }, [formData.paymentFrequency, formData.scheduledDate, formData.recurrenceInterval, formData.totalPayments]);
 
   // Calculate completion percentage for recurring payments
   const completionPercentage = React.useMemo(() => {
@@ -192,9 +192,12 @@ export default function UnifiedArrangementForm({
         }));
       }
 
-      // Set recurring flag based on existing arrangement
+      // Set payment frequency based on existing arrangement
       if (arrangement.recurrenceType && arrangement.recurrenceType !== "none") {
-        setFormData(prev => ({ ...prev, isRecurring: true }));
+        setFormData(prev => ({
+          ...prev,
+          paymentFrequency: arrangement.recurrenceType as 'weekly' | 'biweekly' | 'monthly'
+        }));
       }
     }
   }, [arrangement, state.addresses]);
@@ -339,8 +342,9 @@ export default function UnifiedArrangementForm({
       const arrangementAmount = remainingAmount > 0 ? remainingAmount : totalAmountValue;
       let actualAmount = arrangementAmount;
 
-      // If recurring, split remaining amount across payments
-      if (formData.isRecurring && formData.totalPayments > 1) {
+      // If recurring (not single payment), split remaining amount across payments
+      const isRecurring = formData.paymentFrequency !== 'single';
+      if (isRecurring && formData.totalPayments > 1) {
         actualAmount = arrangementAmount / formData.totalPayments;
       }
 
@@ -354,9 +358,9 @@ export default function UnifiedArrangementForm({
         amount: actualAmount.toFixed(2),
         notes: formData.notes,
         status: formData.status,
-        recurrenceType: formData.isRecurring ? formData.recurrenceType : "none",
-        recurrenceInterval: formData.isRecurring ? formData.recurrenceInterval : undefined,
-        totalPayments: formData.isRecurring ? formData.totalPayments : 1,
+        recurrenceType: isRecurring ? formData.paymentFrequency : "none",
+        recurrenceInterval: isRecurring ? formData.recurrenceInterval : undefined,
+        totalPayments: isRecurring ? formData.totalPayments : 1,
         paymentsMade: arrangement?.paymentsMade ?? 0,
       };
 
@@ -551,6 +555,18 @@ export default function UnifiedArrangementForm({
             className="uaf-input"
           />
         </div>
+
+        <div className="uaf-field">
+          <label className="uaf-label">Case Reference Number</label>
+          <input
+            type="text"
+            value={formData.caseReference}
+            onChange={(e) => setFormData(prev => ({ ...prev, caseReference: e.target.value }))}
+            className="uaf-input"
+            placeholder="e.g., CR-2025-1234"
+          />
+          <div className="uaf-hint">💡 Optional but recommended for tracking</div>
+        </div>
       </div>
 
       {/* Previous Payments Section - Collapsible */}
@@ -649,95 +665,81 @@ export default function UnifiedArrangementForm({
         )}
       </div>
 
-      {/* Optional Recurring Setup - Collapsible */}
+      {/* Payment Schedule Section */}
       {remainingAmount > 0 && (
         <div className="uaf-section">
-          <div className="uaf-section-header uaf-section-header-collapsible" onClick={() => toggleCollapse('recurringPayments')}>
-            <h4 className="uaf-section-title">
-              <span className="uaf-collapse-icon">{collapsed.recurringPayments ? '▶' : '▼'}</span>
-              🔄 Optional: Split Remaining Balance
-            </h4>
+          <div className="uaf-section-header">
+            <h4 className="uaf-section-title">🔄 Payment Schedule</h4>
           </div>
 
-          {!collapsed.recurringPayments && (
-            <>
+          <div className="uaf-row">
+            <div className="uaf-field">
+              <label className="uaf-label">Payment Type *</label>
+              <select
+                value={formData.paymentFrequency}
+                onChange={(e) => setFormData(prev => ({ ...prev, paymentFrequency: e.target.value as 'single' | 'weekly' | 'biweekly' | 'monthly' }))}
+                className="uaf-input"
+              >
+                <option value="single">Single Payment (No Split)</option>
+                <option value="weekly">Weekly Payments</option>
+                <option value="biweekly">Bi-weekly Payments (Every 2 weeks)</option>
+                <option value="monthly">Monthly Payments</option>
+              </select>
+            </div>
+
+            {formData.paymentFrequency !== 'single' && (
               <div className="uaf-field">
-                <label className="uaf-radio-option">
-                  <input
-                    type="checkbox"
-                    checked={formData.isRecurring}
-                    onChange={(e) => setFormData(prev => ({ ...prev, isRecurring: e.target.checked }))}
-                  />
-                  <span>Split £{remainingAmount.toFixed(2)} into multiple payments</span>
-                </label>
+                <label className="uaf-label">Number of Payments</label>
+                <input
+                  type="number"
+                  min="2"
+                  max="12"
+                  value={formData.totalPayments}
+                  onChange={(e) => setFormData(prev => ({ ...prev, totalPayments: parseInt(e.target.value) || 2 }))}
+                  className="uaf-input"
+                />
+              </div>
+            )}
+          </div>
+
+          {formData.paymentFrequency !== 'single' && (
+            <>
+              <div className="uaf-payment-preview">
+                💡 {formData.totalPayments} payments of £{(remainingAmount / formData.totalPayments).toFixed(2)} each
               </div>
 
-              {formData.isRecurring && (
-                <>
-                  <div className="uaf-row">
-                    <div className="uaf-field">
-                      <label className="uaf-label">Frequency</label>
-                      <select
-                        value={formData.recurrenceType}
-                        onChange={(e) => setFormData(prev => ({ ...prev, recurrenceType: e.target.value as 'weekly' | 'biweekly' | 'monthly' }))}
-                        className="uaf-input"
-                      >
-                        <option value="weekly">Weekly</option>
-                        <option value="biweekly">Bi-weekly (Every 2 weeks)</option>
-                        <option value="monthly">Monthly</option>
-                      </select>
-                    </div>
-                    <div className="uaf-field">
-                      <label className="uaf-label">Number of Payments</label>
-                      <input
-                        type="number"
-                        min="2"
-                        max="12"
-                        value={formData.totalPayments}
-                        onChange={(e) => setFormData(prev => ({ ...prev, totalPayments: parseInt(e.target.value) || 2 }))}
-                        className="uaf-input"
-                      />
-                    </div>
+              {/* Visual Timeline */}
+              {paymentTimeline.length > 0 && (
+                <div className="uaf-timeline">
+                  <div className="uaf-timeline-title">📅 Payment Schedule:</div>
+                  <div className="uaf-timeline-dates">
+                    {paymentTimeline.map((date, index) => (
+                      <div key={index} className="uaf-timeline-item">
+                        <span className="uaf-timeline-number">{index + 1}</span>
+                        <span className="uaf-timeline-date">{date}</span>
+                        <span className="uaf-timeline-amount">£{(remainingAmount / formData.totalPayments).toFixed(2)}</span>
+                      </div>
+                    ))}
                   </div>
+                </div>
+              )}
 
-                  <div className="uaf-payment-preview">
-                    💡 {formData.totalPayments} payments of £{(remainingAmount / formData.totalPayments).toFixed(2)} each
+              {/* Completion Percentage for Editing Existing Arrangements */}
+              {arrangement && arrangement.recurrenceType && arrangement.recurrenceType !== 'none' && (
+                <div className="uaf-completion-progress">
+                  <div className="uaf-completion-header">
+                    <span>Payment Progress</span>
+                    <span className="uaf-completion-text">
+                      {arrangement.paymentsMade || 0} of {arrangement.totalPayments || 1} ({completionPercentage}%)
+                    </span>
                   </div>
-
-                  {/* Visual Timeline */}
-                  {paymentTimeline.length > 0 && (
-                    <div className="uaf-timeline">
-                      <div className="uaf-timeline-title">📅 Payment Schedule:</div>
-                      <div className="uaf-timeline-dates">
-                        {paymentTimeline.map((date, index) => (
-                          <div key={index} className="uaf-timeline-item">
-                            <span className="uaf-timeline-number">{index + 1}</span>
-                            <span className="uaf-timeline-date">{date}</span>
-                            <span className="uaf-timeline-amount">£{(remainingAmount / formData.totalPayments).toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Completion Percentage for Editing Existing Arrangements */}
-                  {arrangement && arrangement.recurrenceType && arrangement.recurrenceType !== 'none' && (
-                    <div className="uaf-completion-progress">
-                      <div className="uaf-completion-header">
-                        <span>Payment Progress</span>
-                        <span className="uaf-completion-text">
-                          {arrangement.paymentsMade || 0} of {arrangement.totalPayments || 1} ({completionPercentage}%)
-                        </span>
-                      </div>
-                      <div className="uaf-completion-bar">
-                        <div
-                          className="uaf-completion-fill"
-                          style={{ width: `${completionPercentage}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  )}
-                </>
+                  <div className="uaf-completion-bar">
+                    <div
+                      className="uaf-completion-fill"
+                      style={{ width: `${completionPercentage}%` }}
+                    ></div>
+                  </div>
+                </div>
               )}
             </>
           )}
@@ -799,6 +801,13 @@ export default function UnifiedArrangementForm({
                 </div>
               )}
 
+              {formData.caseReference && (
+                <div className="uaf-confirmation-section">
+                  <div className="uaf-confirmation-label">📋 Case Reference</div>
+                  <div className="uaf-confirmation-value">{formData.caseReference}</div>
+                </div>
+              )}
+
               <div className="uaf-confirmation-section">
                 <div className="uaf-confirmation-label">💰 Total Amount</div>
                 <div className="uaf-confirmation-value uaf-confirmation-amount">
@@ -831,12 +840,12 @@ export default function UnifiedArrangementForm({
                 </div>
               </div>
 
-              {formData.isRecurring && (
+              {formData.paymentFrequency !== 'single' && (
                 <>
                   <div className="uaf-confirmation-section">
                     <div className="uaf-confirmation-label">🔄 Payment Plan</div>
                     <div className="uaf-confirmation-value">
-                      {formData.totalPayments} {formData.recurrenceType} payments of £{(remainingAmount / formData.totalPayments).toFixed(2)}
+                      {formData.totalPayments} {formData.paymentFrequency} payments of £{(remainingAmount / formData.totalPayments).toFixed(2)}
                     </div>
                   </div>
                   <div className="uaf-confirmation-timeline">

@@ -718,6 +718,23 @@
   border-color: var(--gray-300);
 }
 
+/* Dark mode fix for summary row numbers visibility */
+.dark-mode .uaf-summary-row {
+  color: var(--gray-800);
+}
+
+.dark-mode .uaf-summary-row span {
+  color: var(--gray-800);
+}
+
+.dark-mode .uaf-summary-total {
+  color: var(--gray-900);
+}
+
+.dark-mode .uaf-summary-total span {
+  color: var(--gray-900);
+}
+
 @media (max-width: 768px) {
   .uaf-modal {
     margin: 0.5rem;

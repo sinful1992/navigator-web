@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design 3: Improved Form Layout</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+      padding: 2rem;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 2rem;
+    }
+
+    .header h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .header p {
+      opacity: 0.9;
+      font-size: 1.1rem;
+    }
+
+    .design-section {
+      background: white;
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .badge {
+      background: #10b981;
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-before {
+      background: #ef4444;
+    }
+
+    .badge-after {
+      background: #10b981;
+    }
+
+    .side-by-side {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-top: 1rem;
+    }
+
+    /* Form Container */
+    .form-container {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 1.5rem;
+      max-height: 700px;
+      overflow-y: auto;
+    }
+
+    .form-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .form-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    /* Simplified Section */
+    .form-section {
+      margin-bottom: 1.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .form-section:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .section-header {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .form-group-full {
+      grid-column: 1 / -1;
+    }
+
+    .form-label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .required {
+      color: #ef4444;
+    }
+
+    .form-input {
+      padding: 0.75rem;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 0.9375rem;
+      transition: all 0.2s ease;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #0ea5e9;
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+    }
+
+    .form-hint {
+      font-size: 0.8125rem;
+      color: #6b7280;
+      font-style: italic;
+    }
+
+    .highlight-box {
+      background: #fef3c7;
+      border: 2px solid #f59e0b;
+      border-radius: 8px;
+      padding: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    .highlight-new {
+      background: #d1fae5;
+      border-color: #10b981;
+    }
+
+    .highlight-title {
+      font-weight: 600;
+      font-size: 0.875rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .highlight-text {
+      font-size: 0.8125rem;
+      line-height: 1.5;
+    }
+
+    /* Comparison Labels */
+    .form-comparison-label {
+      background: #1f2937;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 8px 8px 0 0;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: -1px;
+    }
+
+    .form-comparison-label.before {
+      background: #ef4444;
+    }
+
+    .form-comparison-label.after {
+      background: #10b981;
+    }
+
+    /* Issue Callouts */
+    .issue-callout {
+      background: #fee2e2;
+      border-left: 4px solid #ef4444;
+      padding: 1rem;
+      margin: 0.5rem 0;
+      border-radius: 4px;
+    }
+
+    .issue-callout-title {
+      font-weight: 700;
+      color: #991b1b;
+      margin-bottom: 0.25rem;
+      font-size: 0.875rem;
+    }
+
+    .issue-callout-text {
+      font-size: 0.8125rem;
+      color: #991b1b;
+    }
+
+    .fix-callout {
+      background: #d1fae5;
+      border-left: 4px solid #10b981;
+      padding: 1rem;
+      margin: 0.5rem 0;
+      border-radius: 4px;
+    }
+
+    .fix-callout-title {
+      font-weight: 700;
+      color: #065f46;
+      margin-bottom: 0.25rem;
+      font-size: 0.875rem;
+    }
+
+    .fix-callout-text {
+      font-size: 0.8125rem;
+      color: #065f46;
+    }
+
+    .changes-summary {
+      display: grid;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .change-item {
+      display: flex;
+      gap: 1rem;
+      padding: 1.25rem;
+      border-radius: 12px;
+      border: 2px solid;
+    }
+
+    .change-icon {
+      font-size: 2rem;
+      flex-shrink: 0;
+    }
+
+    .change-content {
+      flex: 1;
+    }
+
+    .change-title {
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      font-size: 1rem;
+    }
+
+    .change-description {
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 1200px) {
+      .side-by-side {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📋 Design 3: Improved Form Layout</h1>
+      <p>Clearer organization with case reference support</p>
+    </div>
+
+    <!-- Side-by-Side Comparison -->
+    <div class="design-section">
+      <h2 class="section-title">🔄 Before & After Comparison</h2>
+      <div class="side-by-side">
+
+        <!-- BEFORE -->
+        <div>
+          <div class="form-comparison-label before">❌ BEFORE: Current Form</div>
+          <div class="form-container">
+            <div class="form-header">
+              <div class="form-title">➕ Create Payment Arrangement</div>
+            </div>
+
+            <!-- Address Section -->
+            <div class="form-section">
+              <div class="section-header">📍 Address & Customer</div>
+              <div class="form-group">
+                <label class="form-label">Address <span class="required">*</span></label>
+                <select class="form-input">
+                  <option>#47 - 123 High Street, London, SE1 9SG</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Customer Name</label>
+                  <input type="text" class="form-input" placeholder="Customer name">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Phone Number</label>
+                  <input type="tel" class="form-input" placeholder="Phone number">
+                </div>
+              </div>
+            </div>
+
+            <!-- Payment Details -->
+            <div class="form-section">
+              <div class="section-header">💰 Payment Details</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Total Amount Owed <span class="required">*</span></label>
+                  <input type="number" class="form-input" placeholder="0.00">
+                  <div class="issue-callout">
+                    <div class="issue-callout-title">❌ Issue #1: Dark Theme</div>
+                    <div class="issue-callout-text">Numbers invisible in dark mode</div>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Due Date <span class="required">*</span></label>
+                  <input type="date" class="form-input">
+                </div>
+              </div>
+              <div class="issue-callout">
+                <div class="issue-callout-title">❌ Issue #2: Missing Case Reference</div>
+                <div class="issue-callout-text">No field to record case reference number - completions have undefined caseReference</div>
+              </div>
+            </div>
+
+            <!-- Previous Payments (Confusing) -->
+            <div class="form-section">
+              <div class="section-header">💳 Payments Already Made</div>
+              <div style="text-align: center; padding: 2rem; color: #6b7280; font-style: italic;">
+                No previous payments recorded yet.
+              </div>
+              <div class="issue-callout">
+                <div class="issue-callout-title">❌ Issue #3: Confusing Section</div>
+                <div class="issue-callout-text">Users think they need to fill this out BEFORE creating arrangement. Should be simplified or removed.</div>
+              </div>
+            </div>
+
+            <!-- Recurring Payments -->
+            <div class="form-section">
+              <div class="section-header">🔄 Optional: Split Remaining Balance</div>
+              <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                  <input type="checkbox">
+                  <span>Split £600.00 into multiple payments</span>
+                </label>
+              </div>
+              <div class="issue-callout">
+                <div class="issue-callout-title">❌ Issue #4: Fixed Dates Only</div>
+                <div class="issue-callout-text">Can't set custom dates like Oct 23 → Nov 21 → Dec 20</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AFTER -->
+        <div>
+          <div class="form-comparison-label after">✅ AFTER: Improved Form</div>
+          <div class="form-container">
+            <div class="form-header">
+              <div class="form-title">➕ Create Payment Arrangement</div>
+            </div>
+
+            <!-- Address Section (Same) -->
+            <div class="form-section">
+              <div class="section-header">📍 Address & Customer</div>
+              <div class="form-group">
+                <label class="form-label">Address <span class="required">*</span></label>
+                <select class="form-input">
+                  <option>#47 - 123 High Street, London, SE1 9SG</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Customer Name</label>
+                  <input type="text" class="form-input" placeholder="Customer name" value="John Smith">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Phone Number</label>
+                  <input type="tel" class="form-input" placeholder="Phone number" value="07700 900123">
+                </div>
+              </div>
+            </div>
+
+            <!-- Payment Details (IMPROVED) -->
+            <div class="form-section">
+              <div class="section-header">💰 Payment Details</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Total Amount Owed <span class="required">*</span></label>
+                  <input type="number" class="form-input" placeholder="0.00" value="600.00" style="font-weight: 600; color: #059669;">
+                  <div class="fix-callout">
+                    <div class="fix-callout-title">✅ Fixed: Dark Mode Styling</div>
+                    <div class="fix-callout-text">Proper color contrast in all themes</div>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Due Date <span class="required">*</span></label>
+                  <input type="date" class="form-input" value="2025-10-23">
+                </div>
+              </div>
+
+              <!-- NEW: Case Reference Field -->
+              <div class="form-group">
+                <label class="form-label">Case Reference Number</label>
+                <input type="text" class="form-input" placeholder="e.g., CR-2025-1234" value="CR-2025-4789">
+                <div class="form-hint">💡 Optional but recommended for tracking</div>
+                <div class="highlight-box highlight-new">
+                  <div class="highlight-title" style="color: #065f46;">✨ NEW FIELD</div>
+                  <div class="highlight-text" style="color: #065f46;">
+                    Case reference is now captured and stored with completions for proper tracking
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Previous Payments REMOVED / SIMPLIFIED -->
+            <div class="fix-callout">
+              <div class="fix-callout-title">✅ Removed: "Payments Already Made" Section</div>
+              <div class="fix-callout-text">
+                Confusing section removed. If needed, can be added back as a simple expandable section at the bottom of the form.
+              </div>
+            </div>
+
+            <!-- Recurring Payments (IMPROVED) -->
+            <div class="form-section">
+              <div class="section-header">🔄 Payment Schedule</div>
+              <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 1rem; background: white; border: 2px solid #10b981; border-radius: 8px;">
+                  <input type="checkbox" checked style="width: 20px; height: 20px;">
+                  <span style="font-weight: 500;">Split £600.00 into multiple payments</span>
+                </label>
+              </div>
+
+              <div class="form-row" style="margin-top: 1rem;">
+                <div class="form-group">
+                  <label class="form-label">Frequency</label>
+                  <select class="form-input">
+                    <option>Monthly</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Number of Payments</label>
+                  <input type="number" class="form-input" value="4">
+                </div>
+              </div>
+
+              <div class="highlight-box highlight-new">
+                <div class="highlight-title" style="color: #065f46;">✨ NEW: Custom Date Editing</div>
+                <div class="highlight-text" style="color: #065f46;">
+                  Dates are auto-calculated but now editable! Switch to "Manual" mode to customize individual payment dates. Perfect for irregular schedules.
+                </div>
+              </div>
+            </div>
+
+            <!-- Notes (Same) -->
+            <div class="form-section">
+              <div class="section-header">📝 Notes</div>
+              <div class="form-group">
+                <textarea class="form-input" rows="2" placeholder="Payment terms, special instructions, etc...">Customer requested dates around payday</textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary of Changes -->
+    <div class="design-section">
+      <h2 class="section-title">📝 Summary of Changes</h2>
+      <div class="changes-summary">
+
+        <div class="change-item" style="background: #d1fae5; border-color: #10b981;">
+          <div class="change-icon">✅</div>
+          <div class="change-content">
+            <div class="change-title" style="color: #065f46;">1. Added Case Reference Field</div>
+            <div class="change-description" style="color: #065f46;">
+              New input field in Payment Details section to capture case reference numbers. This data is now properly saved with completions and arrangements.
+            </div>
+          </div>
+        </div>
+
+        <div class="change-item" style="background: #eff6ff; border-color: #0ea5e9;">
+          <div class="change-icon">🎨</div>
+          <div class="change-content">
+            <div class="change-title" style="color: #1e40af;">2. Fixed Dark Theme Visibility</div>
+            <div class="change-description" style="color: #1e40af;">
+              Added proper CSS styling for "Total Amount Owed" field in dark mode. Numbers now have proper contrast and are clearly visible.
+            </div>
+          </div>
+        </div>
+
+        <div class="change-item" style="background: #fef3c7; border-color: #f59e0b;">
+          <div class="change-icon">🗑️</div>
+          <div class="change-content">
+            <div class="change-title" style="color: #92400e;">3. Simplified "Previous Payments"</div>
+            <div class="change-description" style="color: #92400e;">
+              Removed confusing "Payments Already Made" section from main form. This can be re-added as an advanced option if truly needed, but it was causing confusion during arrangement creation.
+            </div>
+          </div>
+        </div>
+
+        <div class="change-item" style="background: #fce7f3; border-color: #ec4899;">
+          <div class="change-icon">📅</div>
+          <div class="change-content">
+            <div class="change-title" style="color: #9f1239;">4. Enhanced Payment Schedule</div>
+            <div class="change-description" style="color: #9f1239;">
+              Payment schedule section now supports custom date editing (see Design 2). Users can switch between auto-calculate and manual modes for maximum flexibility.
+            </div>
+          </div>
+        </div>
+
+        <div class="change-item" style="background: #ddd6fe; border-color: #8b5cf6;">
+          <div class="change-icon">🧹</div>
+          <div class="change-content">
+            <div class="change-title" style="color: #5b21b6;">5. Cleaner Organization</div>
+            <div class="change-description" style="color: #5b21b6;">
+              Streamlined section headers and reduced visual clutter. Form flows more naturally from address → payment details → schedule → notes.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Implementation Notes -->
+    <div class="design-section">
+      <h2 class="section-title">⚙️ Technical Implementation Notes</h2>
+      <div style="background: #f3f4f6; border: 2px solid #9ca3af; border-radius: 12px; padding: 1.5rem;">
+        <div style="margin-bottom: 1rem; font-weight: 600; font-size: 1rem;">Changes Required:</div>
+        <ol style="margin-left: 1.5rem; line-height: 2; font-size: 0.9375rem;">
+          <li><strong>UnifiedArrangementForm.tsx:</strong> Add <code>caseReference</code> field to form state and include in submission</li>
+          <li><strong>arrangementForm.css:</strong> Add dark mode overrides for <code>.uaf-summary-row</code> and amount fields</li>
+          <li><strong>Arrangements.tsx:</strong> Pass <code>caseReference</code> to <code>onComplete()</code> when recording payments</li>
+          <li><strong>types.ts:</strong> Already supports <code>caseReference</code> - no changes needed ✅</li>
+          <li><strong>UnifiedArrangementForm.tsx:</strong> Add payment schedule editing mode (from Design 2)</li>
+          <li><strong>Arrangements.tsx:</strong> Fix PIF bug - use "ARR" for installment payments (separate fix)</li>
+        </ol>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

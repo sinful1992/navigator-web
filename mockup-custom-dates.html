@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design 2: Custom Payment Dates</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+      padding: 2rem;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 2rem;
+    }
+
+    .header h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .header p {
+      opacity: 0.9;
+      font-size: 1.1rem;
+    }
+
+    .design-section {
+      background: white;
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .badge {
+      background: #10b981;
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-new {
+      background: #f59e0b;
+    }
+
+    .badge-improved {
+      background: #8b5cf6;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 1rem;
+    }
+
+    .comparison-item {
+      padding: 1.5rem;
+      border-radius: 12px;
+      border: 2px solid;
+    }
+
+    .comparison-before {
+      background: #fee2e2;
+      border-color: #ef4444;
+    }
+
+    .comparison-after {
+      background: #d1fae5;
+      border-color: #10b981;
+    }
+
+    .comparison-title {
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Form Styles */
+    .form-section {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .form-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .form-section-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem;
+      background: white;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .checkbox-label:hover {
+      border-color: #8b5cf6;
+      background: #faf5ff;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .form-label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .form-input {
+      padding: 0.75rem;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 0.9375rem;
+      transition: border-color 0.2s ease;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #8b5cf6;
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+    }
+
+    /* Payment Schedule Table */
+    .payment-schedule {
+      margin-top: 1.5rem;
+    }
+
+    .payment-schedule-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .payment-schedule-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .schedule-mode-toggle {
+      display: flex;
+      gap: 0.5rem;
+      background: white;
+      padding: 0.25rem;
+      border-radius: 8px;
+      border: 2px solid #e5e7eb;
+    }
+
+    .schedule-mode-btn {
+      padding: 0.5rem 1rem;
+      border: none;
+      background: transparent;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: #6b7280;
+    }
+
+    .schedule-mode-btn.active {
+      background: #8b5cf6;
+      color: white;
+    }
+
+    .payment-table {
+      background: white;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .payment-table-header {
+      display: grid;
+      grid-template-columns: 60px 1fr 150px 150px 50px;
+      gap: 1rem;
+      padding: 1rem;
+      background: #f3f4f6;
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .payment-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 150px 150px 50px;
+      gap: 1rem;
+      padding: 1rem;
+      border-top: 1px solid #e5e7eb;
+      align-items: center;
+      transition: background 0.2s ease;
+    }
+
+    .payment-row:hover {
+      background: #faf5ff;
+    }
+
+    .payment-row.editable {
+      background: #fef3c7;
+    }
+
+    .payment-row.editable:hover {
+      background: #fde68a;
+    }
+
+    .payment-number {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      background: #8b5cf6;
+      color: white;
+      border-radius: 50%;
+      font-weight: 700;
+    }
+
+    .payment-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+
+    .status-dot.scheduled {
+      background: #0ea5e9;
+    }
+
+    .payment-date-input {
+      width: 100%;
+      padding: 0.5rem;
+      border: 2px solid #e5e7eb;
+      border-radius: 6px;
+      font-size: 0.875rem;
+    }
+
+    .payment-date-input:focus {
+      outline: none;
+      border-color: #8b5cf6;
+    }
+
+    .payment-amount {
+      font-weight: 600;
+      color: #059669;
+      font-size: 0.9375rem;
+    }
+
+    .edit-icon {
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 6px;
+      transition: background 0.2s ease;
+    }
+
+    .edit-icon:hover {
+      background: #f3f4f6;
+    }
+
+    .info-banner {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border: 2px solid #f59e0b;
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-top: 1rem;
+      display: flex;
+      gap: 1rem;
+    }
+
+    .info-banner-icon {
+      font-size: 2rem;
+      flex-shrink: 0;
+    }
+
+    .info-banner-content {
+      flex: 1;
+    }
+
+    .info-banner-title {
+      font-weight: 700;
+      color: #92400e;
+      margin-bottom: 0.5rem;
+      font-size: 1rem;
+    }
+
+    .info-banner-text {
+      color: #92400e;
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .feature-card {
+      padding: 1.25rem;
+      border-radius: 12px;
+      border: 2px solid;
+    }
+
+    .feature-card h4 {
+      margin-bottom: 0.5rem;
+      font-size: 1rem;
+    }
+
+    .feature-card p {
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 968px) {
+      .comparison {
+        grid-template-columns: 1fr;
+      }
+
+      .payment-table-header,
+      .payment-row {
+        grid-template-columns: 50px 1fr 120px;
+      }
+
+      .payment-table-header .hide-mobile,
+      .payment-row .hide-mobile {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📅 Design 2: Custom Payment Dates</h1>
+      <p>Flexible date selection for payment plans</p>
+    </div>
+
+    <!-- Problem Statement -->
+    <div class="design-section">
+      <h2 class="section-title">🚫 Current Limitation</h2>
+      <div class="comparison">
+        <div class="comparison-item comparison-before">
+          <div class="comparison-title">❌ Current System</div>
+          <div style="margin-bottom: 1rem;">
+            <strong>Fixed Calculation Only:</strong>
+          </div>
+          <ul style="margin-left: 1.25rem; line-height: 2;">
+            <li>Weekly = Every 7 days</li>
+            <li>Monthly = Same day each month</li>
+            <li>Bi-weekly = Every 14 days</li>
+          </ul>
+          <div style="margin-top: 1rem; padding: 1rem; background: white; border-radius: 8px;">
+            <strong style="color: #ef4444;">Example Problem:</strong><br>
+            <div style="margin-top: 0.5rem; font-size: 0.875rem;">
+              You need:<br>
+              • Oct 23rd (first payment)<br>
+              • Nov 21st (29 days later)<br>
+              <br>
+              <strong>Can't do it!</strong> Monthly would give Nov 23rd.
+            </div>
+          </div>
+        </div>
+
+        <div class="comparison-item comparison-after">
+          <div class="comparison-title">✅ New System</div>
+          <div style="margin-bottom: 1rem;">
+            <strong>Auto + Manual Options:</strong>
+          </div>
+          <ul style="margin-left: 1.25rem; line-height: 2;">
+            <li>Auto-calculate dates</li>
+            <li>Edit any date manually</li>
+            <li>Add/remove payments</li>
+            <li>Flexible schedules</li>
+          </ul>
+          <div style="margin-top: 1rem; padding: 1rem; background: white; border-radius: 8px;">
+            <strong style="color: #10b981;">Example Solution:</strong><br>
+            <div style="margin-top: 0.5rem; font-size: 0.875rem;">
+              Start with monthly:<br>
+              • Oct 23rd (auto)<br>
+              • Nov 23rd (auto) → Edit to Nov 21st ✅<br>
+              • Dec 23rd (auto) → Edit to Dec 20th ✅<br>
+              <br>
+              <strong>Perfect!</strong> Total flexibility.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Design: Auto-Calculate Mode -->
+    <div class="design-section">
+      <h2 class="section-title">
+        🎨 Mode 1: Auto-Calculate (Default)
+        <span class="badge">Improved</span>
+      </h2>
+
+      <div class="form-section">
+        <div class="form-section-header">
+          <div class="form-section-title">🔄 Split Remaining Balance</div>
+        </div>
+
+        <label class="checkbox-label">
+          <input type="checkbox" checked>
+          <span style="font-weight: 500;">Split £600.00 into multiple payments</span>
+        </label>
+
+        <div class="form-row" style="margin-top: 1rem;">
+          <div class="form-group">
+            <label class="form-label">Frequency</label>
+            <select class="form-input">
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Bi-weekly (Every 2 weeks)</option>
+              <option selected>Monthly</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Number of Payments</label>
+            <input type="number" class="form-input" value="4" min="2" max="12">
+          </div>
+        </div>
+
+        <!-- Payment Schedule with Auto-Calculate -->
+        <div class="payment-schedule">
+          <div class="payment-schedule-header">
+            <div class="payment-schedule-title">
+              📅 Payment Schedule
+            </div>
+            <div class="schedule-mode-toggle">
+              <button class="schedule-mode-btn active">🤖 Auto</button>
+              <button class="schedule-mode-btn">✏️ Manual</button>
+            </div>
+          </div>
+
+          <div class="payment-table">
+            <div class="payment-table-header">
+              <div>#</div>
+              <div>Status</div>
+              <div>Date</div>
+              <div>Amount</div>
+              <div class="hide-mobile"></div>
+            </div>
+
+            <div class="payment-row">
+              <div><div class="payment-number">1</div></div>
+              <div class="payment-status">
+                <span class="status-dot scheduled"></span>
+                <span style="font-weight: 500;">Scheduled</span>
+              </div>
+              <div style="font-weight: 500;">Oct 23, 2025</div>
+              <div class="payment-amount">£150.00</div>
+              <div class="hide-mobile"></div>
+            </div>
+
+            <div class="payment-row">
+              <div><div class="payment-number">2</div></div>
+              <div class="payment-status">
+                <span class="status-dot"></span>
+                <span>Pending</span>
+              </div>
+              <div>Nov 23, 2025</div>
+              <div class="payment-amount">£150.00</div>
+              <div class="hide-mobile"></div>
+            </div>
+
+            <div class="payment-row">
+              <div><div class="payment-number">3</div></div>
+              <div class="payment-status">
+                <span class="status-dot"></span>
+                <span>Pending</span>
+              </div>
+              <div>Dec 23, 2025</div>
+              <div class="payment-amount">£150.00</div>
+              <div class="hide-mobile"></div>
+            </div>
+
+            <div class="payment-row">
+              <div><div class="payment-number">4</div></div>
+              <div class="payment-status">
+                <span class="status-dot"></span>
+                <span>Pending</span>
+              </div>
+              <div>Jan 23, 2026</div>
+              <div class="payment-amount">£150.00</div>
+              <div class="hide-mobile"></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 1rem; padding: 1rem; background: #dbeafe; border: 1px solid #60a5fa; border-radius: 8px; font-size: 0.875rem; color: #1e40af;">
+          💡 <strong>Auto Mode:</strong> Dates are automatically calculated based on frequency. Switch to Manual mode to edit individual dates.
+        </div>
+      </div>
+    </div>
+
+    <!-- New Design: Manual Edit Mode -->
+    <div class="design-section">
+      <h2 class="section-title">
+        🎨 Mode 2: Manual Edit
+        <span class="badge badge-new">NEW</span>
+      </h2>
+
+      <div class="form-section">
+        <div class="form-section-header">
+          <div class="form-section-title">🔄 Split Remaining Balance</div>
+        </div>
+
+        <label class="checkbox-label">
+          <input type="checkbox" checked>
+          <span style="font-weight: 500;">Split £600.00 into multiple payments</span>
+        </label>
+
+        <div class="form-row" style="margin-top: 1rem;">
+          <div class="form-group">
+            <label class="form-label">Frequency (Starting Point)</label>
+            <select class="form-input">
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Bi-weekly (Every 2 weeks)</option>
+              <option selected>Monthly</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Number of Payments</label>
+            <input type="number" class="form-input" value="4" min="2" max="12">
+          </div>
+        </div>
+
+        <!-- Payment Schedule with Manual Edit -->
+        <div class="payment-schedule">
+          <div class="payment-schedule-header">
+            <div class="payment-schedule-title">
+              📅 Payment Schedule
+            </div>
+            <div class="schedule-mode-toggle">
+              <button class="schedule-mode-btn">🤖 Auto</button>
+              <button class="schedule-mode-btn active">✏️ Manual</button>
+            </div>
+          </div>
+
+          <div class="payment-table">
+            <div class="payment-table-header">
+              <div>#</div>
+              <div>Status</div>
+              <div>Date</div>
+              <div>Amount</div>
+              <div class="hide-mobile"></div>
+            </div>
+
+            <div class="payment-row editable">
+              <div><div class="payment-number">1</div></div>
+              <div class="payment-status">
+                <span class="status-dot scheduled"></span>
+                <span style="font-weight: 500;">Scheduled</span>
+              </div>
+              <div>
+                <input type="date" class="payment-date-input" value="2025-10-23">
+              </div>
+              <div class="payment-amount">£150.00</div>
+              <div class="edit-icon hide-mobile">✏️</div>
+            </div>
+
+            <div class="payment-row editable">
+              <div><div class="payment-number">2</div></div>
+              <div class="payment-status">
+                <span class="status-dot"></span>
+                <span>Pending</span>
+              </div>
+              <div>
+                <input type="date" class="payment-date-input" value="2025-11-21">
+              </div>
+              <div class="payment-amount">£150.00</div>
+              <div class="edit-icon hide-mobile">✏️</div>
+            </div>
+
+            <div class="payment-row editable">
+              <div><div class="payment-number">3</div></div>
+              <div class="payment-status">
+                <span class="status-dot"></span>
+                <span>Pending</span>
+              </div>
+              <div>
+                <input type="date" class="payment-date-input" value="2025-12-20">
+              </div>
+              <div class="payment-amount">£150.00</div>
+              <div class="edit-icon hide-mobile">✏️</div>
+            </div>
+
+            <div class="payment-row editable">
+              <div><div class="payment-number">4</div></div>
+              <div class="payment-status">
+                <span class="status-dot"></span>
+                <span>Pending</span>
+              </div>
+              <div>
+                <input type="date" class="payment-date-input" value="2026-01-20">
+              </div>
+              <div class="payment-amount">£150.00</div>
+              <div class="edit-icon hide-mobile">✏️</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-banner">
+          <div class="info-banner-icon">✨</div>
+          <div class="info-banner-content">
+            <div class="info-banner-title">Manual Edit Mode Active</div>
+            <div class="info-banner-text">
+              All dates are now editable! Click any date field to set a custom payment date. This is perfect for irregular payment schedules like "23rd Oct, 21st Nov, 20th Dec".
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Key Features -->
+    <div class="design-section">
+      <h2 class="section-title">✨ Key Benefits</h2>
+      <div class="feature-grid">
+        <div class="feature-card" style="background: #ecfdf5; border-color: #10b981;">
+          <h4 style="color: #065f46;">🎯 Flexibility</h4>
+          <p style="color: #065f46;">Set any date for any payment. No more rigid schedules that don't match real-world agreements.</p>
+        </div>
+
+        <div class="feature-card" style="background: #eff6ff; border-color: #0ea5e9;">
+          <h4 style="color: #1e40af;">⚡ Quick Start</h4>
+          <p style="color: #1e40af;">Start with auto-calculate to get suggested dates, then fine-tune only what you need to change.</p>
+        </div>
+
+        <div class="feature-card" style="background: #fef3c7; border-color: #f59e0b;">
+          <h4 style="color: #92400e;">👁️ Visual Clarity</h4>
+          <p style="color: #92400e;">See the entire payment schedule at a glance. Know exactly when each payment is due.</p>
+        </div>
+
+        <div class="feature-card" style="background: #fce7f3; border-color: #ec4899;">
+          <h4 style="color: #9f1239;">💾 Smart Saving</h4>
+          <p style="color: #9f1239;">Each payment is saved individually with its custom date. Edit existing arrangements easily.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Real-World Example -->
+    <div class="design-section">
+      <h2 class="section-title">🌍 Real-World Example</h2>
+      <div style="padding: 1.5rem; background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); border: 2px solid #8b5cf6; border-radius: 12px;">
+        <div style="font-size: 1.1rem; font-weight: 600; color: #6b21a8; margin-bottom: 1rem;">
+          Scenario: Customer agrees to pay on specific dates
+        </div>
+        <div style="background: white; padding: 1.25rem; border-radius: 8px; line-height: 1.8;">
+          <strong>Customer says:</strong> "I get paid on the 20th, except this month I get paid on the 23rd because of the holiday. Then I can pay again on November 21st when I get my bonus, and after that just the 20th of each month."
+          <br><br>
+          <strong style="color: #ef4444;">❌ Old system:</strong> Impossible to set up accurately
+          <br>
+          <strong style="color: #10b981;">✅ New system:</strong> Set dates to Oct 23 → Nov 21 → Dec 20 → Jan 20. Done! ✨
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
