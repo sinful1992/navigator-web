@@ -752,6 +752,11 @@ export function useAppState(userId?: string) {
         const newListVersion = (typeof s.currentListVersion === "number" ? s.currentListVersion : 1) + 1;
         logger.info(`🔄 IMPORT BASE STATE UPDATE: addresses=${validRows.length}, preserveCompletions=${preserveCompletions}, oldCompletions=${s.completions.length}, newListVersion=${newListVersion}`);
 
+        // Active protection should prevent this from happening while address is active
+        if (s.activeIndex !== null) {
+          logger.error(`❌ IMPORT WHILE ACTIVE: This should never happen! activeIndex=${s.activeIndex}, protection should be blocking this`);
+        }
+
         const newState = {
           ...s,
           addresses: validRows,
@@ -1587,11 +1592,13 @@ export function useAppState(userId?: string) {
 
         // 🔧 CRITICAL FIX: Clear activeIndex if invalid or address was completed
         if (finalState.activeIndex !== null && typeof finalState.activeIndex === 'number') {
-          const activeAddress = finalState.addresses[finalState.activeIndex];
+          const oldActiveIndex = finalState.activeIndex;
+          const activeAddress = finalState.addresses[oldActiveIndex];
 
           // Clear if activeIndex is out of bounds
           if (!activeAddress) {
-            logger.warn(`🔄 CLEARING INVALID activeIndex: Index ${finalState.activeIndex} is out of bounds (max: ${finalState.addresses.length - 1})`);
+            // This shouldn't happen if active protection is working
+            logger.error(`❌ INVALID activeIndex during cloud sync: Index ${oldActiveIndex} is out of bounds (max: ${finalState.addresses.length - 1}). Protection should have blocked this!`);
             finalState = { ...finalState, activeIndex: null, activeStartTime: null };
           } else {
             // Clear if active address was completed on another device
@@ -1601,8 +1608,29 @@ export function useAppState(userId?: string) {
             );
 
             if (activeAddressCompleted) {
-              logger.info(`🔄 CLEARING ACTIVE INDEX: Address "${activeAddress.address}" was completed on another device`);
-              showInfo(`Address "${activeAddress.address}" was completed on another device`);
+              logger.info(`🔄 Address "${activeAddress.address}" was completed on another device`);
+
+              // 🔧 FIX: Save local time tracking before clearing active state
+              if (finalState.activeStartTime) {
+                const startTime = new Date(finalState.activeStartTime).getTime();
+                const endTime = Date.now();
+                const timeSpentSeconds = Math.floor((endTime - startTime) / 1000);
+
+                // Find the completion from the other device
+                const existingCompletion = finalState.completions.find(c =>
+                  c.address === activeAddress.address &&
+                  (c.listVersion || finalState.currentListVersion) === finalState.currentListVersion
+                );
+
+                if (existingCompletion && !existingCompletion.timeSpentSeconds) {
+                  // Add our local time to the existing completion
+                  logger.info(`⏱️ SAVING LOCAL TIME: Adding ${Math.floor(timeSpentSeconds / 60)}m ${timeSpentSeconds % 60}s to completion from other device`);
+                  existingCompletion.timeSpentSeconds = timeSpentSeconds;
+                } else if (existingCompletion && existingCompletion.timeSpentSeconds) {
+                  logger.info(`⏱️ Time already tracked on other device: ${Math.floor(existingCompletion.timeSpentSeconds / 60)}m ${existingCompletion.timeSpentSeconds % 60}s`);
+                }
+              }
+
               finalState = { ...finalState, activeIndex: null, activeStartTime: null };
             }
           }

@@ -1,19 +1,16 @@
 import React from 'react';
 import type { Arrangement } from '../types';
 import { LoadingButton } from './LoadingButton';
-import { format, parseISO } from 'date-fns';
 
 type Props = {
   arrangement: Arrangement;
-  onConfirm: (amount: string, date: string, notes?: string) => Promise<void>;
+  onConfirm: (amount: string) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
 };
 
 export function QuickPaymentModal({ arrangement, onConfirm, onCancel, isLoading = false }: Props) {
   const [amount, setAmount] = React.useState(arrangement.amount || '');
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
-  const [notes, setNotes] = React.useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +18,7 @@ export function QuickPaymentModal({ arrangement, onConfirm, onCancel, isLoading 
       alert('Please enter a valid payment amount');
       return;
     }
-    await onConfirm(amount, date, notes);
+    await onConfirm(amount);
   };
 
   const handleOverlayClick = (e: React.MouseEvent) => {
@@ -86,29 +83,6 @@ export function QuickPaymentModal({ arrangement, onConfirm, onCancel, isLoading 
                   autoFocus
                 />
               </div>
-            </div>
-
-            {/* Date Input */}
-            <div className="qp-form-group">
-              <label className="qp-label">Payment Date</label>
-              <input
-                type="date"
-                className="qp-input"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
-            </div>
-
-            {/* Notes Input */}
-            <div className="qp-form-group">
-              <label className="qp-label">Notes (Optional)</label>
-              <textarea
-                className="qp-input qp-textarea"
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Payment method, receipt number, etc..."
-              />
             </div>
           </div>
 

@@ -388,7 +388,7 @@ const ArrangementsComponent = function Arrangements({
   };
 
   // Handle quick payment from modal
-  const handleQuickPayment = async (amount: string, date: string, notes?: string) => {
+  const handleQuickPayment = async (amount: string) => {
     if (!quickPaymentArrangementId) return;
 
     setLoadingStates(prev => ({

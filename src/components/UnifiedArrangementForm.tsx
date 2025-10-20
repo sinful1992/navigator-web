@@ -358,7 +358,7 @@ export default function UnifiedArrangementForm({
         amount: actualAmount.toFixed(2),
         notes: formData.notes,
         status: formData.status,
-        recurrenceType: isRecurring ? formData.paymentFrequency : "none",
+        recurrenceType: isRecurring ? (formData.paymentFrequency as 'weekly' | 'biweekly' | 'monthly') : "none",
         recurrenceInterval: isRecurring ? formData.recurrenceInterval : undefined,
         totalPayments: isRecurring ? formData.totalPayments : 1,
         paymentsMade: arrangement?.paymentsMade ?? 0,

@@ -123,6 +123,53 @@ const outcome: Outcome = (isRecurring && !isLastPayment) ? "ARR" : "PIF";
 
 **Documentation**: See `ARRANGEMENTS_IMPROVEMENTS_SUMMARY.md` for complete details
 
+### ⚠️ Address Time Tracking Protection (CRITICAL)
+
+**Background**: Users press "Start" on individual addresses to track time spent on cases. Time tracking data was being lost during long work sessions (2+ hours) due to cloud sync interference and insufficient protection.
+
+**Critical Logic** (`useAppState.ts:941-948, 1610-1635`):
+```typescript
+// Time calculation requires BOTH activeIndex and activeStartTime
+let timeSpentSeconds: number | undefined;
+if (currentState.activeIndex === index && currentState.activeStartTime) {
+  const startTime = new Date(currentState.activeStartTime).getTime();
+  const endTime = new Date(nowISO).getTime();
+  timeSpentSeconds = Math.floor((endTime - startTime) / 1000);
+}
+```
+
+**Protection System** (`protectionFlags.ts:14`):
+```typescript
+'navigator_active_protection': Infinity  // Never expires - only cleared on complete/cancel
+```
+
+**Key Implementation Details**:
+- **Infinite Protection**: Active protection flag never expires (was 5 seconds, caused data loss)
+- **Cloud Sync Blocking**: All cloud updates blocked while address is active
+- **Multi-Device Handling**: Local time saved to completion even if address completed on another device
+- **State Preservation**: Both `activeIndex` and `activeStartTime` must remain intact for time calculation
+
+**DO NOT**:
+- Change protection timeout from `Infinity` - will cause time loss after timeout expires
+- Allow cloud sync to clear `activeIndex` or `activeStartTime` while address is active
+- Clear active state without saving time when address completed elsewhere
+- Import/optimize routes while address is active (protection blocks this)
+
+**Time Tracking Flow**:
+1. User presses "Start" → `activeIndex` and `activeStartTime` set, protection flag enabled
+2. Timer displays elapsed time (UI-only, not persisted)
+3. Cloud sync completely blocked by protection flag
+4. User completes → Time calculated from `activeStartTime`, saved to `Completion.timeSpentSeconds`
+5. Protection flag cleared, cloud sync resumes
+
+**Data Loss Scenarios Fixed**:
+- ✅ Long work sessions (any duration) - protection never expires
+- ✅ Address completed on another device - local time saved to their completion
+- ✅ Cloud sync interference - blocked by infinite protection
+- ❌ User clicks "Cancel" - intentional data loss (user action)
+
+**Documentation**: See `ADDRESS_TIME_TRACKING_FIX.md` for complete technical details
+
 ## Environment Setup
 
 Create `.env.local` for development:

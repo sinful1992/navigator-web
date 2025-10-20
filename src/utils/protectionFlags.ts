@@ -11,7 +11,7 @@ type ProtectionFlag =
 const FLAG_CONFIGS: Record<ProtectionFlag, number> = {
   'navigator_restore_in_progress': 30000, // 30 seconds
   'navigator_import_in_progress': 6000,   // 6 seconds
-  'navigator_active_protection': 5000     // 5 seconds
+  'navigator_active_protection': Infinity // 🔧 FIX: Never expire - only cleared on complete/cancel
 };
 
 /**
