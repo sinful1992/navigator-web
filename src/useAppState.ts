@@ -2,7 +2,7 @@
 import * as React from "react";
 import { storageManager } from "./utils/storageManager";
 import { logger } from "./utils/logger";
-import { showWarning, showInfo, showError } from "./utils/toast";
+import { showWarning, showError } from "./utils/toast";
 import type {
   AddressRow,
   AppState,
