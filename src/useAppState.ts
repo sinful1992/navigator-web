@@ -437,7 +437,16 @@ function applyOptimisticUpdates(
   }
 }
 
-export function useAppState(userId?: string) {
+/**
+ * Submit operation callback for delta sync
+ * Called whenever a state-changing operation occurs
+ */
+type SubmitOperationCallback = (operation: {
+  type: string;
+  payload: any;
+}) => Promise<void>;
+
+export function useAppState(userId?: string, submitOperation?: SubmitOperationCallback) {
   const [baseState, setBaseState] = React.useState<AppState>(initial);
   const [optimisticState, setOptimisticState] =
     React.useState<OptimisticState>({
@@ -772,13 +781,27 @@ export function useAppState(userId?: string) {
       // Confirm immediately for local operations
       confirmOptimisticUpdate(operationId);
 
+      // 🔥 DELTA SYNC: Submit operation to cloud immediately
+      if (submitOperation) {
+        submitOperation({
+          type: 'ADDRESS_BULK_IMPORT',
+          payload: {
+            addresses: validRows,
+            newListVersion: (typeof baseState.currentListVersion === "number" ? baseState.currentListVersion : 1) + 1,
+            preserveCompletions
+          }
+        }).catch(err => {
+          logger.error('Failed to submit bulk import operation:', err);
+        });
+      }
+
       // 🔧 CRITICAL FIX: Clear import protection flag after a delay to allow state to settle
       setTimeout(() => {
         localStorage.removeItem('navigator_import_in_progress');
         logger.info('🛡️ IMPORT PROTECTION CLEARED after import completion');
       }, 2000); // 2 second protection window
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate]
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
   );
 
   /** Add a single address (used by Arrangements "manual address"). Returns new index. */
@@ -845,9 +868,20 @@ export function useAppState(userId?: string) {
 
       const now = new Date().toISOString();
       logger.info(`📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - SYNC BLOCKED until Complete/Cancel`);
+
+      // 🔥 DELTA SYNC: Submit operation to cloud immediately
+      if (submitOperation) {
+        submitOperation({
+          type: 'ACTIVE_INDEX_SET',
+          payload: { index: idx, startTime: now }
+        }).catch(err => {
+          logger.error('Failed to submit active index operation:', err);
+        });
+      }
+
       return { ...s, activeIndex: idx, activeStartTime: now };
     });
-  }, []);
+  }, [submitOperation]);
 
   const cancelActive = React.useCallback(() => {
     // 🔧 FIX: Clear protection to resume cloud sync
@@ -1006,6 +1040,17 @@ export function useAppState(userId?: string) {
           };
         });
 
+        // 🔥 DELTA SYNC: Submit operation to cloud immediately
+        if (submitOperation) {
+          submitOperation({
+            type: 'COMPLETION_CREATE',
+            payload: { completion }
+          }).catch(err => {
+            logger.error('Failed to submit completion operation:', err);
+            // Don't throw - operation is saved locally and will retry
+          });
+        }
+
         return operationId;
       } finally {
         // Always clear pending state, even if above operations fail
@@ -1013,7 +1058,7 @@ export function useAppState(userId?: string) {
         setPendingCompletions(new Set(pendingCompletionsRef.current));
       }
     },
-    [baseState, addOptimisticUpdate]
+    [baseState, addOptimisticUpdate, submitOperation]
   );
 
   /** Enhanced undo with optimistic updates */
@@ -1168,9 +1213,19 @@ export function useAppState(userId?: string) {
           }, 0);
           return { ...s, arrangements: [...s.arrangements, newArrangement] };
         });
+
+        // 🔥 DELTA SYNC: Submit operation to cloud immediately
+        if (submitOperation) {
+          submitOperation({
+            type: 'ARRANGEMENT_CREATE',
+            payload: { arrangement: newArrangement }
+          }).catch(err => {
+            logger.error('Failed to submit arrangement create operation:', err);
+          });
+        }
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate]
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
   );
 
   const updateArrangement = React.useCallback(
@@ -1207,9 +1262,19 @@ export function useAppState(userId?: string) {
 
           return { ...s, arrangements };
         });
+
+        // 🔥 DELTA SYNC: Submit operation to cloud immediately
+        if (submitOperation) {
+          submitOperation({
+            type: 'ARRANGEMENT_UPDATE',
+            payload: { id, updates }
+          }).catch(err => {
+            logger.error('Failed to submit arrangement update operation:', err);
+          });
+        }
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate]
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
   );
 
   const deleteArrangement = React.useCallback(
@@ -1238,9 +1303,19 @@ export function useAppState(userId?: string) {
 
           return { ...s, arrangements };
         });
+
+        // 🔥 DELTA SYNC: Submit operation to cloud immediately
+        if (submitOperation) {
+          submitOperation({
+            type: 'ARRANGEMENT_DELETE',
+            payload: { id }
+          }).catch(err => {
+            logger.error('Failed to submit arrangement delete operation:', err);
+          });
+        }
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate]
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
   );
 
   // ---- subscription management ----
