@@ -449,6 +449,9 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
                           const comp = completions[compIndex] as any;
                           const addr = addresses[comp.index] as AddressRow | undefined;
                           const line =
+                            (typeof comp.address === "string" && comp.address.trim().length > 0
+                              ? comp.address
+                              : undefined) ||
                             (addr && addr.address) ||
                             (addr && (addr as any).name) ||
                             (typeof comp.index === "number" ? "Address #" + comp.index : "Address");
