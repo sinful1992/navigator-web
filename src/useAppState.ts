@@ -442,7 +442,10 @@ function applyOptimisticUpdates(
  * Called whenever a state-changing operation occurs
  */
 type SubmitOperationCallback = (operation: {
-  type: string;
+  type: 'ADDRESS_BULK_IMPORT' | 'COMPLETION_CREATE' | 'ACTIVE_INDEX_SET' |
+        'ARRANGEMENT_CREATE' | 'ARRANGEMENT_UPDATE' | 'ARRANGEMENT_DELETE' |
+        'COMPLETION_UPDATE' | 'COMPLETION_DELETE' | 'ADDRESS_ADD' |
+        'SESSION_START' | 'SESSION_END';
   payload: any;
 }) => Promise<void>;
 

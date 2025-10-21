@@ -1,6 +1,6 @@
 // src/sync/deltaSync.test.ts - Comprehensive delta sync integration tests
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useUnifiedSync } from './migrationAdapter';
 import type { AppState } from '../types';
 
@@ -133,7 +133,10 @@ describe('Delta Sync Integration', () => {
             payload: {
               arrangement: {
                 id: 'arr_123',
+                addressIndex: 0,
                 address: '456 Test Ave',
+                scheduledDate: new Date().toISOString().split('T')[0],
+                status: 'Scheduled' as const,
                 customerName: 'John Doe',
                 phoneNumber: '555-0100',
                 createdAt: new Date().toISOString(),
@@ -235,9 +238,18 @@ describe('Delta Sync Integration', () => {
       await act(async () => {
         if (result.current.submitOperation) {
           try {
+            // Test with malformed completion data
             await result.current.submitOperation({
               type: 'COMPLETION_CREATE',
-              payload: { invalid: 'data' } // Invalid payload
+              payload: {
+                completion: {
+                  // Missing required fields - this tests error handling
+                  index: -1,
+                  address: '',
+                  outcome: 'PIF' as const,
+                  timestamp: new Date().toISOString(),
+                }
+              }
             });
           } catch (error) {
             // Error should be caught internally
@@ -290,7 +302,10 @@ describe('Delta Sync Integration', () => {
             payload: {
               arrangement: {
                 id: 'arr_device2_123',
+                addressIndex: 1,
                 address: '456 Oak Ave',
+                scheduledDate: new Date().toISOString().split('T')[0],
+                status: 'Scheduled' as const,
                 customerName: 'Jane Smith',
                 phoneNumber: '555-0200',
                 createdAt: new Date().toISOString(),
