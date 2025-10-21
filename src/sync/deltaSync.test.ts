@@ -1,6 +1,6 @@
 // src/sync/deltaSync.test.ts - Comprehensive delta sync integration tests
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useUnifiedSync } from './migrationAdapter';
 import type { AppState } from '../types';
 
@@ -133,9 +133,12 @@ describe('Delta Sync Integration', () => {
             payload: {
               arrangement: {
                 id: 'arr_123',
+                addressIndex: 0,
                 address: '456 Test Ave',
                 customerName: 'John Doe',
                 phoneNumber: '555-0100',
+                scheduledDate: new Date().toISOString().split('T')[0],
+                status: 'Scheduled',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
               }
@@ -237,7 +240,7 @@ describe('Delta Sync Integration', () => {
           try {
             await result.current.submitOperation({
               type: 'COMPLETION_CREATE',
-              payload: { invalid: 'data' } // Invalid payload
+              payload: { invalid: 'data' } as any // Invalid payload for testing
             });
           } catch (error) {
             // Error should be caught internally
@@ -290,9 +293,12 @@ describe('Delta Sync Integration', () => {
             payload: {
               arrangement: {
                 id: 'arr_device2_123',
+                addressIndex: 0,
                 address: '456 Oak Ave',
                 customerName: 'Jane Smith',
                 phoneNumber: '555-0200',
+                scheduledDate: new Date().toISOString().split('T')[0],
+                status: 'Scheduled',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
               }
