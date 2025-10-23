@@ -91,7 +91,6 @@ export function useOperationSync(): UseOperationSync {
         });
       } catch (err) {
         logger.error('Failed to initialize operation sync:', err);
-        setError('Failed to initialize sync system');
       }
     };
 
@@ -250,6 +249,7 @@ export function useOperationSync(): UseOperationSync {
             operation_data: operation,
             client_id: operation.clientId,
             timestamp: operation.timestamp,
+            local_timestamp: operation.timestamp,
           });
 
         if (error && error.code !== '23505') { // Ignore duplicate key errors
@@ -268,7 +268,6 @@ export function useOperationSync(): UseOperationSync {
       });
     } catch (err) {
       logger.error('Failed to sync operations to cloud:', err);
-      setError(`Sync failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsSyncing(false);
     }
@@ -323,7 +322,6 @@ export function useOperationSync(): UseOperationSync {
       setLastSyncTime(new Date());
     } catch (err) {
       logger.error('Failed to fetch operations from cloud:', err);
-      setError(`Fetch failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [user, currentState]);
 

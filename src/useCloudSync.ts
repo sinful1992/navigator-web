@@ -452,7 +452,6 @@ export function useCloudSync(): UseCloudSync {
     } catch (batchError: any) {
       // Don't remove any items on batch error - they'll be retried
       logger.error('Sync batch error:', batchError);
-      setError(batchError?.message || 'Sync batch failed');
     } finally {
       isProcessingQueue.current = false;
       setIsSyncing(syncQueue.current.length > 0);
@@ -1155,8 +1154,8 @@ export function useCloudSync(): UseCloudSync {
   const syncData = useCallback(
     async (state: AppState) => {
       if (!user || !supabase) {
-        if (!user) setError("Not authenticated");
-        else setError("Supabase not configured");
+        if (!user) logger.warn("Sync skipped: Not authenticated");
+        else logger.warn("Sync skipped: Supabase not configured");
         return;
       }
 
@@ -1292,9 +1291,6 @@ export function useCloudSync(): UseCloudSync {
 
       } catch (e: any) {
         // Ignore "Auth session missing!" - it's a normal state when not logged in
-        if (e?.message !== 'Auth session missing!') {
-          setError(e?.message || String(e));
-        }
         logger.error('Sync failed:', e);
 
         // 🔧 OFFLINE PROTECTION: If we're offline, queue this state for later sync
@@ -1714,7 +1710,6 @@ export function useCloudSync(): UseCloudSync {
             setLastSyncTime(new Date(updatedAt));
           } catch (e: any) {
             logger.warn("subscribeToData handler error:", e?.message || e);
-            setError("Sync error: " + (e?.message || e));
           }
         }
       );
