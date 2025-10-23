@@ -40,13 +40,25 @@ export function useUnifiedSync() {
     signIn: operationSync.signIn,
     signUp: operationSync.signUp,
     signOut: operationSync.signOut,
+    resetPassword: operationSync.resetPassword,
+    updatePassword: operationSync.updatePassword,
 
     // Sync methods
     syncData,
     subscribeToData,
     submitOperation: operationSync.submitOperation,
     forceSync: operationSync.forceSync,
+    forceFullSync: operationSync.forceSync, // Alias for legacy compatibility
     getStateFromOperations: operationSync.getStateFromOperations,
+
+    // Migration stubs (no longer needed, but kept for compatibility)
+    canMigrate: () => false,
+    performMigration: async () => { throw new Error('Migration not needed - already using operations mode'); },
+    getMigrationStatus: () => ({
+      currentMode: 'operations' as const,
+      canMigrate: false,
+      config: { mode: 'operations' as const, rolloutPercentage: 100, migrationEnabled: false }
+    }),
 
     // Mode info
     currentSyncMode: 'operations' as const,

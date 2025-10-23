@@ -18,10 +18,12 @@ type UseOperationSync = {
   lastSyncTime: Date | null;
   clearError: () => void;
 
-  // Auth methods (same as before)
+  // Auth methods
   signIn: (email: string, password: string) => Promise<{ user: User }>;
   signUp: (email: string, password: string) => Promise<{ user: User }>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
 
   // New operation-based methods
   submitOperation: (operation: Omit<Operation, 'id' | 'timestamp' | 'clientId' | 'sequence'>) => Promise<void>;
@@ -460,6 +462,20 @@ export function useOperationSync(): UseOperationSync {
     setCurrentState(INITIAL_STATE);
   }, [user]);
 
+  const resetPassword = useCallback(async (email: string) => {
+    if (!supabase) throw new Error("Supabase not configured");
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (error) throw error;
+  }, []);
+
+  const updatePassword = useCallback(async (newPassword: string) => {
+    if (!supabase) throw new Error("Supabase not configured");
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  }, []);
+
   // Cleanup batch timer on unmount
   useEffect(() => {
     return () => {
@@ -482,6 +498,8 @@ export function useOperationSync(): UseOperationSync {
       signIn,
       signUp,
       signOut,
+      resetPassword,
+      updatePassword,
       submitOperation,
       subscribeToOperations,
       forceSync,
@@ -498,6 +516,8 @@ export function useOperationSync(): UseOperationSync {
       signIn,
       signUp,
       signOut,
+      resetPassword,
+      updatePassword,
       submitOperation,
       subscribeToOperations,
       forceSync,
