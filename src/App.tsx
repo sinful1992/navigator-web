@@ -75,6 +75,14 @@ async function uploadBackupToStorage(
   label: "finish" | "manual" | "periodic" = "manual",
   retryCount = 0
 ) {
+  // 🔥 DELTA SYNC: Skip storage backups in operations mode
+  // All data is already safely stored in navigator_operations table
+  // Storage backups are redundant and cause unnecessary 400 errors if bucket not configured
+  logger.debug(`Backup skipped (operations mode) - data already in database`);
+  return;
+
+  // Legacy code below (kept for reference, never executed)
+  /* istanbul ignore next */
   if (!supabase) {
     logger.error("Supabase not configured for backup");
     throw new Error("Supabase not configured");
