@@ -69,119 +69,8 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-// Enhanced Upload JSON snapshot to Supabase Storage with retry mechanism
-async function uploadBackupToStorage(
-  data: unknown,
-  label: "finish" | "manual" | "periodic" = "manual",
-  retryCount = 0
-) {
-  // 🔥 DELTA SYNC: Skip storage backups in operations mode
-  // All data is already safely stored in navigator_operations table
-  // Storage backups are redundant and cause unnecessary 400 errors if bucket not configured
-  logger.debug(`Backup skipped (operations mode) - data already in database`);
-  return;
-
-  // Legacy code below (kept for reference, never executed)
-  /* istanbul ignore next */
-  if (!supabase) {
-    logger.error("Supabase not configured for backup");
-    throw new Error("Supabase not configured");
-  }
-
-  const authResp = await supabase.auth.getUser();
-  const userId =
-    authResp && authResp.data && authResp.data.user
-      ? authResp.data.user.id
-      : undefined;
-  if (!userId) {
-    logger.error("User not authenticated for backup");
-    throw new Error("User not authenticated");
-  }
-
-  const tz = "Europe/London";
-  const now = new Date();
-  const yyyy = now.toLocaleDateString("en-GB", { timeZone: tz, year: "numeric" });
-  const mm = now.toLocaleDateString("en-GB", { timeZone: tz, month: "2-digit" });
-  const dd = now.toLocaleDateString("en-GB", { timeZone: tz, day: "2-digit" });
-  const dayKey = `${yyyy}-${mm}-${dd}`;
-  const time = now
-    .toLocaleTimeString("en-GB", { timeZone: tz, hour12: false })
-    .replace(/:/g, "");
-
-  const bucket = import.meta.env.VITE_SUPABASE_BUCKET || "navigator-backups";
-  const name = `backup_${dayKey}_${time}_${label}_retry${retryCount}.json`;
-  const objectPath = `${userId}/${dayKey}/${name}`;
-
-  try {
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
-
-    logger.info(`Uploading backup to ${objectPath}, size: ${blob.size} bytes`);
-
-    // 🔧 OPTIMIZATION: Upload with CDN caching headers to utilize 5GB cached egress quota
-    const uploadRes = await supabase
-      .storage
-      .from(bucket)
-      .upload(objectPath, blob, {
-        upsert: true,
-        contentType: "application/json",
-        cacheControl: "3600" // Cache for 1 hour
-      });
-
-    if (uploadRes.error) {
-      logger.error("Backup upload failed:", uploadRes.error);
-      throw new Error(uploadRes.error.message);
-    }
-
-    // 🔧 OPTIMIZATION: Also save as "latest.json" for cacheable downloads
-    const latestPath = `${userId}/latest.json`;
-    const latestRes = await supabase
-      .storage
-      .from(bucket)
-      .upload(latestPath, blob, {
-        upsert: true,
-        contentType: "application/json",
-        cacheControl: "1800" // Cache for 30 minutes
-      });
-
-    if (latestRes.error) {
-      logger.warn("Latest backup upload failed (non-critical):", latestRes.error);
-      // Don't throw - timestamped backup succeeded
-    }
-
-    logger.info("Backup upload successful:", objectPath);
-
-    // Record backup in database - non-critical, don't fail the backup if this fails
-    try {
-      await supabase.from("backups").insert({
-        user_id: userId,
-        day_key: dayKey,
-        object_path: objectPath,
-        size_bytes: blob.size,
-      });
-      logger.info("Backup database record created");
-    } catch (dbError) {
-      logger.warn("Backups table insert failed (non-critical):", dbError instanceof Error ? dbError.message : dbError);
-    }
-
-    return { objectPath, size: blob.size };
-
-  } catch (error: any) {
-    logger.error(`Backup attempt ${retryCount + 1} failed:`, error);
-
-    // Retry up to 3 times with exponential backoff
-    if (retryCount < 2) {
-      const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
-      logger.info(`Retrying backup in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return uploadBackupToStorage(data, label, retryCount + 1);
-    }
-
-    // All retries failed
-    throw new Error(`Backup failed after ${retryCount + 1} attempts: ${error.message}`);
-  }
-}
+// REMOVED: uploadBackupToStorage function - cloud backups redundant with delta sync
+// All data is safely stored in navigator_operations database table
 
 // Modern Stats Card Component
 function StatsCard({ title, value, change, changeType, icon, iconType }: {
@@ -896,44 +785,8 @@ function AuthedApp() {
   // Note: When sync mode is 'legacy', cloudSync.syncData() may still be used
   // for bootstrap and manual sync operations, but automatic sync is disabled.
 
-  // CRITICAL FIX: Periodic backup to prevent data loss (every 5 minutes when data changes)
-  React.useEffect(() => {
-    if (!cloudSync.user || loading || !hydrated) return;
-
-    let lastBackupState = JSON.stringify(safeState);
-
-    const periodicBackup = async () => {
-      const currentState = JSON.stringify(safeState);
-
-      // Only backup if state has changed and we have meaningful data
-      if (currentState !== lastBackupState &&
-          (safeState.completions.length > 0 || safeState.addresses.length > 0)) {
-        try {
-          logger.info("Performing periodic safety backup...");
-          await uploadBackupToStorage(safeState, "manual");
-          lastBackupState = currentState;
-          logger.info("Periodic backup successful");
-        } catch (error) {
-          logger.error("Periodic backup failed:", error);
-        }
-      }
-    };
-
-    // 🔧 OPTIMIZATION: Run backup every 3 hours (was 1h) to reduce egress while maintaining safety
-    const interval = setInterval(periodicBackup, 3 * 60 * 60 * 1000);
-
-    // Run immediate backup if we have data but no recent backup
-    const lastBackup = localStorage.getItem('last_backup_time');
-    const now = Date.now();
-    if (!lastBackup || (now - parseInt(lastBackup)) > 60 * 60 * 1000) { // 1 hour
-      setTimeout(async () => {
-        await periodicBackup();
-        localStorage.setItem('last_backup_time', now.toString());
-      }, 5000); // After 5 seconds to allow app to stabilize
-    }
-
-    return () => clearInterval(interval);
-  }, [safeState, cloudSync.user, hydrated, loading]);
+  // REMOVED: Periodic cloud backups no longer needed with delta sync
+  // All data is safely stored in navigator_operations table
 
   // CRITICAL FIX: Data integrity monitoring to detect potential data loss
   React.useEffect(() => {
@@ -1026,21 +879,13 @@ function AuthedApp() {
       try {
         await complete(index, outcome, amount, arrangementId, caseReference, numberOfCases, enforcementFees);
 
-        // FIXED: Reduced backup - only cloud backup + local storage (no file downloads)
+        // Local storage backup only (no cloud backup needed with delta sync)
         try {
           const snap = backupState();
-
-          // Cloud backup if available
-          if (supabase) {
-            await uploadBackupToStorage(snap, "manual");
-            logger.info("Cloud backup after completion successful");
-          }
-
-          // Local storage backup only (no file download to prevent data loss)
           LocalBackupManager.storeLocalBackup(snap);
           logger.info("Local storage backup after completion successful");
         } catch (backupError) {
-          logger.error("Backup failed after completion:", backupError);
+          logger.error("Local backup failed after completion:", backupError);
           // Don't throw - completion should still succeed even if backup fails
         }
       } catch (error) {
@@ -1274,17 +1119,11 @@ function AuthedApp() {
         await new Promise(resolve => setTimeout(resolve, 100));
         const snap = backupState();
 
-        // Cloud backup if available
-        if (supabase) {
-          await uploadBackupToStorage(snap, "manual");
-          logger.info("Cloud backup after outcome change successful");
-        }
-
-        // Local storage backup only (no file download)
+        // Local storage backup only (no cloud backup needed with delta sync)
         LocalBackupManager.storeLocalBackup(snap);
         logger.info("Local storage backup after outcome change successful");
       } catch (backupError) {
-        logger.error("Backup failed after outcome change:", backupError);
+        logger.error("Local backup failed after outcome change:", backupError);
       }
     },
     [setState, backupState]
@@ -1311,14 +1150,6 @@ function AuthedApp() {
       await cloudSync.syncData(safeState);
 
       logger.sync("Manual sync completed successfully");
-
-      // Also create a safety backup after manual sync
-      try {
-        await uploadBackupToStorage(safeState, "manual");
-        logger.info("Safety backup after manual sync completed");
-      } catch (backupErr) {
-        logger.warn("Safety backup after sync failed:", backupErr);
-      }
     } catch (err) {
       logger.error("Manual sync failed:", err);
 
@@ -1368,20 +1199,15 @@ function AuthedApp() {
       if (currentState !== lastBackupState &&
           (safeState.completions.length > 0 || safeState.addresses.length > 0)) {
         try {
-          logger.info("Performing periodic safety backup...");
+          logger.info("Performing periodic local backup...");
 
-          // Cloud backup if available
-          if (cloudSync.user && supabase) {
-            await uploadBackupToStorage(safeState, "periodic");
-          }
-
-          // Always store local backup
+          // Store local backup (no cloud backup needed with delta sync)
           LocalBackupManager.storeLocalBackup(safeState);
 
           lastBackupState = currentState;
-          logger.info("Periodic backup successful");
+          logger.info("Periodic local backup successful");
         } catch (error) {
-          logger.error("Periodic backup failed:", error);
+          logger.error("Periodic local backup failed:", error);
         }
       }
     };
@@ -1654,23 +1480,14 @@ function AuthedApp() {
                   );
 
                   try {
-                    // Cloud backup with 30 second timeout
-                    if (supabase) {
-                      await Promise.race([
-                        uploadBackupToStorage(snap, "finish"),
-                        timeoutPromise(30000)
-                      ]);
-                      logger.info("Cloud backup at day end successful");
-                    }
-
-                    // Local backup with 15 second timeout
+                    // Local backup with 15 second timeout (no cloud backup needed with delta sync)
                     await Promise.race([
                       LocalBackupManager.performCriticalBackup(snap, "day-end"),
                       timeoutPromise(15000)
                     ]);
                     logger.info("Local backup at day end successful");
                   } catch (error) {
-                    logger.error("Backup failed or timed out:", error);
+                    logger.error("Local backup failed or timed out:", error);
                     // Re-throw to trigger error handling in useBackupLoading
                     throw error;
                   }
