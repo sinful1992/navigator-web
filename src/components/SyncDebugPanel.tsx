@@ -2,9 +2,7 @@
 import * as React from 'react';
 import { useAppStateV2 } from '../useAppStateV2';
 import { getOperationLog } from '../sync/operationLog';
-import { setSyncModeOverride } from '../sync/migrationAdapter';
 import type { Operation } from '../sync/operations';
-
 import { logger } from '../utils/logger';
 
 type Props = {
@@ -141,46 +139,6 @@ export function SyncDebugPanel({
               Error: {appState.error}
             </div>
           )}
-        </div>
-
-        {/* Migration Controls */}
-        <div style={sectionStyle}>
-          <div><strong>Migration</strong></div>
-          <div>Current: {appState.currentSyncMode}</div>
-          {appState.canMigrate?.() && (
-            <button
-              style={buttonStyle}
-              onClick={() => appState.performMigration?.()}
-            >
-              Migrate to Operations
-            </button>
-          )}
-          <div style={{ marginTop: '4px' }}>
-            <button
-              style={buttonStyle}
-              onClick={() => setSyncModeOverride('legacy')}
-            >
-              Force Legacy
-            </button>
-            <button
-              style={buttonStyle}
-              onClick={() => setSyncModeOverride('operations')}
-            >
-              Force Operations
-            </button>
-            <button
-              style={buttonStyle}
-              onClick={() => setSyncModeOverride('hybrid')}
-            >
-              Force Hybrid
-            </button>
-            <button
-              style={buttonStyle}
-              onClick={() => setSyncModeOverride(null)}
-            >
-              Clear Override
-            </button>
-          </div>
         </div>
 
         {/* State Summary */}

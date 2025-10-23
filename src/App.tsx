@@ -4,7 +4,7 @@ import "./App.css"; // Use the updated modern CSS
 import { useAppState } from "./useAppState";
 import { normalizeState, normalizeBackupData } from "./utils/normalizeState";
 import { SmartUserDetection } from "./utils/userDetection";
-import { mergeStatePreservingActiveIndex } from "./useCloudSync";
+import { mergeStatePreservingActiveIndex } from "./utils/mergeState";
 import { useUnifiedSync } from "./sync/migrationAdapter";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";

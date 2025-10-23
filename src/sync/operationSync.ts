@@ -61,6 +61,9 @@ export function useOperationSync(): UseOperationSync {
   // Subscription cleanup
   const subscriptionCleanup = useRef<(() => void) | null>(null);
 
+  // State change listeners (for notifying App.tsx of local operations)
+  const stateChangeListeners = useRef<Set<(operations: Operation[]) => void>>(new Set());
+
   const clearError = useCallback(() => setError(null), []);
 
   // Initialize device ID and operation log
@@ -214,6 +217,15 @@ export function useOperationSync(): UseOperationSync {
     const newState = reconstructState(INITIAL_STATE, operationLog.current.getAllOperations());
     setCurrentState(newState);
 
+    // Notify all listeners of state change (critical for App.tsx to update!)
+    stateChangeListeners.current.forEach(listener => {
+      try {
+        listener([persistedOperation]);
+      } catch (err) {
+        logger.error('Error in state change listener:', err);
+      }
+    });
+
     // Schedule batched sync instead of immediate sync
     if (isOnline && user) {
       scheduleBatchSync();
@@ -338,6 +350,9 @@ export function useOperationSync(): UseOperationSync {
     (onOperations: (operations: Operation[]) => void) => {
       if (!user || !supabase) return () => {};
 
+      // Register this listener for local operations (critical for App.tsx updates!)
+      stateChangeListeners.current.add(onOperations);
+
       // Clean up existing subscription first to prevent duplicates
       if (subscriptionCleanup.current) {
         logger.debug('Cleaning up existing subscription before creating new one');
@@ -384,6 +399,9 @@ export function useOperationSync(): UseOperationSync {
       channel.subscribe();
 
       const cleanup = () => {
+        // Remove from state change listeners
+        stateChangeListeners.current.delete(onOperations);
+
         try {
           if (supabase) {
             supabase.removeChannel(channel);
