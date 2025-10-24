@@ -15,6 +15,12 @@ export function useUnifiedSync() {
     return operationSync.subscribeToOperations((_operations) => {
       // Reconstruct state from operations and notify
       const state = operationSync.getStateFromOperations();
+      console.log('📤 subscribeToData: Notifying App.tsx with state:', {
+        addresses: state.addresses?.length,
+        completions: state.completions?.length,
+        arrangements: state.arrangements?.length,
+        daySessions: state.daySessions?.length,
+      });
       onChange(state);
     });
   };
