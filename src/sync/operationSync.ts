@@ -366,12 +366,13 @@ export function useOperationSync(): UseOperationSync {
           : operation.type.includes('SETTINGS') ? 'settings'
           : 'unknown';
 
-        // Extract entity_id from operation payload
-        const entityId = operation.payload?.completion?.timestamp
-          || operation.payload?.arrangement?.id
-          || operation.payload?.address?.address
-          || operation.payload?.session?.date
-          || operation.payload?.id
+        // Extract entity_id from operation payload (cast to any to handle union types)
+        const payload = operation.payload as any;
+        const entityId = payload?.completion?.timestamp
+          || payload?.arrangement?.id
+          || payload?.address?.address
+          || payload?.session?.date
+          || payload?.id
           || operation.id;
 
         const { error } = await supabase
