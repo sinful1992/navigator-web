@@ -347,6 +347,23 @@ export function useOperationSync(): UseOperationSync {
     ]);
   }, [syncOperationsToCloud, fetchOperationsFromCloud]);
 
+  // Bootstrap: Fetch operations from cloud when user logs in
+  useEffect(() => {
+    if (!user || !operationLog.current || !isOnline) return;
+
+    const bootstrap = async () => {
+      try {
+        logger.info('🔄 BOOTSTRAP: Fetching operations from cloud for user:', user.id);
+        await fetchOperationsFromCloud();
+        logger.info('✅ BOOTSTRAP: Operations loaded successfully');
+      } catch (err) {
+        logger.error('❌ BOOTSTRAP: Failed to fetch operations:', err);
+      }
+    };
+
+    bootstrap();
+  }, [user?.id, isOnline, fetchOperationsFromCloud]);
+
   // Subscribe to operation changes
   const subscribeToOperations = useCallback(
     (onOperations: (operations: Operation[]) => void) => {

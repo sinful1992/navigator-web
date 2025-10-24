@@ -413,357 +413,57 @@ function AuthedApp() {
     }
   }, [cloudSync.user?.id]);
 
-  // Cloud sync initialization with session poisoning protection
+  // Delta sync subscription - Bootstrap handled by operationSync.ts
   React.useEffect(() => {
     const user = cloudSync.user;
     if (!user || loading) return;
 
-    // 🔧 CRITICAL FIX: If offline, skip cloud sync and use local data immediately
-    if (!cloudSync.isOnline) {
-      logger.info('🔌 OFFLINE: Skipping bootstrap sync, using local data only');
+    logger.info('🔄 DELTA SYNC: Setting up operation subscription for user:', user.id);
 
-      // 🔧 Clear offline mode flag when online returns
-      if (localStorage.getItem('navigator_offline_mode') === 'true') {
-        logger.info('🔌 ONLINE RESTORED: Clearing offline mode, will re-authenticate');
-      }
-
-      setHydrated(true);
-      return;
-    }
-
-    // 🔧 CRITICAL FIX: Clear offline mode flag when properly authenticated online
-    localStorage.removeItem('navigator_offline_mode');
-
-    if (!supabase) {
-      setHydrated(true);
-      return;
-    }
-
-    // 🔒 SECURITY: Prevent concurrent bootstrap syncs
-    if (bootstrapLockRef.current) {
-      logger.warn('🔒 SECURITY: Bootstrap sync already in progress, skipping');
-      return;
-    }
-
-    let cancelled = false;
     let cleanup: undefined | (() => void);
 
-    const getSafeState = () => safeStateRef.current;
-    const getOwnerMetadata = () => ownerMetadataRef.current;
+    // Subscribe to operations (local + remote)
+    cleanup = cloudSync.subscribeToData((updaterOrState) => {
+      if (!updaterOrState) return;
 
-    (async () => {
-      try {
-        bootstrapLockRef.current = true;
-
-        // 🔒 SECURITY: Validate user ID before any state sync
-        const currentUserId = user.id;
-        const expectedUserId = localStorage.getItem('navigator_expected_user_id');
-
-        if (expectedUserId && expectedUserId !== currentUserId) {
-          logger.error(`🚨 SESSION POISONING DETECTED: Expected ${expectedUserId}, got ${currentUserId}`);
-
-          // Create emergency backup before clearing
-          const emergencyBackup = {
-            timestamp: new Date().toISOString(),
-            expectedUserId,
-            actualUserId: currentUserId,
-            localState: getSafeState(),
-            reason: 'session_poisoning_detected'
-          };
-          localStorage.setItem(`navigator_emergency_backup_${Date.now()}`, JSON.stringify(emergencyBackup));
-
-          await alert({
-            title: "⚠️ Security Alert: Session Mismatch",
-            message: `Detected session for different user. Your data has been backed up. Please sign out and sign in again.`,
-            type: "error"
-          });
-
-          // Force sign out to clear poisoned session
-          await cloudSync.signOut();
-          return;
-        }
-
-        // 🔒 SECURITY: Check for active protection flag before syncing
-        const activeProtection = localStorage.getItem('navigator_active_protection');
-        const activeIndex = getSafeState().activeIndex;
-        if (activeProtection && activeIndex !== null) {
-          logger.info(`🛡️ ACTIVE PROTECTION: Skipping bootstrap sync - user has active address #${activeIndex}`);
-          setHydrated(true);
-          return;
-        }
-
-        const sel = await supabase
-          .from("navigator_state")
-          .select("data, updated_at, version")
-          .eq("user_id", currentUserId)
-          .maybeSingle();
-
-        const row = sel.data;
-
-        // 🔒 SECURITY: Verify the response is for the correct user
-        if (row && row.data && row.data._ownerUserId && row.data._ownerUserId !== currentUserId) {
-          logger.error(`🚨 DATA CONTAMINATION: Cloud state has wrong owner! Expected ${currentUserId}, found ${row.data._ownerUserId}`);
-
-          await alert({
-            title: "⚠️ Data Security Error",
-            message: "Cloud data ownership mismatch detected. Using local data only.",
-            type: "error"
-          });
-
-          setHydrated(true);
-          return;
-        }
-
-        if (row && row.data) {
-          const cloudState = normalizeState(row.data);
-          if (!cancelled) {
-            // CRITICAL FIX: Intelligent session restoration with conflict resolution
-            const localSnapshot = getSafeState();
-            const localAddresses = Array.isArray(localSnapshot.addresses) ? localSnapshot.addresses : [];
-            const localCompletions = Array.isArray(localSnapshot.completions) ? localSnapshot.completions : [];
-            const localArrangements = Array.isArray(localSnapshot.arrangements) ? localSnapshot.arrangements : [];
-            const localSessions = Array.isArray(localSnapshot.daySessions) ? localSnapshot.daySessions : [];
-
-            const localHasData =
-              localAddresses.length > 0 ||
-              localCompletions.length > 0 ||
-              localArrangements.length > 0 ||
-              localSessions.length > 0;
-
-            if (localHasData) {
-              // Compare local vs cloud data to prevent data loss
-              const localCompletionCount = localCompletions.length;
-              const cloudCompletionCount = cloudState.completions?.length || 0;
-              const cloudUpdatedAt = row.updated_at ? new Date(row.updated_at) : new Date(0);
-
-              // Check if local data has recent activity (last 2 hours)
-              const recentThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000);
-              const hasRecentLocalActivity = localCompletions.some(comp =>
-                comp.timestamp && new Date(comp.timestamp) > recentThreshold
-              );
-
-              logger.sync("🔍 SESSION RESTORATION ANALYSIS:", {
-                localCompletions: localCompletionCount,
-                cloudCompletions: cloudCompletionCount,
-                cloudLastUpdated: cloudUpdatedAt.toISOString(),
-                hasRecentLocalActivity,
-                willMerge: localCompletionCount > 0 || hasRecentLocalActivity
-              });
-
-              if (localCompletionCount > cloudCompletionCount || hasRecentLocalActivity) {
-                // Local has more/newer data - merge intelligently
-                logger.sync("🛡️ DATA PROTECTION: Local data appears newer, merging states to prevent loss");
-                const currentLocal = getSafeState();
-                const mergedState = mergeStatePreservingActiveIndex(currentLocal, cloudState);
-                setState(mergedState);
-                lastFromCloudRef.current = JSON.stringify(mergedState);
-
-                // Sync the merged state back to cloud to preserve local changes
-                setTimeout(async () => {
-                  if (cancelled) {
-                    logger.sync("🛑 Bootstrap sync cancelled before queued merge sync ran");
-                    return;
-                  }
-                  try {
-                    await cloudSync.syncData(mergedState);
-                    logger.sync("✅ Synced merged state back to cloud");
-                  } catch (syncError) {
-                    logger.error("Failed to sync merged state:", syncError);
-                  }
-                }, 1000);
-              } else {
-                // Cloud data is definitively newer/better
-                logger.sync("☁️ Using cloud state (appears more complete)");
-                setState(cloudState);
-                lastFromCloudRef.current = JSON.stringify(cloudState);
-              }
-            } else {
-              // No local data - safe to use cloud state
-              logger.sync("☁️ No local data, using cloud state");
-              setState(cloudState);
-              lastFromCloudRef.current = JSON.stringify(cloudState);
-            }
-
-            setHydrated(true);
-            logger.sync("Session restored, version:", row?.version);
-          }
-        } else {
-          const localSnapshot = getSafeState();
-          const localAddresses = Array.isArray(localSnapshot.addresses) ? localSnapshot.addresses : [];
-          const localCompletions = Array.isArray(localSnapshot.completions) ? localSnapshot.completions : [];
-          const localArrangements = Array.isArray(localSnapshot.arrangements) ? localSnapshot.arrangements : [];
-          const localSessions = Array.isArray(localSnapshot.daySessions) ? localSnapshot.daySessions : [];
-
-          const localHasData =
-            localAddresses.length > 0 ||
-            localCompletions.length > 0 ||
-            localArrangements.length > 0 ||
-            localSessions.length > 0;
-
-          if (localHasData) {
-            // SMART USER DETECTION: Cloud-based analysis instead of localStorage comparison
-            logger.info("Analyzing data ownership for current user...");
-
-            try {
-              // Get cloud data to help with ownership analysis
-              let cloudData: any = null;
-              try {
-                const { data: cloudStateData } = await supabase!
-                  .from("navigator_state")
-                  .select("data")
-                  .eq("user_id", user.id)
-                  .maybeSingle();
-                cloudData = cloudStateData?.data;
-              } catch (cloudError) {
-                logger.warn("Could not fetch cloud data for analysis:", cloudError);
-              }
-
-              const ownership = SmartUserDetection.analyzeDataOwnership(
-                getSafeState(),
-                user,
-                cloudData,
-                getOwnerMetadata()
-              );
-
-              logger.info("Data ownership analysis:", ownership);
-
-              switch (ownership.action) {
-                case 'sync': {
-                  logger.sync("Syncing local data to cloud (ownership confirmed)");
-                  const latestState = getSafeState();
-                  await cloudSync.syncData(latestState);
-                  SmartUserDetection.storeDeviceContext(user);
-                  if (!cancelled) {
-                    lastFromCloudRef.current = JSON.stringify(latestState);
-                    setHydrated(true);
-                  }
-                  break;
-                }
-
-                case 'backup_and_clear': {
-                  logger.warn("Creating safety backup before clearing (different user detected)");
-
-                  try {
-                    const backupKey = `navigator_safety_backup_${Date.now()}_user_switch`;
-                    const latestState = getSafeState();
-                    const backupData = {
-                      ...latestState,
-                      _backup_timestamp: new Date().toISOString(),
-                      _backup_reason: 'user_switch',
-                      _ownership_analysis: ownership
-                    };
-                    localStorage.setItem(backupKey, JSON.stringify(backupData));
-                    logger.info(`Safety backup created: ${backupKey}`);
-
-                    setState({
-                      addresses: [],
-                      completions: [],
-                      arrangements: [],
-                      daySessions: [],
-                      activeIndex: null,
-                      currentListVersion: 1
-                    });
-                    SmartUserDetection.storeDeviceContext(user);
-                    if (!cancelled) setHydrated(true);
-                  } catch (backupError) {
-                    logger.error("Backup failed - preserving data for safety:", backupError);
-                    // CRITICAL FIX: Don't auto-sync on error - let user decide
-                    SmartUserDetection.storeDeviceContext(user);
-                    if (!cancelled) setHydrated(true);
-                  }
-                  break;
-                }
-
-                case 'preserve_and_ask':
-                default:
-                  logger.info("Preserving local data (uncertain ownership) - user must decide before syncing");
-                  // CRITICAL FIX: Don't auto-sync - store a flag to show prompt
-                  localStorage.setItem('navigator_ownership_uncertain', 'true');
-                  SmartUserDetection.storeDeviceContext(user);
-                  if (!cancelled) setHydrated(true);
-                  break;
-              }
-            } catch (analysisError) {
-              logger.error("User detection analysis failed - preserving data for safety:", analysisError);
-              const latestState = getSafeState();
-              await cloudSync.syncData(latestState);
-              SmartUserDetection.storeDeviceContext(user);
-              if (!cancelled) {
-                lastFromCloudRef.current = JSON.stringify(latestState);
-                setHydrated(true);
-              }
-            }
-          } else {
-            // No local data - store device context for future use
-            SmartUserDetection.storeDeviceContext(user);
-            if (!cancelled) setHydrated(true);
-          }
-        }
-
-        // 🔧 CRITICAL FIX: Respect cancellation before subscribing
-        if (cancelled) {
-          logger.sync("🛑 Bootstrap sync cancelled before subscribing to cloud updates");
-          return;
-        }
-
-        cleanup = cloudSync.subscribeToData((updaterOrState) => {
-          // CRITICAL FIX: Handle both React updater functions and direct state objects
-          if (!updaterOrState) return;
-
-          // 🔧 CRITICAL FIX: Check if restore is in progress before applying any cloud updates
-          if (isProtectionActive('navigator_restore_in_progress')) {
-            logger.sync('🛡️ RESTORE PROTECTION: App.tsx subscription skipping cloud state update to prevent data loss');
-            return;
-          }
-
-          // 🔧 CRITICAL FIX: Check if import is in progress before applying any cloud updates
-          if (isProtectionActive('navigator_import_in_progress')) {
-            logger.sync('🛡️ IMPORT PROTECTION: App.tsx subscription skipping cloud state update to prevent import override');
-            return;
-          }
-
-          if (typeof updaterOrState === 'function') {
-            // This is a React state updater function - call setState directly
-            logger.sync("Received cloud update (React updater)");
-            setState(prevState => {
-              const newState = updaterOrState(prevState);
-              const normalized = normalizeState(newState);
-              const normalizedStr = JSON.stringify(normalized);
-
-              // Update tracking reference (safe to do in updater)
-              lastFromCloudRef.current = normalizedStr;
-
-              return normalized;
-            });
-
-            // CRITICAL FIX: Move side effects outside setState updater to prevent React warnings
-            setHydrated(true);
-          } else {
-            // This is direct state data - handle normally
-            const fromCloudStr = JSON.stringify(updaterOrState);
-            if (fromCloudStr === lastFromCloudRef.current) return;
-
-            const normalized = normalizeState(updaterOrState);
-            logger.sync("Received cloud update (direct state)");
-            setState(normalized);
-            lastFromCloudRef.current = fromCloudStr;
-            setHydrated(true);
-          }
-        });
-      } catch (err) {
-        logger.error("Bootstrap sync failed:", err);
-        if (!cancelled) setHydrated(true);
-      } finally {
-        bootstrapLockRef.current = false;
+      // Protection flags
+      if (isProtectionActive('navigator_restore_in_progress')) {
+        logger.sync('🛡️ RESTORE PROTECTION: Skipping cloud state update');
+        return;
       }
-    })();
+      if (isProtectionActive('navigator_import_in_progress')) {
+        logger.sync('🛡️ IMPORT PROTECTION: Skipping cloud state update');
+        return;
+      }
+      if (isProtectionActive('navigator_active_protection')) {
+        logger.sync('🛡️ ACTIVE PROTECTION: Skipping cloud state update');
+        return;
+      }
+
+      // Apply state update from operations
+      if (typeof updaterOrState === 'function') {
+        setState(prevState => {
+          const newState = updaterOrState(prevState);
+          const normalized = normalizeState(newState);
+          lastFromCloudRef.current = JSON.stringify(normalized);
+          return normalized;
+        });
+      } else {
+        const normalized = normalizeState(updaterOrState);
+        setState(normalized);
+        lastFromCloudRef.current = JSON.stringify(normalized);
+      }
+    });
+
+    setHydrated(true);
+    logger.info('✅ DELTA SYNC: Subscription active');
+
+
 
     return () => {
-      cancelled = true;
-      bootstrapLockRef.current = false;
       if (cleanup) cleanup();
     };
-  }, [cloudSync.user, cloudSync.isOnline, loading, alert]);
+  }, [cloudSync.user, loading]);
 
   // REMOVED: Visibility change handler - was over-engineering after fixing React subscription bug
 
