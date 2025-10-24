@@ -813,7 +813,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
           resolve(-1);
           return;
         }
-        
+
         const operationId = generateOperationId("create", "address", addressRow);
 
         // Apply optimistically
@@ -830,9 +830,20 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
           return { ...s, addresses: newAddresses };
         });
+
+        // 🔥 DELTA SYNC: Submit operation to cloud immediately
+        if (submitOperation) {
+          submitOperation({
+            type: 'ADDRESS_ADD',
+            payload: { address: addressRow }
+          }).catch(err => {
+            logger.error('Failed to submit address add operation:', err);
+            // Don't throw - operation is saved locally and will retry
+          });
+        }
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate]
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
   );
 
   const setActive = React.useCallback((idx: number) => {
