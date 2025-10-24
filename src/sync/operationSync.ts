@@ -139,6 +139,78 @@ export function useOperationSync(): UseOperationSync {
     };
   }, []);
 
+  // Re-initialize operation log when user changes
+  useEffect(() => {
+    if (!user || !deviceId.current) return;
+
+    const initUserOperationLog = async () => {
+      try {
+        logger.info('🔄 Initializing operation log for user:', user.id);
+
+        // Get operation log for this user (this ensures proper user isolation)
+        operationLog.current = getOperationLog(deviceId.current, user.id);
+        await operationLog.current.load();
+
+        // Reconstruct state from local operations first
+        const operations = operationLog.current.getAllOperations();
+        const reconstructedState = reconstructState(INITIAL_STATE, operations);
+        setCurrentState(reconstructedState);
+
+        logger.info('✅ Operation log initialized:', {
+          userId: user.id,
+          deviceId: deviceId.current,
+          operationCount: operations.length,
+        });
+
+        // Now fetch any new operations from cloud
+        if (isOnline && supabase) {
+          logger.info('🔄 BOOTSTRAP: Fetching operations from cloud for user:', user.id);
+
+          // Inline fetch to avoid dependency issues
+          const lastSequence = operationLog.current.getLogState().lastSyncSequence;
+
+          const { data, error } = await supabase
+            .from('navigator_operations')
+            .select('operation_data')
+            .eq('user_id', user.id)
+            .gt('sequence_number', lastSequence)
+            .order('sequence_number', { ascending: true });
+
+          if (error) {
+            logger.error('❌ BOOTSTRAP FETCH FAILED:', error.message);
+          } else if (data && data.length > 0) {
+            logger.info(`📥 BOOTSTRAP: Received ${data.length} operations`);
+
+            const remoteOperations: Operation[] = data.map(row => row.operation_data);
+            const newOps = await operationLog.current.mergeRemoteOperations(remoteOperations);
+
+            if (newOps.length > 0) {
+              const maxSeq = Math.max(...remoteOperations.map(op => op.sequence));
+              if (Number.isFinite(maxSeq)) {
+                await operationLog.current.markSyncedUpTo(maxSeq);
+              }
+
+              // Reconstruct state with merged operations
+              const allOps = operationLog.current.getAllOperations();
+              const newState = reconstructState(INITIAL_STATE, allOps);
+              setCurrentState(newState);
+
+              logger.info('✅ BOOTSTRAP: Complete with remote operations');
+            }
+          } else {
+            logger.info('✅ BOOTSTRAP: No new operations on server');
+          }
+
+          setLastSyncTime(new Date());
+        }
+      } catch (err) {
+        logger.error('Failed to initialize user operation log:', err);
+      }
+    };
+
+    initUserOperationLog();
+  }, [user?.id, isOnline]);
+
   // Online/offline tracking
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -380,16 +452,6 @@ export function useOperationSync(): UseOperationSync {
             await operationLog.current!.markSyncedUpTo(maxRemoteSequence);
           }
 
-          // Apply conflict resolution
-          const { conflictsResolved } = processOperationsWithConflictResolution(
-            newOperations,
-            currentState
-          );
-
-          if (conflictsResolved > 0) {
-            logger.info('Resolved conflicts during sync:', conflictsResolved);
-          }
-
           // Reconstruct state from all operations
           const allOperations = operationLog.current.getAllOperations();
           const newState = reconstructState(INITIAL_STATE, allOperations);
@@ -407,7 +469,7 @@ export function useOperationSync(): UseOperationSync {
     } catch (err) {
       logger.error('❌ FETCH ERROR:', err);
     }
-  }, [user, currentState]);
+  }, [user]);
 
   // Force sync
   const forceSync = useCallback(async () => {
@@ -416,23 +478,6 @@ export function useOperationSync(): UseOperationSync {
       fetchOperationsFromCloud(),
     ]);
   }, [syncOperationsToCloud, fetchOperationsFromCloud]);
-
-  // Bootstrap: Fetch operations from cloud when user logs in
-  useEffect(() => {
-    if (!user || !operationLog.current || !isOnline) return;
-
-    const bootstrap = async () => {
-      try {
-        logger.info('🔄 BOOTSTRAP: Fetching operations from cloud for user:', user.id);
-        await fetchOperationsFromCloud();
-        logger.info('✅ BOOTSTRAP: Operations loaded successfully');
-      } catch (err) {
-        logger.error('❌ BOOTSTRAP: Failed to fetch operations:', err);
-      }
-    };
-
-    bootstrap();
-  }, [user?.id, isOnline, fetchOperationsFromCloud]);
 
   // Subscribe to operation changes
   const subscribeToOperations = useCallback(
@@ -511,7 +556,17 @@ export function useOperationSync(): UseOperationSync {
       );
 
       channel.subscribe((status) => {
-        logger.info('📡 SUBSCRIPTION STATUS:', status);
+        if (status === 'SUBSCRIBED') {
+          logger.info('✅ Real-time subscription CONNECTED successfully');
+        } else if (status === 'CHANNEL_ERROR') {
+          logger.error('❌ Real-time subscription ERROR');
+        } else if (status === 'TIMED_OUT') {
+          logger.error('❌ Real-time subscription TIMED OUT');
+        } else if (status === 'CLOSED') {
+          logger.warn('⚠️ Real-time subscription CLOSED');
+        } else {
+          logger.info('📡 SUBSCRIPTION STATUS:', status);
+        }
       });
 
       logger.info('✅ Real-time subscription active');
