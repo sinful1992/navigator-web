@@ -651,7 +651,7 @@ export function useOperationSync(): UseOperationSync {
   // Auto-sync unsynced operations after initialization
   // This handles restored operations from backup that weren't uploaded
   useEffect(() => {
-    if (!user || !isOnline || !operationLog.current || isLoading) return;
+    if (!user || !isOnline || !operationLog.current || isLoading || !supabase) return;
 
     const checkAndSyncUnsynced = async () => {
       try {
@@ -660,8 +660,45 @@ export function useOperationSync(): UseOperationSync {
           logger.info(`📤 AUTO-SYNC: Found ${unsyncedOps.length} unsynced operations on startup, triggering upload`);
           // Delay slightly to ensure everything is ready
           await new Promise(resolve => setTimeout(resolve, 2000));
-          if (operationLog.current && user && isOnline) {
-            await syncOperationsToCloud();
+
+          // Inline sync to avoid dependency issues
+          if (operationLog.current && user && isOnline && supabase) {
+            setIsSyncing(true);
+            try {
+              const opsToSync = operationLog.current.getUnsyncedOperations();
+              logger.info(`📤 UPLOADING ${opsToSync.length} operations to cloud...`);
+
+              for (const operation of opsToSync) {
+                const { error } = await supabase
+                  .from('navigator_operations')
+                  .insert({
+                    user_id: user.id,
+                    operation_id: operation.id,
+                    sequence_number: operation.sequence,
+                    operation_type: operation.type,
+                    operation_data: operation,
+                    client_id: operation.clientId,
+                    timestamp: operation.timestamp,
+                    local_timestamp: operation.timestamp,
+                  });
+
+                if (error) {
+                  logger.error('Failed to upload operation:', error);
+                  throw error;
+                }
+              }
+
+              // Mark as synced
+              const maxSeq = Math.max(...opsToSync.map(op => op.sequence));
+              await operationLog.current.markSyncedUpTo(maxSeq);
+
+              logger.info(`✅ AUTO-SYNC: Uploaded ${opsToSync.length} operations successfully`);
+              setLastSyncTime(new Date());
+            } catch (err) {
+              logger.error('AUTO-SYNC failed:', err);
+            } finally {
+              setIsSyncing(false);
+            }
           }
         }
       } catch (err) {
@@ -670,7 +707,7 @@ export function useOperationSync(): UseOperationSync {
     };
 
     checkAndSyncUnsynced();
-  }, [user?.id, isOnline, isLoading, syncOperationsToCloud]);
+  }, [user?.id, isOnline, isLoading]);
 
   // Cleanup batch timer on unmount
   useEffect(() => {
