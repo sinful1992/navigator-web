@@ -357,6 +357,15 @@ export function useOperationSync(): UseOperationSync {
       for (const operation of unsyncedOps) {
         logger.debug('Uploading operation:', operation.type, operation.id);
 
+        // Derive entity from operation type
+        const entity = operation.type.includes('COMPLETION') ? 'completion'
+          : operation.type.includes('ADDRESS') ? 'address'
+          : operation.type.includes('SESSION') ? 'session'
+          : operation.type.includes('ARRANGEMENT') ? 'arrangement'
+          : operation.type.includes('ACTIVE_INDEX') ? 'active_index'
+          : operation.type.includes('SETTINGS') ? 'settings'
+          : 'unknown';
+
         const { error } = await supabase
           .from('navigator_operations')
           .insert({
@@ -364,6 +373,7 @@ export function useOperationSync(): UseOperationSync {
             operation_id: operation.id,
             sequence_number: operation.sequence,
             type: operation.type,
+            entity: entity,
             operation_data: operation,
             client_id: operation.clientId,
             timestamp: operation.timestamp,
@@ -687,13 +697,23 @@ export function useOperationSync(): UseOperationSync {
               logger.info(`📤 UPLOADING ${opsToSync.length} operations to cloud...`);
 
               for (const operation of opsToSync) {
+                // Derive entity from operation type
+                const entity = operation.type.includes('COMPLETION') ? 'completion'
+                  : operation.type.includes('ADDRESS') ? 'address'
+                  : operation.type.includes('SESSION') ? 'session'
+                  : operation.type.includes('ARRANGEMENT') ? 'arrangement'
+                  : operation.type.includes('ACTIVE_INDEX') ? 'active_index'
+                  : operation.type.includes('SETTINGS') ? 'settings'
+                  : 'unknown';
+
                 const { error } = await supabase
                   .from('navigator_operations')
                   .insert({
                     user_id: user.id,
                     operation_id: operation.id,
                     sequence_number: operation.sequence,
-                    operation_type: operation.type,
+                    type: operation.type,
+                    entity: entity,
                     operation_data: operation,
                     client_id: operation.clientId,
                     timestamp: operation.timestamp,
@@ -931,13 +951,23 @@ if (typeof window !== 'undefined') {
         for (const operation of operations) {
           console.log(`📤 Uploading operation ${uploaded + 1}/${operations.length}: ${operation.type}`);
 
+          // Derive entity from operation type
+          const entity = operation.type.includes('COMPLETION') ? 'completion'
+            : operation.type.includes('ADDRESS') ? 'address'
+            : operation.type.includes('SESSION') ? 'session'
+            : operation.type.includes('ARRANGEMENT') ? 'arrangement'
+            : operation.type.includes('ACTIVE_INDEX') ? 'active_index'
+            : operation.type.includes('SETTINGS') ? 'settings'
+            : 'unknown';
+
           const { error } = await supabase
             .from('navigator_operations')
             .insert({
               user_id: userId,
               operation_id: operation.id,
               sequence_number: operation.sequence,
-              operation_type: operation.type,
+              type: operation.type,
+              entity: entity,
               operation_data: operation,
               client_id: operation.clientId,
               timestamp: operation.timestamp,

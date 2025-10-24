@@ -198,6 +198,15 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
       let firstError = null;
 
       for (const operation of unsyncedOps) {
+        // Derive entity from operation type
+        const entity = operation.type.includes('COMPLETION') ? 'completion'
+          : operation.type.includes('ADDRESS') ? 'address'
+          : operation.type.includes('SESSION') ? 'session'
+          : operation.type.includes('ARRANGEMENT') ? 'arrangement'
+          : operation.type.includes('ACTIVE_INDEX') ? 'active_index'
+          : operation.type.includes('SETTINGS') ? 'settings'
+          : 'unknown';
+
         const { error } = await supabase
           .from('navigator_operations')
           .insert({
@@ -205,6 +214,7 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
             operation_id: operation.id,
             sequence_number: operation.sequence,
             type: operation.type,
+            entity: entity,
             operation_data: operation,
             client_id: operation.clientId,
             timestamp: operation.timestamp,
