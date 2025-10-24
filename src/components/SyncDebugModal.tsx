@@ -130,6 +130,55 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
+  const clearCloudOperations = React.useCallback(async () => {
+    if (!confirm('⚠️ DELETE ALL CLOUD OPERATIONS?\n\nThis will delete all operations from the cloud database.\n\nOnly proceed if you have exported your data!\n\nContinue?')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const user = await supabase?.auth.getUser();
+      const currentUserId = user?.data?.user?.id;
+
+      if (!currentUserId || !supabase) {
+        alert('❌ Not authenticated');
+        return;
+      }
+
+      // Count before
+      const { count: beforeCount } = await supabase
+        .from('navigator_operations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', currentUserId);
+
+      console.log('📊 Operations before delete:', beforeCount);
+
+      // Delete all
+      const { error } = await supabase
+        .from('navigator_operations')
+        .delete()
+        .eq('user_id', currentUserId);
+
+      if (error) {
+        throw error;
+      }
+
+      // Verify
+      const { count: afterCount } = await supabase
+        .from('navigator_operations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', currentUserId);
+
+      alert(`✅ Cloud Cleared!\n\nDeleted: ${beforeCount} operations\nRemaining: ${afterCount}\n\nNext steps:\n1. Tap "Clear Local"\n2. Restore from JSON backup\n3. Wait for sync`);
+
+      await loadDiagnostics(); // Refresh stats
+    } catch (err) {
+      alert('❌ Error: ' + String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [loadDiagnostics]);
+
   React.useEffect(() => {
     loadDiagnostics();
   }, [loadDiagnostics]);
@@ -334,6 +383,43 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                   🗑️ Clear Local
                 </button>
               </div>
+
+              {/* Dangerous Actions - Only for severe corruption */}
+              {(stats?.isCorrupted || unsyncedCount < 0) && (
+                <div style={{ marginTop: '1rem' }}>
+                  <div style={{
+                    padding: '0.75rem',
+                    backgroundColor: '#ffebee',
+                    border: '2px solid #f44336',
+                    borderRadius: '6px',
+                    fontSize: '0.875rem',
+                    marginBottom: '0.5rem'
+                  }}>
+                    <div style={{ fontWeight: 'bold', color: '#c62828', marginBottom: '0.5rem' }}>
+                      🚨 SEVERE CORRUPTION DETECTED
+                    </div>
+                    <div>If "Repair & Sync" didn't work, you may need to completely rebuild the cloud database:</div>
+                  </div>
+
+                  <button
+                    onClick={clearCloudOperations}
+                    disabled={loading}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      border: '2px solid #d32f2f',
+                      backgroundColor: '#d32f2f',
+                      color: 'white',
+                      borderRadius: '6px',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      width: '100%',
+                      fontWeight: 'bold',
+                      opacity: loading ? 0.6 : 1
+                    }}
+                  >
+                    ☢️ CLEAR CLOUD OPERATIONS (DANGER)
+                  </button>
+                </div>
+              )}
 
               <div style={{
                 marginTop: '1rem',
