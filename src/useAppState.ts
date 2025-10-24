@@ -850,6 +850,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     // 🔧 CRITICAL FIX: Set protection flag (no timeout - cleared on Complete/Cancel)
     localStorage.setItem('navigator_active_protection', 'true');
 
+    const now = new Date().toISOString();
+    let shouldSubmit = false;
+
     setBaseState((s) => {
       const address = s.addresses[idx];
 
@@ -877,21 +880,21 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         }
       }
 
-      const now = new Date().toISOString();
       logger.info(`📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - SYNC BLOCKED until Complete/Cancel`);
-
-      // 🔥 DELTA SYNC: Submit operation to cloud immediately
-      if (submitOperation) {
-        submitOperation({
-          type: 'ACTIVE_INDEX_SET',
-          payload: { index: idx, startTime: now }
-        }).catch(err => {
-          logger.error('Failed to submit active index operation:', err);
-        });
-      }
+      shouldSubmit = true;
 
       return { ...s, activeIndex: idx, activeStartTime: now };
     });
+
+    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
+    if (shouldSubmit && submitOperation) {
+      submitOperation({
+        type: 'ACTIVE_INDEX_SET',
+        payload: { index: idx, startTime: now }
+      }).catch(err => {
+        logger.error('Failed to submit active index operation:', err);
+      });
+    }
   }, [submitOperation]);
 
   const cancelActive = React.useCallback(() => {
@@ -900,19 +903,18 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
     setBaseState((s) => {
       logger.info(`📍 CANCELING ACTIVE: Clearing active state - SYNC RESUMED`);
-
-      // 🔥 DELTA SYNC: Submit operation to cloud immediately
-      if (submitOperation) {
-        submitOperation({
-          type: 'ACTIVE_INDEX_SET',
-          payload: { index: null, startTime: null }
-        }).catch(err => {
-          logger.error('Failed to submit cancel active operation:', err);
-        });
-      }
-
       return { ...s, activeIndex: null, activeStartTime: null };
     });
+
+    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
+    if (submitOperation) {
+      submitOperation({
+        type: 'ACTIVE_INDEX_SET',
+        payload: { index: null, startTime: null }
+      }).catch(err => {
+        logger.error('Failed to submit cancel active operation:', err);
+      });
+    }
   }, [submitOperation]);
 
   // Track pending completions to prevent double submissions
@@ -1086,6 +1088,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   /** Enhanced undo with optimistic updates */
   const undo = React.useCallback(
     (index: number) => {
+      let completionToDelete: Completion | undefined;
+
       setBaseState((s) => {
         const arr = s.completions.slice();
 
@@ -1107,6 +1111,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
         if (mostRecentPos >= 0) {
           const completion = arr[mostRecentPos];
+          completionToDelete = completion;
+
           const operationId = generateOperationId(
             "delete",
             "completion",
@@ -1120,24 +1126,24 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
           // Confirm immediately for local operations
           setTimeout(() => confirmOptimisticUpdate(operationId), 0);
-
-          // 🔥 DELTA SYNC: Submit operation to cloud immediately
-          if (submitOperation) {
-            submitOperation({
-              type: 'COMPLETION_DELETE',
-              payload: {
-                timestamp: completion.timestamp,
-                index: completion.index,
-                listVersion: completion.listVersion,
-              }
-            }).catch(err => {
-              logger.error('Failed to submit completion delete operation:', err);
-            });
-          }
         }
 
         return { ...s, completions: arr };
       });
+
+      // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
+      if (completionToDelete && submitOperation) {
+        submitOperation({
+          type: 'COMPLETION_DELETE',
+          payload: {
+            timestamp: completionToDelete.timestamp,
+            index: completionToDelete.index,
+            listVersion: completionToDelete.listVersion,
+          }
+        }).catch(err => {
+          logger.error('Failed to submit completion delete operation:', err);
+        });
+      }
     },
     [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
   );
@@ -1145,6 +1151,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   /** Update an existing completion (e.g., change outcome or amount) */
   const updateCompletion = React.useCallback(
     (completionArrayIndex: number, updates: Partial<Completion>) => {
+      let originalTimestamp: string | undefined;
+      let shouldSubmit = false;
+
       setBaseState((s) => {
         if (
           !Number.isInteger(completionArrayIndex) ||
@@ -1156,6 +1165,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         }
 
         const originalCompletion = s.completions[completionArrayIndex];
+        originalTimestamp = originalCompletion.timestamp;
+        shouldSubmit = true;
+
         const updatedCompletion = { ...originalCompletion, ...updates };
 
         const operationId = generateOperationId(
@@ -1173,21 +1185,21 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         // Confirm immediately for local operations
         setTimeout(() => confirmOptimisticUpdate(operationId), 0);
 
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
-          submitOperation({
-            type: 'COMPLETION_UPDATE',
-            payload: {
-              originalTimestamp: originalCompletion.timestamp,
-              updates,
-            }
-          }).catch(err => {
-            logger.error('Failed to submit completion update operation:', err);
-          });
-        }
-
         return { ...s, completions: newCompletions };
       });
+
+      // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
+      if (shouldSubmit && originalTimestamp && submitOperation) {
+        submitOperation({
+          type: 'COMPLETION_UPDATE',
+          payload: {
+            originalTimestamp,
+            updates,
+          }
+        }).catch(err => {
+          logger.error('Failed to submit completion update operation:', err);
+        });
+      }
     },
     [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
   );
@@ -1197,6 +1209,11 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   const startDay = React.useCallback(() => {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
+
+    const sess: DaySession = {
+      date: today,
+      start: now.toISOString(),
+    };
 
     setBaseState((s) => {
       // 🔧 IMPROVED: More specific check - only block if there's an active session TODAY
@@ -1220,28 +1237,23 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         return session;
       });
 
-      const sess: DaySession = {
-        date: today,
-        start: now.toISOString(),
-      };
-
       logger.info('Starting new day session:', sess);
-
-      // 🔥 DELTA SYNC: Submit operation to cloud immediately
-      if (submitOperation) {
-        submitOperation({
-          type: 'SESSION_START',
-          payload: { session: sess }
-        }).catch(err => {
-          logger.error('Failed to submit session start operation:', err);
-        });
-      }
 
       return {
         ...s,
         daySessions: [...updatedSessions, sess]
       };
     });
+
+    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
+    if (submitOperation) {
+      submitOperation({
+        type: 'SESSION_START',
+        payload: { session: sess }
+      }).catch(err => {
+        logger.error('Failed to submit session start operation:', err);
+      });
+    }
   }, [submitOperation]);
 
 
@@ -1249,12 +1261,16 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
 
+    let endedSession: DaySession | undefined;
+
     setBaseState((s) => {
       const {
         updatedSessions,
         closedSessions,
-        endedSession,
+        endedSession: session,
       } = prepareEndDaySessions(s.daySessions, today, now);
+
+      endedSession = session;
 
       closedSessions.forEach((session) =>
         logger.info("Auto-closing stale day session before ending today", session)
@@ -1269,22 +1285,21 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       }
 
       logger.info("Ending day session:", endedSession);
-
-      // 🔥 DELTA SYNC: Submit operation to cloud immediately
-      if (submitOperation && endedSession.end) {
-        submitOperation({
-          type: 'SESSION_END',
-          payload: {
-            date: endedSession.date,
-            endTime: endedSession.end,
-          }
-        }).catch(err => {
-          logger.error('Failed to submit session end operation:', err);
-        });
-      }
-
       return { ...s, daySessions: updatedSessions };
     });
+
+    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
+    if (submitOperation && endedSession && endedSession.end) {
+      submitOperation({
+        type: 'SESSION_END',
+        payload: {
+          date: endedSession.date,
+          endTime: endedSession.end,
+        }
+      }).catch(err => {
+        logger.error('Failed to submit session end operation:', err);
+      });
+    }
   }, [submitOperation]);
 
   // ---- enhanced arrangements ----
