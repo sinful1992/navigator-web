@@ -542,6 +542,20 @@ export function useOperationSync(): UseOperationSync {
       // Register this listener for local operations (critical for App.tsx updates!)
       stateChangeListeners.current.add(onOperations);
 
+      // CRITICAL: Immediately notify with existing operations (if any)
+      // This handles the case where subscription happens AFTER bootstrap
+      if (operationLog.current) {
+        const existingOps = operationLog.current.getAllOperations();
+        if (existingOps.length > 0) {
+          logger.info(`📤 Immediately notifying new subscriber with ${existingOps.length} existing operations`);
+          try {
+            onOperations(existingOps);
+          } catch (err) {
+            logger.error('Error notifying subscriber with existing operations:', err);
+          }
+        }
+      }
+
       // Clean up existing subscription first to prevent duplicates
       if (subscriptionCleanup.current) {
         logger.debug('Cleaning up existing subscription before creating new one');
