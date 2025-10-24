@@ -6,7 +6,6 @@ import type { AppState } from "../types";
 import type { Operation } from "./operations";
 import { OperationLogManager, getOperationLog, clearOperationLogsForUser } from "./operationLog";
 import { reconstructState } from "./reducer";
-import { processOperationsWithConflictResolution } from "./conflictResolution";
 import { logger } from "../utils/logger";
 
 type UseOperationSync = {
