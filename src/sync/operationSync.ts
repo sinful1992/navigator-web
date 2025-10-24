@@ -366,17 +366,31 @@ export function useOperationSync(): UseOperationSync {
           : operation.type.includes('SETTINGS') ? 'settings'
           : 'unknown';
 
+        // Extract entity_id from operation payload
+        const entityId = operation.payload?.completion?.timestamp
+          || operation.payload?.arrangement?.id
+          || operation.payload?.address?.address
+          || operation.payload?.session?.date
+          || operation.payload?.id
+          || operation.id;
+
         const { error } = await supabase
           .from('navigator_operations')
           .insert({
+            // New columns
             user_id: user.id,
             operation_id: operation.id,
             sequence_number: operation.sequence,
-            type: operation.type,
-            entity: entity,
+            operation_type: operation.type,
             operation_data: operation,
             client_id: operation.clientId,
             timestamp: operation.timestamp,
+            // Old columns (still required for backwards compatibility)
+            type: operation.type,
+            entity: entity,
+            entity_id: String(entityId),
+            data: operation.payload,
+            device_id: operation.clientId,
             local_timestamp: operation.timestamp,
           });
 
@@ -706,17 +720,31 @@ export function useOperationSync(): UseOperationSync {
                   : operation.type.includes('SETTINGS') ? 'settings'
                   : 'unknown';
 
+                // Extract entity_id from operation payload
+                const entityId = operation.payload?.completion?.timestamp
+                  || operation.payload?.arrangement?.id
+                  || operation.payload?.address?.address
+                  || operation.payload?.session?.date
+                  || operation.payload?.id
+                  || operation.id;
+
                 const { error } = await supabase
                   .from('navigator_operations')
                   .insert({
+                    // New columns
                     user_id: user.id,
                     operation_id: operation.id,
                     sequence_number: operation.sequence,
-                    type: operation.type,
-                    entity: entity,
+                    operation_type: operation.type,
                     operation_data: operation,
                     client_id: operation.clientId,
                     timestamp: operation.timestamp,
+                    // Old columns (still required for backwards compatibility)
+                    type: operation.type,
+                    entity: entity,
+                    entity_id: String(entityId),
+                    data: operation.payload,
+                    device_id: operation.clientId,
                     local_timestamp: operation.timestamp,
                   });
 
@@ -960,17 +988,31 @@ if (typeof window !== 'undefined') {
             : operation.type.includes('SETTINGS') ? 'settings'
             : 'unknown';
 
+          // Extract entity_id from operation payload
+          const entityId = operation.payload?.completion?.timestamp
+            || operation.payload?.arrangement?.id
+            || operation.payload?.address?.address
+            || operation.payload?.session?.date
+            || operation.payload?.id
+            || operation.id;
+
           const { error } = await supabase
             .from('navigator_operations')
             .insert({
+              // New columns
               user_id: userId,
               operation_id: operation.id,
               sequence_number: operation.sequence,
-              type: operation.type,
-              entity: entity,
+              operation_type: operation.type,
               operation_data: operation,
               client_id: operation.clientId,
               timestamp: operation.timestamp,
+              // Old columns (still required for backwards compatibility)
+              type: operation.type,
+              entity: entity,
+              entity_id: String(entityId),
+              data: operation.payload,
+              device_id: operation.clientId,
               local_timestamp: operation.timestamp,
             });
 
