@@ -218,7 +218,7 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
 
         const { error } = await supabase
           .from('navigator_operations')
-          .insert({
+          .upsert({
             // New columns
             user_id: currentUserId,
             operation_id: operation.id,
@@ -234,6 +234,9 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
             data: operation.payload,
             device_id: operation.clientId,
             local_timestamp: operation.timestamp,
+          }, {
+            onConflict: 'user_id,operation_id',
+            ignoreDuplicates: true,
           });
 
         if (error) {

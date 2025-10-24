@@ -377,7 +377,7 @@ export function useOperationSync(): UseOperationSync {
 
         const { error } = await supabase
           .from('navigator_operations')
-          .insert({
+          .upsert({
             // New columns
             user_id: user.id,
             operation_id: operation.id,
@@ -393,6 +393,9 @@ export function useOperationSync(): UseOperationSync {
             data: operation.payload,
             device_id: operation.clientId,
             local_timestamp: operation.timestamp,
+          }, {
+            onConflict: 'user_id,operation_id',
+            ignoreDuplicates: true,
           });
 
         if (error && error.code !== '23505') { // Ignore duplicate key errors
@@ -732,7 +735,7 @@ export function useOperationSync(): UseOperationSync {
 
                 const { error } = await supabase
                   .from('navigator_operations')
-                  .insert({
+                  .upsert({
                     // New columns
                     user_id: user.id,
                     operation_id: operation.id,
@@ -748,6 +751,9 @@ export function useOperationSync(): UseOperationSync {
                     data: operation.payload,
                     device_id: operation.clientId,
                     local_timestamp: operation.timestamp,
+                  }, {
+                    onConflict: 'user_id,operation_id',
+                    ignoreDuplicates: true,
                   });
 
                 if (error) {
@@ -1001,7 +1007,7 @@ if (typeof window !== 'undefined') {
 
           const { error } = await supabase
             .from('navigator_operations')
-            .insert({
+            .upsert({
               // New columns
               user_id: userId,
               operation_id: operation.id,
@@ -1017,6 +1023,9 @@ if (typeof window !== 'undefined') {
               data: operation.payload,
               device_id: operation.clientId,
               local_timestamp: operation.timestamp,
+            }, {
+              onConflict: 'user_id,operation_id',
+              ignoreDuplicates: true,
             });
 
           if (error && error.code !== '23505') {
