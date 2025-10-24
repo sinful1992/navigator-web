@@ -204,7 +204,7 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
             user_id: currentUserId,
             operation_id: operation.id,
             sequence_number: operation.sequence,
-            operation_type: operation.type,
+            type: operation.type,
             operation_data: operation,
             client_id: operation.clientId,
             timestamp: operation.timestamp,
