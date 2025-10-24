@@ -85,7 +85,7 @@ export function useUnifiedSync() {
     if (JSON.stringify(currentState.subscription) !== JSON.stringify(newState.subscription)) {
       await operationSync.submitOperation({
         type: 'SETTINGS_UPDATE_SUBSCRIPTION',
-        payload: { subscription: newState.subscription },
+        payload: { subscription: newState.subscription ?? null },
       });
     }
 
