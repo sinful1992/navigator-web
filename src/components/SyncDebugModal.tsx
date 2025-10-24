@@ -419,22 +419,40 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                 </button>
               </div>
 
-              {/* Dangerous Actions - Only for severe corruption */}
-              {(stats?.isCorrupted || unsyncedCount < 0) && (
+              {/* Advanced Actions - Show when unsynced or corrupted */}
+              {(stats?.isCorrupted || unsyncedCount < 0 || unsyncedCount > 0) && (
                 <div style={{ marginTop: '1rem' }}>
-                  <div style={{
-                    padding: '0.75rem',
-                    backgroundColor: '#ffebee',
-                    border: '2px solid #f44336',
-                    borderRadius: '6px',
-                    fontSize: '0.875rem',
-                    marginBottom: '0.5rem'
-                  }}>
-                    <div style={{ fontWeight: 'bold', color: '#c62828', marginBottom: '0.5rem' }}>
-                      🚨 SEVERE CORRUPTION DETECTED
+                  {(stats?.isCorrupted || unsyncedCount < 0) && (
+                    <div style={{
+                      padding: '0.75rem',
+                      backgroundColor: '#ffebee',
+                      border: '2px solid #f44336',
+                      borderRadius: '6px',
+                      fontSize: '0.875rem',
+                      marginBottom: '0.5rem'
+                    }}>
+                      <div style={{ fontWeight: 'bold', color: '#c62828', marginBottom: '0.5rem' }}>
+                        🚨 SEVERE CORRUPTION DETECTED
+                      </div>
+                      <div>If "Repair & Sync" didn't work, you may need to reset the sync pointer or completely rebuild the cloud database:</div>
                     </div>
-                    <div>If "Repair & Sync" didn't work, you may need to reset the sync pointer or completely rebuild the cloud database:</div>
-                  </div>
+                  )}
+
+                  {(unsyncedCount > 0 && !stats?.isCorrupted && unsyncedCount >= 0) && (
+                    <div style={{
+                      padding: '0.75rem',
+                      backgroundColor: '#fff3cd',
+                      border: '2px solid #ff9800',
+                      borderRadius: '6px',
+                      fontSize: '0.875rem',
+                      marginBottom: '0.5rem'
+                    }}>
+                      <div style={{ fontWeight: 'bold', color: '#856404', marginBottom: '0.5rem' }}>
+                        ⚠️ UNSYNCED OPERATIONS
+                      </div>
+                      <div>You have {unsyncedCount} unsynced operations. If they're not uploading automatically, use "Reset Sync Pointer" to force upload:</div>
+                    </div>
+                  )}
 
                   <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
                     <button
@@ -455,23 +473,25 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                       🔄 Reset Sync Pointer
                     </button>
 
-                    <button
-                      onClick={clearCloudOperations}
-                      disabled={loading}
-                      style={{
-                        padding: '0.75rem 1rem',
-                        border: '2px solid #d32f2f',
-                        backgroundColor: '#d32f2f',
-                        color: 'white',
-                        borderRadius: '6px',
-                        cursor: loading ? 'not-allowed' : 'pointer',
-                        width: '100%',
-                        fontWeight: 'bold',
-                        opacity: loading ? 0.6 : 1
-                      }}
-                    >
-                      ☢️ CLEAR CLOUD OPERATIONS (DANGER)
-                    </button>
+                    {(stats?.isCorrupted || unsyncedCount < 0) && (
+                      <button
+                        onClick={clearCloudOperations}
+                        disabled={loading}
+                        style={{
+                          padding: '0.75rem 1rem',
+                          border: '2px solid #d32f2f',
+                          backgroundColor: '#d32f2f',
+                          color: 'white',
+                          borderRadius: '6px',
+                          cursor: loading ? 'not-allowed' : 'pointer',
+                          width: '100%',
+                          fontWeight: 'bold',
+                          opacity: loading ? 0.6 : 1
+                        }}
+                      >
+                        ☢️ CLEAR CLOUD OPERATIONS (DANGER)
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
