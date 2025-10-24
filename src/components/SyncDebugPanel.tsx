@@ -1,46 +1,60 @@
-// src/components/SyncDebugPanel.tsx - Debug panel for sync system
+// src/components/SyncDebugPanel.tsx - Debug panel for sync system (DEPRECATED - Use SyncDebugModal instead)
 import * as React from 'react';
-import { getOperationLog, getOperationLogStats } from '../sync/operationLog';
+import { getOperationLog } from '../sync/operationLog';
 import type { Operation } from '../sync/operations';
 import { logger } from '../utils/logger';
-import { supabase } from '../lib/supabaseClient';
 
 type Props = {
   visible?: boolean;
   position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+  deviceId?: string;
+  userId?: string;
+  isOnline?: boolean;
+  isSyncing?: boolean;
+  error?: string | null;
+  lastSyncTime?: Date | null;
+  forceSync?: () => void;
+  clearError?: () => void;
 };
 
 export function SyncDebugPanel({
   visible = false,
-  position = 'bottom-right'
+  position = 'bottom-right',
+  deviceId = '',
+  userId = '',
+  isOnline = false,
+  isSyncing = false,
+  error = null,
+  lastSyncTime = null,
+  forceSync,
+  clearError
 }: Props) {
-  const appState = useAppStateV2();
   const [operations, setOperations] = React.useState<Operation[]>([]);
   const [expandedSection, setExpandedSection] = React.useState<string | null>(null);
 
   // Load operations for debugging
   React.useEffect(() => {
-    if (visible && appState.deviceId) {
-      const log = getOperationLog(appState.deviceId);
+    if (visible && deviceId && userId) {
+      const log = getOperationLog(deviceId, userId);
       log.load().then(() => {
         setOperations(log.getAllOperations());
       });
     }
-  }, [visible, appState.deviceId]);
+  }, [visible, deviceId, userId]);
 
   // Auto-refresh operations
   React.useEffect(() => {
     if (!visible) return;
 
     const interval = setInterval(() => {
-      if (appState.deviceId) {
-        const log = getOperationLog(appState.deviceId);
+      if (deviceId && userId) {
+        const log = getOperationLog(deviceId, userId);
         setOperations(log.getAllOperations());
       }
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [visible, appState.deviceId]);
+  }, [visible, deviceId, userId]);
 
   if (!visible) return null;
 
@@ -101,9 +115,9 @@ export function SyncDebugPanel({
   };
 
   const getStatusIcon = () => {
-    if (appState.isSyncing) return '⏳';
-    if (!appState.isOnline) return '📴';
-    if (appState.error) return '❌';
+    if (isSyncing) return '⏳';
+    if (!isOnline) return '📴';
+    if (error) return '❌';
     return '✅';
   };
 
@@ -127,45 +141,16 @@ export function SyncDebugPanel({
         {/* Sync Status */}
         <div style={sectionStyle}>
           <div><strong>Status</strong></div>
-          <div>Mode: {appState.currentSyncMode}</div>
-          <div>Online: {appState.isOnline ? '✅' : '❌'}</div>
-          <div>Syncing: {appState.isSyncing ? '⏳' : '✅'}</div>
-          <div>Device: {appState.deviceId.slice(-8)}</div>
-          {appState.lastSyncTime && (
-            <div>Last Sync: {appState.lastSyncTime.toLocaleTimeString()}</div>
+          <div>Online: {isOnline ? '✅' : '❌'}</div>
+          <div>Syncing: {isSyncing ? '⏳' : '✅'}</div>
+          <div>Device: {deviceId.slice(-8)}</div>
+          {lastSyncTime && (
+            <div>Last Sync: {lastSyncTime.toLocaleTimeString()}</div>
           )}
-          {appState.error && (
+          {error && (
             <div style={{ color: 'red', wordBreak: 'break-word' }}>
-              Error: {appState.error}
+              Error: {error}
             </div>
-          )}
-        </div>
-
-        {/* State Summary */}
-        <div style={sectionStyle}>
-          <div
-            style={{ cursor: 'pointer', userSelect: 'none' }}
-            onClick={() => toggleSection('state')}
-          >
-            <strong>State {expandedSection === 'state' ? '▼' : '▶'}</strong>
-          </div>
-          <div>Addresses: {appState.state.addresses.length}</div>
-          <div>Completions: {appState.state.completions.length}</div>
-          <div>Arrangements: {appState.state.arrangements.length}</div>
-          <div>Sessions: {appState.state.daySessions.length}</div>
-          <div>Active: {appState.state.activeIndex ?? 'none'}</div>
-
-          {expandedSection === 'state' && (
-            <pre style={{
-              fontSize: '10px',
-              overflow: 'auto',
-              maxHeight: '100px',
-              backgroundColor: '#f8f9fa',
-              padding: '4px',
-              margin: '4px 0',
-            }}>
-              {JSON.stringify(appState.state, null, 2)}
-            </pre>
           )}
         </div>
 
@@ -210,22 +195,26 @@ export function SyncDebugPanel({
         {/* Actions */}
         <div style={sectionStyle}>
           <div><strong>Actions</strong></div>
+          {forceSync && (
+            <button
+              style={buttonStyle}
+              onClick={() => forceSync()}
+              disabled={!isOnline}
+            >
+              Force Sync
+            </button>
+          )}
+          {clearError && (
+            <button
+              style={buttonStyle}
+              onClick={() => clearError()}
+            >
+              Clear Error
+            </button>
+          )}
           <button
             style={buttonStyle}
-            onClick={() => appState.forceSync?.()}
-            disabled={!appState.isOnline}
-          >
-            Force Sync
-          </button>
-          <button
-            style={buttonStyle}
-            onClick={() => appState.clearError?.()}
-          >
-            Clear Error
-          </button>
-          <button
-            style={buttonStyle}
-            onClick={() => logger.info('AppState:', appState)}
+            onClick={() => logger.info('Operations:', operations)}
           >
             Log to Console
           </button>
