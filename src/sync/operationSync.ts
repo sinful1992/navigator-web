@@ -155,6 +155,17 @@ export function useOperationSync(): UseOperationSync {
         const reconstructedState = reconstructState(INITIAL_STATE, operations);
         setCurrentState(reconstructedState);
 
+        // Notify listeners of initial state (if there are operations)
+        if (operations.length > 0) {
+          stateChangeListeners.current.forEach(listener => {
+            try {
+              listener(operations);
+            } catch (err) {
+              logger.error('Error in state change listener during init:', err);
+            }
+          });
+        }
+
         logger.info('✅ Operation log initialized:', {
           userId: user.id,
           deviceId: deviceId.current,
@@ -193,6 +204,15 @@ export function useOperationSync(): UseOperationSync {
               const allOps = operationLog.current.getAllOperations();
               const newState = reconstructState(INITIAL_STATE, allOps);
               setCurrentState(newState);
+
+              // CRITICAL: Notify listeners so App.tsx updates UI!
+              stateChangeListeners.current.forEach(listener => {
+                try {
+                  listener(newOps);
+                } catch (err) {
+                  logger.error('Error in state change listener:', err);
+                }
+              });
 
               logger.info('✅ BOOTSTRAP: Complete with remote operations');
             }
