@@ -1142,6 +1142,56 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
   );
 
+  /** Update an existing completion (e.g., change outcome or amount) */
+  const updateCompletion = React.useCallback(
+    (completionArrayIndex: number, updates: Partial<Completion>) => {
+      setBaseState((s) => {
+        if (
+          !Number.isInteger(completionArrayIndex) ||
+          completionArrayIndex < 0 ||
+          completionArrayIndex >= s.completions.length
+        ) {
+          logger.error('Invalid completion index:', completionArrayIndex);
+          return s;
+        }
+
+        const originalCompletion = s.completions[completionArrayIndex];
+        const updatedCompletion = { ...originalCompletion, ...updates };
+
+        const operationId = generateOperationId(
+          "update",
+          "completion",
+          { originalTimestamp: originalCompletion.timestamp, updates }
+        );
+
+        // Add optimistic update
+        addOptimisticUpdate("update", "completion", updatedCompletion, operationId);
+
+        const newCompletions = s.completions.slice();
+        newCompletions[completionArrayIndex] = updatedCompletion;
+
+        // Confirm immediately for local operations
+        setTimeout(() => confirmOptimisticUpdate(operationId), 0);
+
+        // 🔥 DELTA SYNC: Submit operation to cloud immediately
+        if (submitOperation) {
+          submitOperation({
+            type: 'COMPLETION_UPDATE',
+            payload: {
+              originalTimestamp: originalCompletion.timestamp,
+              updates,
+            }
+          }).catch(err => {
+            logger.error('Failed to submit completion update operation:', err);
+          });
+        }
+
+        return { ...s, completions: newCompletions };
+      });
+    },
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
+  );
+
   // ---- 🔧 FIXED: Enhanced day tracking with better validation ----
 
   const startDay = React.useCallback(() => {
@@ -1916,6 +1966,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     cancelActive,
     complete,
     undo,
+    updateCompletion,
     startDay,
     endDay,
     addArrangement,
