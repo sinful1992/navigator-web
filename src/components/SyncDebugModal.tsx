@@ -130,6 +130,41 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
+  const resetSyncPointer = React.useCallback(async () => {
+    if (!confirm('🔧 Reset sync pointer to 0?\n\nThis will force all local operations to re-upload to cloud.\n\nContinue?')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const storedDeviceId = localStorage.getItem('navigator_device_id');
+      const user = await supabase?.auth.getUser();
+      const currentUserId = user?.data?.user?.id;
+
+      if (!storedDeviceId || !currentUserId) {
+        alert('❌ Not authenticated');
+        return;
+      }
+
+      const manager = getOperationLog(storedDeviceId, currentUserId);
+      await manager.load();
+
+      const oldLastSync = manager.getLogState().lastSyncSequence;
+      const opsCount = manager.getAllOperations().length;
+
+      // Reset to 0
+      await manager.markSyncedUpTo(0);
+
+      alert(`✅ Sync pointer reset!\n\nOld lastSync: ${oldLastSync}\nNew lastSync: 0\n\nOperations to sync: ${opsCount}\n\nRefreshing to trigger sync...`);
+
+      window.location.reload();
+    } catch (err) {
+      alert('❌ Error: ' + String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const clearCloudOperations = React.useCallback(async () => {
     if (!confirm('⚠️ DELETE ALL CLOUD OPERATIONS?\n\nThis will delete all operations from the cloud database.\n\nOnly proceed if you have exported your data!\n\nContinue?')) {
       return;
@@ -398,26 +433,46 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                     <div style={{ fontWeight: 'bold', color: '#c62828', marginBottom: '0.5rem' }}>
                       🚨 SEVERE CORRUPTION DETECTED
                     </div>
-                    <div>If "Repair & Sync" didn't work, you may need to completely rebuild the cloud database:</div>
+                    <div>If "Repair & Sync" didn't work, you may need to reset the sync pointer or completely rebuild the cloud database:</div>
                   </div>
 
-                  <button
-                    onClick={clearCloudOperations}
-                    disabled={loading}
-                    style={{
-                      padding: '0.75rem 1rem',
-                      border: '2px solid #d32f2f',
-                      backgroundColor: '#d32f2f',
-                      color: 'white',
-                      borderRadius: '6px',
-                      cursor: loading ? 'not-allowed' : 'pointer',
-                      width: '100%',
-                      fontWeight: 'bold',
-                      opacity: loading ? 0.6 : 1
-                    }}
-                  >
-                    ☢️ CLEAR CLOUD OPERATIONS (DANGER)
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+                    <button
+                      onClick={resetSyncPointer}
+                      disabled={loading}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        border: '2px solid #ff9800',
+                        backgroundColor: '#ff9800',
+                        color: 'white',
+                        borderRadius: '6px',
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        width: '100%',
+                        fontWeight: 'bold',
+                        opacity: loading ? 0.6 : 1
+                      }}
+                    >
+                      🔄 Reset Sync Pointer
+                    </button>
+
+                    <button
+                      onClick={clearCloudOperations}
+                      disabled={loading}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        border: '2px solid #d32f2f',
+                        backgroundColor: '#d32f2f',
+                        color: 'white',
+                        borderRadius: '6px',
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        width: '100%',
+                        fontWeight: 'bold',
+                        opacity: loading ? 0.6 : 1
+                      }}
+                    >
+                      ☢️ CLEAR CLOUD OPERATIONS (DANGER)
+                    </button>
+                  </div>
                 </div>
               )}
 
