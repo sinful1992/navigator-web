@@ -1215,6 +1215,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       start: now.toISOString(),
     };
 
+    let shouldSubmit = false;
+
     setBaseState((s) => {
       // 🔧 IMPROVED: More specific check - only block if there's an active session TODAY
       const activeTodaySession = s.daySessions.find((d) => d.date === today && !d.end);
@@ -1238,6 +1240,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       });
 
       logger.info('Starting new day session:', sess);
+      shouldSubmit = true;
 
       return {
         ...s,
@@ -1246,7 +1249,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     });
 
     // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-    if (submitOperation) {
+    if (shouldSubmit && submitOperation) {
       submitOperation({
         type: 'SESSION_START',
         payload: { session: sess }
