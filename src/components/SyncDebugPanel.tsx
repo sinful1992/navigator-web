@@ -1,9 +1,9 @@
 // src/components/SyncDebugPanel.tsx - Debug panel for sync system
 import * as React from 'react';
-import { useAppStateV2 } from '../useAppStateV2';
-import { getOperationLog } from '../sync/operationLog';
+import { getOperationLog, getOperationLogStats } from '../sync/operationLog';
 import type { Operation } from '../sync/operations';
 import { logger } from '../utils/logger';
+import { supabase } from '../lib/supabaseClient';
 
 type Props = {
   visible?: boolean;

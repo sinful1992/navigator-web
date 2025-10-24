@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useSettings, isSupabaseConfigured } from '../hooks/useSettings';
 import { ReminderSettings } from './ReminderSettings';
 import { BonusSettingsModal } from './BonusSettingsModal';
+import { SyncDebugModal } from './SyncDebugModal';
 import type { ReminderSettings as ReminderSettingsType, BonusSettings } from '../types';
 import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
 import type { AppState } from '../types';
@@ -121,6 +122,7 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [showSMSSettings, setShowSMSSettings] = useState(false);
   const [showBonusSettings, setShowBonusSettings] = useState(false);
+  const [showSyncDebug, setShowSyncDebug] = useState(false);
   const [storageInfo, setStorageInfo] = useState<{ usedMB: string; quotaMB: string; percentage: number } | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>('general');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -414,6 +416,18 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                     <span className="modern-button-text">
                       {isSyncing ? "Syncing..." : "Sync Now"}
                     </span>
+                  </button>
+
+                  <button
+                    className="modern-action-button"
+                    onClick={() => {
+                      setShowSyncDebug(true);
+                      setIsOpen(false);
+                    }}
+                    style={{ marginTop: '0.5rem' }}
+                  >
+                    <span className="modern-button-icon">🛠️</span>
+                    <span className="modern-button-text">Sync Diagnostics</span>
                   </button>
                 </div>
               )}
@@ -722,6 +736,13 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
             setShowBonusSettings(false);
           }}
           onClose={() => setShowBonusSettings(false)}
+        />
+      )}
+
+      {/* Sync Debug Modal */}
+      {showSyncDebug && (
+        <SyncDebugModal
+          onClose={() => setShowSyncDebug(false)}
         />
       )}
 
