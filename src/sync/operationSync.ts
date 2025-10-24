@@ -4,7 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import type { AppState } from "../types";
 import type { Operation } from "./operations";
-import { OperationLogManager, getOperationLog, clearOperationLogsForUser } from "./operationLog";
+import { OperationLogManager, getOperationLog, clearOperationLogsForUser, getOperationLogStats } from "./operationLog";
 import { reconstructState } from "./reducer";
 import { logger } from "../utils/logger";
 
@@ -696,4 +696,132 @@ export function useOperationSync(): UseOperationSync {
       getStateFromOperations,
     ]
   );
+}
+
+// DEBUG: Expose sync debugging utilities globally
+if (typeof window !== 'undefined') {
+  (window as any).syncDebug = {
+    /**
+     * Get statistics about the current operation log
+     */
+    async getStats() {
+      const deviceId = localStorage.getItem('navigator_device_id');
+      const user = await supabase?.auth.getUser();
+      const userId = user?.data?.user?.id;
+
+      if (!deviceId || !userId) {
+        console.error('Not authenticated or device ID missing');
+        return null;
+      }
+
+      const manager = getOperationLog(deviceId, userId);
+      await manager.load();
+      const stats = getOperationLogStats(manager);
+
+      console.log('📊 Operation Log Statistics:');
+      console.log('  Total operations:', stats.totalOperations);
+      console.log('  By type:', stats.byType);
+      console.log('  Duplicate completions:', stats.duplicateCompletions);
+      console.log('  Sequence range:', stats.sequenceRange);
+      console.log('  Last synced sequence:', stats.lastSyncSequence);
+
+      return stats;
+    },
+
+    /**
+     * Check cloud database for operations
+     */
+    async checkCloud() {
+      const user = await supabase?.auth.getUser();
+      const userId = user?.data?.user?.id;
+
+      if (!userId || !supabase) {
+        console.error('Not authenticated');
+        return null;
+      }
+
+      const { data, error } = await supabase
+        .from('navigator_operations')
+        .select('operation_id, sequence_number, operation_type, client_id, timestamp')
+        .eq('user_id', userId)
+        .order('sequence_number', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error('❌ Error fetching from cloud:', error);
+        return null;
+      }
+
+      console.log('☁️ Latest 20 operations in cloud:');
+      console.table(data);
+
+      return data;
+    },
+
+    /**
+     * Compare local vs cloud operations
+     */
+    async compare() {
+      const stats = await this.getStats();
+      const cloud = await this.checkCloud();
+
+      if (!stats || !cloud) return;
+
+      console.log('\n📊 COMPARISON:');
+      console.log('  Local operations:', stats.totalOperations);
+      console.log('  Cloud operations (total): Checking...');
+
+      const user = await supabase?.auth.getUser();
+      const userId = user?.data?.user?.id;
+
+      if (userId && supabase) {
+        const { count } = await supabase
+          .from('navigator_operations')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId);
+
+        console.log('  Cloud operations (total):', count);
+        console.log('  Local sequence:', stats.sequenceRange.max);
+        console.log('  Last synced sequence:', stats.lastSyncSequence);
+        console.log('  Unsynced operations:', stats.totalOperations - stats.lastSyncSequence);
+      }
+    },
+
+    /**
+     * Clear local operation log (WARNING: This will require re-sync from cloud)
+     */
+    async clearLocal() {
+      const confirmed = confirm('⚠️ This will clear your local operation log. You will need to refresh to re-sync from cloud. Continue?');
+      if (!confirmed) return;
+
+      const deviceId = localStorage.getItem('navigator_device_id');
+      const user = await supabase?.auth.getUser();
+      const userId = user?.data?.user?.id;
+
+      if (!deviceId || !userId) {
+        console.error('Not authenticated');
+        return;
+      }
+
+      const manager = getOperationLog(deviceId, userId);
+      await manager.clear();
+
+      console.log('✅ Local operation log cleared. Refresh the page to re-sync from cloud.');
+    },
+
+    /**
+     * Force a full sync
+     */
+    async forceSync() {
+      console.log('🔄 Triggering force sync...');
+      // This will be called from App.tsx context
+      console.log('Please use cloudSync.forceSync() from the main app context');
+    }
+  };
+
+  console.log('🛠️ Sync debugging utilities available at window.syncDebug');
+  console.log('  syncDebug.getStats() - View local operation log statistics');
+  console.log('  syncDebug.checkCloud() - View operations in cloud database');
+  console.log('  syncDebug.compare() - Compare local vs cloud');
+  console.log('  syncDebug.clearLocal() - Clear local operation log (requires refresh)');
 }

@@ -320,3 +320,46 @@ export function clearOperationLogsForUser(userId: string): void {
     });
   }
 }
+
+/**
+ * DEBUG: Get statistics about the operation log
+ */
+export function getOperationLogStats(manager: OperationLogManager): {
+  totalOperations: number;
+  byType: Record<string, number>;
+  duplicateCompletions: number;
+  sequenceRange: { min: number; max: number };
+  lastSyncSequence: number;
+} {
+  const ops = manager.getAllOperations();
+  const byType: Record<string, number> = {};
+  const completionKeys = new Set<string>();
+  let duplicateCompletions = 0;
+
+  for (const op of ops) {
+    // Count by type
+    byType[op.type] = (byType[op.type] || 0) + 1;
+
+    // Check for duplicate completions
+    if (op.type === 'COMPLETION_CREATE') {
+      const key = `${op.payload.completion.timestamp}_${op.payload.completion.index}_${op.payload.completion.outcome}`;
+      if (completionKeys.has(key)) {
+        duplicateCompletions++;
+      } else {
+        completionKeys.add(key);
+      }
+    }
+  }
+
+  const sequences = ops.map(o => o.sequence);
+  const min = sequences.length > 0 ? Math.min(...sequences) : 0;
+  const max = sequences.length > 0 ? Math.max(...sequences) : 0;
+
+  return {
+    totalOperations: ops.length,
+    byType,
+    duplicateCompletions,
+    sequenceRange: { min, max },
+    lastSyncSequence: manager.getLogState().lastSyncSequence,
+  };
+}
