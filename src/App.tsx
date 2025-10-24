@@ -424,19 +424,8 @@ function AuthedApp() {
     cleanup = cloudSync.subscribeToData((updaterOrState) => {
       if (!updaterOrState) return;
 
-      // Protection flags
-      if (isProtectionActive('navigator_restore_in_progress')) {
-        logger.sync('🛡️ RESTORE PROTECTION: Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_import_in_progress')) {
-        logger.sync('🛡️ IMPORT PROTECTION: Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_active_protection')) {
-        logger.sync('🛡️ ACTIVE PROTECTION: Skipping cloud state update');
-        return;
-      }
+      // 🔧 FIX: Protection flags removed - not needed with operation-based sync
+      // activeIndex is now local-only and never syncs between devices
 
       // Apply state update from operations
       if (typeof updaterOrState === 'function') {
@@ -812,16 +801,6 @@ function AuthedApp() {
     try {
       logger.sync("Manual sync initiated...");
       const stateStr = JSON.stringify(safeState);
-
-      // 🔧 CRITICAL FIX: Check if restore is in progress before manual sync
-      if (isProtectionActive('navigator_restore_in_progress')) {
-        logger.sync('🛡️ RESTORE PROTECTION: Manual sync blocked to prevent data loss');
-        await alert({
-          title: "Restore in Progress",
-          message: "Please wait 30 seconds before manual sync to prevent data loss"
-        });
-        return;
-      }
 
       // CRITICAL FIX: Update lastFromCloudRef BEFORE syncing to prevent race condition
       lastFromCloudRef.current = stateStr;

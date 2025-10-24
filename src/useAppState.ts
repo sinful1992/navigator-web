@@ -442,7 +442,7 @@ function applyOptimisticUpdates(
  * Called whenever a state-changing operation occurs
  */
 type SubmitOperationCallback = (operation: {
-  type: 'ADDRESS_BULK_IMPORT' | 'COMPLETION_CREATE' | 'ACTIVE_INDEX_SET' | 'ARRANGEMENT_CREATE' | 'ARRANGEMENT_UPDATE' | 'ARRANGEMENT_DELETE' | 'COMPLETION_UPDATE' | 'COMPLETION_DELETE' | 'ADDRESS_ADD' | 'SESSION_START' | 'SESSION_END' | 'SETTINGS_UPDATE_SUBSCRIPTION' | 'SETTINGS_UPDATE_REMINDER' | 'SETTINGS_UPDATE_BONUS';
+  type: 'ADDRESS_BULK_IMPORT' | 'COMPLETION_CREATE' | 'ARRANGEMENT_CREATE' | 'ARRANGEMENT_UPDATE' | 'ARRANGEMENT_DELETE' | 'COMPLETION_UPDATE' | 'COMPLETION_DELETE' | 'ADDRESS_ADD' | 'SESSION_START' | 'SESSION_END' | 'SETTINGS_UPDATE_SUBSCRIPTION' | 'SETTINGS_UPDATE_REMINDER' | 'SETTINGS_UPDATE_BONUS';
   payload: any;
 }) => Promise<void>;
 
@@ -880,42 +880,26 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         }
       }
 
-      logger.info(`📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - SYNC BLOCKED until Complete/Cancel`);
+      logger.info(`📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - LOCAL ONLY (not synced)`);
       shouldSubmit = true;
 
       return { ...s, activeIndex: idx, activeStartTime: now };
     });
 
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-    if (shouldSubmit && submitOperation) {
-      submitOperation({
-        type: 'ACTIVE_INDEX_SET',
-        payload: { index: idx, startTime: now }
-      }).catch(err => {
-        logger.error('Failed to submit active index operation:', err);
-      });
-    }
+    // 🔧 FIX: activeIndex is LOCAL-ONLY state - DO NOT sync between devices
+    // Each device tracks its own active address independently
+    // Syncing this caused activeIndex to be overwritten by other devices, breaking time tracking
   }, [submitOperation]);
 
   const cancelActive = React.useCallback(() => {
-    // 🔧 FIX: Clear protection to resume cloud sync
-    localStorage.removeItem('navigator_active_protection');
-
     setBaseState((s) => {
-      logger.info(`📍 CANCELING ACTIVE: Clearing active state - SYNC RESUMED`);
+      logger.info(`📍 CANCELING ACTIVE: Clearing active state - LOCAL ONLY (not synced)`);
       return { ...s, activeIndex: null, activeStartTime: null };
     });
 
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-    if (submitOperation) {
-      submitOperation({
-        type: 'ACTIVE_INDEX_SET',
-        payload: { index: null, startTime: null }
-      }).catch(err => {
-        logger.error('Failed to submit cancel active operation:', err);
-      });
-    }
-  }, [submitOperation]);
+    // 🔧 FIX: activeIndex is LOCAL-ONLY state - DO NOT sync between devices
+    // Each device tracks its own active address independently
+  }, []);
 
   // Track pending completions to prevent double submissions
   const [, setPendingCompletions] = React.useState<Set<number>>(new Set());
