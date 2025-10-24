@@ -651,7 +651,25 @@ export function useOperationSync(): UseOperationSync {
   // Auto-sync unsynced operations after initialization
   // This handles restored operations from backup that weren't uploaded
   useEffect(() => {
-    if (!user || !isOnline || !operationLog.current || isLoading || !supabase) return;
+    logger.info('🔍 AUTO-SYNC EFFECT TRIGGERED:', {
+      hasUser: !!user,
+      userId: user?.id,
+      isOnline,
+      isLoading,
+      hasOperationLog: !!operationLog.current,
+      hasSupabase: !!supabase,
+    });
+
+    if (!user || !isOnline || !operationLog.current || isLoading || !supabase) {
+      logger.warn('⚠️ AUTO-SYNC SKIPPED - conditions not met:', {
+        hasUser: !!user,
+        isOnline,
+        hasOperationLog: !!operationLog.current,
+        isLoading,
+        hasSupabase: !!supabase,
+      });
+      return;
+    }
 
     const checkAndSyncUnsynced = async () => {
       try {
