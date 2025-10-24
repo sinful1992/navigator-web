@@ -3,8 +3,6 @@ import * as React from "react";
 import "./App.css"; // Use the updated modern CSS
 import { useAppState } from "./useAppState";
 import { normalizeState, normalizeBackupData } from "./utils/normalizeState";
-import { SmartUserDetection } from "./utils/userDetection";
-import { mergeStatePreservingActiveIndex } from "./utils/mergeState";
 import { useUnifiedSync } from "./sync/migrationAdapter";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";
@@ -395,7 +393,6 @@ function AuthedApp() {
 
   // 🔒 SECURITY: Track expected user ID to prevent session poisoning
   const expectedUserIdRef = React.useRef<string | null>(null);
-  const bootstrapLockRef = React.useRef<boolean>(false);
 
   // Store expected user ID when it changes
   React.useEffect(() => {
