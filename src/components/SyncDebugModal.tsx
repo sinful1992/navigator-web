@@ -165,6 +165,81 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
+  const forceUpload = React.useCallback(async () => {
+    if (!confirm('🔧 Force upload all unsynced operations to cloud?\n\nThis will attempt to upload all local operations that haven\'t been synced yet.\n\nContinue?')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const storedDeviceId = localStorage.getItem('navigator_device_id');
+      const user = await supabase?.auth.getUser();
+      const currentUserId = user?.data?.user?.id;
+
+      if (!storedDeviceId || !currentUserId || !supabase) {
+        alert('❌ Not authenticated');
+        return;
+      }
+
+      const manager = getOperationLog(storedDeviceId, currentUserId);
+      await manager.load();
+
+      const unsyncedOps = manager.getUnsyncedOperations();
+
+      if (unsyncedOps.length === 0) {
+        alert('✅ No unsynced operations to upload');
+        return;
+      }
+
+      alert(`Found ${unsyncedOps.length} unsynced operations.\n\nStarting upload...`);
+
+      let uploaded = 0;
+      let failed = 0;
+      let firstError = null;
+
+      for (const operation of unsyncedOps) {
+        const { error } = await supabase
+          .from('navigator_operations')
+          .insert({
+            user_id: currentUserId,
+            operation_id: operation.id,
+            sequence_number: operation.sequence,
+            operation_type: operation.type,
+            operation_data: operation,
+            client_id: operation.clientId,
+            timestamp: operation.timestamp,
+            local_timestamp: operation.timestamp,
+          });
+
+        if (error) {
+          failed++;
+          if (!firstError) firstError = error;
+          console.error('Upload failed for operation:', operation.id, error);
+        } else {
+          uploaded++;
+        }
+      }
+
+      if (uploaded > 0) {
+        const maxSeq = Math.max(...unsyncedOps.slice(0, uploaded).map(op => op.sequence));
+        await manager.markSyncedUpTo(maxSeq);
+      }
+
+      if (failed > 0) {
+        alert(`⚠️ Partial upload:\n\nUploaded: ${uploaded}\nFailed: ${failed}\n\nFirst error: ${firstError?.message || 'Unknown'}\n\nCheck console for details`);
+      } else {
+        alert(`✅ Successfully uploaded ${uploaded} operations!`);
+      }
+
+      await loadDiagnostics();
+    } catch (err) {
+      alert('❌ Error: ' + String(err));
+      console.error('Force upload error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadDiagnostics]);
+
   const clearCloudOperations = React.useCallback(async () => {
     if (!confirm('⚠️ DELETE ALL CLOUD OPERATIONS?\n\nThis will delete all operations from the cloud database.\n\nOnly proceed if you have exported your data!\n\nContinue?')) {
       return;
@@ -383,6 +458,25 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                 >
                   🔄 Refresh
                 </button>
+                {unsyncedCount > 0 && (
+                  <button
+                    onClick={forceUpload}
+                    disabled={loading}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      border: '1px solid #4caf50',
+                      backgroundColor: '#4caf50',
+                      color: 'white',
+                      borderRadius: '6px',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      flex: '1',
+                      minWidth: '120px',
+                      opacity: loading ? 0.6 : 1
+                    }}
+                  >
+                    📤 Force Upload
+                  </button>
+                )}
                 {(stats?.isCorrupted || unsyncedCount < 0) && (
                   <button
                     onClick={repairAndSync}
