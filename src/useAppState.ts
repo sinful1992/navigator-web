@@ -1383,19 +1383,49 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   const setSubscription = React.useCallback((subscription: UserSubscription | null) => {
     setBaseState((s) => ({ ...s, subscription }));
-  }, []);
+
+    // 🔥 DELTA SYNC: Submit operation to cloud immediately
+    if (submitOperation) {
+      submitOperation({
+        type: 'SETTINGS_UPDATE_SUBSCRIPTION',
+        payload: { subscription }
+      }).catch(err => {
+        logger.error('Failed to submit subscription update operation:', err);
+      });
+    }
+  }, [submitOperation]);
 
   // ---- reminder system management ----
 
   const updateReminderSettings = React.useCallback((settings: ReminderSettings) => {
     setBaseState((s) => ({ ...s, reminderSettings: settings }));
-  }, []);
+
+    // 🔥 DELTA SYNC: Submit operation to cloud immediately
+    if (submitOperation) {
+      submitOperation({
+        type: 'SETTINGS_UPDATE_REMINDER',
+        payload: { settings }
+      }).catch(err => {
+        logger.error('Failed to submit reminder settings update operation:', err);
+      });
+    }
+  }, [submitOperation]);
 
   // ---- bonus settings management ----
 
   const updateBonusSettings = React.useCallback((settings: BonusSettings) => {
     setBaseState((s) => ({ ...s, bonusSettings: settings }));
-  }, []);
+
+    // 🔥 DELTA SYNC: Submit operation to cloud immediately
+    if (submitOperation) {
+      submitOperation({
+        type: 'SETTINGS_UPDATE_BONUS',
+        payload: { settings }
+      }).catch(err => {
+        logger.error('Failed to submit bonus settings update operation:', err);
+      });
+    }
+  }, [submitOperation]);
 
   const updateReminderNotification = React.useCallback(
     (notificationId: string, status: ReminderNotification['status'], message?: string) => {

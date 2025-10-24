@@ -1,5 +1,5 @@
 // src/sync/operations.ts - Event-based sync operations
-import type { Completion, AddressRow, DaySession, Arrangement } from '../types';
+import type { Completion, AddressRow, DaySession, Arrangement, UserSubscription, ReminderSettings, BonusSettings } from '../types';
 
 // Base operation structure
 export type BaseOperation = {
@@ -15,7 +15,8 @@ export type Operation =
   | AddressOperation
   | SessionOperation
   | ArrangementOperation
-  | ActiveIndexOperation;
+  | ActiveIndexOperation
+  | SettingsOperation;
 
 // Completion operations
 export type CompletionOperation = BaseOperation & (
@@ -108,6 +109,28 @@ export type ActiveIndexOperation = BaseOperation & {
     startTime?: string | null; // Time when address was activated (for time tracking)
   };
 };
+
+// Settings operations
+export type SettingsOperation = BaseOperation & (
+  | {
+      type: 'SETTINGS_UPDATE_SUBSCRIPTION';
+      payload: {
+        subscription: UserSubscription | null;
+      };
+    }
+  | {
+      type: 'SETTINGS_UPDATE_REMINDER';
+      payload: {
+        settings: ReminderSettings;
+      };
+    }
+  | {
+      type: 'SETTINGS_UPDATE_BONUS';
+      payload: {
+        settings: BonusSettings;
+      };
+    }
+);
 
 // Operation factory functions
 export function createOperation<T extends Operation>(

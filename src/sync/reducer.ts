@@ -187,6 +187,33 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
         };
       }
 
+      case 'SETTINGS_UPDATE_SUBSCRIPTION': {
+        const { subscription } = operation.payload;
+
+        return {
+          ...state,
+          subscription,
+        };
+      }
+
+      case 'SETTINGS_UPDATE_REMINDER': {
+        const { settings } = operation.payload;
+
+        return {
+          ...state,
+          reminderSettings: settings,
+        };
+      }
+
+      case 'SETTINGS_UPDATE_BONUS': {
+        const { settings } = operation.payload;
+
+        return {
+          ...state,
+          bonusSettings: settings,
+        };
+      }
+
       default:
         logger.warn('Unknown operation type:', (operation as any).type);
         return state;
