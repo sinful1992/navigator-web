@@ -648,6 +648,30 @@ export function useOperationSync(): UseOperationSync {
     if (error) throw error;
   }, []);
 
+  // Auto-sync unsynced operations after initialization
+  // This handles restored operations from backup that weren't uploaded
+  useEffect(() => {
+    if (!user || !isOnline || !operationLog.current || isLoading) return;
+
+    const checkAndSyncUnsynced = async () => {
+      try {
+        const unsyncedOps = operationLog.current?.getUnsyncedOperations() || [];
+        if (unsyncedOps.length > 0) {
+          logger.info(`📤 AUTO-SYNC: Found ${unsyncedOps.length} unsynced operations on startup, triggering upload`);
+          // Delay slightly to ensure everything is ready
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          if (operationLog.current && user && isOnline) {
+            await syncOperationsToCloud();
+          }
+        }
+      } catch (err) {
+        logger.error('Failed to auto-sync unsynced operations:', err);
+      }
+    };
+
+    checkAndSyncUnsynced();
+  }, [user?.id, isOnline, isLoading, syncOperationsToCloud]);
+
   // Cleanup batch timer on unmount
   useEffect(() => {
     return () => {
