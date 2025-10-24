@@ -178,11 +178,39 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       }
 
       case 'ACTIVE_INDEX_SET': {
-        const { index } = operation.payload;
+        const { index, startTime } = operation.payload;
 
         return {
           ...state,
           activeIndex: index,
+          activeStartTime: startTime ?? (index !== null ? new Date().toISOString() : null),
+        };
+      }
+
+      case 'SETTINGS_UPDATE_SUBSCRIPTION': {
+        const { subscription } = operation.payload;
+
+        return {
+          ...state,
+          subscription,
+        };
+      }
+
+      case 'SETTINGS_UPDATE_REMINDER': {
+        const { settings } = operation.payload;
+
+        return {
+          ...state,
+          reminderSettings: settings,
+        };
+      }
+
+      case 'SETTINGS_UPDATE_BONUS': {
+        const { settings } = operation.payload;
+
+        return {
+          ...state,
+          bonusSettings: settings,
         };
       }
 

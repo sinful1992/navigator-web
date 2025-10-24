@@ -197,6 +197,7 @@ function AuthedApp() {
     cancelActive,
     complete,
     undo,
+    updateCompletion,
     startDay,
     endDay,
     backupState,
@@ -780,37 +781,18 @@ function AuthedApp() {
       numberOfCases?: number,
       enforcementFees?: number[]
     ) => {
-      setState((s) => {
-        if (
-          !Number.isInteger(targetCompletionIndex) ||
-          targetCompletionIndex < 0 ||
-          targetCompletionIndex >= s.completions.length
-        ) {
-          return s;
-        }
-        const comps = s.completions.slice();
-        const updatedCompletion = {
-          ...comps[targetCompletionIndex],
-          outcome,
-          amount,
-        };
-        if (arrangementId !== undefined) {
-          updatedCompletion.arrangementId = arrangementId;
-        }
-        if (caseReference !== undefined) {
-          updatedCompletion.caseReference = caseReference;
-        }
-        if (numberOfCases !== undefined) {
-          updatedCompletion.numberOfCases = numberOfCases;
-        }
-        if (enforcementFees !== undefined) {
-          updatedCompletion.enforcementFees = enforcementFees;
-        }
-        comps[targetCompletionIndex] = updatedCompletion;
-        return { ...s, completions: comps };
-      });
+      // 🔥 DELTA SYNC: Use updateCompletion to submit COMPLETION_UPDATE operation
+      const updates: Partial<Completion> = { outcome };
 
-      // FIXED: Reduced backup - only cloud backup + local storage (no file downloads)
+      if (amount !== undefined) updates.amount = amount;
+      if (arrangementId !== undefined) updates.arrangementId = arrangementId;
+      if (caseReference !== undefined) updates.caseReference = caseReference;
+      if (numberOfCases !== undefined) updates.numberOfCases = numberOfCases;
+      if (enforcementFees !== undefined) updates.enforcementFees = enforcementFees;
+
+      updateCompletion(targetCompletionIndex, updates);
+
+      // FIXED: Reduced backup - only local storage (delta sync handles cloud persistence)
       try {
         // Small delay to ensure state has updated
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -823,7 +805,7 @@ function AuthedApp() {
         logger.error("Local backup failed after outcome change:", backupError);
       }
     },
-    [setState, backupState]
+    [updateCompletion, backupState]
   );
 
   const handleManualSync = React.useCallback(async () => {
