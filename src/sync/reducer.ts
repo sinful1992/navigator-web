@@ -177,6 +177,16 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
         };
       }
 
+      case 'ACTIVE_INDEX_SET': {
+        const { index, startTime } = operation.payload;
+
+        return {
+          ...state,
+          activeIndex: index,
+          activeStartTime: startTime ?? (index !== null ? new Date().toISOString() : null),
+        };
+      }
+
       case 'SETTINGS_UPDATE_SUBSCRIPTION': {
         const { subscription } = operation.payload;
 
@@ -249,6 +259,15 @@ export function validateOperation(state: AppState, operation: Operation): boolea
         );
         if (existing) {
           logger.warn('Invalid completion - already exists:', completion);
+          return false;
+        }
+        return true;
+      }
+
+      case 'ACTIVE_INDEX_SET': {
+        const { index } = operation.payload;
+        if (index !== null && !state.addresses[index]) {
+          logger.warn('Invalid active index - address not found:', index);
           return false;
         }
         return true;

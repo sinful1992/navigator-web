@@ -15,6 +15,7 @@ export type Operation =
   | AddressOperation
   | SessionOperation
   | ArrangementOperation
+  | ActiveIndexOperation
   | SettingsOperation;
 
 // Completion operations
@@ -99,6 +100,15 @@ export type ArrangementOperation = BaseOperation & (
       };
     }
 );
+
+// Active index operations
+export type ActiveIndexOperation = BaseOperation & {
+  type: 'ACTIVE_INDEX_SET';
+  payload: {
+    index: number | null;
+    startTime?: string | null; // Time when address was activated (for time tracking)
+  };
+};
 
 // Settings operations
 export type SettingsOperation = BaseOperation & (
