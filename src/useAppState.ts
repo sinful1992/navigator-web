@@ -1360,12 +1360,22 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   const updateArrangement = React.useCallback(
     (id: string, updates: Partial<Arrangement>): Promise<void> => {
       return new Promise((resolve) => {
+        let shouldSubmit = false;
+
         const operationId = generateOperationId("update", "arrangement", {
           id,
           ...updates,
         });
 
         setBaseState((s) => {
+          // Check if arrangement exists before updating
+          const arrangement = s.arrangements.find((arr) => arr.id === id);
+          if (!arrangement) {
+            logger.warn(`Cannot update arrangement ${id} - not found`);
+            resolve();
+            return s;
+          }
+
           const updatedArrangement = {
             ...updates,
             id,
@@ -1389,11 +1399,12 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
             resolve();
           }, 0);
 
+          shouldSubmit = true;
           return { ...s, arrangements };
         });
 
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
+        // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if update occurred)
+        if (shouldSubmit && submitOperation) {
           submitOperation({
             type: 'ARRANGEMENT_UPDATE',
             payload: { id, updates }
@@ -1409,6 +1420,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   const deleteArrangement = React.useCallback(
     (id: string): Promise<void> => {
       return new Promise((resolve) => {
+        let shouldSubmit = false;
+
         setBaseState((s) => {
           const arrangement = s.arrangements.find((arr) => arr.id === id);
           if (!arrangement) {
@@ -1430,11 +1443,12 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
             resolve();
           }, 0);
 
+          shouldSubmit = true;
           return { ...s, arrangements };
         });
 
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
+        // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if deletion occurred)
+        if (shouldSubmit && submitOperation) {
           submitOperation({
             type: 'ARRANGEMENT_DELETE',
             payload: { id }
