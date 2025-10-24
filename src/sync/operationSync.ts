@@ -200,7 +200,19 @@ export function useOperationSync(): UseOperationSync {
     operationData: Omit<Operation, 'id' | 'timestamp' | 'clientId' | 'sequence'>
   ): Promise<void> => {
     if (!operationLog.current) {
+      logger.error('❌ SYNC FAILURE: Operation log not initialized');
       throw new Error('Operation log not initialized');
+    }
+
+    if (!user) {
+      logger.error('❌ SYNC FAILURE: No user authenticated - operation will NOT sync to cloud');
+      logger.error('Operation type:', operationData.type);
+      logger.error('This operation will be stored locally but never reach other devices!');
+    }
+
+    if (!supabase) {
+      logger.error('❌ SYNC FAILURE: Supabase not configured - operation will NOT sync to cloud');
+      logger.error('Operation type:', operationData.type);
     }
 
     // Create envelope without sequence - OperationLog will assign it
@@ -230,29 +242,50 @@ export function useOperationSync(): UseOperationSync {
 
     // Schedule batched sync instead of immediate sync
     if (isOnline && user) {
+      logger.info('📤 Scheduling sync for operation:', operationData.type);
       scheduleBatchSync();
+    } else {
+      if (!isOnline) {
+        logger.warn('⚠️ OFFLINE: Operation stored locally, will sync when online');
+      }
+      if (!user) {
+        logger.warn('⚠️ NOT AUTHENTICATED: Operation stored locally but will NOT sync');
+      }
     }
 
     logger.debug('Submitted operation:', {
       type: persistedOperation.type,
       id: persistedOperation.id,
+      willSync: isOnline && !!user,
     });
   }, [isOnline, user, scheduleBatchSync]);
 
   // Sync operations to cloud
   const syncOperationsToCloud = useCallback(async () => {
-    if (!operationLog.current || !user || !supabase) return;
+    if (!operationLog.current || !user || !supabase) {
+      logger.warn('⚠️ SYNC SKIPPED:', {
+        hasOperationLog: !!operationLog.current,
+        hasUser: !!user,
+        hasSupabase: !!supabase,
+      });
+      return;
+    }
 
     setIsSyncing(true);
     try {
       const unsyncedOps = operationLog.current.getUnsyncedOperations();
 
       if (unsyncedOps.length === 0) {
+        logger.debug('✅ No unsynced operations');
         return; // Nothing to sync
       }
 
+      logger.info(`📤 UPLOADING ${unsyncedOps.length} operations to cloud...`);
+
       // Upload operations to cloud
       for (const operation of unsyncedOps) {
+        logger.debug('Uploading operation:', operation.type, operation.id);
+
         const { error } = await supabase
           .from('navigator_operations')
           .insert({
@@ -267,7 +300,18 @@ export function useOperationSync(): UseOperationSync {
           });
 
         if (error && error.code !== '23505') { // Ignore duplicate key errors
+          logger.error('❌ UPLOAD FAILED:', {
+            operation: operation.type,
+            error: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+          });
           throw error;
+        }
+
+        if (error?.code === '23505') {
+          logger.debug('⚠️ Duplicate operation (already uploaded):', operation.id);
         }
       }
 
@@ -276,12 +320,13 @@ export function useOperationSync(): UseOperationSync {
       await operationLog.current.markSyncedUpTo(maxSequence);
       setLastSyncTime(new Date());
 
-      logger.info('Synced operations to cloud:', {
+      logger.info('✅ SYNC SUCCESS:', {
         count: unsyncedOps.length,
         maxSequence,
       });
     } catch (err) {
-      logger.error('Failed to sync operations to cloud:', err);
+      logger.error('❌ SYNC FAILED:', err);
+      // Don't mark as synced so we can retry later
     } finally {
       setIsSyncing(false);
     }
@@ -289,10 +334,19 @@ export function useOperationSync(): UseOperationSync {
 
   // Fetch operations from cloud
   const fetchOperationsFromCloud = useCallback(async () => {
-    if (!operationLog.current || !user || !supabase) return;
+    if (!operationLog.current || !user || !supabase) {
+      logger.warn('⚠️ FETCH SKIPPED:', {
+        hasOperationLog: !!operationLog.current,
+        hasUser: !!user,
+        hasSupabase: !!supabase,
+      });
+      return;
+    }
 
     try {
       const lastSequence = operationLog.current.getLogState().lastSyncSequence;
+
+      logger.info(`📥 FETCHING operations from cloud (after sequence ${lastSequence})...`);
 
       const { data, error } = await supabase
         .from('navigator_operations')
@@ -301,9 +355,19 @@ export function useOperationSync(): UseOperationSync {
         .gt('sequence_number', lastSequence)
         .order('sequence_number', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        logger.error('❌ FETCH FAILED:', {
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
+        throw error;
+      }
 
       if (data && data.length > 0) {
+        logger.info(`📥 RECEIVED ${data.length} operations from cloud`);
+
         const remoteOperations: Operation[] = data.map(row => row.operation_data);
 
         // Merge remote operations and resolve conflicts
@@ -330,12 +394,18 @@ export function useOperationSync(): UseOperationSync {
           const allOperations = operationLog.current.getAllOperations();
           const newState = reconstructState(INITIAL_STATE, allOperations);
           setCurrentState(newState);
+
+          logger.info('✅ FETCH SUCCESS: State updated with remote operations');
+        } else {
+          logger.debug('No new operations after merge (already had them)');
         }
+      } else {
+        logger.debug('✅ No new operations on server');
       }
 
       setLastSyncTime(new Date());
     } catch (err) {
-      logger.error('Failed to fetch operations from cloud:', err);
+      logger.error('❌ FETCH ERROR:', err);
     }
   }, [user, currentState]);
 
@@ -367,7 +437,15 @@ export function useOperationSync(): UseOperationSync {
   // Subscribe to operation changes
   const subscribeToOperations = useCallback(
     (onOperations: (operations: Operation[]) => void) => {
-      if (!user || !supabase) return () => {};
+      if (!user || !supabase) {
+        logger.warn('⚠️ SUBSCRIPTION SKIPPED:', {
+          hasUser: !!user,
+          hasSupabase: !!supabase,
+        });
+        return () => {};
+      }
+
+      logger.info('📡 SETTING UP real-time subscription for user:', user.id);
 
       // Register this listener for local operations (critical for App.tsx updates!)
       stateChangeListeners.current.add(onOperations);
@@ -391,10 +469,23 @@ export function useOperationSync(): UseOperationSync {
         },
         async (payload: any) => {
           try {
+            logger.info('📥 REAL-TIME: Received operation from another device');
             const operation: Operation = payload.new.operation_data;
 
+            logger.debug('Operation details:', {
+              type: operation.type,
+              clientId: operation.clientId,
+              myClientId: deviceId.current,
+              sequence: operation.sequence,
+            });
+
             // Skip our own operations
-            if (operation.clientId === deviceId.current) return;
+            if (operation.clientId === deviceId.current) {
+              logger.debug('⏭️ Skipping own operation');
+              return;
+            }
+
+            logger.info('✅ Processing remote operation:', operation.type);
 
             if (operationLog.current) {
               const newOps = await operationLog.current.mergeRemoteOperations([operation]);
@@ -407,17 +498,27 @@ export function useOperationSync(): UseOperationSync {
                 const newState = reconstructState(INITIAL_STATE, allOperations);
                 setCurrentState(newState);
                 onOperations(newOps);
+
+                logger.info('✅ REAL-TIME SYNC: State updated with remote operation');
+              } else {
+                logger.debug('No new operations after merge (already had it)');
               }
             }
           } catch (err) {
-            logger.error('Error processing real-time operation:', err);
+            logger.error('❌ REAL-TIME ERROR: Failed to process operation:', err);
           }
         }
       );
 
-      channel.subscribe();
+      channel.subscribe((status) => {
+        logger.info('📡 SUBSCRIPTION STATUS:', status);
+      });
+
+      logger.info('✅ Real-time subscription active');
 
       const cleanup = () => {
+        logger.info('🔌 Cleaning up real-time subscription');
+
         // Remove from state change listeners
         stateChangeListeners.current.delete(onOperations);
 

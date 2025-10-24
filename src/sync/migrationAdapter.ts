@@ -19,11 +19,91 @@ export function useUnifiedSync() {
     });
   };
 
-  // syncData is a no-op in operations mode
-  // Operations are auto-synced via submitOperation() called by app actions
-  const syncData = async (_state: AppState): Promise<void> => {
-    // No-op: operations are automatically synced when submitted
-    return Promise.resolve();
+  // syncData converts bulk state changes into operations
+  // This is called when importing from backup or restoring from cloud
+  const syncData = async (newState: AppState): Promise<void> => {
+    if (!operationSync.user) {
+      return; // Not authenticated, can't sync
+    }
+
+    const currentState = operationSync.getStateFromOperations();
+
+    // 🔧 FIX: Submit operations for all differences between current and new state
+    // This ensures bulk imports (backup restore, cloud restore) sync to other devices
+
+    // 1. Sync addresses if they changed
+    if (JSON.stringify(currentState.addresses) !== JSON.stringify(newState.addresses)) {
+      await operationSync.submitOperation({
+        type: 'ADDRESS_BULK_IMPORT',
+        payload: {
+          addresses: newState.addresses,
+          newListVersion: newState.currentListVersion || 1,
+          preserveCompletions: true,
+        },
+      });
+    }
+
+    // 2. Sync completions - find new ones not in current state
+    const currentCompletionKeys = new Set(
+      currentState.completions.map(c => `${c.timestamp}_${c.index}_${c.listVersion || 1}`)
+    );
+    const newCompletions = newState.completions.filter(c =>
+      !currentCompletionKeys.has(`${c.timestamp}_${c.index}_${c.listVersion || 1}`)
+    );
+    for (const completion of newCompletions) {
+      await operationSync.submitOperation({
+        type: 'COMPLETION_CREATE',
+        payload: { completion },
+      });
+    }
+
+    // 3. Sync arrangements - find new ones not in current state
+    const currentArrangementIds = new Set(currentState.arrangements.map(a => a.id));
+    const newArrangements = newState.arrangements.filter(a => !currentArrangementIds.has(a.id));
+    for (const arrangement of newArrangements) {
+      await operationSync.submitOperation({
+        type: 'ARRANGEMENT_CREATE',
+        payload: { arrangement },
+      });
+    }
+
+    // 4. Sync sessions - find new ones not in current state
+    const currentSessionKeys = new Set(
+      currentState.daySessions.map(s => `${s.date}_${s.start}`)
+    );
+    const newSessions = newState.daySessions.filter(s =>
+      !currentSessionKeys.has(`${s.date}_${s.start}`)
+    );
+    for (const session of newSessions) {
+      await operationSync.submitOperation({
+        type: 'SESSION_START',
+        payload: { session },
+      });
+    }
+
+    // 5. Sync settings if changed
+    if (JSON.stringify(currentState.subscription) !== JSON.stringify(newState.subscription)) {
+      await operationSync.submitOperation({
+        type: 'SETTINGS_UPDATE_SUBSCRIPTION',
+        payload: { subscription: newState.subscription },
+      });
+    }
+
+    // Only sync reminder settings if both are defined and different
+    if (newState.reminderSettings && JSON.stringify(currentState.reminderSettings) !== JSON.stringify(newState.reminderSettings)) {
+      await operationSync.submitOperation({
+        type: 'SETTINGS_UPDATE_REMINDER',
+        payload: { settings: newState.reminderSettings },
+      });
+    }
+
+    // Only sync bonus settings if both are defined and different
+    if (newState.bonusSettings && JSON.stringify(currentState.bonusSettings) !== JSON.stringify(newState.bonusSettings)) {
+      await operationSync.submitOperation({
+        type: 'SETTINGS_UPDATE_BONUS',
+        payload: { settings: newState.bonusSettings },
+      });
+    }
   };
 
   return {
