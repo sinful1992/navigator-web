@@ -330,6 +330,7 @@ export function getOperationLogStats(manager: OperationLogManager): {
   duplicateCompletions: number;
   sequenceRange: { min: number; max: number };
   lastSyncSequence: number;
+  isCorrupted: boolean;
 } {
   const ops = manager.getAllOperations();
   const byType: Record<string, number> = {};
@@ -354,12 +355,62 @@ export function getOperationLogStats(manager: OperationLogManager): {
   const sequences = ops.map(o => o.sequence);
   const min = sequences.length > 0 ? Math.min(...sequences) : 0;
   const max = sequences.length > 0 ? Math.max(...sequences) : 0;
+  const lastSyncSequence = manager.getLogState().lastSyncSequence;
+
+  // Detect corruption: lastSyncSequence should never be greater than max sequence
+  const isCorrupted = lastSyncSequence > max;
 
   return {
     totalOperations: ops.length,
     byType,
     duplicateCompletions,
     sequenceRange: { min, max },
-    lastSyncSequence: manager.getLogState().lastSyncSequence,
+    lastSyncSequence,
+    isCorrupted,
   };
+}
+
+/**
+ * REPAIR: Fix corrupted sequence numbers
+ * This fixes the bug where lastSyncSequence becomes corrupted (too high)
+ * Returns the number of operations that need to be synced
+ */
+export async function repairCorruptedSequences(
+  manager: OperationLogManager,
+  actualCloudMaxSequence: number
+): Promise<number> {
+  const state = manager.getLogState();
+  const ops = manager.getAllOperations();
+
+  if (ops.length === 0) {
+    logger.warn('No operations to repair');
+    return 0;
+  }
+
+  const maxLocalSequence = Math.max(...ops.map(o => o.sequence));
+
+  // Detect corruption
+  if (state.lastSyncSequence <= maxLocalSequence) {
+    logger.info('No corruption detected - lastSyncSequence is valid');
+    return 0;
+  }
+
+  logger.warn('🔧 CORRUPTION DETECTED:', {
+    lastSyncSequence: state.lastSyncSequence,
+    maxLocalSequence,
+    difference: state.lastSyncSequence - maxLocalSequence,
+  });
+
+  // Reset lastSyncSequence to the actual cloud max
+  // This will make getUnsyncedOperations() work correctly
+  await manager.markSyncedUpTo(actualCloudMaxSequence);
+
+  const unsyncedCount = ops.filter(op => op.sequence > actualCloudMaxSequence).length;
+
+  logger.info('✅ REPAIRED:', {
+    newLastSyncSequence: actualCloudMaxSequence,
+    unsyncedOperations: unsyncedCount,
+  });
+
+  return unsyncedCount;
 }

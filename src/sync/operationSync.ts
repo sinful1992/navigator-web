@@ -816,6 +816,77 @@ if (typeof window !== 'undefined') {
       console.log('🔄 Triggering force sync...');
       // This will be called from App.tsx context
       console.log('Please use cloudSync.forceSync() from the main app context');
+    },
+
+    /**
+     * Fix corrupted sequence numbers and force upload all operations
+     */
+    async repairSync() {
+      const confirmed = confirm('⚠️ This will reset sync sequence numbers and re-upload all operations to cloud. Continue?');
+      if (!confirmed) return;
+
+      try {
+        const deviceId = localStorage.getItem('navigator_device_id');
+        const user = await supabase?.auth.getUser();
+        const userId = user?.data?.user?.id;
+
+        if (!deviceId || !userId || !supabase) {
+          console.error('Not authenticated');
+          return;
+        }
+
+        console.log('🔧 Starting sync repair...');
+
+        const manager = getOperationLog(deviceId, userId);
+        await manager.load();
+
+        const operations = manager.getAllOperations();
+        console.log(`📊 Found ${operations.length} operations to sync`);
+
+        // Reset the last sync sequence to 0
+        await manager.markSyncedUpTo(0);
+        console.log('✅ Reset lastSyncSequence to 0');
+
+        // Upload all operations to cloud
+        let uploaded = 0;
+        for (const operation of operations) {
+          console.log(`📤 Uploading operation ${uploaded + 1}/${operations.length}: ${operation.type}`);
+
+          const { error } = await supabase
+            .from('navigator_operations')
+            .insert({
+              user_id: userId,
+              operation_id: operation.id,
+              sequence_number: operation.sequence,
+              operation_type: operation.type,
+              operation_data: operation,
+              client_id: operation.clientId,
+              timestamp: operation.timestamp,
+              local_timestamp: operation.timestamp,
+            });
+
+          if (error && error.code !== '23505') {
+            console.error('❌ Upload failed:', error);
+            throw error;
+          }
+
+          if (error?.code === '23505') {
+            console.log('⚠️ Already exists (skipping)');
+          } else {
+            uploaded++;
+          }
+        }
+
+        // Mark all as synced
+        const maxSeq = Math.max(...operations.map(op => op.sequence));
+        await manager.markSyncedUpTo(maxSeq);
+
+        console.log(`✅ Repair complete! Uploaded ${uploaded} operations, synced up to sequence ${maxSeq}`);
+        alert(`✅ Sync repaired! Uploaded ${uploaded} operations to cloud. Refresh the page.`);
+      } catch (err) {
+        console.error('❌ Repair failed:', err);
+        alert('❌ Repair failed: ' + String(err));
+      }
     }
   };
 

@@ -1,7 +1,7 @@
 // src/components/SyncDebugModal.tsx - Mobile-friendly sync diagnostics
 import * as React from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { getOperationLog, getOperationLogStats } from '../sync/operationLog';
+import { getOperationLog, getOperationLogStats, repairCorruptedSequences } from '../sync/operationLog';
 
 type SyncStats = {
   totalOperations: number;
@@ -9,6 +9,7 @@ type SyncStats = {
   duplicateCompletions: number;
   sequenceRange: { min: number; max: number };
   lastSyncSequence: number;
+  isCorrupted: boolean;
 };
 
 export function SyncDebugModal({ onClose }: { onClose: () => void }) {
@@ -72,6 +73,50 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
       window.location.reload();
     } catch (err) {
       alert('❌ Error: ' + String(err));
+    }
+  }, []);
+
+  const repairAndSync = React.useCallback(async () => {
+    if (!confirm('🔧 This will repair corrupted sequence numbers and force sync unsynced operations. Continue?')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const storedDeviceId = localStorage.getItem('navigator_device_id');
+      const user = await supabase?.auth.getUser();
+      const currentUserId = user?.data?.user?.id;
+
+      if (!storedDeviceId || !currentUserId || !supabase) {
+        alert('❌ Not authenticated');
+        return;
+      }
+
+      // Get actual max sequence from cloud
+      const { data, error } = await supabase
+        .from('navigator_operations')
+        .select('sequence_number')
+        .eq('user_id', currentUserId)
+        .order('sequence_number', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        throw error;
+      }
+
+      const cloudMaxSequence = data && data.length > 0 ? data[0].sequence_number : 0;
+
+      // Repair the corruption
+      const manager = getOperationLog(storedDeviceId, currentUserId);
+      await manager.load();
+      const unsyncedCount = await repairCorruptedSequences(manager, cloudMaxSequence);
+
+      alert(`✅ Repaired!\n\n${unsyncedCount} operations need to be synced.\n\nRefreshing to apply changes...`);
+      window.location.reload();
+    } catch (err) {
+      alert('❌ Error: ' + String(err));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -151,7 +196,34 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                     {unsyncedCount} {unsyncedCount > 0 ? '⚠️' : '✅'}
                   </span>
                 </Row>
+                {stats?.isCorrupted && (
+                  <Row label="Corruption">
+                    <span style={{ color: '#f44336', fontWeight: 'bold' }}>
+                      🚨 DETECTED
+                    </span>
+                  </Row>
+                )}
               </Section>
+
+              {/* Corruption Warning */}
+              {stats?.isCorrupted && (
+                <div style={{
+                  marginTop: '1rem',
+                  padding: '0.75rem',
+                  backgroundColor: '#ffebee',
+                  border: '2px solid #f44336',
+                  borderRadius: '6px',
+                  fontSize: '0.875rem'
+                }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#c62828' }}>
+                    🚨 SEQUENCE NUMBER CORRUPTION DETECTED
+                  </div>
+                  <div>
+                    Your sync sequence numbers are corrupted. This prevents operations from syncing to the cloud.
+                    Use <strong>"Repair & Sync"</strong> button below to fix this.
+                  </div>
+                </div>
+              )}
 
               {/* Local Storage */}
               {stats && (
@@ -208,6 +280,25 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                 >
                   🔄 Refresh
                 </button>
+                {stats?.isCorrupted && (
+                  <button
+                    onClick={repairAndSync}
+                    disabled={loading}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      border: '1px solid #ff9800',
+                      backgroundColor: '#ff9800',
+                      color: 'white',
+                      borderRadius: '6px',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      flex: '1',
+                      minWidth: '120px',
+                      opacity: loading ? 0.6 : 1
+                    }}
+                  >
+                    🔧 Repair & Sync
+                  </button>
+                )}
                 <button
                   onClick={clearLocal}
                   style={{
