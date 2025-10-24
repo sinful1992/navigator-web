@@ -900,9 +900,20 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
     setBaseState((s) => {
       logger.info(`📍 CANCELING ACTIVE: Clearing active state - SYNC RESUMED`);
+
+      // 🔥 DELTA SYNC: Submit operation to cloud immediately
+      if (submitOperation) {
+        submitOperation({
+          type: 'ACTIVE_INDEX_SET',
+          payload: { index: null, startTime: null }
+        }).catch(err => {
+          logger.error('Failed to submit cancel active operation:', err);
+        });
+      }
+
       return { ...s, activeIndex: null, activeStartTime: null };
     });
-  }, []);
+  }, [submitOperation]);
 
   // Track pending completions to prevent double submissions
   const [, setPendingCompletions] = React.useState<Set<number>>(new Set());
@@ -1077,14 +1088,14 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     (index: number) => {
       setBaseState((s) => {
         const arr = s.completions.slice();
-        
+
         // Find the most recent completion for this index and list version
         let mostRecentPos = -1;
         let mostRecentTime = 0;
-        
+
         for (let i = 0; i < arr.length; i++) {
           const c = arr[i];
-          if (Number(c.index) === Number(index) && 
+          if (Number(c.index) === Number(index) &&
               c.listVersion === s.currentListVersion) {
             const completionTime = new Date(c.timestamp).getTime();
             if (completionTime > mostRecentTime) {
@@ -1109,12 +1120,26 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
           // Confirm immediately for local operations
           setTimeout(() => confirmOptimisticUpdate(operationId), 0);
+
+          // 🔥 DELTA SYNC: Submit operation to cloud immediately
+          if (submitOperation) {
+            submitOperation({
+              type: 'COMPLETION_DELETE',
+              payload: {
+                timestamp: completion.timestamp,
+                index: completion.index,
+                listVersion: completion.listVersion,
+              }
+            }).catch(err => {
+              logger.error('Failed to submit completion delete operation:', err);
+            });
+          }
         }
 
         return { ...s, completions: arr };
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate]
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
   );
 
   // ---- 🔧 FIXED: Enhanced day tracking with better validation ----
@@ -1151,12 +1176,23 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       };
 
       logger.info('Starting new day session:', sess);
+
+      // 🔥 DELTA SYNC: Submit operation to cloud immediately
+      if (submitOperation) {
+        submitOperation({
+          type: 'SESSION_START',
+          payload: { session: sess }
+        }).catch(err => {
+          logger.error('Failed to submit session start operation:', err);
+        });
+      }
+
       return {
         ...s,
         daySessions: [...updatedSessions, sess]
       };
     });
-  }, []);
+  }, [submitOperation]);
 
 
   const endDay = React.useCallback(() => {
@@ -1183,9 +1219,23 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       }
 
       logger.info("Ending day session:", endedSession);
+
+      // 🔥 DELTA SYNC: Submit operation to cloud immediately
+      if (submitOperation && endedSession.end) {
+        submitOperation({
+          type: 'SESSION_END',
+          payload: {
+            date: endedSession.date,
+            endTime: endedSession.end,
+          }
+        }).catch(err => {
+          logger.error('Failed to submit session end operation:', err);
+        });
+      }
+
       return { ...s, daySessions: updatedSessions };
     });
-  }, []);
+  }, [submitOperation]);
 
   // ---- enhanced arrangements ----
 

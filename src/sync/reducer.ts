@@ -178,11 +178,12 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       }
 
       case 'ACTIVE_INDEX_SET': {
-        const { index } = operation.payload;
+        const { index, startTime } = operation.payload;
 
         return {
           ...state,
           activeIndex: index,
+          activeStartTime: startTime ?? (index !== null ? new Date().toISOString() : null),
         };
       }
 
