@@ -37,6 +37,16 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
       const manager = getOperationLog(storedDeviceId, currentUserId);
       await manager.load();
       const localStats = getOperationLogStats(manager);
+
+      // DEBUG: Log stats to console
+      console.log('📊 SYNC DEBUG - Stats loaded:', {
+        totalOperations: localStats.totalOperations,
+        lastSyncSequence: localStats.lastSyncSequence,
+        sequenceRange: localStats.sequenceRange,
+        isCorrupted: localStats.isCorrupted,
+        unsyncedCalc: localStats.totalOperations - localStats.lastSyncSequence
+      });
+
       setStats(localStats);
 
       // Get cloud count
@@ -126,6 +136,15 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
 
   const unsyncedCount = stats ? stats.totalOperations - stats.lastSyncSequence : 0;
   const isInSync = cloudCount !== null && stats && cloudCount >= stats.totalOperations;
+
+  // DEBUG: Log render state
+  if (stats && !loading) {
+    console.log('📊 SYNC DEBUG - Render state:', {
+      isCorrupted: stats.isCorrupted,
+      willShowWarning: !!stats?.isCorrupted,
+      stats
+    });
+  }
 
   return (
     <div style={{
@@ -280,7 +299,7 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                 >
                   🔄 Refresh
                 </button>
-                {stats?.isCorrupted && (
+                {(stats?.isCorrupted || unsyncedCount < 0) && (
                   <button
                     onClick={repairAndSync}
                     disabled={loading}
