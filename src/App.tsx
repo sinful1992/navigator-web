@@ -12,7 +12,7 @@ import Completed from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { readJsonFile } from "./backup";
-import type { AddressRow, Outcome } from "./types";
+import type { AddressRow, Outcome, Completion } from "./types";
 import { supabase } from "./lib/supabaseClient";
 import ManualAddressFAB from "./ManualAddressFAB";
 import { SubscriptionManager } from "./SubscriptionManager";
