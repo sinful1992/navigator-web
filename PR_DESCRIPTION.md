@@ -24,7 +24,9 @@ Unsynced Ops:        0  ❌ LIE! Should be 79
 
 ## 🔍 Root Cause Analysis
 
-Found and fixed **5 critical bugs** in the sync system:
+Found and fixed **6 critical bugs** in the sync system:
+
+> **🎯 Bug #6 found by Codex AI code review tool - caught a critical flaw in my own fix!**
 
 ### **Bug #1: Sync Tracker Lied About Upload Status** 🔴 CRITICAL
 
@@ -254,6 +256,86 @@ if (newOps.length > 0) {
 
 ---
 
+### **Bug #6: Continuous Sequence Check Started from Wrong Position** 🔴 CRITICAL
+
+**Location:** `src/sync/operationSync.ts` - Both `syncOperationsToCloud()` and auto-sync (lines 483-531, 932-981)
+
+**Found By:** Codex AI code review tool (caught a flaw in my Bug #1 fix!)
+
+**The Problem:**
+My fix for Bug #1 tracked successful uploads correctly, but the continuous sequence algorithm started from the **first successful upload** instead of from the **current lastSyncSequence**. This meant failed operations in the middle of a batch became invisible.
+
+```javascript
+// MY BUGGY FIX - STILL BROKEN!
+successfulSequences = [102, 103, 104, 105]  // 101 failed!
+successfulSequences.sort()
+
+maxContinuousSeq = successfulSequences[0]  // ❌ Started at 102!
+// Loop checked if 103 === 102+1, 104 === 103+1, etc.
+// Found 102->103->104->105 continuous
+maxContinuousSeq = 105
+
+markSyncedUpTo(105)  // ❌ BUG! Hides operation 101 forever
+```
+
+**The Scenario:**
+```
+Current lastSyncSequence: 100
+Unsynced operations: [101, 102, 103, 104, 105]
+
+Upload results:
+  Operation 101: ❌ FAILS
+  Operations 102-105: ✅ SUCCESS
+
+My buggy code:
+  - Marked lastSyncSequence = 105
+  - getUnsyncedOperations() returns ops > 105
+  - Operation 101 (sequence=101) is NOT > 105
+  - Operation 101 NEVER RETRIES! ❌
+```
+
+**The Correct Fix:**
+```javascript
+// CORRECT FIX - ACTUALLY WORKS!
+successfulSequences = [102, 103, 104, 105]
+successfulSequences.sort()
+
+const currentLastSynced = 100
+let maxContinuousSeq = currentLastSynced  // ✅ Start from current position!
+
+for (const seq of successfulSequences) {
+  if (seq === maxContinuousSeq + 1) {
+    maxContinuousSeq = seq  // Extend chain
+  } else if (seq > maxContinuousSeq + 1) {
+    break  // ✅ Gap found! (101 is missing)
+  }
+}
+
+// maxContinuousSeq = 100 (no change - gap at 101)
+markSyncedUpTo(100)  // ✅ Correct! Doesn't hide operation 101
+```
+
+**Result:**
+```
+After correct fix:
+  - lastSyncSequence = 100 (unchanged)
+  - getUnsyncedOperations() returns ops > 100
+  - Returns [101, 102, 103, 104, 105]
+  - Operation 101 WILL RETRY on next sync ✅
+```
+
+**Impact:**
+- ✅ Failed operations in the middle of a batch no longer become invisible
+- ✅ Prevents permanent data loss from upload failures
+- ✅ Ensures all operations eventually upload (with retries)
+- ✅ Works correctly even if operations upload out of order
+
+**Fixed in TWO locations:**
+1. `syncOperationsToCloud()` - Manual/scheduled sync (lines 483-531)
+2. Auto-sync effect - Startup sync (lines 932-981)
+
+---
+
 ## 🛠️ Additional Improvements
 
 ### **Mobile Sync Diagnostic Tool** 📱
@@ -392,8 +474,9 @@ Device B:
 ## 📝 Commits
 
 ```
-4ea4085 - Fix remaining sync bugs found in code review
-bfa63ca - Fix root cause: Sync tracker and state reconstruction bugs
+cb2cbde - CRITICAL FIX: Prevent marking failed operations as synced (Bug #6 - found by Codex)
+4ea4085 - Fix remaining sync bugs found in code review (Bugs #3, #4, #5)
+bfa63ca - Fix root cause: Sync tracker and state reconstruction bugs (Bugs #1, #2)
 ba59c0f - Add mobile-friendly sync diagnostic tool
 2292c2a - Add comprehensive debug logging to trace sync flow
 ```
@@ -408,6 +491,7 @@ ba59c0f - Add mobile-friendly sync diagnostic tool
 - [x] Fixed auto-sync upload logic (Bug #3)
 - [x] Fixed bootstrap sync marking (Bug #4)
 - [x] Fixed real-time sync marking (Bug #5)
+- [x] Fixed continuous sequence algorithm (Bug #6 - critical!)
 - [x] Added comprehensive logging
 - [x] Added mobile diagnostic tool
 - [x] Tested on both devices
@@ -418,7 +502,7 @@ ba59c0f - Add mobile-friendly sync diagnostic tool
 
 ## 🎉 Summary
 
-This PR completely overhauls the multi-device sync system to fix **5 critical bugs** that were causing:
+This PR completely overhauls the multi-device sync system to fix **6 critical bugs** that were causing:
 - Silent upload failures
 - Incorrect sync status tracking
 - State reconstruction failures
