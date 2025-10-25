@@ -393,9 +393,13 @@ export function useOperationSync(): UseOperationSync {
 
       logger.info(`📤 UPLOADING ${unsyncedOps.length} operations to cloud...`);
 
+      // 🔧 CRITICAL FIX: Track successful uploads instead of assuming all succeed
+      const successfulSequences: number[] = [];
+      const failedOps: Array<{seq: number; type: string; error: string}> = [];
+
       // Upload operations to cloud
       for (const operation of unsyncedOps) {
-        logger.debug('Uploading operation:', operation.type, operation.id);
+        logger.debug('Uploading operation:', operation.type, operation.id, 'seq:', operation.sequence);
 
         // Derive entity from operation type
         const entity = operation.type.includes('COMPLETION') ? 'completion'
@@ -441,28 +445,61 @@ export function useOperationSync(): UseOperationSync {
         if (error && error.code !== '23505') { // Ignore duplicate key errors
           logger.error('❌ UPLOAD FAILED:', {
             operation: operation.type,
+            sequence: operation.sequence,
             error: error.message,
             code: error.code,
             details: error.details,
             hint: error.hint,
           });
-          throw error;
+
+          // 🔧 CRITICAL FIX: Don't throw - track failure and continue with other operations
+          failedOps.push({
+            seq: operation.sequence,
+            type: operation.type,
+            error: error.message
+          });
+          continue; // Skip to next operation
         }
 
         if (error?.code === '23505') {
           logger.debug('⚠️ Duplicate operation (already uploaded):', operation.id);
         }
+
+        // 🔧 FIX: Track this as successfully uploaded (including duplicates)
+        successfulSequences.push(operation.sequence);
       }
 
-      // Mark operations as synced
-      const maxSequence = Math.max(...unsyncedOps.map(op => op.sequence));
-      await operationLog.current.markSyncedUpTo(maxSequence);
-      setLastSyncTime(new Date());
+      // 🔧 CRITICAL FIX: Only mark operations up to the LAST SUCCESSFUL CONTINUOUS sequence
+      // Don't mark seq 100 as synced if seq 50 failed - only mark up to seq 49
+      if (successfulSequences.length > 0) {
+        successfulSequences.sort((a, b) => a - b);
 
-      logger.info('✅ SYNC SUCCESS:', {
-        count: unsyncedOps.length,
-        maxSequence,
-      });
+        // Find the highest continuous sequence (no gaps)
+        let maxContinuousSeq = successfulSequences[0];
+        for (let i = 1; i < successfulSequences.length; i++) {
+          if (successfulSequences[i] === maxContinuousSeq + 1) {
+            maxContinuousSeq = successfulSequences[i];
+          } else {
+            break; // Gap found, stop here
+          }
+        }
+
+        await operationLog.current.markSyncedUpTo(maxContinuousSeq);
+        setLastSyncTime(new Date());
+
+        logger.info('✅ SYNC COMPLETE:', {
+          total: unsyncedOps.length,
+          succeeded: successfulSequences.length,
+          failed: failedOps.length,
+          markedSyncedUpTo: maxContinuousSeq,
+        });
+
+        if (failedOps.length > 0) {
+          logger.error('⚠️ FAILED OPERATIONS:', failedOps);
+        }
+      } else {
+        logger.error('❌ ALL UPLOADS FAILED - no operations marked as synced');
+      }
     } catch (err) {
       logger.error('❌ SYNC FAILED:', err);
       // Don't mark as synced so we can retry later

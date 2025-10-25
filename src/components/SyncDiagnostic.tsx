@@ -12,6 +12,7 @@ type DiagnosticData = {
   localCompletions: number;
   lastSyncSequence: number;
   unsyncedOperations: number;
+  operationBreakdown: Record<string, number>;
 
   // Cloud stats
   cloudOperations: number;
@@ -20,6 +21,7 @@ type DiagnosticData = {
   // Comparison
   syncHealth: 'good' | 'warning' | 'error';
   issues: string[];
+  recommendations: string[];
 };
 
 export function SyncDiagnostic({ userId, currentState }: {
@@ -47,10 +49,17 @@ export function SyncDiagnostic({ userId, currentState }: {
       const logState = opLog.getLogState();
       const unsyncedOps = opLog.getUnsyncedOperations();
 
+      // Get operation type breakdown
+      const operationBreakdown = localOps.reduce((acc, op) => {
+        acc[op.type] = (acc[op.type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
       logger.info('📊 DIAGNOSTIC: Local stats:', {
         totalOps: localOps.length,
         lastSyncSeq: logState.lastSyncSequence,
         unsynced: unsyncedOps.length,
+        breakdown: operationBreakdown,
       });
 
       // Get cloud operation stats
@@ -82,26 +91,47 @@ export function SyncDiagnostic({ userId, currentState }: {
       }
 
       // Analyze issues
+      const recommendations: string[] = [];
+
       if (unsyncedOps.length > 0) {
         issues.push(`${unsyncedOps.length} operations not uploaded to cloud`);
+        recommendations.push('Tap "Force Upload" to upload pending operations');
       }
 
       if (localOps.length > cloudOps) {
         issues.push(`Local has ${localOps.length - cloudOps} more operations than cloud`);
+        if (unsyncedOps.length === 0) {
+          // This is the CRITICAL case - sync tracker is broken!
+          recommendations.push('⚠️ Sync tracker corrupted - use "Nuclear Reset" to fix');
+        }
       }
 
       if (currentState.addresses.length === 0 && cloudOps > 0) {
         issues.push('No addresses in UI but operations exist in cloud');
+        recommendations.push('⚠️ State reconstruction failing - check operation types');
+      }
+
+      if (currentState.addresses.length === 0 && localOps.length > 0) {
+        // Check if we have ADDRESS_BULK_IMPORT operations
+        const hasAddressOps = operationBreakdown['ADDRESS_BULK_IMPORT'] > 0 || operationBreakdown['ADDRESS_ADD'] > 0;
+        if (!hasAddressOps) {
+          issues.push('No address operations found in log');
+          recommendations.push('Import addresses from Excel to create fresh operations');
+        } else {
+          issues.push('Address operations exist but not being applied');
+          recommendations.push('⚠️ CRITICAL: State reducer may be broken - use "Nuclear Reset"');
+        }
       }
 
       if (cloudOps === 0 && localOps.length > 0) {
         issues.push('Operations in local log but none uploaded to cloud');
+        recommendations.push('Check internet connection and authentication');
       }
 
       // Determine health
       let syncHealth: 'good' | 'warning' | 'error' = 'good';
       if (issues.length > 0) {
-        syncHealth = unsyncedOps.length > 5 || cloudOps === 0 ? 'error' : 'warning';
+        syncHealth = unsyncedOps.length > 5 || cloudOps === 0 || currentState.addresses.length === 0 ? 'error' : 'warning';
       }
 
       setData({
@@ -110,10 +140,12 @@ export function SyncDiagnostic({ userId, currentState }: {
         localCompletions: currentState.completions.length,
         lastSyncSequence: logState.lastSyncSequence,
         unsyncedOperations: unsyncedOps.length,
+        operationBreakdown,
         cloudOperations: cloudOps,
         cloudLatestSequence: cloudLatestSeq,
         syncHealth,
         issues,
+        recommendations,
       });
 
     } catch (err: any) {
