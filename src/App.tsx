@@ -422,34 +422,76 @@ function AuthedApp() {
 
     // Subscribe to operations (local + remote)
     cleanup = cloudSync.subscribeToData((updaterOrState) => {
-      if (!updaterOrState) return;
+      logger.info('📥 APP: subscribeToData callback fired', {
+        isFunction: typeof updaterOrState === 'function',
+        hasData: !!updaterOrState,
+      });
+
+      if (!updaterOrState) {
+        logger.warn('⚠️ APP: No data in subscribeToData callback, ignoring');
+        return;
+      }
 
       // Protection flags
       if (isProtectionActive('navigator_restore_in_progress')) {
-        logger.sync('🛡️ RESTORE PROTECTION: Skipping cloud state update');
+        logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
         return;
       }
       if (isProtectionActive('navigator_import_in_progress')) {
-        logger.sync('🛡️ IMPORT PROTECTION: Skipping cloud state update');
+        logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping cloud state update');
         return;
       }
       if (isProtectionActive('navigator_active_protection')) {
-        logger.sync('🛡️ ACTIVE PROTECTION: Skipping cloud state update');
+        logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
         return;
       }
 
+      logger.info('✅ APP: No protection flags active, applying state update');
+
       // Apply state update from operations
       if (typeof updaterOrState === 'function') {
+        logger.info('🔄 APP: Applying function updater');
         setState(prevState => {
+          logger.info('📊 APP: Previous state:', {
+            addresses: prevState.addresses?.length || 0,
+            completions: prevState.completions?.length || 0,
+            arrangements: prevState.arrangements?.length || 0,
+          });
+
           const newState = updaterOrState(prevState);
+          logger.info('📊 APP: New state from updater:', {
+            addresses: newState.addresses?.length || 0,
+            completions: newState.completions?.length || 0,
+            arrangements: newState.arrangements?.length || 0,
+          });
+
           const normalized = normalizeState(newState);
+          logger.info('📊 APP: Normalized state:', {
+            addresses: normalized.addresses?.length || 0,
+            completions: normalized.completions?.length || 0,
+            arrangements: normalized.arrangements?.length || 0,
+          });
+
           lastFromCloudRef.current = JSON.stringify(normalized);
           return normalized;
         });
       } else {
+        logger.info('🔄 APP: Applying direct state', {
+          addresses: updaterOrState.addresses?.length || 0,
+          completions: updaterOrState.completions?.length || 0,
+          arrangements: updaterOrState.arrangements?.length || 0,
+        });
+
         const normalized = normalizeState(updaterOrState);
+        logger.info('📊 APP: Normalized state:', {
+          addresses: normalized.addresses?.length || 0,
+          completions: normalized.completions?.length || 0,
+          arrangements: normalized.arrangements?.length || 0,
+        });
+
         setState(normalized);
         lastFromCloudRef.current = JSON.stringify(normalized);
+        logger.info('✅ APP: setState called successfully');
       }
     });
 

@@ -7,6 +7,8 @@ import type { Operation } from "./operations";
 import { OperationLogManager, getOperationLog, clearOperationLogsForUser, getOperationLogStats } from "./operationLog";
 import { reconstructState } from "./reducer";
 import { logger } from "../utils/logger";
+import { DEFAULT_REMINDER_SETTINGS } from "../services/reminderScheduler";
+import { DEFAULT_BONUS_SETTINGS } from "../utils/bonusCalculator";
 
 type UseOperationSync = {
   user: User | null;
@@ -39,9 +41,10 @@ const INITIAL_STATE: AppState = {
   arrangements: [],
   currentListVersion: 1,
   subscription: null,
-  reminderSettings: undefined,
+  reminderSettings: DEFAULT_REMINDER_SETTINGS,
   reminderNotifications: [],
   lastReminderProcessed: undefined,
+  bonusSettings: DEFAULT_BONUS_SETTINGS,
 };
 
 export function useOperationSync(): UseOperationSync {
@@ -189,10 +192,16 @@ export function useOperationSync(): UseOperationSync {
           if (error) {
             logger.error('❌ BOOTSTRAP FETCH FAILED:', error.message);
           } else if (data && data.length > 0) {
-            logger.info(`📥 BOOTSTRAP: Received ${data.length} operations`);
+            logger.info(`📥 BOOTSTRAP: Received ${data.length} operations from cloud`);
 
             const remoteOperations: Operation[] = data.map(row => row.operation_data);
+            logger.info('📊 BOOTSTRAP: Operation types:', remoteOperations.reduce((acc, op) => {
+              acc[op.type] = (acc[op.type] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>));
+
             const newOps = await operationLog.current.mergeRemoteOperations(remoteOperations);
+            logger.info(`📥 BOOTSTRAP: Merged ${newOps.length} new operations (${remoteOperations.length - newOps.length} were duplicates)`);
 
             if (newOps.length > 0) {
               const maxSeq = Math.max(...remoteOperations.map(op => op.sequence));
@@ -202,10 +211,19 @@ export function useOperationSync(): UseOperationSync {
 
               // Reconstruct state with merged operations
               const allOps = operationLog.current.getAllOperations();
+              logger.info(`🔄 BOOTSTRAP: Reconstructing state from ${allOps.length} total operations`);
               const newState = reconstructState(INITIAL_STATE, allOps);
+              logger.info('📊 BOOTSTRAP: Reconstructed state:', {
+                addresses: newState.addresses?.length || 0,
+                completions: newState.completions?.length || 0,
+                arrangements: newState.arrangements?.length || 0,
+                daySessions: newState.daySessions?.length || 0,
+                currentListVersion: newState.currentListVersion,
+              });
               setCurrentState(newState);
 
               // CRITICAL: Notify listeners so App.tsx updates UI!
+              logger.info(`📤 BOOTSTRAP: Notifying ${stateChangeListeners.current.size} listeners`);
               stateChangeListeners.current.forEach(listener => {
                 try {
                   listener(newOps);
@@ -215,6 +233,8 @@ export function useOperationSync(): UseOperationSync {
               });
 
               logger.info('✅ BOOTSTRAP: Complete with remote operations');
+            } else {
+              logger.warn('⚠️ BOOTSTRAP: No new operations after merge - all were duplicates');
             }
           } else {
             logger.info('✅ BOOTSTRAP: No new operations on server');
@@ -547,12 +567,29 @@ export function useOperationSync(): UseOperationSync {
       if (operationLog.current) {
         const existingOps = operationLog.current.getAllOperations();
         if (existingOps.length > 0) {
-          logger.info(`📤 Immediately notifying new subscriber with ${existingOps.length} existing operations`);
+          logger.info(`📤 SUBSCRIPTION: Immediately notifying new subscriber with ${existingOps.length} existing operations`);
+          logger.info('📊 SUBSCRIPTION: Operation types:', existingOps.reduce((acc, op) => {
+            acc[op.type] = (acc[op.type] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>));
+
+          // Log the current reconstructed state
+          const currentState = operationLog.current ? reconstructState(INITIAL_STATE, existingOps) : INITIAL_STATE;
+          logger.info('📊 SUBSCRIPTION: Current state from operations:', {
+            addresses: currentState.addresses?.length || 0,
+            completions: currentState.completions?.length || 0,
+            arrangements: currentState.arrangements?.length || 0,
+            daySessions: currentState.daySessions?.length || 0,
+          });
+
           try {
             onOperations(existingOps);
+            logger.info('✅ SUBSCRIPTION: Successfully called onOperations callback');
           } catch (err) {
-            logger.error('Error notifying subscriber with existing operations:', err);
+            logger.error('❌ SUBSCRIPTION: Error notifying subscriber with existing operations:', err);
           }
+        } else {
+          logger.warn('⚠️ SUBSCRIPTION: No existing operations to notify subscriber with');
         }
       }
 
