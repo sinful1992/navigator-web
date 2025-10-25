@@ -362,7 +362,6 @@ const ArrangementsComponent = function Arrangements({
       }
 
       setShowAddForm(false);
-      setEditingId(null);
     } catch (error) {
       logger.error('Error saving arrangement:', error);
       alert(`Failed to save arrangement: ${error instanceof Error ? error.message : 'Please try again.'}`);
