@@ -64,6 +64,25 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'ADDRESS_BULK_IMPORT': {
         const { addresses, newListVersion, preserveCompletions } = operation.payload;
 
+        // 🔧 CRITICAL FIX: Validate addresses array
+        if (!Array.isArray(addresses)) {
+          logger.error('❌ ADDRESS_BULK_IMPORT: addresses is not an array!', {
+            type: typeof addresses,
+            value: addresses,
+            operation: operation.id,
+          });
+          return state; // Don't corrupt state with invalid data
+        }
+
+        // 🔧 FIX: Log the import for debugging
+        logger.info('📥 APPLYING ADDRESS_BULK_IMPORT:', {
+          count: addresses.length,
+          newListVersion,
+          preserveCompletions,
+          operationId: operation.id,
+          sequence: operation.sequence,
+        });
+
         return {
           ...state,
           addresses,
@@ -235,7 +254,28 @@ export function reconstructState(
   // Sort operations by sequence number to ensure deterministic replay
   const sortedOps = [...operations].sort((a, b) => a.sequence - b.sequence);
 
-  return sortedOps.reduce(applyOperation, initialState);
+  logger.info('🔄 STATE RECONSTRUCTION START:', {
+    totalOperations: operations.length,
+    sequenceRange: operations.length > 0
+      ? `${operations[0]?.sequence} - ${operations[operations.length - 1]?.sequence}`
+      : 'none',
+    operationTypes: operations.reduce((acc, op) => {
+      acc[op.type] = (acc[op.type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>),
+  });
+
+  const finalState = sortedOps.reduce(applyOperation, initialState);
+
+  logger.info('🔄 STATE RECONSTRUCTION COMPLETE:', {
+    addresses: finalState.addresses?.length || 0,
+    completions: finalState.completions?.length || 0,
+    arrangements: finalState.arrangements?.length || 0,
+    daySessions: finalState.daySessions?.length || 0,
+    currentListVersion: finalState.currentListVersion,
+  });
+
+  return finalState;
 }
 
 /**
