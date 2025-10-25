@@ -500,16 +500,156 @@ ba59c0f - Add mobile-friendly sync diagnostic tool
 
 ---
 
+## **Bug #7-11: Active Index Race Conditions** 🔴 CRITICAL
+
+**Found:** After fixing sync bugs, investigated why time tracking data was being lost on long work sessions (2+ hours)
+
+**Location:** `src/useAppState.ts`, `src/sync/reducer.ts`
+
+### Bug #7: Protection Flag Uses Wrong Data Type (CRITICAL - ROOT CAUSE)
+
+**The Problem:**
+```javascript
+// OLD CODE - BROKEN
+localStorage.setItem('navigator_active_protection', 'true');  // ❌ String "true"
+
+// But protectionFlags.ts expects timestamp
+const timestamp = parseInt(stored, 10);  // parseInt("true") = NaN
+if (isNaN(timestamp)) {
+  clearProtectionFlag(flag);
+  return false;  // ❌ Protection BROKEN!
+}
+```
+
+**What Happened:**
+1. User presses "Start" on address at 10:00 AM
+2. Protection flag set to "true" (not timestamp)
+3. activeIndex=5, activeStartTime="10:00:00" saved
+4. User works for 2 hours...
+5. Cloud sync fires, checks protection: parseInt("true") = NaN
+6. Protection check FAILS, cloud sync PROCEEDS
+7. Cloud data overwrites: activeIndex=null, activeStartTime=null
+8. User completes at 12:00 PM
+9. Time calculation: if (activeIndex === 5 && activeStartTime) → FALSE
+10. timeSpentSeconds = undefined ❌
+11. **2 HOURS OF TIME TRACKING DATA LOST!**
+
+**The Fix:**
+```javascript
+// Import proper helpers
+import { setProtectionFlag, clearProtectionFlag } from "./utils/protectionFlags";
+
+// Set protection flag AFTER validation (with timestamp)
+setProtectionFlag('navigator_active_protection');  // ✅ Timestamp
+
+// Clear flag properly
+clearProtectionFlag('navigator_active_protection');  // ✅
+```
+
+**Files Changed:**
+- `src/useAppState.ts:25` - Import helpers
+- `src/useAppState.ts:880` - Set flag after validation
+- `src/useAppState.ts:901` - Clear flag in cancelActive
+- `src/useAppState.ts:1052` - Clear flag in complete
+
+### Bug #8: Time Calculation Races with Cloud Sync
+
+**The Problem:** Protection flag might not get cleared if cloud sync fires between time calculation and setBaseState callback
+
+**The Fix:**
+```javascript
+// Capture active state at function entry
+const wasActive = currentState.activeIndex === index;
+const capturedStartTime = wasActive ? currentState.activeStartTime : null;
+
+// Later, always clear if wasActive (even if cloud sync changed state)
+setBaseState((s) => {
+  if (wasActive) {  // ✅ Use captured value
+    clearProtectionFlag('navigator_active_protection');
+  }
+  // ...
+});
+```
+
+### Bug #9: setState() Mutates Completion Object
+
+**The Problem:** Direct mutation breaks React immutability
+```javascript
+// OLD CODE - BROKEN
+existingCompletion.timeSpentSeconds = timeSpentSeconds;  // ❌ Mutation!
+```
+
+**The Fix:**
+```javascript
+// NEW CODE - FIXED
+const updatedCompletions = finalState.completions.map(c =>
+  c === existingCompletion
+    ? { ...c, timeSpentSeconds }  // ✅ Immutable update
+    : c
+);
+finalState = { ...finalState, completions: updatedCompletions };
+```
+
+### Bug #10: Protection Flag Set Before Validation
+
+**The Problem:** Flag set before validation, creating inconsistency if validation fails
+
+**The Fix:** Moved `setProtectionFlag()` inside `setBaseState()` callback after all validation passes
+
+### Bug #11: ACTIVE_INDEX_SET Not Validated in Reducer
+
+**The Problem:** No validation before applying operation from cloud sync
+- Could set invalid activeIndex from other device with different list
+- Could set active on already-completed address
+- Could crash UI with out-of-bounds index
+
+**The Fix:**
+```javascript
+case 'ACTIVE_INDEX_SET': {
+  const { index, startTime } = operation.payload;
+
+  // ✅ Validate before applying
+  if (index !== null) {
+    // Check bounds
+    if (index < 0 || index >= state.addresses.length) {
+      logger.warn('Invalid index out of bounds');
+      return state;  // Reject
+    }
+
+    // Check if already completed
+    const isCompleted = state.completions.some(...);
+    if (isCompleted) {
+      logger.warn('Address already completed');
+      return state;  // Reject
+    }
+  }
+
+  return { ...state, activeIndex: index, activeStartTime: startTime };
+}
+```
+
+**Impact of Bugs #7-11:**
+- ✅ Time tracking works reliably on 2+ hour sessions
+- ✅ Protection flag properly blocks cloud sync when address active
+- ✅ Multi-device scenarios handled correctly
+- ✅ No state corruption from mutations
+- ✅ Invalid operations rejected by reducer
+
+---
+
 ## 🎉 Summary
 
-This PR completely overhauls the multi-device sync system to fix **6 critical bugs** that were causing:
+This PR completely overhauls the multi-device sync system to fix **11 critical bugs** (6 sync bugs + 5 race condition bugs) that were causing:
 - Silent upload failures
 - Incorrect sync status tracking
 - State reconstruction failures
 - Data disappearing after restore
 - Multi-device sync issues
+- **Time tracking data loss on long work sessions**
+- **State corruption from mutations**
+- **Invalid activeIndex from multi-device scenarios**
 
 The sync is now **rock solid** and includes comprehensive logging and a mobile diagnostic tool for easy troubleshooting.
 
-**Before:** Sync broken, data loss, unreliable multi-device
-**After:** Sync reliable, data safe, perfect multi-device sync ✅
+**Before:** Sync broken, data loss, unreliable multi-device, time tracking broken
+**After:** Sync reliable, data safe, perfect multi-device sync, time tracking works ✅
