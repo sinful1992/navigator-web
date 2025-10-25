@@ -480,33 +480,51 @@ export function useOperationSync(): UseOperationSync {
         successfulSequences.push(operation.sequence);
       }
 
-      // 🔧 CRITICAL FIX: Only mark operations up to the LAST SUCCESSFUL CONTINUOUS sequence
-      // Don't mark seq 100 as synced if seq 50 failed - only mark up to seq 49
+      // 🔧 CRITICAL FIX: Only mark continuous sequences FROM current lastSyncSequence
+      // If lastSyncSequence=100 and ops [101,102,103] upload but 101 fails, we mark NOTHING
+      // Otherwise 101 becomes invisible and never retries!
       if (successfulSequences.length > 0) {
         successfulSequences.sort((a, b) => a - b);
 
-        // Find the highest continuous sequence (no gaps)
-        let maxContinuousSeq = successfulSequences[0];
-        for (let i = 1; i < successfulSequences.length; i++) {
-          if (successfulSequences[i] === maxContinuousSeq + 1) {
-            maxContinuousSeq = successfulSequences[i];
-          } else {
-            break; // Gap found, stop here
+        const currentLastSynced = operationLog.current.getLogState().lastSyncSequence;
+
+        // Find the highest continuous sequence starting from currentLastSynced + 1
+        let maxContinuousSeq = currentLastSynced;
+        for (const seq of successfulSequences) {
+          if (seq === maxContinuousSeq + 1) {
+            maxContinuousSeq = seq; // Extend the continuous chain
+          } else if (seq > maxContinuousSeq + 1) {
+            // Gap found! Can't advance past this
+            break;
           }
+          // If seq <= maxContinuousSeq, it's already synced or duplicate, skip
         }
 
-        await operationLog.current.markSyncedUpTo(maxContinuousSeq);
-        setLastSyncTime(new Date());
+        // Only update if we actually advanced
+        if (maxContinuousSeq > currentLastSynced) {
+          await operationLog.current.markSyncedUpTo(maxContinuousSeq);
+          setLastSyncTime(new Date());
 
-        logger.info('✅ SYNC COMPLETE:', {
-          total: unsyncedOps.length,
-          succeeded: successfulSequences.length,
-          failed: failedOps.length,
-          markedSyncedUpTo: maxContinuousSeq,
-        });
+          logger.info('✅ SYNC COMPLETE:', {
+            total: unsyncedOps.length,
+            succeeded: successfulSequences.length,
+            failed: failedOps.length,
+            previousLastSynced: currentLastSynced,
+            newLastSynced: maxContinuousSeq,
+            advanced: maxContinuousSeq - currentLastSynced,
+          });
 
-        if (failedOps.length > 0) {
-          logger.error('⚠️ FAILED OPERATIONS:', failedOps);
+          if (failedOps.length > 0) {
+            logger.error('⚠️ FAILED OPERATIONS (will retry):', failedOps);
+          }
+        } else {
+          logger.warn('⚠️ NO PROGRESS: Successful uploads exist but not continuous from last synced', {
+            currentLastSynced,
+            successfulSequences: successfulSequences.slice(0, 5), // Show first 5
+            firstGap: successfulSequences[0] > currentLastSynced + 1
+              ? currentLastSynced + 1
+              : 'unknown',
+          });
         }
       } else {
         logger.error('❌ ALL UPLOADS FAILED - no operations marked as synced');
@@ -911,34 +929,53 @@ export function useOperationSync(): UseOperationSync {
                 successfulSequences.push(operation.sequence);
               }
 
-              // 🔧 CRITICAL FIX: Only mark continuous sequences as synced
+              // 🔧 CRITICAL FIX: Only mark continuous sequences FROM current lastSyncSequence
+              // If lastSyncSequence=100 and ops [101,102,103] upload but 101 fails, we mark NOTHING
+              // Otherwise 101 becomes invisible and never retries!
               if (successfulSequences.length > 0) {
                 successfulSequences.sort((a, b) => a - b);
 
-                // Find highest continuous sequence
-                let maxContinuousSeq = successfulSequences[0];
-                for (let i = 1; i < successfulSequences.length; i++) {
-                  if (successfulSequences[i] === maxContinuousSeq + 1) {
-                    maxContinuousSeq = successfulSequences[i];
-                  } else {
-                    break; // Gap found
+                const currentLastSynced = operationLog.current.getLogState().lastSyncSequence;
+
+                // Find the highest continuous sequence starting from currentLastSynced + 1
+                let maxContinuousSeq = currentLastSynced;
+                for (const seq of successfulSequences) {
+                  if (seq === maxContinuousSeq + 1) {
+                    maxContinuousSeq = seq; // Extend the continuous chain
+                  } else if (seq > maxContinuousSeq + 1) {
+                    // Gap found! Can't advance past this
+                    break;
                   }
+                  // If seq <= maxContinuousSeq, it's already synced or duplicate, skip
                 }
 
-                await operationLog.current.markSyncedUpTo(maxContinuousSeq);
+                // Only update if we actually advanced
+                if (maxContinuousSeq > currentLastSynced) {
+                  await operationLog.current.markSyncedUpTo(maxContinuousSeq);
 
-                logger.info('✅ AUTO-SYNC COMPLETE:', {
-                  total: opsToSync.length,
-                  succeeded: successfulSequences.length,
-                  failed: failedOps.length,
-                  markedSyncedUpTo: maxContinuousSeq,
-                });
+                  logger.info('✅ AUTO-SYNC COMPLETE:', {
+                    total: opsToSync.length,
+                    succeeded: successfulSequences.length,
+                    failed: failedOps.length,
+                    previousLastSynced: currentLastSynced,
+                    newLastSynced: maxContinuousSeq,
+                    advanced: maxContinuousSeq - currentLastSynced,
+                  });
 
-                if (failedOps.length > 0) {
-                  logger.error('⚠️ AUTO-SYNC FAILED OPERATIONS:', failedOps);
+                  if (failedOps.length > 0) {
+                    logger.error('⚠️ AUTO-SYNC FAILED OPERATIONS (will retry):', failedOps);
+                  }
+
+                  setLastSyncTime(new Date());
+                } else {
+                  logger.warn('⚠️ AUTO-SYNC NO PROGRESS: Successful uploads exist but not continuous from last synced', {
+                    currentLastSynced,
+                    successfulSequences: successfulSequences.slice(0, 5),
+                    firstGap: successfulSequences[0] > currentLastSynced + 1
+                      ? currentLastSynced + 1
+                      : 'unknown',
+                  });
                 }
-
-                setLastSyncTime(new Date());
               } else {
                 logger.error('❌ AUTO-SYNC: All uploads failed');
               }
