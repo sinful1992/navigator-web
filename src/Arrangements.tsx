@@ -673,15 +673,6 @@ const ArrangementsComponent = function Arrangements({
                         </div>
                       )}
 
-                      <button
-                        className="btn btn-sm btn-ghost btn-action-secondary"
-                        onClick={() => setEditingId(arrangement.id)}
-                        disabled={loadingStates.updating || loadingStates.saving}
-                      >
-                        <span className="btn-icon">✏️</span>
-                        <span className="btn-text">Edit</span>
-                      </button>
-
                       {/* DANGER: Defaulted and Delete - Destructive actions last */}
                       {(arrangement.status === "Scheduled" || arrangement.status === "Confirmed") && (
                         <LoadingButton
