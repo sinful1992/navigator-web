@@ -40,6 +40,7 @@ import { formatDateKey } from "./utils/dateFormatter";
 import { useStats } from "./hooks/useStats";
 import { OwnershipPrompt } from "./components/OwnershipPrompt";
 import { Sidebar } from "./components/Sidebar";
+import { SyncDiagnostic } from "./components/SyncDiagnostic";
 
 export type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
@@ -1535,6 +1536,14 @@ function AuthedApp() {
 
       {/* GDPR Compliance: Privacy & Cookie Consent */}
       <PrivacyConsent />
+
+      {/* Sync Diagnostic Tool (Mobile-Friendly) */}
+      {cloudSync.user && (
+        <SyncDiagnostic
+          userId={cloudSync.user.id}
+          currentState={safeState}
+        />
+      )}
     </div>
   );
 }
