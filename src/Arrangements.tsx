@@ -33,18 +33,15 @@ const ArrangementsComponent = function Arrangements({
 }: Props) {
   const [viewMode, setViewMode] = React.useState<ViewMode>("thisWeek");
   const [showAddForm, setShowAddForm] = React.useState(false);
-  const [editingId, setEditingId] = React.useState<string | null>(null);
   const [quickPaymentArrangementId, setQuickPaymentArrangementId] = React.useState<string | null>(null);
   const [loadingStates, setLoadingStates] = React.useState<{
     saving: boolean;
-    updating: boolean;
     deleting: Set<string>;
     markingPaid: Set<string>;
     markingDefaulted: Set<string>;
     sendingReminder: Set<string>;
   }>({
     saving: false,
-    updating: false,
     deleting: new Set(),
     markingPaid: new Set(),
     markingDefaulted: new Set(),
@@ -374,18 +371,6 @@ const ArrangementsComponent = function Arrangements({
     }
   };
 
-  const handleArrangementUpdate = async (id: string, arrangementData: Partial<Arrangement>) => {
-    setLoadingStates(prev => ({ ...prev, updating: true }));
-    try {
-      await onUpdateArrangement(id, arrangementData);
-      setEditingId(null);
-    } catch (error) {
-      logger.error('Error updating arrangement:', error);
-      alert('Failed to update arrangement. Please try again.');
-    } finally {
-      setLoadingStates(prev => ({ ...prev, updating: false }));
-    }
-  };
 
   // Handle quick payment from modal
   const handleQuickPayment = async (amount: string) => {
@@ -466,19 +451,15 @@ const ArrangementsComponent = function Arrangements({
         </div>
       </div>
 
-      {/* Add/Edit Form */}
-      {(showAddForm || editingId) && (
+      {/* Add Form */}
+      {showAddForm && (
         <UnifiedArrangementForm
           state={state}
-          arrangement={editingId ? state.arrangements.find(a => a.id === editingId) : undefined}
           preSelectedAddressIndex={autoCreateForAddress}
           onAddAddress={onAddAddress}
-          onSave={editingId ? (arrangementData) => handleArrangementUpdate(editingId, arrangementData) : handleArrangementSave}
-          onCancel={() => {
-            setShowAddForm(false);
-            setEditingId(null);
-          }}
-          isLoading={loadingStates.saving || loadingStates.updating}
+          onSave={handleArrangementSave}
+          onCancel={() => setShowAddForm(false)}
+          isLoading={loadingStates.saving}
           onComplete={onComplete}
           fullscreen={true}
         />
