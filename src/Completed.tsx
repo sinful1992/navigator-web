@@ -2,6 +2,7 @@
 import * as React from "react";
 import type { AddressRow, Completion, DaySession, Outcome, Arrangement, AppState } from "./types";
 import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
+import { PifDetailsModal } from "./components/PifDetailsModal";
 
 import { logger } from './utils/logger';
 
@@ -282,6 +283,15 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
   // Track which PIF amounts are being edited
   const [editingPifAmount, setEditingPifAmount] = React.useState<number | null>(null);
   const [tempPifAmount, setTempPifAmount] = React.useState<string>("");
+
+  // Track which completion is showing PIF details modal
+  const [showPifModal, setShowPifModal] = React.useState<{
+    completionIndex: number;
+    currentAmount?: string;
+    currentCaseRef?: string;
+    currentNumberOfCases?: number;
+    currentEnforcementFees?: number[];
+  } | null>(null);
 
   // Track which completion is showing arrangement form for ARR outcome
   const [showArrangementForm, setShowArrangementForm] = React.useState<{
@@ -678,6 +688,15 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
                                         completionIndex: compIndex,
                                         addressIndex: comp.index
                                       });
+                                    } else if (newOutcome === "PIF") {
+                                      // Show PIF details modal for entering/editing full PIF information
+                                      setShowPifModal({
+                                        completionIndex: compIndex,
+                                        currentAmount: comp.amount,
+                                        currentCaseRef: comp.caseReference,
+                                        currentNumberOfCases: comp.numberOfCases,
+                                        currentEnforcementFees: comp.enforcementFees
+                                      });
                                     } else {
                                       onChangeOutcome(compIndex, newOutcome, comp.amount, comp.arrangementId, comp.caseReference, comp.numberOfCases, comp.enforcementFees);
                                     }
@@ -723,6 +742,29 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
           onCancel={() => setShowArrangementForm(null)}
           onComplete={onComplete}
           fullscreen={true}
+        />
+      )}
+
+      {/* PIF Details Modal for editing PIF completions */}
+      {showPifModal && (
+        <PifDetailsModal
+          initialAmount={showPifModal.currentAmount}
+          initialCaseReference={showPifModal.currentCaseRef}
+          initialNumberOfCases={showPifModal.currentNumberOfCases}
+          initialEnforcementFees={showPifModal.currentEnforcementFees}
+          onConfirm={(data) => {
+            onChangeOutcome(
+              showPifModal.completionIndex,
+              "PIF",
+              data.amount,
+              completions[showPifModal.completionIndex]?.arrangementId,
+              data.caseReference,
+              data.numberOfCases,
+              data.enforcementFees
+            );
+            setShowPifModal(null);
+          }}
+          onCancel={() => setShowPifModal(null)}
         />
       )}
     </div>

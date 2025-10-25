@@ -626,102 +626,92 @@ const ArrangementsComponent = function Arrangements({
                     </div>
 
                     <div className="arrangement-actions">
-                      {/* NEW: Quick Payment Button */}
+                      {/* PRIMARY: Add Payment Button - Most important action */}
                       {(arrangement.status === "Scheduled" || arrangement.status === "Confirmed") && (
                         <button
-                          className="btn btn-sm btn-payment"
+                          className="btn btn-sm btn-payment btn-action-primary"
                           onClick={() => setQuickPaymentArrangementId(arrangement.id)}
                         >
-                          💰 Add Payment
+                          <span className="btn-icon">💰</span>
+                          <span className="btn-text">Add Payment</span>
                         </button>
                       )}
 
-                      {(arrangement.status === "Scheduled" || arrangement.status === "Confirmed") && (
-                        <>
-                          {/* Send Reminder Button */}
-                          {arrangement.phoneNumber && (
-                            <div style={{ position: 'relative' }}>
-                              <LoadingButton
-                                className="btn btn-sm btn-primary"
-                                isLoading={loadingStates.sendingReminder.has(arrangement.id)}
-                                loadingText="Opening..."
-                                onClick={() => sendReminderSMS(arrangement)}
-                                title={`Send SMS reminder to ${arrangement.phoneNumber}`}
-                              >
-                                📱 Send SMS
-                              </LoadingButton>
+                      {/* SECONDARY: Send SMS and Edit */}
+                      {(arrangement.status === "Scheduled" || arrangement.status === "Confirmed") && arrangement.phoneNumber && (
+                        <div className="btn-with-feedback">
+                          <LoadingButton
+                            className="btn btn-sm btn-secondary btn-action-secondary"
+                            isLoading={loadingStates.sendingReminder.has(arrangement.id)}
+                            loadingText="Opening..."
+                            onClick={() => sendReminderSMS(arrangement)}
+                            title={`Send SMS reminder to ${arrangement.phoneNumber}`}
+                          >
+                            <span className="btn-icon">📱</span>
+                            <span className="btn-text">Send SMS</span>
+                          </LoadingButton>
 
-                              {/* Confirmation message */}
-                              {reminderSent.has(arrangement.id) && (
-                                <div
-                                  className="reminder-confirmation"
-                                  style={{
-                                    position: 'absolute',
-                                    top: '-35px',
-                                    left: '0',
-                                    padding: '4px 8px',
-                                    borderRadius: '4px',
-                                    fontSize: '12px',
-                                    whiteSpace: 'nowrap',
-                                    zIndex: 1000,
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                                  }}
-                                >
-                                  ✅ SMS opened!
-                                </div>
-                              )}
-
-                              {/* Show reminder history */}
-                              {arrangement.reminderCount && arrangement.reminderCount > 0 && (
-                                <div className="reminder-history">
-                                  {arrangement.reminderCount} SMS reminder{arrangement.reminderCount > 1 ? 's' : ''} sent
-                                  {arrangement.lastReminderSent && (
-                                    <span>
-                                      {' • Last: '}
-                                      {format(parseISO(arrangement.lastReminderSent), 'MMM d, HH:mm')}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
+                          {/* Confirmation message */}
+                          {reminderSent.has(arrangement.id) && (
+                            <div className="reminder-confirmation">
+                              ✅ SMS opened!
                             </div>
                           )}
 
-                          <LoadingButton
-                            className="btn btn-sm btn-warning"
-                            isLoading={loadingStates.markingDefaulted.has(arrangement.id)}
-                            loadingText="Processing..."
-                            onClick={async () => {
-                              if (confirm("Mark this arrangement as defaulted? This will complete the case as 'Done (Defaulted Arrangement)'.")) {
-                                setLoadingStates(prev => ({
-                                  ...prev,
-                                  markingDefaulted: new Set([...prev.markingDefaulted, arrangement.id])
-                                }));
-                                try {
-                                  await markAsDefaulted(arrangement.id);
-                                } finally {
-                                  setLoadingStates(prev => ({
-                                    ...prev,
-                                    markingDefaulted: new Set([...prev.markingDefaulted].filter(id => id !== arrangement.id))
-                                  }));
-                                }
-                              }
-                            }}
-                          >
-                            ❌ Defaulted
-                          </LoadingButton>
-                        </>
+                          {/* Show reminder history */}
+                          {arrangement.reminderCount && arrangement.reminderCount > 0 && (
+                            <div className="reminder-history">
+                              {arrangement.reminderCount} reminder{arrangement.reminderCount > 1 ? 's' : ''} sent
+                              {arrangement.lastReminderSent && (
+                                <span>
+                                  {' • '}
+                                  {format(parseISO(arrangement.lastReminderSent), 'MMM d, HH:mm')}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       )}
 
                       <button
-                        className="btn btn-sm btn-ghost"
+                        className="btn btn-sm btn-ghost btn-action-secondary"
                         onClick={() => setEditingId(arrangement.id)}
                         disabled={loadingStates.updating || loadingStates.saving}
                       >
-                        ✏️ Edit
+                        <span className="btn-icon">✏️</span>
+                        <span className="btn-text">Edit</span>
                       </button>
 
+                      {/* DANGER: Defaulted and Delete - Destructive actions last */}
+                      {(arrangement.status === "Scheduled" || arrangement.status === "Confirmed") && (
+                        <LoadingButton
+                          className="btn btn-sm btn-warning btn-action-danger"
+                          isLoading={loadingStates.markingDefaulted.has(arrangement.id)}
+                          loadingText="Processing..."
+                          onClick={async () => {
+                            if (confirm("Mark this arrangement as defaulted? This will complete the case as 'Done (Defaulted Arrangement)'.")) {
+                              setLoadingStates(prev => ({
+                                ...prev,
+                                markingDefaulted: new Set([...prev.markingDefaulted, arrangement.id])
+                              }));
+                              try {
+                                await markAsDefaulted(arrangement.id);
+                              } finally {
+                                setLoadingStates(prev => ({
+                                  ...prev,
+                                  markingDefaulted: new Set([...prev.markingDefaulted].filter(id => id !== arrangement.id))
+                                }));
+                              }
+                            }
+                          }}
+                        >
+                          <span className="btn-icon">❌</span>
+                          <span className="btn-text">Defaulted</span>
+                        </LoadingButton>
+                      )}
+
                       <LoadingButton
-                        className="btn btn-sm btn-danger"
+                        className="btn btn-sm btn-danger btn-action-danger"
                         isLoading={loadingStates.deleting.has(arrangement.id)}
                         loadingText="Deleting..."
                         onClick={async () => {
@@ -741,7 +731,8 @@ const ArrangementsComponent = function Arrangements({
                           }
                         }}
                       >
-                        🗑️ Delete
+                        <span className="btn-icon">🗑️</span>
+                        <span className="btn-text">Delete</span>
                       </LoadingButton>
                     </div>
                   </div>
@@ -1345,18 +1336,153 @@ const ArrangementsComponent = function Arrangements({
           font-weight: 400;
         }
 
+        /* ENHANCED Arrangement Actions - Professional Button Layout */
         .arrangement-actions {
           display: flex;
-          gap: 0.75rem;
+          gap: 0.625rem;
           flex-wrap: wrap;
-          align-items: center;
+          align-items: stretch;
           margin-top: 1.5rem;
           padding-top: 1.5rem;
           border-top: 1px solid var(--gray-200);
         }
 
+        .arrangement-actions .btn {
+          min-height: 44px; /* Accessibility - better touch target */
+          flex: 0 1 auto;
+          white-space: nowrap;
+          padding: 0.625rem 1rem;
+          font-size: 0.875rem;
+          font-weight: 600;
+          border-radius: 8px;
+          transition: all 0.2s ease;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.375rem;
+        }
+
+        .btn-icon {
+          font-size: 1rem;
+          line-height: 1;
+        }
+
+        .btn-text {
+          line-height: 1;
+        }
+
+        /* Action Hierarchy Classes */
+        .btn-action-primary {
+          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+          order: 1;
+        }
+
+        .btn-action-primary:hover {
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+        }
+
+        .btn-action-secondary {
+          order: 2;
+        }
+
+        .btn-action-danger {
+          order: 3;
+        }
+
+        /* Button with feedback (for SMS button) */
+        .btn-with-feedback {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .reminder-confirmation {
+          position: absolute;
+          top: -32px;
+          left: 0;
+          padding: 0.375rem 0.625rem;
+          background: var(--success, #10b981);
+          color: white;
+          border-radius: 6px;
+          font-size: 0.75rem;
+          font-weight: 600;
+          white-space: nowrap;
+          z-index: 1000;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          animation: slideDown 0.2s ease;
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-4px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .reminder-history {
+          font-size: 0.75rem;
+          color: var(--gray-600);
+          margin-top: 0.25rem;
+          line-height: 1.3;
+        }
+
+        /* Mobile Layout - Stack Vertically */
+        @media (max-width: 768px) {
+          .arrangement-actions {
+            flex-direction: column;
+            gap: 0.5rem;
+          }
+
+          .arrangement-actions .btn {
+            width: 100%;
+            flex: 1 0 auto;
+          }
+
+          .btn-with-feedback {
+            width: 100%;
+          }
+
+          .btn-with-feedback .btn {
+            width: 100%;
+          }
+        }
+
+        /* Tablet - Two Columns */
+        @media (min-width: 769px) and (max-width: 1024px) {
+          .arrangement-actions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+          }
+
+          .arrangement-actions .btn {
+            width: 100%;
+          }
+
+          .btn-with-feedback {
+            width: 100%;
+          }
+
+          .btn-with-feedback .btn {
+            width: 100%;
+          }
+        }
+
         .dark-mode .arrangement-actions {
           border-top-color: var(--gray-300);
+        }
+
+        .dark-mode .reminder-confirmation {
+          background: var(--success-dark, #059669);
+        }
+
+        .dark-mode .reminder-history {
+          color: var(--gray-500);
         }
 
         @media (max-width: 768px) {

@@ -52,7 +52,10 @@ export default function UnifiedArrangementForm({
     // Customer details
     customerName: arrangement?.customerName ?? "",
     phoneNumber: arrangement?.phoneNumber ?? "",
-    caseReference: "", // NEW: Case reference field
+
+    // Case details (NEW: Added case reference and number of cases)
+    caseReference: "",
+    numberOfCases: 1,
 
     // Payment details
     totalAmount: arrangement?.amount ?? "",
@@ -505,6 +508,32 @@ export default function UnifiedArrangementForm({
             />
           </div>
         </div>
+
+        <div className="uaf-row">
+          <div className="uaf-field">
+            <label className="uaf-label">Case Reference</label>
+            <input
+              type="text"
+              value={formData.caseReference}
+              onChange={(e) => setFormData(prev => ({ ...prev, caseReference: e.target.value }))}
+              className="uaf-input"
+              placeholder="e.g., CR-2025-1234"
+            />
+            <div className="uaf-hint">💡 Optional but recommended for tracking</div>
+          </div>
+          <div className="uaf-field">
+            <label className="uaf-label">Number of Cases</label>
+            <input
+              type="number"
+              min="1"
+              value={formData.numberOfCases}
+              onChange={(e) => setFormData(prev => ({ ...prev, numberOfCases: parseInt(e.target.value) || 1 }))}
+              className="uaf-input"
+              placeholder="1"
+            />
+            <div className="uaf-hint">💡 If 1 debtor has 3 linked cases, enter 3</div>
+          </div>
+        </div>
       </div>
 
       {/* Payment Setup Section */}
@@ -554,18 +583,6 @@ export default function UnifiedArrangementForm({
             onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
             className="uaf-input"
           />
-        </div>
-
-        <div className="uaf-field">
-          <label className="uaf-label">Case Reference Number</label>
-          <input
-            type="text"
-            value={formData.caseReference}
-            onChange={(e) => setFormData(prev => ({ ...prev, caseReference: e.target.value }))}
-            className="uaf-input"
-            placeholder="e.g., CR-2025-1234"
-          />
-          <div className="uaf-hint">💡 Optional but recommended for tracking</div>
         </div>
       </div>
 

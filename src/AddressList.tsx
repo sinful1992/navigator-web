@@ -2,6 +2,7 @@
 import * as React from "react";
 import type { AppState, Outcome, AddressRow, Arrangement } from "./types";
 import UnifiedArrangementForm from "./components/UnifiedArrangementForm";
+import { PifDetailsModal } from "./components/PifDetailsModal";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { logger } from './utils/logger';
@@ -188,10 +189,7 @@ const AddressListComponent = function AddressList({
   // Local UI state for outcome panel & PIF
   const [outcomeOpenFor, setOutcomeOpenFor] = React.useState<number | null>(null);
   const [pifAmount, setPifAmount] = React.useState<string>("");
-  const [caseReference, setCaseReference] = React.useState<string>("");
-  const [numberOfCases, setNumberOfCases] = React.useState<string>("1");
-  const [enforcementFees, setEnforcementFees] = React.useState<string[]>([""]);
-  const [showCaseRefPrompt, setShowCaseRefPrompt] = React.useState<number | null>(null);
+  const [showPifModal, setShowPifModal] = React.useState<number | null>(null);
 
   // Prevent double submissions with Promise-based locking
   const [submittingIndex, setSubmittingIndex] = React.useState<number | null>(null);
@@ -205,10 +203,7 @@ const AddressListComponent = function AddressList({
     if (activeIndex === null) {
       setOutcomeOpenFor(null);
       setPifAmount("");
-      setCaseReference("");
-      setNumberOfCases("1");
-      setEnforcementFees([""]);
-      setShowCaseRefPrompt(null);
+      setShowPifModal(null);
       setShowArrangementForm(null);
       setSubmittingIndex(null);
     }
@@ -457,8 +452,7 @@ const AddressListComponent = function AddressList({
                         const willOpen = outcomeOpenFor !== i;
                         setOutcomeOpenFor(willOpen ? i : null);
                         setPifAmount("");
-                        setCaseReference("");
-                        setShowCaseRefPrompt(null);
+                        setShowPifModal(null);
                       }}
                     >
                       <span>✅</span>
@@ -543,7 +537,7 @@ const AddressListComponent = function AddressList({
                               alert("Enter a valid PIF amount (e.g. 50)");
                               return;
                             }
-                            setShowCaseRefPrompt(i);
+                            setShowPifModal(i);
                           }
                         }}
                       />
@@ -556,7 +550,7 @@ const AddressListComponent = function AddressList({
                             alert("Enter a valid PIF amount (e.g. 50)");
                             return;
                           }
-                          setShowCaseRefPrompt(i);
+                          setShowPifModal(i);
                         }}
                       >
                         <span className="outcome-icon">💷</span>
@@ -596,163 +590,20 @@ const AddressListComponent = function AddressList({
         />
       )}
 
-      {/* Case Reference Prompt Modal */}
-      {showCaseRefPrompt !== null && (
-        <div className="case-ref-modal-overlay" onClick={() => setShowCaseRefPrompt(null)}>
-          <div className="case-ref-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="case-ref-modal-header">
-              <h3>📋 Enter Case Details</h3>
-              <button className="close-btn" onClick={() => setShowCaseRefPrompt(null)}>✕</button>
-            </div>
-            <div className="case-ref-modal-body">
-              <p>PIF Amount: <strong>£{Number(pifAmount).toFixed(2)}</strong></p>
-              <div className="case-ref-input-wrapper">
-                <label htmlFor="case-ref-input">Case Reference Number</label>
-                <input
-                  id="case-ref-input"
-                  type="number"
-                  inputMode="numeric"
-                  className="case-ref-input"
-                  placeholder="e.g. 123456"
-                  value={caseReference}
-                  onChange={(e) => setCaseReference(e.target.value)}
-                  autoComplete="off"
-                  autoFocus
-                />
-              </div>
-              <div className="case-ref-input-wrapper" style={{ marginTop: '1rem' }}>
-                <label htmlFor="num-cases-input">Number of Cases</label>
-                <input
-                  id="num-cases-input"
-                  type="number"
-                  inputMode="numeric"
-                  className="case-ref-input"
-                  placeholder="e.g. 1"
-                  min="1"
-                  value={numberOfCases}
-                  onChange={(e) => setNumberOfCases(e.target.value)}
-                  autoComplete="off"
-                />
-                <small style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.25rem' }}>
-                  If 1 debtor has 3 linked cases, enter 3
-                </small>
-              </div>
-              <div className="case-ref-input-wrapper" style={{ marginTop: '1rem' }}>
-                <label>Enforcement Fees (Optional)</label>
-                <small style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginBottom: '0.5rem', display: 'block' }}>
-                  Add enforcement fees for cases that have them. Linked cases without fees receive £10 bonus each.
-                </small>
-
-                {enforcementFees.map((fee, index) => (
-                  <div key={index} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      inputMode="decimal"
-                      className="case-ref-input"
-                      placeholder="e.g. 272.50"
-                      value={fee}
-                      onChange={(e) => {
-                        const newFees = [...enforcementFees];
-                        newFees[index] = e.target.value;
-                        setEnforcementFees(newFees);
-                      }}
-                      autoComplete="off"
-                      style={{ flex: 1 }}
-                    />
-                    {enforcementFees.length > 1 && (
-                      <button
-                        type="button"
-                        className="modal-btn modal-btn-cancel"
-                        onClick={() => {
-                          const newFees = enforcementFees.filter((_, i) => i !== index);
-                          setEnforcementFees(newFees);
-                        }}
-                        style={{ flex: '0 0 auto', padding: '0.5rem 0.75rem' }}
-                        title="Remove this enforcement fee"
-                      >
-                        ➖
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-                <button
-                  type="button"
-                  className="modal-btn modal-btn-save"
-                  onClick={() => setEnforcementFees([...enforcementFees, ""])}
-                  style={{ marginTop: '0.5rem', width: '100%' }}
-                >
-                  ➕ Add Another Enf Fee
-                </button>
-
-                {numberOfCases && Number(numberOfCases) > 0 && (
-                  <small style={{ fontSize: '0.75rem', color: 'var(--primary)', marginTop: '0.5rem', display: 'block', fontWeight: 600 }}>
-                    ℹ️ {Math.max(0, Number(numberOfCases) - enforcementFees.filter(f => f && f.trim()).length)} linked case(s) (£10 bonus each)
-                  </small>
-                )}
-              </div>
-            </div>
-            <div className="case-ref-modal-footer">
-              <button
-                className="modal-btn modal-btn-cancel"
-                onClick={() => {
-                  setShowCaseRefPrompt(null);
-                  setCaseReference("");
-                  setNumberOfCases("1");
-                  setEnforcementFees([""]);
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className="modal-btn modal-btn-save"
-                disabled={submittingIndex === showCaseRefPrompt}
-                onClick={() => {
-                  const caseRefNum = Number(caseReference);
-                  const numCases = Number(numberOfCases);
-
-                  // Parse and validate enforcement fees
-                  const parsedEnfFees = enforcementFees
-                    .filter(f => f && f.trim())
-                    .map(f => parseFloat(f));
-
-                  if (!caseReference || !caseReference.trim()) {
-                    alert("Please enter a case reference number");
-                    return;
-                  }
-                  if (!Number.isFinite(caseRefNum) || caseRefNum <= 0 || !Number.isInteger(caseRefNum)) {
-                    alert("Case reference must be a valid whole number");
-                    return;
-                  }
-                  if (!Number.isFinite(numCases) || numCases <= 0 || !Number.isInteger(numCases)) {
-                    alert("Number of cases must be a valid whole number");
-                    return;
-                  }
-
-                  // Validate all enforcement fees are valid non-negative numbers
-                  if (parsedEnfFees.some(f => !Number.isFinite(f) || f < 0)) {
-                    alert("All enforcement fees must be valid non-negative numbers");
-                    return;
-                  }
-
-                  // Pass array to handleCompletion (or undefined if no fees entered)
-                  const enfFeesArray = parsedEnfFees.length > 0 ? parsedEnfFees : undefined;
-
-                  handleCompletion(showCaseRefPrompt, "PIF", Number(pifAmount).toFixed(2), undefined, caseReference.trim(), numCases, enfFeesArray);
-                  setShowCaseRefPrompt(null);
-                  setCaseReference("");
-                  setNumberOfCases("1");
-                  setEnforcementFees([""]);
-                  setPifAmount("");
-                }}
-              >
-                {submittingIndex === showCaseRefPrompt ? 'Saving...' : 'Save PIF'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* PIF Details Modal */}
+      {showPifModal !== null && (
+        <PifDetailsModal
+          initialAmount={pifAmount}
+          onConfirm={(data) => {
+            handleCompletion(showPifModal, "PIF", data.amount, undefined, data.caseReference, data.numberOfCases, data.enforcementFees);
+            setShowPifModal(null);
+            setPifAmount("");
+          }}
+          onCancel={() => {
+            setShowPifModal(null);
+          }}
+          isLoading={submittingIndex === showPifModal}
+        />
       )}
 
       <style>{`

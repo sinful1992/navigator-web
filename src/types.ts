@@ -80,6 +80,9 @@ export type Arrangement = {
   initialPaymentAmount?: string;  // Initial payment recorded at arrangement creation
   createdAt: string;
   updatedAt: string;
+  // Case details
+  caseReference?: string;   // Case reference number for tracking
+  numberOfCases?: number;   // Number of linked cases (e.g., 1 debtor with 3 cases)
   // Recurring payment fields
   recurrenceType?: RecurrenceType;
   recurrenceInterval?: number;  // e.g., 1 for weekly, 2 for bi-weekly
