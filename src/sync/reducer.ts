@@ -199,6 +199,37 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'ACTIVE_INDEX_SET': {
         const { index, startTime } = operation.payload;
 
+        // 🔧 CRITICAL FIX: Validate before applying
+        if (index !== null) {
+          // Check bounds
+          if (typeof index !== 'number' || index < 0 || index >= state.addresses.length) {
+            logger.warn('❌ ACTIVE_INDEX_SET: Invalid index out of bounds', {
+              index,
+              maxIndex: state.addresses.length - 1,
+              operationId: operation.id,
+              sequence: operation.sequence,
+            });
+            return state; // Reject invalid operation
+          }
+
+          // Check if address is already completed
+          const address = state.addresses[index];
+          const isCompleted = state.completions.some(c =>
+            c.address === address.address &&
+            (c.listVersion || state.currentListVersion) === state.currentListVersion
+          );
+
+          if (isCompleted) {
+            logger.warn('❌ ACTIVE_INDEX_SET: Address already completed', {
+              index,
+              address: address.address,
+              operationId: operation.id,
+              sequence: operation.sequence,
+            });
+            return state; // Reject invalid operation
+          }
+        }
+
         return {
           ...state,
           activeIndex: index,

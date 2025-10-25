@@ -22,6 +22,7 @@ import {
   DEFAULT_REMINDER_SETTINGS,
 } from "./services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "./utils/bonusCalculator";
+import { setProtectionFlag, clearProtectionFlag } from "./utils/protectionFlags";
 
 const STORAGE_KEY = "navigator_state_v5";
 const CURRENT_SCHEMA_VERSION = 5;
@@ -847,9 +848,6 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   );
 
   const setActive = React.useCallback((idx: number) => {
-    // 🔧 CRITICAL FIX: Set protection flag (no timeout - cleared on Complete/Cancel)
-    localStorage.setItem('navigator_active_protection', 'true');
-
     const now = new Date().toISOString();
     let shouldSubmit = false;
 
@@ -861,7 +859,6 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         const currentActiveAddress = s.addresses[s.activeIndex];
         logger.warn(`Cannot start address #${idx} - address #${s.activeIndex} "${currentActiveAddress?.address}" is already active`);
         showWarning(`Please complete or cancel the current active address first`);
-        localStorage.removeItem('navigator_active_protection');
         return s; // Don't change state
       }
 
@@ -875,11 +872,12 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         if (isCompleted) {
           logger.warn(`Cannot set active - address at index ${idx} is already completed`);
           showWarning(`This address is already completed`);
-          localStorage.removeItem('navigator_active_protection');
           return s; // Don't change state
         }
       }
 
+      // 🔧 CRITICAL FIX: Set protection flag AFTER validation (with timestamp, not "true")
+      setProtectionFlag('navigator_active_protection');
       logger.info(`📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - SYNC BLOCKED until Complete/Cancel`);
       shouldSubmit = true;
 
@@ -898,10 +896,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   }, [submitOperation]);
 
   const cancelActive = React.useCallback(() => {
-    // 🔧 FIX: Clear protection to resume cloud sync
-    localStorage.removeItem('navigator_active_protection');
-
     setBaseState((s) => {
+      // 🔧 FIX: Clear protection to resume cloud sync (use helper function)
+      clearProtectionFlag('navigator_active_protection');
       logger.info(`📍 CANCELING ACTIVE: Clearing active state - SYNC RESUMED`);
       return { ...s, activeIndex: null, activeStartTime: null };
     });
@@ -1001,10 +998,14 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
       const nowISO = new Date().toISOString();
 
+      // 🔧 FIX: Capture active state immediately to prevent race conditions
+      const wasActive = currentState.activeIndex === index;
+      const capturedStartTime = wasActive ? currentState.activeStartTime : null;
+
       // Calculate time spent on this case if it was the active one
       let timeSpentSeconds: number | undefined;
-      if (currentState.activeIndex === index && currentState.activeStartTime) {
-        const startTime = new Date(currentState.activeStartTime).getTime();
+      if (wasActive && capturedStartTime) {
+        const startTime = new Date(capturedStartTime).getTime();
         const endTime = new Date(nowISO).getTime();
         timeSpentSeconds = Math.floor((endTime - startTime) / 1000);
         logger.info(`⏱️ CASE TIME TRACKED: ${Math.floor(timeSpentSeconds / 60)}m ${timeSpentSeconds % 60}s on "${address.address}"`);
@@ -1050,9 +1051,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         addOptimisticUpdate("create", "completion", completion, operationId);
 
         setBaseState((s) => {
-          if (s.activeIndex === index) {
-            // 🔧 FIX: Clear protection when completing active address
-            localStorage.removeItem('navigator_active_protection');
+          // 🔧 FIX: Always clear protection if we captured wasActive, even if cloud sync changed state
+          if (wasActive) {
+            clearProtectionFlag('navigator_active_protection');
             logger.info(`📍 COMPLETED ACTIVE ADDRESS: Clearing active state - SYNC RESUMED`);
           }
 
@@ -1871,9 +1872,16 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
                 );
 
                 if (existingCompletion && !existingCompletion.timeSpentSeconds) {
-                  // Add our local time to the existing completion
+                  // 🔧 CRITICAL FIX: Create new completion object (immutable update)
                   logger.info(`⏱️ SAVING LOCAL TIME: Adding ${Math.floor(timeSpentSeconds / 60)}m ${timeSpentSeconds % 60}s to completion from other device`);
-                  existingCompletion.timeSpentSeconds = timeSpentSeconds;
+
+                  const updatedCompletions = finalState.completions.map(c =>
+                    c === existingCompletion
+                      ? { ...c, timeSpentSeconds }
+                      : c
+                  );
+
+                  finalState = { ...finalState, completions: updatedCompletions };
                 } else if (existingCompletion && existingCompletion.timeSpentSeconds) {
                   logger.info(`⏱️ Time already tracked on other device: ${Math.floor(existingCompletion.timeSpentSeconds / 60)}m ${existingCompletion.timeSpentSeconds % 60}s`);
                 }
