@@ -204,9 +204,20 @@ export function useOperationSync(): UseOperationSync {
             logger.info(`📥 BOOTSTRAP: Merged ${newOps.length} new operations (${remoteOperations.length - newOps.length} were duplicates)`);
 
             if (newOps.length > 0) {
-              const maxSeq = Math.max(...remoteOperations.map(op => op.sequence));
-              if (Number.isFinite(maxSeq)) {
-                await operationLog.current.markSyncedUpTo(maxSeq);
+              // 🔧 CRITICAL FIX: Only mark as synced if operations are from THIS device
+              // Downloaded operations from other devices don't count as "synced" because WE didn't upload them
+              const myOpsToMarkSynced = remoteOperations
+                .filter(op => op.clientId === deviceId.current)
+                .map(op => op.sequence);
+
+              if (myOpsToMarkSynced.length > 0) {
+                const maxMySeq = Math.max(...myOpsToMarkSynced);
+                if (Number.isFinite(maxMySeq)) {
+                  await operationLog.current.markSyncedUpTo(maxMySeq);
+                  logger.info(`📥 BOOTSTRAP: Marked sequences up to ${maxMySeq} as synced (from this device)`);
+                }
+              } else {
+                logger.info(`📥 BOOTSTRAP: No operations from this device to mark as synced`);
               }
 
               // Reconstruct state with merged operations
@@ -671,7 +682,13 @@ export function useOperationSync(): UseOperationSync {
               const newOps = await operationLog.current.mergeRemoteOperations([operation]);
 
               if (newOps.length > 0) {
-                await operationLog.current.markSyncedUpTo(operation.sequence);
+                // 🔧 CRITICAL FIX: Don't mark operations from OTHER devices as synced
+                // Only mark as synced if this operation is from THIS device (shouldn't happen here since we filter above)
+                // This is just for safety in case the filter is removed
+                if (operation.clientId === deviceId.current) {
+                  await operationLog.current.markSyncedUpTo(operation.sequence);
+                  logger.info('📥 REAL-TIME: Marked own operation as synced');
+                }
 
                 // Reconstruct state and notify
                 const allOperations = operationLog.current.getAllOperations();
@@ -820,9 +837,15 @@ export function useOperationSync(): UseOperationSync {
             setIsSyncing(true);
             try {
               const opsToSync = operationLog.current.getUnsyncedOperations();
-              logger.info(`📤 UPLOADING ${opsToSync.length} operations to cloud...`);
+              logger.info(`📤 AUTO-SYNC: UPLOADING ${opsToSync.length} operations to cloud...`);
+
+              // 🔧 CRITICAL FIX: Track successful uploads (same as syncOperationsToCloud)
+              const successfulSequences: number[] = [];
+              const failedOps: Array<{seq: number; type: string; error: string}> = [];
 
               for (const operation of opsToSync) {
+                logger.debug('AUTO-SYNC: Uploading operation:', operation.type, 'seq:', operation.sequence);
+
                 // Derive entity from operation type
                 const entity = operation.type.includes('COMPLETION') ? 'completion'
                   : operation.type.includes('ADDRESS') ? 'address'
@@ -864,18 +887,61 @@ export function useOperationSync(): UseOperationSync {
                     ignoreDuplicates: true,
                   });
 
-                if (error) {
-                  logger.error('Failed to upload operation:', error);
-                  throw error;
+                if (error && error.code !== '23505') {
+                  logger.error('AUTO-SYNC: Upload failed:', {
+                    type: operation.type,
+                    sequence: operation.sequence,
+                    error: error.message,
+                  });
+
+                  // 🔧 CRITICAL FIX: Don't throw - track failure and continue
+                  failedOps.push({
+                    seq: operation.sequence,
+                    type: operation.type,
+                    error: error.message
+                  });
+                  continue; // Skip to next operation
                 }
+
+                if (error?.code === '23505') {
+                  logger.debug('AUTO-SYNC: Duplicate operation (already uploaded):', operation.id);
+                }
+
+                // Track successful upload
+                successfulSequences.push(operation.sequence);
               }
 
-              // Mark as synced
-              const maxSeq = Math.max(...opsToSync.map(op => op.sequence));
-              await operationLog.current.markSyncedUpTo(maxSeq);
+              // 🔧 CRITICAL FIX: Only mark continuous sequences as synced
+              if (successfulSequences.length > 0) {
+                successfulSequences.sort((a, b) => a - b);
 
-              logger.info(`✅ AUTO-SYNC: Uploaded ${opsToSync.length} operations successfully`);
-              setLastSyncTime(new Date());
+                // Find highest continuous sequence
+                let maxContinuousSeq = successfulSequences[0];
+                for (let i = 1; i < successfulSequences.length; i++) {
+                  if (successfulSequences[i] === maxContinuousSeq + 1) {
+                    maxContinuousSeq = successfulSequences[i];
+                  } else {
+                    break; // Gap found
+                  }
+                }
+
+                await operationLog.current.markSyncedUpTo(maxContinuousSeq);
+
+                logger.info('✅ AUTO-SYNC COMPLETE:', {
+                  total: opsToSync.length,
+                  succeeded: successfulSequences.length,
+                  failed: failedOps.length,
+                  markedSyncedUpTo: maxContinuousSeq,
+                });
+
+                if (failedOps.length > 0) {
+                  logger.error('⚠️ AUTO-SYNC FAILED OPERATIONS:', failedOps);
+                }
+
+                setLastSyncTime(new Date());
+              } else {
+                logger.error('❌ AUTO-SYNC: All uploads failed');
+              }
             } catch (err) {
               logger.error('AUTO-SYNC failed:', err);
             } finally {
