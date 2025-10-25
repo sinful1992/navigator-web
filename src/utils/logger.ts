@@ -9,7 +9,7 @@ const SENSITIVE_FIELDS = [
 ];
 
 // Log levels
-type LogLevel = 'silent' | 'normal' | 'verbose';
+type LogLevel = 'silent' | 'normal' | 'sync' | 'verbose';
 
 /**
  * Get current log level from localStorage or return default
@@ -19,7 +19,7 @@ function getLogLevel(): LogLevel {
 
   try {
     const stored = localStorage.getItem('logLevel') as LogLevel;
-    if (stored && ['silent', 'normal', 'verbose'].includes(stored)) {
+    if (stored && ['silent', 'normal', 'sync', 'verbose'].includes(stored)) {
       return stored;
     }
   } catch {
@@ -54,17 +54,12 @@ function isDebugModeEnabled(): boolean {
 }
 
 /**
- * Check if sync logs should be shown
- * Sync logs are noisy, so we hide them by default unless explicitly enabled
+ * Determine if sync-specific logs should be shown
+ * Sync logs are shown at 'sync' or 'verbose' levels
  */
-const shouldShowSyncLogs = (): boolean => {
-  if (typeof window === 'undefined') return false;
-
-  try {
-    return localStorage.getItem('showSyncLogs') === 'true';
-  } catch {
-    return false;
-  }
+const shouldLogSync = (): boolean => {
+  const level = getLogLevel();
+  return level === 'sync' || level === 'verbose';
 };
 
 /**
@@ -135,15 +130,21 @@ export const logger = {
   /**
    * Debug logging (with sanitization)
    * Only shown when log level is 'verbose'
-   * Sync logs are hidden by default unless showSyncLogs is enabled
+   * Sync logs require 'sync' or 'verbose' level
    */
   debug: (message: string, ...args: any[]) => {
-    // Hide sync logs unless explicitly enabled
+    // Check if this is a sync-related log
     const isSyncLog = message.includes('AUTO-SYNC') || message.includes('SYNC') || message.includes('UPLOAD');
-    if (isSyncLog && !shouldShowSyncLogs()) {
+
+    // Sync logs require 'sync' or 'verbose' level
+    if (isSyncLog) {
+      if (shouldLogSync()) {
+        console.log(`[DEBUG] ${message}`, ...sanitizeArgs(args));
+      }
       return;
     }
 
+    // Non-sync logs require 'verbose' level
     if (shouldLogVerbose()) {
       console.log(`[DEBUG] ${message}`, ...sanitizeArgs(args));
     }
@@ -152,15 +153,21 @@ export const logger = {
   /**
    * Information logging (with sanitization)
    * Only shown when log level is 'verbose'
-   * Sync logs are hidden by default unless showSyncLogs is enabled
+   * Sync logs require 'sync' or 'verbose' level
    */
   info: (message: string, ...args: any[]) => {
-    // Hide sync logs unless explicitly enabled
+    // Check if this is a sync-related log
     const isSyncLog = message.includes('AUTO-SYNC') || message.includes('SYNC') || message.includes('UPLOAD') || message.includes('BOOTSTRAP') || message.includes('FETCH');
-    if (isSyncLog && !shouldShowSyncLogs()) {
+
+    // Sync logs require 'sync' or 'verbose' level
+    if (isSyncLog) {
+      if (shouldLogSync()) {
+        console.log(`[INFO] ${message}`, ...sanitizeArgs(args));
+      }
       return;
     }
 
+    // Non-sync logs require 'verbose' level
     if (shouldLogVerbose()) {
       console.log(`[INFO] ${message}`, ...sanitizeArgs(args));
     }
@@ -168,15 +175,21 @@ export const logger = {
 
   /**
    * Warning messages (shown in normal and verbose modes, with sanitization)
-   * Sync logs are hidden by default unless showSyncLogs is enabled
+   * Sync logs require 'sync' or 'verbose' level
    */
   warn: (message: string, ...args: any[]) => {
-    // Hide sync logs unless explicitly enabled
+    // Check if this is a sync-related log
     const isSyncLog = message.includes('AUTO-SYNC') || message.includes('SYNC') || message.includes('NO PROGRESS');
-    if (isSyncLog && !shouldShowSyncLogs()) {
+
+    // Sync logs require 'sync' or 'verbose' level
+    if (isSyncLog) {
+      if (shouldLogSync()) {
+        console.warn(`[WARN] ${message}`, ...sanitizeArgs(args));
+      }
       return;
     }
 
+    // Non-sync warnings require 'normal' or higher
     if (shouldLogNormal()) {
       console.warn(`[WARN] ${message}`, ...sanitizeArgs(args));
     }
@@ -243,7 +256,7 @@ export const logger = {
 
   /**
    * Set log level
-   * @param level - 'silent' (errors only), 'normal' (errors + warnings), 'verbose' (everything)
+   * @param level - 'silent' (errors only), 'normal' (errors + warnings), 'sync' (errors + warnings + sync logs), 'verbose' (everything)
    */
   setLevel: (level: LogLevel) => {
     try {
@@ -292,38 +305,6 @@ export const logger = {
    */
   isDebugMode: (): boolean => {
     return isDebugModeEnabled();
-  },
-
-  /**
-   * Enable sync logs (shows AUTO-SYNC, UPLOAD, FETCH, etc.)
-   * These are hidden by default to declutter the console
-   */
-  showSyncLogs: () => {
-    try {
-      localStorage.setItem('showSyncLogs', 'true');
-      console.log('[SYNC LOGS] ✅ Enabled - Refresh the page to see sync logs');
-    } catch (e) {
-      console.error('[SYNC LOGS] ❌ Failed to enable:', e);
-    }
-  },
-
-  /**
-   * Disable sync logs (hides AUTO-SYNC, UPLOAD, FETCH, etc.)
-   */
-  hideSyncLogs: () => {
-    try {
-      localStorage.removeItem('showSyncLogs');
-      console.log('[SYNC LOGS] ❌ Disabled - Refresh the page');
-    } catch (e) {
-      console.error('[SYNC LOGS] Failed to disable:', e);
-    }
-  },
-
-  /**
-   * Check if sync logs are currently shown
-   */
-  areSyncLogsShown: (): boolean => {
-    return shouldShowSyncLogs();
   }
 };
 
