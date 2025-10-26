@@ -170,6 +170,109 @@ if (currentState.activeIndex === index && currentState.activeStartTime) {
 
 **Documentation**: See `ADDRESS_TIME_TRACKING_FIX.md` for complete technical details
 
+### ⚠️ Backup Restore Race Condition Protection (CRITICAL)
+
+**Background**: When users restore from backup (cloud or file), data would temporarily disappear for a few seconds before reappearing after a page refresh. This was caused by a race condition between the restore protection window and cloud sync operations.
+
+**Root Cause**:
+- Restore protection expired at 30 seconds
+- Cloud sync `syncData()` was scheduled for 31 seconds
+- Between 30-31s, remote operations could override the restored local data
+- On page refresh, IndexedDB (with correct restored data) would reload properly
+
+**Critical Logic** (`protectionFlags.ts:12`, `App.tsx:374, 794`):
+```typescript
+// Protection window extended to 60 seconds to cover entire sync operation
+const FLAG_CONFIGS: Record<ProtectionFlag, number> = {
+  'navigator_restore_in_progress': 60000, // 60 seconds
+  // ...
+};
+
+// Wait 61 seconds (after 60s protection window expires) before syncing
+setTimeout(async () => {
+  await cloudSync.syncData(data);
+  lastFromCloudRef.current = JSON.stringify(data);
+}, 61000);
+```
+
+**Key Implementation Details**:
+- **Extended Protection**: Restore protection window increased from 30s to 60s
+- **Delayed Sync**: Cloud sync delayed from 31s to 61s (after protection expires)
+- **Complete Coverage**: Protection now fully covers restore + sync operation
+- **No Race Window**: Zero-second gap prevents remote operations from interfering
+
+**DO NOT**:
+- Reduce protection timeout below sync delay - will recreate race condition
+- Sync before protection expires - defeats the protection mechanism
+- Remove the setTimeout delay - causes immediate conflicts with remote data
+
+**Restore Flow**:
+1. User initiates restore (cloud or file backup)
+2. `restoreState()` updates local state and IndexedDB
+3. Protection flag set with 60s timeout
+4. Cloud sync subscription blocked by protection flag
+5. After 61s, protection expires and `syncData()` syncs restored state
+6. No data loss, no temporary disappearance
+
+**Fixed Scenarios**:
+- ✅ Cloud backup restore - data persists immediately
+- ✅ File backup restore - data persists immediately
+- ✅ Multi-device sync during restore - remote operations blocked
+- ✅ No refresh required - data stays visible throughout process
+
+### 📊 Earnings PIF Case Reference Details (FEATURE)
+
+**Background**: Users need to see which specific case references contributed to their daily PIF counts and earnings in the Earnings tab.
+
+**Implementation** (`EarningsCalendar.tsx:24-36, 316-498`):
+```typescript
+// Expandable row state tracking
+const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+
+// Click handler for expanding rows
+const toggleExpanded = (date: string) => {
+  setExpandedDates(prev => {
+    const newSet = new Set(prev);
+    if (newSet.has(date)) {
+      newSet.delete(date);
+    } else {
+      newSet.add(date);
+    }
+    return newSet;
+  });
+};
+```
+
+**Features**:
+- **Expandable Rows**: Click on PIF count to expand/collapse details
+- **Visual Indicators**: Arrow icons (▶/▼) show expand state
+- **Interactive UI**: PIF count highlighted in primary color when clickable
+- **Detailed Information Display**:
+  - Total amount collected (sum of all PIF amounts)
+  - Number of PIF cases
+  - Enforcement fees (only if multiple PIFs and complex bonus enabled)
+  - Grid of case references with individual amounts
+- **Responsive Design**: Grid layout adapts to screen size
+- **Smart Filtering**: Only dates with PIFs (> 0) are expandable
+
+**Component Structure**:
+- `EarningsCalendar`: Main component with expandable table
+- `PifDetailsRow`: Nested component showing case reference details
+- Integrates with bonus calculator for enforcement fee calculations
+
+**User Experience**:
+1. View daily breakdown table in Earnings tab
+2. Click on any PIF count (when > 0) to expand row
+3. See summary: total collected, case count, enforcement fees
+4. Browse case references in responsive grid
+5. Each reference shows case ID and amount collected
+6. Click again to collapse row
+
+**DO NOT**:
+- Make all rows expandable - only rows with PIFs should be interactive
+- Remove enforcement fee calculation - valuable for complex bonus users
+- Hardcode grid columns - must remain responsive
+
 ## Environment Setup
 
 Create `.env.local` for development:
