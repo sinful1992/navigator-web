@@ -517,58 +517,22 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                           {settings.homeAddress}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
+                      <div className="modern-inline-button-group">
                         <button
+                          className="modern-inline-button primary"
                           onClick={() => {
                             setTempHomeAddress(settings.homeAddress);
                             setIsEditingHomeAddress(true);
-                          }}
-                          style={{
-                            padding: '0.5rem 0.75rem',
-                            fontSize: '0.8125rem',
-                            fontWeight: '500',
-                            color: '#6366f1',
-                            background: 'white',
-                            border: '1.5px solid rgba(99, 102, 241, 0.3)',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)';
-                            e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.5)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'white';
-                            e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
                           }}
                         >
                           Change
                         </button>
                         <button
+                          className="modern-inline-button danger"
                           onClick={() => {
                             if (confirm("Clear your home address? You can set it again anytime.")) {
                               clearHomeAddress();
                             }
-                          }}
-                          style={{
-                            padding: '0.5rem 0.75rem',
-                            fontSize: '0.8125rem',
-                            fontWeight: '500',
-                            color: '#dc2626',
-                            background: 'white',
-                            border: '1.5px solid rgba(220, 38, 38, 0.3)',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(220, 38, 38, 0.1)';
-                            e.currentTarget.style.borderColor = 'rgba(220, 38, 38, 0.5)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'white';
-                            e.currentTarget.style.borderColor = 'rgba(220, 38, 38, 0.3)';
                           }}
                         >
                           Clear
@@ -1385,6 +1349,46 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
 
         .modern-button-group .modern-action-button {
           flex: 1;
+        }
+
+        /* Inline Buttons (for home address etc.) */
+        .modern-inline-button-group {
+          display: flex;
+          gap: 0.5rem;
+          flex-shrink: 0;
+          align-items: center;
+        }
+
+        .modern-inline-button {
+          padding: 0.5rem 0.75rem;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          background: white;
+          border: 1.5px solid;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s;
+          white-space: nowrap;
+        }
+
+        .modern-inline-button.primary {
+          color: #6366f1;
+          border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .modern-inline-button.primary:hover {
+          background: rgba(99, 102, 241, 0.1);
+          border-color: rgba(99, 102, 241, 0.5);
+        }
+
+        .modern-inline-button.danger {
+          color: #dc2626;
+          border-color: rgba(220, 38, 38, 0.3);
+        }
+
+        .modern-inline-button.danger:hover {
+          background: rgba(220, 38, 38, 0.1);
+          border-color: rgba(220, 38, 38, 0.5);
         }
 
         /* Link Buttons */
