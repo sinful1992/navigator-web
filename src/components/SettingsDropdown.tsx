@@ -4,6 +4,7 @@ import { useSettings, isSupabaseConfigured } from '../hooks/useSettings';
 import { ReminderSettings } from './ReminderSettings';
 import { BonusSettingsModal } from './BonusSettingsModal';
 import { SyncDebugModal } from './SyncDebugModal';
+import { AddressAutocomplete } from './AddressAutocomplete';
 import type { ReminderSettings as ReminderSettingsType, BonusSettings } from '../types';
 import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
 import type { AppState } from '../types';
@@ -12,6 +13,7 @@ import {
   getStorageInfo,
   clearLocalCaches
 } from '../utils/dataExport';
+import { isHybridRoutingAvailable } from '../services/hybridRouting';
 // @ts-ignore
 import packageJson from '../../package.json';
 
@@ -139,7 +141,13 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
     toggleConfirmBeforeDelete,
     toggleAvoidTolls,
     updateKeepDataForMonths,
+    updateHomeAddress,
+    clearHomeAddress,
   } = useSettings();
+
+  // Home address editing state
+  const [isEditingHomeAddress, setIsEditingHomeAddress] = useState(false);
+  const [tempHomeAddress, setTempHomeAddress] = useState("");
 
   // Load storage info when dropdown opens
   useEffect(() => {
@@ -451,6 +459,121 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                   checked={settings.avoidTolls}
                   onChange={toggleAvoidTolls}
                 />
+              </div>
+
+              {/* Home Address Setting */}
+              <div className="modern-setting-column" style={{ marginTop: '1rem' }}>
+                <div className="modern-setting-label" style={{ marginBottom: '0.5rem' }}>
+                  🏠 Home Address
+                </div>
+
+                {!isEditingHomeAddress && !settings.homeAddress && (
+                  <div style={{
+                    padding: '0.875rem',
+                    background: 'rgba(99, 102, 241, 0.05)',
+                    borderRadius: '10px',
+                    border: '1.5px dashed rgba(99, 102, 241, 0.2)',
+                    textAlign: 'center',
+                    marginBottom: '0.5rem'
+                  }}>
+                    <p style={{ margin: '0 0 0.75rem 0', color: '#6b7280', fontSize: '0.8125rem' }}>
+                      Set your home address to optimize routes that end near home
+                    </p>
+                    <button
+                      className="modern-action-button primary small"
+                      onClick={() => setIsEditingHomeAddress(true)}
+                      style={{ margin: '0 auto', maxWidth: '200px' }}
+                    >
+                      <span className="modern-button-icon">+</span>
+                      <span className="modern-button-text">Set Home Address</span>
+                    </button>
+                  </div>
+                )}
+
+                {!isEditingHomeAddress && settings.homeAddress && (
+                  <div style={{
+                    padding: '0.875rem',
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    borderRadius: '10px',
+                    border: '1.5px solid rgba(16, 185, 129, 0.3)',
+                    marginBottom: '0.5rem'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      justifyContent: 'space-between',
+                      gap: '0.75rem'
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          fontWeight: '600',
+                          color: '#059669',
+                          marginBottom: '0.25rem',
+                          fontSize: '0.8125rem'
+                        }}>
+                          ✓ Routes will end near home
+                        </div>
+                        <div style={{ color: '#374151', fontSize: '0.8125rem' }}>
+                          {settings.homeAddress}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                        <button
+                          className="modern-action-button small"
+                          onClick={() => {
+                            setTempHomeAddress(settings.homeAddress);
+                            setIsEditingHomeAddress(true);
+                          }}
+                          style={{ minWidth: 'auto', padding: '0.5rem 0.75rem' }}
+                        >
+                          Change
+                        </button>
+                        <button
+                          className="modern-action-button small"
+                          onClick={() => {
+                            if (confirm("Clear your home address? You can set it again anytime.")) {
+                              clearHomeAddress();
+                            }
+                          }}
+                          style={{ minWidth: 'auto', padding: '0.5rem 0.75rem' }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {isEditingHomeAddress && (
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <AddressAutocomplete
+                      id="settings-home-address-input"
+                      value={tempHomeAddress}
+                      onChange={setTempHomeAddress}
+                      onSelect={(address, lat, lng) => {
+                        updateHomeAddress(address, lat, lng);
+                        setIsEditingHomeAddress(false);
+                        setTempHomeAddress("");
+                      }}
+                      placeholder="Type your home address..."
+                      disabled={!isHybridRoutingAvailable()}
+                    />
+                    <button
+                      className="modern-action-button small"
+                      onClick={() => {
+                        setIsEditingHomeAddress(false);
+                        setTempHomeAddress("");
+                      }}
+                      style={{ marginTop: '0.5rem' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                <div className="modern-setting-desc">
+                  When set, route optimization will create routes that end near your home address
+                </div>
               </div>
             </CollapsibleSection>
 

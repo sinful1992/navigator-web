@@ -28,7 +28,7 @@ interface RoutePlanningProps {
 
 const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }: RoutePlanningProps) {
   // Settings
-  const { settings, updateHomeAddress, clearHomeAddress } = useSettings();
+  const { settings } = useSettings();
 
   // Ref for address input to support auto-focus
   const addressInputRef = useRef<HTMLInputElement>(null);
@@ -46,10 +46,6 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
     total: number;
     current: string;
   } | null>(null);
-
-  // Home address state for editing
-  const [isEditingHomeAddress, setIsEditingHomeAddress] = useState(false);
-  const [tempHomeAddress, setTempHomeAddress] = useState("");
 
   // Optimization results
   const [optimizationResult, setOptimizationResult] = useState<{
@@ -222,20 +218,6 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
     } finally {
       setIsGeocoding(false);
       setGeocodingProgress(null);
-    }
-  };
-
-  // Handle selecting home address from autocomplete
-  const handleSelectHomeAddress = (address: string, lat: number, lng: number) => {
-    updateHomeAddress(address, lat, lng);
-    setIsEditingHomeAddress(false);
-    setTempHomeAddress("");
-  };
-
-  // Handle clearing home address
-  const handleClearHomeAddress = () => {
-    if (confirm("Clear your home address? You can set it again anytime.")) {
-      clearHomeAddress();
     }
   };
 
@@ -472,128 +454,6 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
             )}
           </div>
         )}
-
-        {/* Home Address Setting */}
-        <div style={{
-          background: 'var(--surface)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '1.5rem',
-          marginBottom: '1rem',
-          boxShadow: 'var(--shadow-sm)',
-          border: '1px solid var(--border-light)'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '0.75rem'
-          }}>
-            <h3 style={{ margin: 0, fontSize: '1.125rem', color: 'var(--text-primary)' }}>
-              🏠 Home Address
-            </h3>
-            {settings.homeAddress && !isEditingHomeAddress && (
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={handleClearHomeAddress}
-                style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          {!isEditingHomeAddress && !settings.homeAddress && (
-            <div style={{
-              padding: '1rem',
-              background: 'var(--gray-50)',
-              borderRadius: 'var(--radius-md)',
-              border: '1px dashed var(--border)',
-              textAlign: 'center',
-              marginBottom: '0.75rem'
-            }}>
-              <p style={{ margin: '0 0 0.75rem 0', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                Set your home address to optimize routes that end near home
-              </p>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => setIsEditingHomeAddress(true)}
-                style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-              >
-                + Set Home Address
-              </button>
-            </div>
-          )}
-
-          {!isEditingHomeAddress && settings.homeAddress && (
-            <div style={{
-              padding: '1rem',
-              background: 'var(--success-light)',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--success)',
-              marginBottom: '0.75rem'
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: '0.75rem'
-              }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{
-                    fontWeight: '600',
-                    color: 'var(--success-dark)',
-                    marginBottom: '0.25rem',
-                    fontSize: '0.9375rem'
-                  }}>
-                    ✓ Routes will end near home
-                  </div>
-                  <div style={{ color: 'var(--text-primary)', fontSize: '0.875rem' }}>
-                    {settings.homeAddress}
-                  </div>
-                </div>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => {
-                    setTempHomeAddress(settings.homeAddress);
-                    setIsEditingHomeAddress(true);
-                  }}
-                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem', flexShrink: 0 }}
-                >
-                  Change
-                </button>
-              </div>
-            </div>
-          )}
-
-          {isEditingHomeAddress && (
-            <div style={{ marginBottom: '0.75rem' }}>
-              <AddressAutocomplete
-                id="home-address-input"
-                value={tempHomeAddress}
-                onChange={setTempHomeAddress}
-                onSelect={handleSelectHomeAddress}
-                placeholder="Type your home address..."
-                disabled={!isHybridRoutingAvailable()}
-              />
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => {
-                    setIsEditingHomeAddress(false);
-                    setTempHomeAddress("");
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '0.5rem',
-                    fontSize: '0.875rem'
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Add Address & Optimize Controls (below map) */}
         <div style={{
