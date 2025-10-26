@@ -371,7 +371,7 @@ function AuthedApp() {
         setTimeout(async () => {
           await cloudSync.syncData(data);
           lastFromCloudRef.current = JSON.stringify(data);
-        }, 31000); // Wait 31 seconds (after protection window expires)
+        }, 61000); // Wait 61 seconds (after 60s protection window expires)
 
         // ARCHITECTURAL FIX: Post-restore session reconciliation
         await reconcileSessionState(cloudSync, setState, supabase);
@@ -791,7 +791,7 @@ function AuthedApp() {
       setTimeout(async () => {
         await cloudSync.syncData(data);
         lastFromCloudRef.current = JSON.stringify(data);
-      }, 31000); // Wait 31 seconds (after protection window expires)
+      }, 61000); // Wait 61 seconds (after 60s protection window expires)
 
       // ARCHITECTURAL FIX: Post-restore session reconciliation
       await reconcileSessionState(cloudSync, setState, supabase);

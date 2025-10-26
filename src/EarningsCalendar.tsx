@@ -15,10 +15,25 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
     today.setDate(1); // Start of current month
     return today.toISOString().slice(0, 10);
   });
-  
+
   const [selectedEndDate, setSelectedEndDate] = useState(() => {
     return new Date().toISOString().slice(0, 10);
   });
+
+  // State for tracking which rows are expanded
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (date: string) => {
+    setExpandedDates(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(date)) {
+        newSet.delete(date);
+      } else {
+        newSet.add(date);
+      }
+      return newSet;
+    });
+  };
 
   // Calculate earnings for the selected date range
   const rangeStats = useMemo(() => {
@@ -298,29 +313,62 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rangeStats.dailyStats.map(day => (
-                    <tr key={day.date}>
-                      <td style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-light)' }}>
-                        {new Date(day.date).toLocaleDateString('en-GB', { 
-                          weekday: 'short',
-                          day: 'numeric',
-                          month: 'short'
-                        })}
-                      </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)' }}>
-                        {day.pifs}
-                      </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)' }}>
-                        {day.total}
-                      </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)', fontWeight: 'bold' }}>
-                        {formatCurrency(day.fees)}
-                      </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)', fontWeight: 'bold', color: day.bonus > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
-                        {formatCurrency(day.bonus)}
-                      </td>
-                    </tr>
-                  ))}
+                  {rangeStats.dailyStats.map(day => {
+                    const isExpanded = expandedDates.has(day.date);
+                    const hasPifs = day.pifs > 0;
+
+                    return (
+                      <>
+                        <tr key={day.date}>
+                          <td style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-light)' }}>
+                            {new Date(day.date).toLocaleDateString('en-GB', {
+                              weekday: 'short',
+                              day: 'numeric',
+                              month: 'short'
+                            })}
+                          </td>
+                          <td
+                            style={{
+                              padding: '0.75rem',
+                              textAlign: 'right',
+                              borderBottom: '1px solid var(--border-light)',
+                              cursor: hasPifs ? 'pointer' : 'default',
+                              userSelect: 'none',
+                              color: hasPifs ? 'var(--primary)' : 'inherit'
+                            }}
+                            onClick={() => hasPifs && toggleExpanded(day.date)}
+                          >
+                            {hasPifs && (
+                              <span style={{ marginRight: '0.5rem' }}>
+                                {isExpanded ? '▼' : '▶'}
+                              </span>
+                            )}
+                            {day.pifs}
+                          </td>
+                          <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)' }}>
+                            {day.total}
+                          </td>
+                          <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)', fontWeight: 'bold' }}>
+                            {formatCurrency(day.fees)}
+                          </td>
+                          <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)', fontWeight: 'bold', color: day.bonus > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
+                            {formatCurrency(day.bonus)}
+                          </td>
+                        </tr>
+                        {isExpanded && hasPifs && (
+                          <tr key={`${day.date}-expanded`}>
+                            <td colSpan={5} style={{
+                              padding: '1rem',
+                              background: 'var(--background)',
+                              borderBottom: '1px solid var(--border-light)'
+                            }}>
+                              <PifDetailsRow date={day.date} state={state} />
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -328,6 +376,124 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
         </div>
       </div>
     </SubscriptionGuard>
+  );
+}
+
+interface PifDetailsRowProps {
+  date: string;
+  state: AppState;
+}
+
+function PifDetailsRow({ date, state }: PifDetailsRowProps) {
+  const completions = state.completions || [];
+  const pifCompletions = completions.filter(
+    c => c.timestamp.slice(0, 10) === date && c.outcome === 'PIF'
+  );
+
+  if (pifCompletions.length === 0) {
+    return <div style={{ color: 'var(--text-muted)' }}>No PIF completions found</div>;
+  }
+
+  const totalCollected = pifCompletions.reduce((sum, c) => {
+    const amount = parseFloat(c.amount || '0');
+    return sum + (isNaN(amount) ? 0 : amount);
+  }, 0);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+      minimumFractionDigits: 2,
+    }).format(amount);
+  };
+
+  // Calculate enforcement fees using complex bonus calculation
+  const bonusSettings = state.bonusSettings || DEFAULT_BONUS_SETTINGS;
+  let enforcementFees = 0;
+
+  if (pifCompletions.length > 1 && bonusSettings.calculationType === 'complex') {
+    // Calculate enforcement fees based on TCG Regulations 2014
+    const breakdown = calculateBonusBreakdown(pifCompletions, 1, bonusSettings);
+    if (breakdown.enforcementFees !== undefined) {
+      enforcementFees = breakdown.enforcementFees;
+    }
+  }
+
+  return (
+    <div>
+      <div style={{
+        display: 'flex',
+        gap: '2rem',
+        marginBottom: '1rem',
+        flexWrap: 'wrap'
+      }}>
+        <div>
+          <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            Total Collected
+          </div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--success)' }}>
+            {formatCurrency(totalCollected)}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            Number of Cases
+          </div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
+            {pifCompletions.length}
+          </div>
+        </div>
+        {pifCompletions.length > 1 && enforcementFees > 0 && (
+          <div>
+            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+              Enforcement Fees
+            </div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+              {formatCurrency(enforcementFees)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: '1rem' }}>
+        <div style={{
+          fontSize: '0.875rem',
+          fontWeight: 'bold',
+          marginBottom: '0.5rem',
+          color: 'var(--text-muted)'
+        }}>
+          Case References:
+        </div>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+          gap: '0.5rem'
+        }}>
+          {pifCompletions.map((c, idx) => {
+            const amount = parseFloat(c.amount || '0');
+            return (
+              <div
+                key={idx}
+                style={{
+                  padding: '0.5rem',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: 'var(--radius)',
+                  fontSize: '0.875rem'
+                }}
+              >
+                <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>
+                  {c.caseReference || 'No Reference'}
+                </div>
+                <div style={{ color: 'var(--text-muted)' }}>
+                  {formatCurrency(amount)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -9,7 +9,7 @@ type ProtectionFlag =
   | 'navigator_active_protection';
 
 const FLAG_CONFIGS: Record<ProtectionFlag, number> = {
-  'navigator_restore_in_progress': 30000, // 30 seconds
+  'navigator_restore_in_progress': 60000, // 60 seconds - extended to cover sync operation
   'navigator_import_in_progress': 6000,   // 6 seconds
   'navigator_active_protection': Infinity // 🔧 FIX: Never expire - only cleared on complete/cancel
 };
