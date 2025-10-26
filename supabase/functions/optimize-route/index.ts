@@ -13,6 +13,7 @@ interface RouteOptimizationRequest {
     lng: number;
   }>;
   startLocation?: [number, number]; // [lng, lat] - Optional starting point
+  endLocation?: [number, number]; // [lng, lat] - Optional ending point (e.g., home)
   avoidTolls?: boolean; // Whether to avoid toll roads
 }
 
@@ -80,7 +81,7 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { addresses, startLocation, avoidTolls = false }: RouteOptimizationRequest = await req.json()
+    const { addresses, startLocation, endLocation, avoidTolls = false }: RouteOptimizationRequest = await req.json()
 
     if (!addresses || !Array.isArray(addresses)) {
       throw new Error('Invalid request: addresses array required')
@@ -184,12 +185,14 @@ serve(async (req) => {
     })
 
     // Prepare vehicle (enforcement agent)
-    // NOTE: NO 'end' property - VROOM will optimize a one-way route ending at the last task
+    // Configure vehicle with start and optional end point
     const vehicles = [{
       id: 1,
       profile: 'driving-car',
       start: defaultStart,
-      // Omit 'end' for one-way routes (VROOM will find best route without returning to start)
+      // Add end location if provided (e.g., home address)
+      // If omitted, VROOM will find best one-way route ending at the last optimized task
+      ...(endLocation ? { end: endLocation } : {}),
       // Add options to avoid tolls if requested
       ...(avoidTolls ? {
         options: {
