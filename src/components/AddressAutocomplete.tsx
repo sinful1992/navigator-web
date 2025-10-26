@@ -116,11 +116,6 @@ export const AddressAutocomplete = forwardRef<HTMLInputElement, AddressAutocompl
       setSelectedIndex(-1);
       setSuggestions([]);
     });
-
-    // Defer blur to avoid focus conflicts
-    setTimeout(() => {
-      inputRef.current?.blur();
-    }, 0);
   };
 
   // Keyboard navigation

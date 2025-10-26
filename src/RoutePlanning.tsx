@@ -84,7 +84,10 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
     });
 
     // Auto-focus the input for adding more addresses
-    setTimeout(() => addressInputRef.current?.focus(), 0);
+    // Use requestAnimationFrame to ensure DOM updates have completed
+    requestAnimationFrame(() => {
+      addressInputRef.current?.focus();
+    });
   };
 
   // Add address from autocomplete
@@ -107,7 +110,10 @@ const RoutePlanningComponent = function RoutePlanning({ user, onAddressesReady }
     });
 
     // Auto-focus the input for adding more addresses
-    setTimeout(() => addressInputRef.current?.focus(), 0);
+    // Use requestAnimationFrame to ensure DOM updates have completed
+    requestAnimationFrame(() => {
+      addressInputRef.current?.focus();
+    });
   };
 
   // Remove address
