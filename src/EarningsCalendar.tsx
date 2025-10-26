@@ -407,16 +407,14 @@ function PifDetailsRow({ date, state }: PifDetailsRowProps) {
     }).format(amount);
   };
 
-  // Calculate enforcement fees using complex bonus calculation
+  // Calculate enforcement fees (bonus) using complex calculation if enabled
   const bonusSettings = state.bonusSettings || DEFAULT_BONUS_SETTINGS;
   let enforcementFees = 0;
 
   if (pifCompletions.length > 1 && bonusSettings.calculationType === 'complex') {
-    // Calculate enforcement fees based on TCG Regulations 2014
+    // For TCG Regulations 2014, enforcement fees are the bonus earned
     const breakdown = calculateBonusBreakdown(pifCompletions, 1, bonusSettings);
-    if (breakdown.enforcementFees !== undefined) {
-      enforcementFees = breakdown.enforcementFees;
-    }
+    enforcementFees = breakdown.grossBonus;
   }
 
   return (
