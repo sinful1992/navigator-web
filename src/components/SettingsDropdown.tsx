@@ -517,25 +517,59 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                           {settings.homeAddress}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
                         <button
-                          className="modern-action-button small"
                           onClick={() => {
                             setTempHomeAddress(settings.homeAddress);
                             setIsEditingHomeAddress(true);
                           }}
-                          style={{ minWidth: 'auto', padding: '0.5rem 0.75rem' }}
+                          style={{
+                            padding: '0.5rem 0.75rem',
+                            fontSize: '0.8125rem',
+                            fontWeight: '500',
+                            color: '#6366f1',
+                            background: 'white',
+                            border: '1.5px solid rgba(99, 102, 241, 0.3)',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)';
+                            e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'white';
+                            e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+                          }}
                         >
                           Change
                         </button>
                         <button
-                          className="modern-action-button small"
                           onClick={() => {
                             if (confirm("Clear your home address? You can set it again anytime.")) {
                               clearHomeAddress();
                             }
                           }}
-                          style={{ minWidth: 'auto', padding: '0.5rem 0.75rem' }}
+                          style={{
+                            padding: '0.5rem 0.75rem',
+                            fontSize: '0.8125rem',
+                            fontWeight: '500',
+                            color: '#dc2626',
+                            background: 'white',
+                            border: '1.5px solid rgba(220, 38, 38, 0.3)',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(220, 38, 38, 0.1)';
+                            e.currentTarget.style.borderColor = 'rgba(220, 38, 38, 0.5)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'white';
+                            e.currentTarget.style.borderColor = 'rgba(220, 38, 38, 0.3)';
+                          }}
                         >
                           Clear
                         </button>
