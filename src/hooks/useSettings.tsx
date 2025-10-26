@@ -11,6 +11,9 @@ export interface Settings {
   confirmBeforeDelete: boolean;
   keepDataForMonths: 0 | 3 | 6 | 12; // 0 = forever
   avoidTolls: boolean; // Route planning: avoid toll roads
+  homeAddress: string; // Route planning: home address for route end point
+  homeAddressLat?: number; // Route planning: home latitude
+  homeAddressLng?: number; // Route planning: home longitude
 }
 
 // Pre-defined reminder texts for SMS
@@ -31,6 +34,9 @@ const DEFAULT_SETTINGS: Settings = {
   confirmBeforeDelete: true,
   keepDataForMonths: 6,
   avoidTolls: false, // Don't avoid tolls by default
+  homeAddress: '', // No home address by default
+  homeAddressLat: undefined,
+  homeAddressLng: undefined,
 };
 
 // Key for localStorage
@@ -48,6 +54,8 @@ interface SettingsContextType {
   toggleAvoidTolls: () => void;
   updateReminderText: (text: string) => void;
   updateKeepDataForMonths: (months: 0 | 3 | 6 | 12) => void;
+  updateHomeAddress: (address: string, lat?: number, lng?: number) => void;
+  clearHomeAddress: () => void;
   predefinedReminders: typeof PREDEFINED_REMINDERS;
 }
 
@@ -124,6 +132,24 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setSettings((prev) => ({ ...prev, keepDataForMonths: months }));
   }, []);
 
+  const updateHomeAddress = useCallback((address: string, lat?: number, lng?: number) => {
+    setSettings((prev) => ({
+      ...prev,
+      homeAddress: address,
+      homeAddressLat: lat,
+      homeAddressLng: lng
+    }));
+  }, []);
+
+  const clearHomeAddress = useCallback(() => {
+    setSettings((prev) => ({
+      ...prev,
+      homeAddress: '',
+      homeAddressLat: undefined,
+      homeAddressLng: undefined
+    }));
+  }, []);
+
   const value = {
     settings,
     updateSettings,
@@ -135,6 +161,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     toggleAvoidTolls,
     updateReminderText,
     updateKeepDataForMonths,
+    updateHomeAddress,
+    clearHomeAddress,
     predefinedReminders: PREDEFINED_REMINDERS,
   };
 
