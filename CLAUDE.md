@@ -24,9 +24,14 @@ npm test           # Run tests (OK to run)
 
 ### Core State Management
 - **State**: Centralized in `useAppState.ts` using React state + IndexedDB persistence
-- **Sync**: Real-time cloud sync with Supabase via `useCloudSync.ts`
-- **Optimistic Updates**: Local-first with conflict resolution
+- **Sync**: **Operation-based delta sync** via `useUnifiedSync` (migrated from state-based sync)
+  - 99.7% reduction in sync payload size (103KB → 0.3KB per operation)
+  - Immediate sync with no debounce delays
+  - Reliable multi-device synchronization
+  - Operations stored in `navigator_operations` Supabase table
+- **Optimistic Updates**: Local-first with instant UI feedback
 - **Offline Support**: Full offline functionality with sync on reconnection
+- **Conflict Resolution**: Automatic via operation log timestamps and sequence numbers
 
 ### Key Data Types (`src/types.ts`)
 - `AddressRow`: Address entries with optional lat/lng coordinates
@@ -39,15 +44,31 @@ npm test           # Run tests (OK to run)
 - `AddressList.tsx`: Displays addresses with filtering and completion actions
 - `Completed.tsx`: Shows completion history with outcome modification
 - `Arrangements.tsx`: Manages scheduled visits and customer interactions
-  - `UnifiedArrangementForm.tsx`: Create/edit arrangement form with case reference and payment schedule
+  - `UnifiedArrangementForm.tsx`: Create/edit arrangement form with case reference, number of cases, and payment schedule
   - `QuickPaymentModal.tsx`: Fast payment recording modal (5-second payment entry)
+  - **Edit functionality removed** - arrangements are now read-only after creation
+- `PifDetailsModal.tsx`: Shared modal for recording PIF completions
+  - Auto-calculates enforcement fees for single cases (£75 + £235 + 7.5% over £1500)
+  - Used by both AddressList and Completed components
+  - Supports case reference and amount entry
+- `RoutePlanning.tsx`: Route optimization with home address support
+  - Set/change/clear home address via autocomplete
+  - Routes optimized to end near home when configured
+  - Visual indicators showing route will end at home (🏠)
+- `EarningsCalendar.tsx`: Earnings tracking with expandable PIF details
+  - Daily breakdown with expandable rows showing case references
+  - Enforcement fee calculations for complex bonus settings
 - `Auth.tsx`: Supabase authentication flow
 - `DayPanel.tsx`: Time tracking and session management
+- `Settings.tsx`: User preferences including home address management
 
 ### Supabase Integration
 - **Authentication**: Email/password with persistent sessions
-- **Real-time sync**: Uses `entity_store` table for conflict-free replication
-- **Storage**: Automatic backups to Supabase Storage buckets
+- **Real-time sync**: Uses `navigator_operations` table for operation-based delta sync
+  - Each state mutation submitted as an operation (COMPLETION_CREATE, ADDRESS_BULK_IMPORT, etc.)
+  - Operations replicated across devices via Supabase real-time subscriptions
+  - Local operation log in IndexedDB for offline support
+- **Storage**: Local backups only (cloud backup removed as redundant with delta sync)
 - **Environment**: Requires `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
 
 ### Build & Deploy
@@ -272,6 +293,183 @@ const toggleExpanded = (date: string) => {
 - Make all rows expandable - only rows with PIFs should be interactive
 - Remove enforcement fee calculation - valuable for complex bonus users
 - Hardcode grid columns - must remain responsive
+
+### ⚡ Delta Sync Architecture (CRITICAL)
+
+**Background**: Migrated from state-based sync to operation-based delta sync for improved performance and reliability.
+
+**Key Changes** (Commit: `9a20f56`):
+- **Breaking Change**: Switched from full state replication to operation-based sync
+- **Payload Reduction**: 99.7% smaller sync payloads (103KB → 0.3KB per operation)
+- **No Debounce**: Immediate sync instead of 500ms debounce delays
+- **Multi-Device**: Fixed sync reliability across devices
+
+**Architecture** (`src/sync/`):
+```typescript
+// Operation types submitted to sync
+type OperationType =
+  | 'ADDRESS_BULK_IMPORT'
+  | 'COMPLETION_CREATE'
+  | 'COMPLETION_UPDATE'
+  | 'ARRANGEMENT_CREATE'
+  | 'ARRANGEMENT_UPDATE'
+  | 'SESSION_START'
+  | 'SESSION_END'
+  | 'SETTINGS_UPDATE_SUBSCRIPTION'
+  | 'SETTINGS_UPDATE_REMINDER'
+  | 'SETTINGS_UPDATE_BONUS';
+
+// Every state mutation submits an operation
+await submitOperation({
+  type: 'COMPLETION_CREATE',
+  payload: { completion }
+});
+```
+
+**Key Files**:
+- `src/sync/operationSync.ts`: Core delta sync implementation
+- `src/sync/migrationAdapter.ts`: Unified sync interface (operations mode only)
+- `src/sync/operationLog.ts`: Local operation log management
+- `src/sync/reducer.ts`: State reconstruction from operations
+- `src/sync/operations.ts`: Operation type definitions
+
+**Database**:
+- Table: `navigator_operations`
+- Columns: `id`, `user_id`, `device_id`, `sequence`, `type`, `payload`, `timestamp`, `entity`
+- Real-time subscription for cross-device sync
+- IndexedDB for local operation log
+
+**Critical Fixes** (Commit: `cb2cbde`):
+- **Bug**: Failed operations were marked as synced, causing permanent data loss
+- **Fix**: Only mark continuous sequences as synced (no gaps)
+- **Impact**: Critical reliability improvement for multi-device sync
+
+**DO NOT**:
+- Revert to state-based sync - causes multi-device failures
+- Add debounce to operation submission - defeats immediate sync benefits
+- Skip submitOperation calls - breaks cross-device synchronization
+- Modify operation sequence logic - carefully designed to prevent data loss
+
+**Root Cause Fixed**:
+The original state-based sync used a 500ms debounce timer that was reset on every state change. During active work sessions, the timer never reached 500ms, so data never synced to cloud. Delta sync eliminates this by submitting each operation immediately.
+
+### 🏠 Home Address Route Optimization (FEATURE)
+
+**Background**: Users wanted routes optimized to end near their home address for convenience.
+
+**Implementation** (`RoutePlanning.tsx`, Commit: `aef88c7`):
+```typescript
+// Settings stored in localStorage
+interface Settings {
+  homeAddress?: string;
+  homeAddressLat?: number;
+  homeAddressLng?: number;
+}
+
+// Route optimization with end location
+const optimizedRoute = await optimizeRoute({
+  addresses,
+  startLocation: { lat, lng },
+  endLocation: homeAddress ? { lat: homeAddressLat, lng: homeAddressLng } : undefined
+});
+```
+
+**Features**:
+- **Set Home Address**: Autocomplete address input in Settings or Route Planning tab
+- **Change Home**: Update home address anytime
+- **Clear Home**: Remove home address to revert to one-way routes
+- **Visual Indicators**: 🏠 icon shows when route will end at home
+- **VROOM Integration**: Backend Edge Function accepts `endLocation` parameter
+- **Optional**: Routes work with or without home address configured
+
+**User Flow**:
+1. Navigate to Settings tab
+2. Enter home address via autocomplete
+3. Save home address
+4. Return to Route Planning
+5. Optimize route - automatically ends near home
+6. Visual confirmation shows "Route will end near: [home address]"
+
+**Backend** (`supabase/functions/optimize-route/index.ts`):
+- VROOM vehicle configured with optional `end` parameter
+- When `endLocation` provided: start → stops → home
+- When `endLocation` omitted: one-way route (current behavior)
+
+**DO NOT**:
+- Make home address required - must remain optional
+- Remove visual indicators - users need confirmation
+- Change autocomplete behavior - matches main address autocomplete
+
+### 💰 PIF Details Modal & Enforcement Fees (FEATURE)
+
+**Background**: Unified PIF recording across AddressList and Completed with automatic enforcement fee calculation.
+
+**Implementation** (`PifDetailsModal.tsx`, Commit: `88b4ca6`):
+```typescript
+// Auto-calculation for single case PIFs
+const complianceFee = 75;
+const baseFee = 235;
+const amountOverThreshold = Math.max(0, debtAmount - 1500);
+const percentageFee = amountOverThreshold * 0.075; // 7.5%
+const enforcementFee = complianceFee + baseFee + percentageFee;
+```
+
+**Features**:
+- **Shared Component**: Used by both `AddressList.tsx` and `Completed.tsx`
+- **Auto-Calculation**: Enforcement fees calculated automatically for single cases
+- **TCG Regulations 2014**: £75 compliance + £235 base + 7.5% over £1500
+- **Case Reference**: Required field for all PIF completions
+- **Amount Entry**: User enters debt amount, enforcement fee calculated
+- **Multiple Cases**: User can specify if multiple cases involved
+
+**Arrangement Integration**:
+- `UnifiedArrangementForm.tsx` now includes:
+  - `caseReference`: Case reference number
+  - `numberOfCases`: Number of cases in arrangement
+- Button order updated: Add Payment → Send SMS → Defaulted → Delete
+- **Edit removed**: Arrangements are read-only after creation (prevents data inconsistencies)
+
+**DO NOT**:
+- Remove auto-calculation - saves time and prevents errors
+- Change TCG fee structure without user confirmation - regulatory requirement
+- Re-add arrangement edit functionality - removed to prevent sync issues
+
+### 🔄 Completion Update Sync Fix (CRITICAL)
+
+**Background**: Changing completion outcomes (PIF → DA, updating amounts) wasn't syncing across devices.
+
+**Root Cause** (Commit: `9e12710`):
+`handleChangeOutcome` in `App.tsx` directly mutated state via `setState()` instead of submitting operations to delta sync.
+
+**Fix**:
+```typescript
+// OLD (broken):
+setState(prev => ({
+  ...prev,
+  completions: prev.completions.map((c, i) =>
+    i === index ? { ...c, outcome: newOutcome } : c
+  )
+}));
+
+// NEW (working):
+updateCompletion(index, {
+  outcome: newOutcome,
+  amount: newAmount,
+  arrangementId: arrId
+});
+// Internally submits COMPLETION_UPDATE operation
+```
+
+**Impact**:
+- ✅ Outcome changes now sync across devices
+- ✅ Amount updates sync properly
+- ✅ Arrangement linking syncs correctly
+- ✅ Multi-device consistency maintained
+
+**DO NOT**:
+- Directly mutate completions array - always use `updateCompletion()`
+- Bypass operation submission - breaks cross-device sync
+- Remove updateCompletion function - required for delta sync
 
 ## Environment Setup
 
