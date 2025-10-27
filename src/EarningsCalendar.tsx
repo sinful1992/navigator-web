@@ -35,6 +35,22 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
     });
   };
 
+  // State for manually selected working days
+  // Initialized to all dates with completions (user can uncheck days they didn't work)
+  const [manualWorkingDays, setManualWorkingDays] = useState<Set<string> | null>(null);
+
+  const toggleWorkingDay = (date: string) => {
+    setManualWorkingDays(prev => {
+      const newSet = new Set(prev || new Set());
+      if (newSet.has(date)) {
+        newSet.delete(date);
+      } else {
+        newSet.add(date);
+      }
+      return newSet;
+    });
+  };
+
   // Calculate earnings for the selected date range
   const rangeStats = useMemo(() => {
     const completions = state.completions || [];
@@ -55,13 +71,19 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
     const daCount = rangeCompletions.filter(c => c.outcome === 'DA').length;
     const arrCount = rangeCompletions.filter(c => c.outcome === 'ARR').length;
 
-    // Calculate working days: count unique days with completions in the range
-    // This ensures bonus calculation is consistent with daily breakdown
-    // (each day with completions = 1 working day for threshold purposes)
+    // Get all unique dates with completions in range
     const completionDates = new Set(
       rangeCompletions.map(c => c.timestamp.slice(0, 10))
     );
-    const workingDays = completionDates.size;
+
+    // Initialize manual working days on first load
+    if (manualWorkingDays === null && completionDates.size > 0) {
+      setManualWorkingDays(new Set(completionDates));
+    }
+
+    // Use manual selection if available, otherwise use all completion dates
+    const selectedWorkingDays = manualWorkingDays || completionDates;
+    const workingDays = selectedWorkingDays.size;
 
     // Use configurable bonus settings
     const bonusSettings = state.bonusSettings || DEFAULT_BONUS_SETTINGS;
@@ -129,7 +151,7 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
       formulaDescription,
       dailyStats: dailyStatsWithBonus.sort((a, b) => b.date.localeCompare(a.date))
     };
-  }, [state.completions, state.daySessions, state.bonusSettings, selectedStartDate, selectedEndDate]);
+  }, [state.completions, state.daySessions, state.bonusSettings, selectedStartDate, selectedEndDate, manualWorkingDays]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-GB', {
@@ -288,6 +310,9 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
                     <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-light)' }}>
                       Date
                     </th>
+                    <th style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid var(--border-light)', fontSize: '0.875rem' }}>
+                      Worked?
+                    </th>
                     <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)' }}>
                       PIFs
                     </th>
@@ -319,6 +344,19 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
                               day: 'numeric',
                               month: 'short'
                             })}
+                          </td>
+                          <td style={{
+                            padding: '0.75rem',
+                            textAlign: 'center',
+                            borderBottom: isExpanded ? 'none' : '1px solid var(--border-light)'
+                          }}>
+                            <input
+                              type="checkbox"
+                              checked={manualWorkingDays?.has(day.date) ?? false}
+                              onChange={() => toggleWorkingDay(day.date)}
+                              style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+                              title="Mark as working day"
+                            />
                           </td>
                           <td
                             style={{
@@ -365,7 +403,7 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
                         </tr>
                         {isExpanded && hasPifs && (
                           <tr key={`${day.date}-expanded`}>
-                            <td colSpan={5} style={{
+                            <td colSpan={6} style={{
                               padding: '0 0.75rem 1rem 0.75rem',
                               background: 'var(--background)',
                               borderBottom: '1px solid var(--border-light)'
