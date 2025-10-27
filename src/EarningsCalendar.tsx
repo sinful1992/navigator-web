@@ -25,7 +25,7 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
 
   const toggleExpanded = (date: string) => {
     setExpandedDates(prev => {
-      const newSet = new Set<string>(prev);
+      const newSet = new Set(prev);
       if (newSet.has(date)) {
         newSet.delete(date);
       } else {
@@ -41,7 +41,7 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
 
   const toggleWorkingDay = (date: string) => {
     setManualWorkingDays(prev => {
-      const newSet = new Set<string>(prev || new Set<string>());
+      const newSet = new Set(prev || new Set());
       if (newSet.has(date)) {
         newSet.delete(date);
       } else {
