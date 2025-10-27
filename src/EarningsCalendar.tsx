@@ -55,23 +55,13 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
     const daCount = rangeCompletions.filter(c => c.outcome === 'DA').length;
     const arrCount = rangeCompletions.filter(c => c.outcome === 'ARR').length;
 
-    // Calculate working days from day sessions in the selected range
-    // Count only days where you both clocked in/out AND completed at least one address
-    // This ensures you're not penalized with higher threshold for unproductive days
-    const daySessions = state.daySessions || [];
+    // Calculate working days: count unique days with completions in the range
+    // This ensures bonus calculation is consistent with daily breakdown
+    // (each day with completions = 1 working day for threshold purposes)
     const completionDates = new Set(
       rangeCompletions.map(c => c.timestamp.slice(0, 10))
     );
-    const workingDays = new Set(
-      daySessions
-        .filter(session =>
-          session.date >= selectedStartDate &&
-          session.date <= selectedEndDate &&
-          session.end &&
-          completionDates.has(session.date) // Only count days with actual completions
-        )
-        .map(session => session.date)
-    ).size;
+    const workingDays = completionDates.size;
 
     // Use configurable bonus settings
     const bonusSettings = state.bonusSettings || DEFAULT_BONUS_SETTINGS;
