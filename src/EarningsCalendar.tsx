@@ -463,6 +463,14 @@ function PifDetailsRow({ date, state }: PifDetailsRowProps) {
         }}>
           {pifCompletions.map((c, idx) => {
             const amount = parseFloat(c.amount || '0');
+
+            // Calculate enforcement fees per TCG Regulations 2014
+            const complianceFee = 75;
+            const baseFee = 235;
+            const amountOverThreshold = Math.max(0, amount - 1500);
+            const percentageFee = amountOverThreshold * 0.075; // 7.5%
+            const enforcementFee = complianceFee + baseFee + percentageFee;
+
             return (
               <div
                 key={idx}
@@ -480,6 +488,17 @@ function PifDetailsRow({ date, state }: PifDetailsRowProps) {
                 <div style={{ color: 'var(--text-muted)' }}>
                   {formatCurrency(amount)}
                 </div>
+                {pifCompletions.length > 1 && (
+                  <div style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--text-muted)',
+                    marginTop: '0.25rem',
+                    borderTop: '1px solid var(--border-light)',
+                    paddingTop: '0.25rem'
+                  }}>
+                    Enf. Fee: {formatCurrency(enforcementFee)}
+                  </div>
+                )}
               </div>
             );
           })}
