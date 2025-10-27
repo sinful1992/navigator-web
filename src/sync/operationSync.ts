@@ -290,6 +290,9 @@ export function useOperationSync(): UseOperationSync {
   const batchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingBatchRef = useRef<boolean>(false);
 
+  // 🔧 FIX: Track last time we logged "no progress" to prevent spam
+  const lastNoProgressLogRef = useRef<number>(0);
+
   // Trigger batch sync with debouncing
   const scheduleBatchSync = useCallback(() => {
     if (batchTimerRef.current) {
@@ -520,13 +523,18 @@ export function useOperationSync(): UseOperationSync {
             logger.error('⚠️ FAILED OPERATIONS (will retry):', failedOps);
           }
         } else {
-          logger.warn('⚠️ NO PROGRESS: Successful uploads exist but not continuous from last synced', {
-            currentLastSynced,
-            successfulSequences: successfulSequences.slice(0, 5), // Show first 5
-            firstGap: successfulSequences[0] > currentLastSynced + 1
-              ? currentLastSynced + 1
-              : 'unknown',
-          });
+          // 🔧 FIX: Only log "NO PROGRESS" once every 30 seconds to prevent spam
+          const now = Date.now();
+          if (now - lastNoProgressLogRef.current > 30000) {
+            logger.warn('⚠️ NO PROGRESS: Successful uploads exist but not continuous from last synced', {
+              currentLastSynced,
+              successfulSequences: successfulSequences.slice(0, 5), // Show first 5
+              firstGap: successfulSequences[0] > currentLastSynced + 1
+                ? currentLastSynced + 1
+                : 'unknown',
+            });
+            lastNoProgressLogRef.current = now;
+          }
         }
       } else {
         logger.error('❌ ALL UPLOADS FAILED - no operations marked as synced');
@@ -970,13 +978,18 @@ export function useOperationSync(): UseOperationSync {
 
                   setLastSyncTime(new Date());
                 } else {
-                  logger.warn('⚠️ AUTO-SYNC NO PROGRESS: Successful uploads exist but not continuous from last synced', {
-                    currentLastSynced,
-                    successfulSequences: successfulSequences.slice(0, 5),
-                    firstGap: successfulSequences[0] > currentLastSynced + 1
-                      ? currentLastSynced + 1
-                      : 'unknown',
-                  });
+                  // 🔧 FIX: Only log "NO PROGRESS" once every 30 seconds to prevent spam
+                  const now = Date.now();
+                  if (now - lastNoProgressLogRef.current > 30000) {
+                    logger.warn('⚠️ AUTO-SYNC NO PROGRESS: Successful uploads exist but not continuous from last synced', {
+                      currentLastSynced,
+                      successfulSequences: successfulSequences.slice(0, 5),
+                      firstGap: successfulSequences[0] > currentLastSynced + 1
+                        ? currentLastSynced + 1
+                        : 'unknown',
+                    });
+                    lastNoProgressLogRef.current = now;
+                  }
                 }
               } else {
                 logger.error('❌ AUTO-SYNC: All uploads failed');
