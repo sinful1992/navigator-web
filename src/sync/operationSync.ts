@@ -9,188 +9,6 @@ import { reconstructState } from "./reducer";
 import { logger } from "../utils/logger";
 import { DEFAULT_REMINDER_SETTINGS } from "../services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "../utils/bonusCalculator";
-import { SEQUENCE_CORRUPTION_THRESHOLD } from "./syncConfig";
-
-/**
- * SECURITY: Track used operation nonces to prevent replay attacks
- * Nonces are generated when operations are created and must be unique
- */
-const usedNonces = new Set<string>();
-
-function generateNonce(): string {
-  // Generate cryptographically unique nonce for replay attack prevention
-  // Format: timestamp + random + counter = near-unique identifier
-  return `${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
-}
-
-/**
- * SECURITY: Check if operation nonce has been seen before (replay attack detection)
- * Returns true if this is a new operation, false if replay detected
- */
-function checkAndRegisterNonce(nonce: string | undefined): boolean {
-  if (!nonce) return true; // Allow operations without nonce (legacy)
-
-  if (usedNonces.has(nonce)) {
-    logger.warn('🚨 SECURITY: Replay attack detected - nonce already used:', { nonce });
-    return false; // Replay detected
-  }
-
-  usedNonces.add(nonce);
-
-  // Memory management: keep only recent nonces (last 10000)
-  // Older operations are presumed not to be replayed
-  if (usedNonces.size > 10000) {
-    const noncesArray = Array.from(usedNonces);
-    // Clear oldest half
-    const toDelete = noncesArray.slice(0, 5000);
-    toDelete.forEach(n => usedNonces.delete(n));
-    logger.info('🧹 Nonce cache cleared - kept recent 5000 nonces');
-  }
-
-  return true; // New operation, not a replay
-}
-
-/**
- * SECURITY: Validate operation payload before accepting from cloud
- * Prevents malformed data from corrupting application state
- */
-function validateOperationPayload(operation: any): { valid: boolean; error?: string } {
-  // Check base fields
-  if (!operation || typeof operation !== 'object') {
-    return { valid: false, error: 'Operation must be an object' };
-  }
-
-  if (typeof operation.id !== 'string' || !operation.id) {
-    return { valid: false, error: 'Missing or invalid operation.id' };
-  }
-
-  if (typeof operation.timestamp !== 'string' || !operation.timestamp) {
-    return { valid: false, error: 'Missing or invalid operation.timestamp' };
-  }
-
-  if (typeof operation.clientId !== 'string' || !operation.clientId) {
-    return { valid: false, error: 'Missing or invalid operation.clientId' };
-  }
-
-  if (!Number.isInteger(operation.sequence) || operation.sequence < 0) {
-    return { valid: false, error: 'Missing or invalid operation.sequence' };
-  }
-
-  if (typeof operation.type !== 'string' || !operation.type) {
-    return { valid: false, error: 'Missing or invalid operation.type' };
-  }
-
-  // Validate timestamp is reasonable (not more than 24 hours in future to prevent clock skew attacks)
-  const opTime = new Date(operation.timestamp).getTime();
-  const now = Date.now();
-  const maxFutureMs = 24 * 60 * 60 * 1000; // 24 hours
-
-  if (isNaN(opTime)) {
-    return { valid: false, error: 'Invalid timestamp format' };
-  }
-
-  if (opTime > now + maxFutureMs) {
-    return { valid: false, error: 'Operation timestamp too far in future (clock skew attack?)' };
-  }
-
-  // Validate payload exists and is an object
-  if (!operation.payload || typeof operation.payload !== 'object') {
-    return { valid: false, error: 'Missing or invalid operation.payload' };
-  }
-
-  // Type-specific payload validation
-  switch (operation.type) {
-    case 'COMPLETION_CREATE':
-      if (!operation.payload.completion || typeof operation.payload.completion !== 'object') {
-        return { valid: false, error: 'COMPLETION_CREATE: Missing completion object' };
-      }
-      if (!operation.payload.completion.timestamp || !operation.payload.completion.index) {
-        return { valid: false, error: 'COMPLETION_CREATE: Missing required completion fields' };
-      }
-      break;
-
-    case 'COMPLETION_UPDATE':
-      if (!operation.payload.originalTimestamp || typeof operation.payload.originalTimestamp !== 'string') {
-        return { valid: false, error: 'COMPLETION_UPDATE: Missing originalTimestamp' };
-      }
-      if (!operation.payload.updates || typeof operation.payload.updates !== 'object') {
-        return { valid: false, error: 'COMPLETION_UPDATE: Missing updates object' };
-      }
-      break;
-
-    case 'COMPLETION_DELETE':
-      if (!operation.payload.timestamp || typeof operation.payload.timestamp !== 'string') {
-        return { valid: false, error: 'COMPLETION_DELETE: Missing timestamp' };
-      }
-      if (!Number.isInteger(operation.payload.index) || operation.payload.index < 0) {
-        return { valid: false, error: 'COMPLETION_DELETE: Invalid index' };
-      }
-      break;
-
-    case 'ADDRESS_BULK_IMPORT':
-      if (!Array.isArray(operation.payload.addresses)) {
-        return { valid: false, error: 'ADDRESS_BULK_IMPORT: addresses must be an array' };
-      }
-      if (!Number.isInteger(operation.payload.newListVersion) || operation.payload.newListVersion < 1) {
-        return { valid: false, error: 'ADDRESS_BULK_IMPORT: Invalid newListVersion' };
-      }
-      break;
-
-    case 'ADDRESS_ADD':
-      if (!operation.payload.address || typeof operation.payload.address !== 'object') {
-        return { valid: false, error: 'ADDRESS_ADD: Missing address object' };
-      }
-      break;
-
-    case 'SESSION_START':
-    case 'SESSION_END':
-      if (!operation.payload || typeof operation.payload !== 'object') {
-        return { valid: false, error: `${operation.type}: Missing payload` };
-      }
-      break;
-
-    case 'ARRANGEMENT_CREATE':
-      if (!operation.payload.arrangement || typeof operation.payload.arrangement !== 'object') {
-        return { valid: false, error: 'ARRANGEMENT_CREATE: Missing arrangement object' };
-      }
-      break;
-
-    case 'ARRANGEMENT_UPDATE':
-      if (!operation.payload.id || typeof operation.payload.id !== 'string') {
-        return { valid: false, error: 'ARRANGEMENT_UPDATE: Missing id' };
-      }
-      if (!operation.payload.updates || typeof operation.payload.updates !== 'object') {
-        return { valid: false, error: 'ARRANGEMENT_UPDATE: Missing updates object' };
-      }
-      break;
-
-    case 'ARRANGEMENT_DELETE':
-      if (!operation.payload.id || typeof operation.payload.id !== 'string') {
-        return { valid: false, error: 'ARRANGEMENT_DELETE: Missing id' };
-      }
-      break;
-
-    case 'ACTIVE_INDEX_SET':
-      if (!('index' in operation.payload)) {
-        return { valid: false, error: 'ACTIVE_INDEX_SET: Missing index' };
-      }
-      break;
-
-    case 'SETTINGS_UPDATE_SUBSCRIPTION':
-    case 'SETTINGS_UPDATE_REMINDER':
-    case 'SETTINGS_UPDATE_BONUS':
-      // These can have null/undefined payloads, just validate structure
-      if (!operation.payload) {
-        return { valid: false, error: `${operation.type}: Missing payload` };
-      }
-      break;
-
-    default:
-      return { valid: false, error: `Unknown operation type: ${operation.type}` };
-  }
-
-  return { valid: true };
-}
 
 type UseOperationSync = {
   user: User | null;
@@ -213,8 +31,6 @@ type UseOperationSync = {
   subscribeToOperations: (onOperations: (operations: Operation[]) => void) => () => void;
   forceSync: () => Promise<void>;
   getStateFromOperations: () => AppState;
-  getOperationLogState: () => ReturnType<OperationLogManager['getLogState']> | null; // 🔧 FIX: Expose operation log state for restore operations
-  clearOperationLogForRestore: () => Promise<void>; // 🔧 FIX: Clear with sequence preservation during backup restore
 };
 
 const INITIAL_STATE: AppState = {
@@ -251,9 +67,6 @@ export function useOperationSync(): UseOperationSync {
 
   // State change listeners (for notifying App.tsx of local operations)
   const stateChangeListeners = useRef<Set<(operations: Operation[]) => void>>(new Set());
-
-  // forceSync will be defined later but we need a ref to it for the online/offline effect
-  const forceSyncRef = useRef<(() => Promise<void>) | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -381,49 +194,7 @@ export function useOperationSync(): UseOperationSync {
           } else if (data && data.length > 0) {
             logger.info(`📥 BOOTSTRAP: Received ${data.length} operations from cloud`);
 
-            const remoteOperations: Operation[] = [];
-            const invalidOps: Array<{raw: any; error: string}> = [];
-
-            // SECURITY: Validate each operation before accepting (prevents malformed data corruption)
-            for (const row of data) {
-              const validation = validateOperationPayload(row.operation_data);
-              if (!validation.valid) {
-                logger.warn('🚨 SECURITY: Rejecting invalid operation from cloud:', {
-                  error: validation.error,
-                  opId: row.operation_data?.id,
-                  opType: row.operation_data?.type,
-                });
-                invalidOps.push({
-                  raw: row.operation_data,
-                  error: validation.error || 'Unknown validation error'
-                });
-                continue;
-              }
-
-              // SECURITY: Check for replay attacks (use nonce if present, else operation ID)
-              const nonce = (row.operation_data as any)?.nonce || row.operation_data?.id;
-              if (!checkAndRegisterNonce(nonce)) {
-                logger.error('🚨 SECURITY: Rejecting operation - replay attack detected (duplicate nonce):', {
-                  opId: row.operation_data?.id,
-                  opType: row.operation_data?.type,
-                });
-                invalidOps.push({
-                  raw: row.operation_data,
-                  error: 'Replay attack detected - duplicate nonce'
-                });
-                continue;
-              }
-
-              // All security checks passed
-              remoteOperations.push(row.operation_data);
-            }
-
-            if (invalidOps.length > 0) {
-              logger.error(`❌ BOOTSTRAP: Rejected ${invalidOps.length}/${data.length} malformed operations`, {
-                sample: invalidOps.slice(0, 3)
-              });
-            }
-
+            const remoteOperations: Operation[] = data.map(row => row.operation_data);
             logger.info('📊 BOOTSTRAP: Operation types:', remoteOperations.reduce((acc, op) => {
               acc[op.type] = (acc[op.type] || 0) + 1;
               return acc;
@@ -441,37 +212,9 @@ export function useOperationSync(): UseOperationSync {
 
               if (myOpsToMarkSynced.length > 0) {
                 const maxMySeq = Math.max(...myOpsToMarkSynced);
-
-                // 🔧 CRITICAL FIX: Detect corrupted sequence numbers from cloud
-                // If all local operations are much lower than cloud sequence, cloud is corrupted
-                // However, legitimate gaps occur from multiple devices
-                const localMaxSeq = operationLog.current.getAllOperations().length > 0
-                  ? Math.max(...operationLog.current.getAllOperations().map(op => op.sequence))
-                  : 0;
-
-                // PHASE 1.1.2 FIX: Use configurable threshold for sequence corruption detection
-                // The SEQUENCE_CORRUPTION_THRESHOLD is defined in syncConfig.ts
-                // Increased from 1000 to 10000 to reduce false positives
-                const gap = maxMySeq - localMaxSeq;
-                const isCloudCorrupted = gap > SEQUENCE_CORRUPTION_THRESHOLD && localMaxSeq > 100;
-
-                if (isCloudCorrupted) {
-                  logger.error('🚨 BOOTSTRAP: Cloud operations have corrupted sequence numbers!', {
-                    cloudMaxSeq: maxMySeq,
-                    localMaxSeq,
-                    gap,
-                    threshold: SEQUENCE_CORRUPTION_THRESHOLD,
-                  });
-                  // DON'T use this corrupted sequence - it will poison our local sequence generator
-                  logger.info('📥 BOOTSTRAP: Skipping corrupted sequence number marking (would cause sequence collision)');
-                } else if (Number.isFinite(maxMySeq)) {
-                  // Sequence is valid - use it
+                if (Number.isFinite(maxMySeq)) {
                   await operationLog.current.markSyncedUpTo(maxMySeq);
-                  logger.info(`📥 BOOTSTRAP: Marked sequences up to ${maxMySeq} as synced (from this device)`, {
-                    gap,
-                    threshold: SEQUENCE_CORRUPTION_THRESHOLD,
-                    status: 'valid',
-                  });
+                  logger.info(`📥 BOOTSTRAP: Marked sequences up to ${maxMySeq} as synced (from this device)`);
                 }
               } else {
                 logger.info(`📥 BOOTSTRAP: No operations from this device to mark as synced`);
@@ -516,7 +259,7 @@ export function useOperationSync(): UseOperationSync {
     };
 
     initUserOperationLog();
-  }, [user?.id, isOnline, supabase]);
+  }, [user?.id, isOnline]);
 
   // Online/offline tracking
   useEffect(() => {
@@ -525,8 +268,8 @@ export function useOperationSync(): UseOperationSync {
     const handleOnline = () => {
       setIsOnline(true);
       // Trigger sync when coming back online
-      if (user && operationLog.current && forceSyncRef.current) {
-        setTimeout(() => forceSyncRef.current?.(), 100);
+      if (user && operationLog.current) {
+        setTimeout(() => forceSync(), 100);
       }
     };
 
@@ -544,9 +287,6 @@ export function useOperationSync(): UseOperationSync {
   // Operation batching for backpressure control
   const batchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingBatchRef = useRef<boolean>(false);
-
-  // 🔧 FIX: Track last time we logged "no progress" to prevent spam
-  const lastNoProgressLogRef = useRef<number>(0);
 
   // Trigger batch sync with debouncing
   const scheduleBatchSync = useCallback(() => {
@@ -598,15 +338,13 @@ export function useOperationSync(): UseOperationSync {
     }
 
     // Create envelope without sequence - OperationLog will assign it
-    // SECURITY: Add nonce for replay attack prevention
     const operationEnvelope = {
       id: `op_${Date.now()}_${Math.random().toString(36).slice(2)}`,
       timestamp: new Date().toISOString(),
       clientId: deviceId.current,
       type: operationData.type,
       payload: operationData.payload,
-      nonce: generateNonce(), // Unique identifier to prevent replay attacks
-    } as Omit<Operation, 'sequence'> & { nonce: string };
+    } as Omit<Operation, 'sequence'>;
 
     // Add to local log (assigns sequence internally)
     const persistedOperation = await operationLog.current.append(operationEnvelope);
@@ -780,18 +518,13 @@ export function useOperationSync(): UseOperationSync {
             logger.error('⚠️ FAILED OPERATIONS (will retry):', failedOps);
           }
         } else {
-          // 🔧 FIX: Only log "NO PROGRESS" once every 30 seconds to prevent spam
-          const now = Date.now();
-          if (now - lastNoProgressLogRef.current > 30000) {
-            logger.warn('⚠️ NO PROGRESS: Successful uploads exist but not continuous from last synced', {
-              currentLastSynced,
-              successfulSequences: successfulSequences.slice(0, 5), // Show first 5
-              firstGap: successfulSequences[0] > currentLastSynced + 1
-                ? currentLastSynced + 1
-                : 'unknown',
-            });
-            lastNoProgressLogRef.current = now;
-          }
+          logger.warn('⚠️ NO PROGRESS: Successful uploads exist but not continuous from last synced', {
+            currentLastSynced,
+            successfulSequences: successfulSequences.slice(0, 5), // Show first 5
+            firstGap: successfulSequences[0] > currentLastSynced + 1
+              ? currentLastSynced + 1
+              : 'unknown',
+          });
         }
       } else {
         logger.error('❌ ALL UPLOADS FAILED - no operations marked as synced');
@@ -840,44 +573,7 @@ export function useOperationSync(): UseOperationSync {
       if (data && data.length > 0) {
         logger.info(`📥 RECEIVED ${data.length} operations from cloud`);
 
-        const remoteOperations: Operation[] = [];
-        const invalidOps: Array<{error: string; opType?: string}> = [];
-
-        // SECURITY: Validate each operation before accepting (prevents malformed data corruption)
-        for (const row of data) {
-          const validation = validateOperationPayload(row.operation_data);
-          if (!validation.valid) {
-            logger.warn('🚨 SECURITY: Rejecting invalid operation from cloud:', {
-              error: validation.error,
-              opType: row.operation_data?.type,
-            });
-            invalidOps.push({
-              error: validation.error || 'Unknown validation error',
-              opType: row.operation_data?.type
-            });
-            continue;
-          }
-
-          // SECURITY: Check for replay attacks (duplicate nonce)
-          if (!checkAndRegisterNonce(row.operation_data?.nonce)) {
-            logger.error('🚨 SECURITY: Rejecting operation - replay attack detected:', {
-              opType: row.operation_data?.type,
-              nonce: row.operation_data?.nonce?.substring(0, 10) + '...',
-            });
-            invalidOps.push({
-              error: 'Replay attack detected - duplicate nonce',
-              opType: row.operation_data?.type
-            });
-            continue;
-          }
-
-          // All security checks passed
-          remoteOperations.push(row.operation_data);
-        }
-
-        if (invalidOps.length > 0) {
-          logger.error(`❌ FETCH: Rejected ${invalidOps.length}/${data.length} malformed operations`);
-        }
+        const remoteOperations: Operation[] = data.map(row => row.operation_data);
 
         // Merge remote operations and resolve conflicts
         const newOperations = await operationLog.current!.mergeRemoteOperations(remoteOperations);
@@ -915,9 +611,6 @@ export function useOperationSync(): UseOperationSync {
       fetchOperationsFromCloud(),
     ]);
   }, [syncOperationsToCloud, fetchOperationsFromCloud]);
-
-  // Set ref for use in online/offline event listeners
-  forceSyncRef.current = forceSync;
 
   // Subscribe to operation changes
   const subscribeToOperations = useCallback(
@@ -987,27 +680,6 @@ export function useOperationSync(): UseOperationSync {
           try {
             logger.info('📥 REAL-TIME: Received operation from another device');
             const operation: Operation = payload.new.operation_data;
-
-            // SECURITY: Validate operation before processing (prevents malformed data corruption)
-            const validation = validateOperationPayload(operation);
-            if (!validation.valid) {
-              logger.error('🚨 SECURITY: Rejecting invalid real-time operation:', {
-                error: validation.error,
-                opType: operation?.type,
-                opId: operation?.id,
-              });
-              return;
-            }
-
-            // SECURITY: Check for replay attacks (use nonce if present, else operation ID)
-            const opNonce = (operation as any)?.nonce || operation?.id;
-            if (!checkAndRegisterNonce(opNonce)) {
-              logger.error('🚨 SECURITY: Rejecting operation - replay attack detected (real-time):', {
-                opType: operation?.type,
-                opId: operation?.id,
-              });
-              return;
-            }
 
             logger.debug('Operation details:', {
               type: operation.type,
@@ -1296,18 +968,13 @@ export function useOperationSync(): UseOperationSync {
 
                   setLastSyncTime(new Date());
                 } else {
-                  // 🔧 FIX: Only log "NO PROGRESS" once every 30 seconds to prevent spam
-                  const now = Date.now();
-                  if (now - lastNoProgressLogRef.current > 30000) {
-                    logger.warn('⚠️ AUTO-SYNC NO PROGRESS: Successful uploads exist but not continuous from last synced', {
-                      currentLastSynced,
-                      successfulSequences: successfulSequences.slice(0, 5),
-                      firstGap: successfulSequences[0] > currentLastSynced + 1
-                        ? currentLastSynced + 1
-                        : 'unknown',
-                    });
-                    lastNoProgressLogRef.current = now;
-                  }
+                  logger.warn('⚠️ AUTO-SYNC NO PROGRESS: Successful uploads exist but not continuous from last synced', {
+                    currentLastSynced,
+                    successfulSequences: successfulSequences.slice(0, 5),
+                    firstGap: successfulSequences[0] > currentLastSynced + 1
+                      ? currentLastSynced + 1
+                      : 'unknown',
+                  });
                 }
               } else {
                 logger.error('❌ AUTO-SYNC: All uploads failed');
@@ -1337,24 +1004,6 @@ export function useOperationSync(): UseOperationSync {
     };
   }, []);
 
-  // 🔧 CRITICAL: Get operation log state for restore operations
-  // This preserves lastSyncSequence during backup restore
-  const getOperationLogState = useCallback(() => {
-    return operationLog.current?.getLogState() ?? null;
-  }, []);
-
-  // 🔧 CRITICAL: Clear operation log while preserving sequence continuity
-  // Called during backup restore to prevent sequence gaps
-  const clearOperationLogForRestore = useCallback(async () => {
-    if (operationLog.current) {
-      await operationLog.current.clearForRestore();
-      // Reconstruct state from empty operations (should give INITIAL_STATE)
-      const newState = reconstructState(INITIAL_STATE, []);
-      setCurrentState(newState);
-      logger.info('✅ Operation log cleared for restore, sequence continuity preserved');
-    }
-  }, []);
-
   return useMemo<UseOperationSync>(
     () => ({
       user,
@@ -1373,8 +1022,6 @@ export function useOperationSync(): UseOperationSync {
       subscribeToOperations,
       forceSync,
       getStateFromOperations,
-      getOperationLogState,
-      clearOperationLogForRestore,
     }),
     [
       user,
@@ -1393,8 +1040,6 @@ export function useOperationSync(): UseOperationSync {
       subscribeToOperations,
       forceSync,
       getStateFromOperations,
-      getOperationLogState,
-      clearOperationLogForRestore,
     ]
   );
 }
