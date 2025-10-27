@@ -9,6 +9,7 @@ type SyncStats = {
   duplicateCompletions: number;
   sequenceRange: { min: number; max: number };
   lastSyncSequence: number;
+  unsyncedCount: number; // 🔧 FIX: Actual count of unsynced operations
   isCorrupted: boolean;
 };
 
@@ -47,7 +48,13 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
         unsyncedCalc: localStats.totalOperations - localStats.lastSyncSequence
       });
 
-      setStats(localStats);
+      // 🔧 FIX: Calculate correct unsynced count
+      const unsyncedOpsCount = opLog.getUnsyncedOperations().length;
+
+      setStats({
+        ...localStats,
+        unsyncedCount: unsyncedOpsCount,
+      });
 
       // Get cloud count
       if (supabase) {
@@ -321,7 +328,8 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
     loadDiagnostics();
   }, [loadDiagnostics]);
 
-  const unsyncedCount = stats ? stats.totalOperations - stats.lastSyncSequence : 0;
+  // 🔧 FIX: Use the correct unsynced count (not a math subtraction!)
+  const unsyncedCount = stats ? stats.unsyncedCount : 0;
   const isInSync = cloudCount !== null && stats && cloudCount >= stats.totalOperations;
 
   // DEBUG: Log render state
