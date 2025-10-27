@@ -31,6 +31,8 @@ type UseOperationSync = {
   subscribeToOperations: (onOperations: (operations: Operation[]) => void) => () => void;
   forceSync: () => Promise<void>;
   getStateFromOperations: () => AppState;
+  getOperationLogState: () => ReturnType<OperationLogManager['getLogState']> | null; // 🔧 FIX: Expose operation log state for restore operations
+  clearOperationLogForRestore: () => Promise<void>; // 🔧 FIX: Clear with sequence preservation during backup restore
 };
 
 const INITIAL_STATE: AppState = {
@@ -1004,6 +1006,24 @@ export function useOperationSync(): UseOperationSync {
     };
   }, []);
 
+  // 🔧 CRITICAL: Get operation log state for restore operations
+  // This preserves lastSyncSequence during backup restore
+  const getOperationLogState = useCallback(() => {
+    return operationLog.current?.getLogState() ?? null;
+  }, []);
+
+  // 🔧 CRITICAL: Clear operation log while preserving sequence continuity
+  // Called during backup restore to prevent sequence gaps
+  const clearOperationLogForRestore = useCallback(async () => {
+    if (operationLog.current) {
+      await operationLog.current.clearForRestore();
+      // Reconstruct state from empty operations (should give INITIAL_STATE)
+      const newState = reconstructState(INITIAL_STATE, []);
+      setCurrentState(newState);
+      logger.info('✅ Operation log cleared for restore, sequence continuity preserved');
+    }
+  }, []);
+
   return useMemo<UseOperationSync>(
     () => ({
       user,
@@ -1022,6 +1042,8 @@ export function useOperationSync(): UseOperationSync {
       subscribeToOperations,
       forceSync,
       getStateFromOperations,
+      getOperationLogState,
+      clearOperationLogForRestore,
     }),
     [
       user,
@@ -1040,6 +1062,8 @@ export function useOperationSync(): UseOperationSync {
       subscribeToOperations,
       forceSync,
       getStateFromOperations,
+      getOperationLogState,
+      clearOperationLogForRestore,
     ]
   );
 }

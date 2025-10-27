@@ -244,6 +244,40 @@ export class OperationLogManager {
     logger.info('Cleared operation log');
   }
 
+  /**
+   * 🔧 CRITICAL FIX: Clear operations but preserve sequence continuity for restore
+   * This prevents sequence gaps during backup restore by:
+   * 1. Saving the current lastSyncSequence (what's already synced to cloud)
+   * 2. Clearing all local operations
+   * 3. Setting sequence counter to lastSyncSequence + 1
+   * This ensures new operations don't conflict with old ones already on the cloud
+   */
+  async clearForRestore(): Promise<void> {
+    const previousLastSynced = this.log.lastSyncSequence;
+
+    logger.info('🔧 RESTORE: Clearing operation log with sequence preservation:', {
+      previousLastSynced,
+      operationsCleared: this.log.operations.length,
+    });
+
+    // Clear operations but preserve sequence continuity
+    this.log = {
+      operations: [],
+      lastSequence: previousLastSynced, // Continue from where we left off
+      lastSyncSequence: previousLastSynced, // Mark as already synced (since we're discarding them)
+      checksum: '',
+    };
+
+    // Set sequence counter to lastSyncSequence + 1 so new operations don't conflict
+    setSequence(previousLastSynced);
+
+    await this.persist();
+
+    logger.info('✅ RESTORE: Operation log cleared, sequence continuity preserved:', {
+      newStartSequence: previousLastSynced + 1,
+    });
+  }
+
   private async persist(): Promise<void> {
     try {
       await storageManager.queuedSet(OPERATION_LOG_KEY, this.log);

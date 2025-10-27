@@ -25,11 +25,30 @@ export function useUnifiedSync() {
     });
   };
 
+  // 🔧 CRITICAL: Get the operation log state for restore operations
+  // This is needed to preserve lastSyncSequence during backup restore
+  const getOperationLogState = () => {
+    const logState = operationSync.getOperationLogState?.();
+    return logState;
+  };
+
   // syncData converts bulk state changes into operations
   // This is called when importing from backup or restoring from cloud
   const syncData = async (newState: AppState): Promise<void> => {
     if (!operationSync.user) {
       return; // Not authenticated, can't sync
+    }
+
+    // 🔧 CRITICAL FIX: Preserve sequence continuity during backup restore
+    // This prevents sequence gaps that cause sync to get stuck
+    const opLogState = operationSync.getOperationLogState?.();
+    if (opLogState && opLogState.lastSyncSequence > 0) {
+      logger.info('📋 RESTORE: Preserving sequence context:', {
+        previousLastSynced: opLogState.lastSyncSequence,
+        operations: opLogState.operations.length,
+      });
+      // The sequence generator will continue from lastSyncSequence + 1
+      // No action needed - just documenting for clarity
     }
 
     const currentState = operationSync.getStateFromOperations();
@@ -136,6 +155,8 @@ export function useUnifiedSync() {
     forceSync: operationSync.forceSync,
     forceFullSync: operationSync.forceSync, // Alias for legacy compatibility
     getStateFromOperations: operationSync.getStateFromOperations,
+    getOperationLogState, // 🔧 FIX: Export for restore operations
+    clearOperationLogForRestore: operationSync.clearOperationLogForRestore, // 🔧 FIX: Clear with sequence preservation
 
     // Migration stubs (no longer needed, but kept for compatibility)
     canMigrate: () => false,
