@@ -294,6 +294,73 @@ const toggleExpanded = (date: string) => {
 - Remove enforcement fee calculation - valuable for complex bonus users
 - Hardcode grid columns - must remain responsive
 
+### ☑️ Manual Working Days Selection (FEATURE)
+
+**Background**: Users might create completions on days they didn't actually work (e.g., data entry after the fact). They need to manually override which days count as working days for accurate bonus calculations.
+
+**Implementation** (`EarningsCalendar.tsx:38-52, 348-360`):
+```typescript
+// State for manually selected working days
+const [manualWorkingDays, setManualWorkingDays] = useState<Set<string> | null>(null);
+
+const toggleWorkingDay = (date: string) => {
+  setManualWorkingDays(prev => {
+    const newSet = new Set(prev || new Set());
+    if (newSet.has(date)) {
+      newSet.delete(date);
+    } else {
+      newSet.add(date);
+    }
+    return newSet;
+  });
+};
+
+// In bonus calculation
+const selectedWorkingDays = manualWorkingDays || completionDates;
+const workingDays = selectedWorkingDays.size;
+```
+
+**Features**:
+- **"Worked?" Column**: New checkbox column in daily breakdown table
+- **Pre-checked Default**: All days with completions are checked by default (preserves existing behavior)
+- **One-Click Toggle**: Uncheck days the user didn't actually work
+- **Real-Time Updates**: Bonus recalculates instantly as user toggles checkboxes
+- **Persistent in Session**: Selection is maintained while viewing earnings tab (reset on navigation)
+
+**User Flow**:
+1. View Earnings tab with Daily Breakdown table
+2. Each day shows a "Worked?" checkbox (pre-checked for days with completions)
+3. User unchecks days they didn't actually work
+4. Potential Bonus updates in real-time
+5. Working days count reflects manual selection
+6. Each unchecked day reduces threshold by £100 (increases bonus by £100)
+
+**Example Scenario**:
+```
+Original: 16 days with completions
+- Working days: 16
+- Threshold: 16 × £100 = £1,600
+- Potential Bonus: £2,795.06 (after threshold)
+
+User unchecks 3 days they didn't work:
+- Working days: 13 (manually selected)
+- Threshold: 13 × £100 = £1,300
+- Potential Bonus: £3,095.06 (after threshold - £500 more!)
+```
+
+**Technical Details**:
+- Stored in component state (not persisted across navigation)
+- Initialized with all completion dates (first load)
+- Uses Set for efficient lookup and toggle operations
+- Affects bonus calculation via `workingDays` parameter
+- Updates dependencies in useMemo for reactive recalculation
+
+**DO NOT**:
+- Persist selection across page navigation - session-only is correct
+- Auto-uncheck days based on heuristics - manual selection is intentional
+- Hide the checkbox for certain days - user should always be able to override
+- Remove the default pre-checked behavior - must match existing calculation
+
 ### ⚡ Delta Sync Architecture (CRITICAL)
 
 **Background**: Migrated from state-based sync to operation-based delta sync for improved performance and reliability.
