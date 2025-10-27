@@ -407,15 +407,9 @@ function PifDetailsRow({ date, state }: PifDetailsRowProps) {
     }).format(amount);
   };
 
-  // Calculate enforcement fees (bonus) using complex calculation if enabled
+  // Calculate bonus earned for these PIFs
   const bonusSettings = state.bonusSettings || DEFAULT_BONUS_SETTINGS;
-  let enforcementFees = 0;
-
-  if (pifCompletions.length > 1 && bonusSettings.calculationType === 'complex') {
-    // For TCG Regulations 2014, enforcement fees are the bonus earned
-    const breakdown = calculateBonusBreakdown(pifCompletions, 1, bonusSettings);
-    enforcementFees = breakdown.grossBonus;
-  }
+  const bonusEarned = calculateBonus(pifCompletions, 1, bonusSettings);
 
   return (
     <div>
@@ -441,13 +435,13 @@ function PifDetailsRow({ date, state }: PifDetailsRowProps) {
             {pifCompletions.length}
           </div>
         </div>
-        {pifCompletions.length > 1 && enforcementFees > 0 && (
+        {bonusEarned > 0 && (
           <div>
             <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-              Enforcement Fees
+              Bonus Earned
             </div>
             <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--primary)' }}>
-              {formatCurrency(enforcementFees)}
+              {formatCurrency(bonusEarned)}
             </div>
           </div>
         )}
