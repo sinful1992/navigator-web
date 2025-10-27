@@ -22,6 +22,11 @@ import {
   DEFAULT_REMINDER_SETTINGS,
 } from "./services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "./utils/bonusCalculator";
+import {
+  setProtectionFlag,
+  clearProtectionFlag,
+  isProtectionActive,
+} from "./utils/protectionFlags";
 
 const STORAGE_KEY = "navigator_state_v5";
 const CURRENT_SCHEMA_VERSION = 5;
@@ -728,8 +733,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       logger.info(`🔄 IMPORT START: Importing ${rows.length} addresses, preserveCompletions=${preserveCompletions}`);
 
       // 🔧 CRITICAL FIX: Set import protection flag to prevent cloud sync override
-      const importTime = Date.now();
-      localStorage.setItem('navigator_import_in_progress', importTime.toString());
+      const importTime = setProtectionFlag('navigator_import_in_progress');
       logger.info('🛡️ IMPORT PROTECTION ACTIVATED:', new Date(importTime).toISOString());
 
       const operationId = generateOperationId("update", "address", {
@@ -797,7 +801,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
       // 🔧 CRITICAL FIX: Clear import protection flag after a delay to allow state to settle
       setTimeout(() => {
-        localStorage.removeItem('navigator_import_in_progress');
+        clearProtectionFlag('navigator_import_in_progress');
         logger.info('🛡️ IMPORT PROTECTION CLEARED after import completion');
       }, 2000); // 2 second protection window
     },
@@ -848,7 +852,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   const setActive = React.useCallback((idx: number) => {
     // 🔧 CRITICAL FIX: Set protection flag (no timeout - cleared on Complete/Cancel)
-    localStorage.setItem('navigator_active_protection', 'true');
+    setProtectionFlag('navigator_active_protection');
 
     const now = new Date().toISOString();
     let shouldSubmit = false;
@@ -861,7 +865,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         const currentActiveAddress = s.addresses[s.activeIndex];
         logger.warn(`Cannot start address #${idx} - address #${s.activeIndex} "${currentActiveAddress?.address}" is already active`);
         showWarning(`Please complete or cancel the current active address first`);
-        localStorage.removeItem('navigator_active_protection');
+        clearProtectionFlag('navigator_active_protection');
         return s; // Don't change state
       }
 
@@ -875,7 +879,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         if (isCompleted) {
           logger.warn(`Cannot set active - address at index ${idx} is already completed`);
           showWarning(`This address is already completed`);
-          localStorage.removeItem('navigator_active_protection');
+          clearProtectionFlag('navigator_active_protection');
           return s; // Don't change state
         }
       }
@@ -899,7 +903,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   const cancelActive = React.useCallback(() => {
     // 🔧 FIX: Clear protection to resume cloud sync
-    localStorage.removeItem('navigator_active_protection');
+    clearProtectionFlag('navigator_active_protection');
 
     setBaseState((s) => {
       logger.info(`📍 CANCELING ACTIVE: Clearing active state - SYNC RESUMED`);
@@ -1052,7 +1056,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         setBaseState((s) => {
           if (s.activeIndex === index) {
             // 🔧 FIX: Clear protection when completing active address
-            localStorage.removeItem('navigator_active_protection');
+            clearProtectionFlag('navigator_active_protection');
             logger.info(`📍 COMPLETED ACTIVE ADDRESS: Clearing active state - SYNC RESUMED`);
           }
 
@@ -1760,13 +1764,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         });
 
         // 🔧 CRITICAL FIX: Set restore flag to prevent cloud sync override
-        // Use 30 second protection window for testing
-        const restoreTime = Date.now();
-        localStorage.setItem('navigator_restore_in_progress', restoreTime.toString());
+        const restoreTime = setProtectionFlag('navigator_restore_in_progress');
         logger.info('🛡️ RESTORE PROTECTION ACTIVATED:', new Date(restoreTime).toISOString());
-
-        // Also set a backup protection flag that lasts longer
-        localStorage.setItem('navigator_last_restore', restoreTime.toString());
 
       } catch (persistError: unknown) {
         logger.error('Failed to persist restored state:', persistError);

@@ -26,7 +26,7 @@ import { BackupManager } from "./components/BackupManager";
 import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
-import { isProtectionActive } from "./utils/protectionFlags";
+import { isProtectionActive, initializeProtectionFlags } from "./utils/protectionFlags";
 import { PrivacyConsent } from "./components/PrivacyConsent";
 import { EnhancedOfflineIndicator } from "./components/EnhancedOfflineIndicator";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
@@ -104,6 +104,35 @@ export default function App() {
   // 🎯 UX IMPROVEMENT: Only show loading screen if actually taking time
   const [showLoading, setShowLoading] = React.useState(false);
   const [forceSkipLoading, setForceSkipLoading] = React.useState(false);
+
+  // 🔧 PHASE 1.2.2 (REVISED): Initialize hybrid protection flags cache on app startup
+  // FIX #3: Track readiness state to prevent race condition at startup
+  // Hybrid architecture: in-memory cache for fast synchronous reads, IndexedDB for atomic updates
+  const [protectionFlagsReady, setProtectionFlagsReady] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await initializeProtectionFlags();
+        if (!cancelled) {
+          setProtectionFlagsReady(true);
+          logger.debug('✅ Protection flags cache initialized (hybrid cache + IndexedDB)');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          logger.warn('⚠️ Failed to initialize protection flags cache:', err);
+          // Continue anyway - fallback to empty cache, operations will still work
+          setProtectionFlagsReady(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []); // Run once on mount
 
   React.useEffect(() => {
     if (cloudSync.isLoading) {
@@ -434,6 +463,12 @@ function AuthedApp() {
 
       if (!updaterOrState) {
         logger.warn('⚠️ APP: No data in subscribeToData callback, ignoring');
+        return;
+      }
+
+      // 🔧 FIX #3: Block updates until protection flags are ready to prevent startup race
+      if (!protectionFlagsReady) {
+        logger.info('⏳ APP: Protection flags not ready yet, deferring update');
         return;
       }
 
