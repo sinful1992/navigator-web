@@ -27,6 +27,122 @@ const FLAG_CONFIGS: Record<ProtectionFlag, number> = {
 };
 
 // ============================================================================
+// FIX #5: INPUT VALIDATION (Security & Data Integrity)
+// ============================================================================
+
+/**
+ * Check if value is a valid ProtectionFlag
+ */
+function isValidProtectionFlag(value: unknown): value is ProtectionFlag {
+  return typeof value === 'string' && value in FLAG_CONFIGS;
+}
+
+/**
+ * Validate timestamp is within reasonable range (±1 year)
+ * Prevents clock skew attacks and data corruption
+ */
+function isValidTimestamp(ts: any): boolean {
+  if (typeof ts !== 'number' || !isFinite(ts)) {
+    return false;
+  }
+
+  const now = Date.now();
+  const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+
+  // Reject timestamps too far in past/future
+  return ts >= (now - oneYearMs) && ts <= (now + oneYearMs);
+}
+
+/**
+ * Check if value is valid FlagData object
+ */
+function isValidFlagData(value: unknown): value is FlagData {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const obj = value as any;
+
+  // Check timestamp
+  if (!isValidTimestamp(obj.timestamp)) {
+    return false;
+  }
+
+  // Check expiresAt (either number or Infinity)
+  if (typeof obj.expiresAt !== 'number') {
+    return false;
+  }
+
+  // If Infinity, that's valid
+  if (obj.expiresAt === Infinity) {
+    return true;
+  }
+
+  // If number, must be finite and valid timestamp
+  return isFinite(obj.expiresAt) && obj.expiresAt >= obj.timestamp && isValidTimestamp(obj.expiresAt);
+}
+
+/**
+ * Safely parse and validate IndexedDB record
+ * Returns null if invalid
+ */
+function parseIndexedDBRecord(record: any): { flag: ProtectionFlag; data: FlagData } | null {
+  if (!record || typeof record !== 'object') {
+    logger.warn('Invalid IndexedDB record: not an object');
+    return null;
+  }
+
+  const { flag, timestamp, expiresAt } = record;
+
+  // Validate flag
+  if (!isValidProtectionFlag(flag)) {
+    logger.warn('Invalid flag in IndexedDB record:', flag);
+    return null;
+  }
+
+  // Validate data structure
+  const data: any = { timestamp, expiresAt };
+  if (!isValidFlagData(data)) {
+    logger.warn('Invalid flag data in IndexedDB for', flag, ':', { timestamp, expiresAt });
+    return null;
+  }
+
+  return { flag, data };
+}
+
+/**
+ * Safely parse and validate BroadcastChannel message
+ * Returns null if invalid
+ */
+function parseBroadcastMessage(event: MessageEvent): { flag: ProtectionFlag; data: FlagData | null } | null {
+  if (!event || !event.data || typeof event.data !== 'object') {
+    logger.warn('Invalid BroadcastChannel message: malformed event');
+    return null;
+  }
+
+  const { flag, data } = event.data;
+
+  // Validate flag
+  if (!isValidProtectionFlag(flag)) {
+    logger.warn('Invalid flag in BroadcastChannel message:', flag);
+    return null;
+  }
+
+  // Handle delete message (data === null is valid)
+  if (data === null) {
+    return { flag, data: null };
+  }
+
+  // Validate data structure for set message
+  if (!isValidFlagData(data)) {
+    logger.warn('Invalid flag data in BroadcastChannel for', flag, ':', data);
+    return null;
+  }
+
+  return { flag, data };
+}
+
+// ============================================================================
 // IN-MEMORY CACHE (for synchronous reads)
 // ============================================================================
 
@@ -109,27 +225,23 @@ function initBroadcastChannel() {
     if (!broadcastChannel) {
       broadcastChannel = new BroadcastChannel('navigator-protection-flags');
       broadcastChannel.onmessage = (event) => {
-        const { flag, data } = event.data;
-
-        // 🔧 FIX #2: Proper validation and delete logic
-        if (!flag) {
-          logger.warn('Invalid flag received via BroadcastChannel');
+        // 🔧 FIX #5: Use validated parsing function for security
+        const parsed = parseBroadcastMessage(event);
+        if (!parsed) {
+          // Invalid message, already logged by parser
           return;
         }
 
+        const { flag, data } = parsed;
+
         if (data === null) {
           // Flag was cleared in another tab
-          flagCache.delete(flag as ProtectionFlag);
+          flagCache.delete(flag);
           logger.debug(`🗑️ Protection flag cleared from another tab: ${flag}`);
-        } else if (data && typeof data.timestamp === 'number' && typeof data.expiresAt === 'number') {
-          // Flag was set in another tab
-          flagCache.set(flag as ProtectionFlag, {
-            timestamp: data.timestamp,
-            expiresAt: data.expiresAt,
-          });
-          logger.debug(`🔄 Protection flag updated from another tab: ${flag}`);
         } else {
-          logger.warn(`Invalid flag data received via BroadcastChannel for ${flag}:`, data);
+          // Flag was set in another tab
+          flagCache.set(flag, data);
+          logger.debug(`🔄 Protection flag updated from another tab: ${flag}`);
         }
       };
     }
@@ -172,23 +284,38 @@ export async function initializeProtectionFlags(): Promise<void> {
         // Clear existing cache
         flagCache.clear();
 
-        // Load all flags into cache
-        for (const flag of allFlags) {
-          const now = Date.now();
-          const { expiresAt } = flag as any;
+        // 🔧 FIX #5: Validate all data loaded from IndexedDB
+        let loadedCount = 0;
+        let skippedCount = 0;
 
-          // Skip expired flags
-          if (expiresAt !== Infinity && now >= expiresAt) {
+        for (const record of allFlags) {
+          // Validate record structure and values
+          const parsed = parseIndexedDBRecord(record);
+          if (!parsed) {
+            skippedCount++;
             continue;
           }
 
-          flagCache.set((flag as any).flag as ProtectionFlag, {
-            timestamp: (flag as any).timestamp,
-            expiresAt: (flag as any).expiresAt,
-          });
+          const { flag, data } = parsed;
+          const now = Date.now();
+
+          // Skip expired flags
+          if (data.expiresAt !== Infinity && now >= data.expiresAt) {
+            logger.debug(`Skipping expired flag: ${flag}`);
+            skippedCount++;
+            continue;
+          }
+
+          // Load valid, non-expired flag into cache
+          flagCache.set(flag, data);
+          loadedCount++;
         }
 
-        logger.debug(`Loaded ${flagCache.size} protection flags from IndexedDB`);
+        if (skippedCount > 0) {
+          logger.warn(`Loaded ${loadedCount} valid flags, skipped ${skippedCount} invalid/expired flags`);
+        } else {
+          logger.debug(`Loaded ${loadedCount} protection flags from IndexedDB`);
+        }
         resolve();
       };
 
