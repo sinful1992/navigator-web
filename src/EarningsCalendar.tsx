@@ -319,8 +319,11 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
 
                     return (
                       <>
-                        <tr key={day.date}>
-                          <td style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-light)' }}>
+                        <tr key={day.date} style={{ background: isExpanded ? 'var(--background)' : 'transparent' }}>
+                          <td style={{
+                            padding: '0.75rem',
+                            borderBottom: isExpanded ? 'none' : '1px solid var(--border-light)'
+                          }}>
                             {new Date(day.date).toLocaleDateString('en-GB', {
                               weekday: 'short',
                               day: 'numeric',
@@ -331,7 +334,7 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
                             style={{
                               padding: '0.75rem',
                               textAlign: 'right',
-                              borderBottom: '1px solid var(--border-light)',
+                              borderBottom: isExpanded ? 'none' : '1px solid var(--border-light)',
                               cursor: hasPifs ? 'pointer' : 'default',
                               userSelect: 'none',
                               color: hasPifs ? 'var(--primary)' : 'inherit'
@@ -345,20 +348,35 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
                             )}
                             {day.pifs}
                           </td>
-                          <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)' }}>
+                          <td style={{
+                            padding: '0.75rem',
+                            textAlign: 'right',
+                            borderBottom: isExpanded ? 'none' : '1px solid var(--border-light)'
+                          }}>
                             {day.total}
                           </td>
-                          <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)', fontWeight: 'bold' }}>
+                          <td style={{
+                            padding: '0.75rem',
+                            textAlign: 'right',
+                            borderBottom: isExpanded ? 'none' : '1px solid var(--border-light)',
+                            fontWeight: 'bold'
+                          }}>
                             {formatCurrency(day.fees)}
                           </td>
-                          <td style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)', fontWeight: 'bold', color: day.bonus > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
+                          <td style={{
+                            padding: '0.75rem',
+                            textAlign: 'right',
+                            borderBottom: isExpanded ? 'none' : '1px solid var(--border-light)',
+                            fontWeight: 'bold',
+                            color: day.bonus > 0 ? 'var(--primary)' : 'var(--text-muted)'
+                          }}>
                             {formatCurrency(day.bonus)}
                           </td>
                         </tr>
                         {isExpanded && hasPifs && (
                           <tr key={`${day.date}-expanded`}>
                             <td colSpan={5} style={{
-                              padding: '1rem',
+                              padding: '0 0.75rem 1rem 0.75rem',
                               background: 'var(--background)',
                               borderBottom: '1px solid var(--border-light)'
                             }}>
