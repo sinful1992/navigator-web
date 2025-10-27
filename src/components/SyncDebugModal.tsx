@@ -49,7 +49,7 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
       });
 
       // 🔧 FIX: Calculate correct unsynced count
-      const unsyncedOpsCount = opLog.getUnsyncedOperations().length;
+      const unsyncedOpsCount = manager.getUnsyncedOperations().length;
 
       setStats({
         ...localStats,

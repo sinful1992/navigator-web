@@ -2,6 +2,7 @@
 import type React from "react";
 import type { AppState } from "../types";
 import { useOperationSync } from "./operationSync";
+import { logger } from "../utils/logger";
 
 /**
  * Unified sync hook - now only supports operation-based delta sync
