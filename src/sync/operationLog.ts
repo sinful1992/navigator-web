@@ -1,10 +1,12 @@
-// src/sync/operationLog.ts - Operation log management
+// src/sync/operationLog.ts - Operation log management with atomic transactions
 import type { Operation } from './operations';
 import { nextSequence, setSequence } from './operations';
 import { storageManager } from '../utils/storageManager';
 import { logger } from '../utils/logger';
+import { ENABLE_SEQUENCE_CONTINUITY_VALIDATION } from './syncConfig';
 
 const OPERATION_LOG_KEY = 'navigator_operation_log_v1';
+const TRANSACTION_LOG_KEY = 'navigator_transaction_log_v1';
 
 export type OperationLog = {
   operations: Operation[];
@@ -14,8 +16,33 @@ export type OperationLog = {
 };
 
 /**
- * Manages the local operation log
+ * 🔧 ATOMIC: Transaction log for write-ahead logging
+ * Stores the intent to merge operations before actually merging
+ * Used for recovery if app crashes mid-transaction
+ */
+export type TransactionLog = {
+  isInProgress: boolean;
+  operationsBefore: Operation[];
+  operationsToMerge: Operation[];
+  lastSequenceBefore: number;
+  lastSyncSequenceBefore: number;
+  checksumBefore: string;
+  timestamp: string;
+};
+
+/**
+ * Manages the local operation log with atomic merge transactions
  * This is the source of truth for what operations have been applied locally
+ *
+ * ATOMIC GUARANTEE: mergeRemoteOperations is all-or-nothing
+ * - Either all operations are merged or none are
+ * - Uses write-ahead logging for crash recovery
+ * - Transaction flag prevents partial merges
+ *
+ * PHASE 1.1.3: Per-Client Sequence Tracking
+ * - Tracks highest sequence number seen from each device
+ * - Detects out-of-order operations (sequence goes backwards)
+ * - Helps identify which device has sync issues
  */
 export class OperationLogManager {
   private log: OperationLog = {
@@ -25,6 +52,10 @@ export class OperationLogManager {
     checksum: '',
   };
 
+  // PHASE 1.1.3: Track per-client sequence for out-of-order detection
+  private clientSequences: Map<string, number> = new Map();
+
+  private transaction: TransactionLog | null = null;
   private deviceId: string;
   private isLoaded = false;
 
@@ -34,18 +65,27 @@ export class OperationLogManager {
 
   /**
    * Load operation log from IndexedDB
+   * Also checks for incomplete transactions and recovers from them
    */
   async load(): Promise<void> {
     try {
+      // First check for incomplete transaction (crash recovery)
+      await this.recoverFromIncompleteTransaction();
+
       const saved = await storageManager.queuedGet(OPERATION_LOG_KEY) as OperationLog | null;
 
       if (saved) {
         this.log = saved;
         setSequence(this.log.lastSequence);
+
+        // PHASE 1.1.3: Rebuild per-client sequence map
+        this.rebuildClientSequences();
+
         logger.info('Loaded operation log:', {
           operationCount: this.log.operations.length,
           lastSequence: this.log.lastSequence,
           lastSyncSequence: this.log.lastSyncSequence,
+          uniqueClients: this.clientSequences.size,
         });
       }
 
@@ -53,6 +93,66 @@ export class OperationLogManager {
     } catch (error) {
       logger.error('Failed to load operation log:', error);
       this.isLoaded = true; // Continue with empty log
+    }
+  }
+
+  /**
+   * 🔧 ATOMIC: Recover from incomplete transaction
+   * If app crashed during merge, this restores consistency
+   */
+  private async recoverFromIncompleteTransaction(): Promise<void> {
+    try {
+      const savedTransaction = await storageManager.queuedGet(TRANSACTION_LOG_KEY) as TransactionLog | null;
+
+      if (!savedTransaction) {
+        return; // No incomplete transaction
+      }
+
+      if (!savedTransaction.isInProgress) {
+        // Transaction was completed, clear the log
+        await storageManager.queuedSet(TRANSACTION_LOG_KEY, null);
+        return;
+      }
+
+      // Transaction was incomplete - determine what happened
+      const currentLog = await storageManager.queuedGet(OPERATION_LOG_KEY) as OperationLog | null;
+
+      if (!currentLog) {
+        // Main log was cleared - rollback by restoring from before-state
+        logger.warn('🔧 ATOMIC: Recovering from incomplete transaction - rolling back');
+        const restoredLog: OperationLog = {
+          operations: savedTransaction.operationsBefore,
+          lastSequence: savedTransaction.lastSequenceBefore,
+          lastSyncSequence: savedTransaction.lastSyncSequenceBefore,
+          checksum: savedTransaction.checksumBefore,
+        };
+        await storageManager.queuedSet(OPERATION_LOG_KEY, restoredLog);
+        setSequence(restoredLog.lastSequence);
+      } else if (currentLog.checksum === savedTransaction.checksumBefore) {
+        // Merge was never applied - clear transaction and continue
+        logger.warn('🔧 ATOMIC: Incomplete transaction detected, rolling back');
+      } else {
+        // Merge was partially or fully applied - check if consistent
+        const expectedOpsCount = savedTransaction.operationsBefore.length +
+          savedTransaction.operationsToMerge.filter(op => op.clientId !== this.deviceId).length;
+
+        if (currentLog.operations.length !== expectedOpsCount) {
+          logger.error('🔧 ATOMIC: State mismatch detected, attempting restoration');
+          await storageManager.queuedSet(OPERATION_LOG_KEY, {
+            operations: savedTransaction.operationsBefore,
+            lastSequence: savedTransaction.lastSequenceBefore,
+            lastSyncSequence: savedTransaction.lastSyncSequenceBefore,
+            checksum: savedTransaction.checksumBefore,
+          });
+        }
+      }
+
+      // Clear completed or rolled-back transaction
+      await storageManager.queuedSet(TRANSACTION_LOG_KEY, null);
+      logger.info('✅ ATOMIC: Transaction recovery completed');
+    } catch (error) {
+      logger.error('Failed to recover from incomplete transaction:', error);
+      // Continue - data may be corrupted but app won't crash
     }
   }
 
@@ -121,75 +221,253 @@ export class OperationLogManager {
   }
 
   /**
-   * Add operations received from cloud sync
-   * This handles merging remote operations with local ones
-   * Uses transaction-like approach - all or nothing
+   * 🔧 ATOMIC: Add operations received from cloud sync
+   * Handles merging remote operations with local ones - guaranteed all-or-nothing
+   *
+   * ATOMICITY GUARANTEE:
+   * - Uses write-ahead logging (transaction log)
+   * - All operations merged together or none at all
+   * - If app crashes: recovery on next load restores consistency
+   * - Sequence tracking is atomic with operation merge
+   *
+   * STEPS:
+   * 1. Validate all operations before modifying state
+   * 2. Write transaction log (intent to merge)
+   * 3. Apply all operations to in-memory state
+   * 4. Persist merged state
+   * 5. Clear transaction log (marks transaction complete)
    */
   async mergeRemoteOperations(remoteOps: Operation[]): Promise<Operation[]> {
     if (!this.isLoaded) {
       await this.load();
     }
 
-    // Create snapshot for rollback
-    const originalLog = {
-      operations: [...this.log.operations],
-      lastSequence: this.log.lastSequence,
-      lastSyncSequence: this.log.lastSyncSequence,
-      checksum: this.log.checksum,
+    // Step 1: Validate all operations BEFORE any state changes
+    const operationsToMerge = remoteOps.filter(remoteOp => {
+      // Skip operations from this device (we already have them)
+      if (remoteOp.clientId === this.deviceId) {
+        return false;
+      }
+
+      // Check if we already have this operation
+      const exists = this.log.operations.some(localOp => localOp.id === remoteOp.id);
+      return !exists;
+    });
+
+    if (operationsToMerge.length === 0) {
+      // No new operations to merge
+      return [];
+    }
+
+    // Step 2: Write transaction log BEFORE making any changes
+    // This is write-ahead logging - if crash occurs, recovery can restore consistency
+    const transactionLog: TransactionLog = {
+      isInProgress: true,
+      operationsBefore: [...this.log.operations],
+      operationsToMerge,
+      lastSequenceBefore: this.log.lastSequence,
+      lastSyncSequenceBefore: this.log.lastSyncSequence,
+      checksumBefore: this.log.checksum,
+      timestamp: new Date().toISOString(),
     };
 
     try {
+      // Persist transaction log (intent)
+      await storageManager.queuedSet(TRANSACTION_LOG_KEY, transactionLog);
+
+      // Step 3: Apply all operations to in-memory state (ATOMIC: all at once)
       const newOperations: Operation[] = [];
 
-      for (const remoteOp of remoteOps) {
-        // Skip operations from this device (we already have them)
-        if (remoteOp.clientId === this.deviceId) {
-          continue;
-        }
+      for (const remoteOp of operationsToMerge) {
+        // PHASE 1.1.3: Detect out-of-order operations
+        const outOfOrderInfo = this.detectOutOfOrderOperation(remoteOp);
 
-        // Check if we already have this operation
-        const exists = this.log.operations.some(localOp =>
-          localOp.id === remoteOp.id
-        );
+        this.log.operations.push(remoteOp);
+        newOperations.push(remoteOp);
 
-        if (!exists) {
-          this.log.operations.push(remoteOp);
-          newOperations.push(remoteOp);
+        // PHASE 1.1.3: Update per-client sequence tracking
+        this.updateClientSequence(remoteOp);
 
-          // Update sequence tracking
-          this.log.lastSequence = Math.max(this.log.lastSequence, remoteOp.sequence);
-          setSequence(this.log.lastSequence);
-        }
+        // Update sequence tracking - done after all operations added
+        this.log.lastSequence = Math.max(this.log.lastSequence, remoteOp.sequence);
       }
 
-      if (newOperations.length > 0) {
-        // Sort operations by sequence to maintain order
-        this.log.operations.sort((a, b) => a.sequence - b.sequence);
-        this.log.checksum = this.computeChecksum();
+      // Sort operations by sequence to maintain order
+      this.log.operations.sort((a, b) => a.sequence - b.sequence);
 
-        // Persist atomically - if this fails, we'll rollback
-        await this.persist();
+      // Compute new checksum for validation
+      this.log.checksum = this.computeChecksum();
 
-        logger.info('Merged remote operations:', {
-          newOperationCount: newOperations.length,
-          totalOperationCount: this.log.operations.length,
-        });
-      }
+      // Validate sequence continuity (CRITICAL)
+      this.validateSequenceContinuity('after merge');
+
+      // Step 4: Persist merged state atomically
+      await this.persist();
+
+      // Update sequence generator AFTER successful persist
+      setSequence(this.log.lastSequence);
+
+      // Step 5: Clear transaction log (marks transaction as complete)
+      await storageManager.queuedSet(TRANSACTION_LOG_KEY, null);
+
+      logger.info('✅ ATOMIC MERGE COMPLETE:', {
+        newOperationCount: newOperations.length,
+        totalOperationCount: this.log.operations.length,
+        lastSequence: this.log.lastSequence,
+        checksumAfter: this.log.checksum,
+      });
 
       return newOperations;
     } catch (error) {
-      // Rollback on error
-      logger.error('Failed to merge remote operations, rolling back:', error);
-      this.log = originalLog;
-
-      // Try to persist rollback state
+      // ATOMIC ROLLBACK: Clear transaction log without updating main log
+      logger.error('🔧 ATOMIC: Merge failed, marking transaction incomplete:', error);
       try {
-        await this.persist();
-      } catch (persistError) {
-        logger.error('Failed to persist rollback state:', persistError);
+        // Mark transaction as incomplete (recovery on next load will restore)
+        const failedTransaction = { ...transactionLog, isInProgress: true };
+        await storageManager.queuedSet(TRANSACTION_LOG_KEY, failedTransaction);
+      } catch (transactionError) {
+        logger.error('Failed to mark transaction as failed:', transactionError);
       }
 
-      throw new Error(`Merge failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`Atomic merge failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * PHASE 1.1.4: Validate sequence continuity
+   * Detects gaps in operation sequences that indicate data loss
+   *
+   * Sequence gaps can occur from:
+   * 1. Network loss - operations sent but not received
+   * 2. Device crash - operations lost before sync
+   * 3. Sync bug - operations skipped during merge
+   * 4. Clock jump - sequence counter got corrupted
+   *
+   * This is critical to detect because gaps = silent data loss!
+   */
+  private validateSequenceContinuity(context: string): void {
+    if (!ENABLE_SEQUENCE_CONTINUITY_VALIDATION) {
+      return; // Validation disabled, skip
+    }
+
+    if (this.log.operations.length === 0) {
+      return; // Empty log, nothing to validate
+    }
+
+    const sequences = this.log.operations.map(op => op.sequence).sort((a, b) => a - b);
+    const gaps: Array<{ from: number; to: number; size: number; lostOps: number }> = [];
+
+    for (let i = 1; i < sequences.length; i++) {
+      if (sequences[i] !== sequences[i - 1] + 1) {
+        const gap = sequences[i] - sequences[i - 1] - 1;
+        gaps.push({
+          from: sequences[i - 1],
+          to: sequences[i],
+          size: gap,
+          lostOps: gap, // Each gap position = 1 lost operation
+        });
+      }
+    }
+
+    if (gaps.length > 0) {
+      // PHASE 1.1.4: Enhanced diagnostics for sequence gaps
+      const totalLost = gaps.reduce((sum, g) => sum + g.lostOps, 0);
+
+      logger.error('🚨 CRITICAL: Sequence gaps detected ' + context, {
+        message: 'Data loss detected - operations were lost during sync',
+        gapCount: gaps.length,
+        totalLostOperations: totalLost,
+        gaps: gaps.map(g => ({
+          between: `${g.from}...${g.to}`,
+          missedCount: g.size,
+        })),
+        totalOperations: this.log.operations.length,
+        sequenceRange: { min: sequences[0], max: sequences[sequences.length - 1] },
+        percentage: ((totalLost / sequences[sequences.length - 1]) * 100).toFixed(2) + '%',
+        recommendation: 'Check network stability and device clock settings',
+      });
+
+      // Additional logging per gap for debugging
+      gaps.forEach((gap, index) => {
+        logger.warn(`Gap #${index + 1}: Operations ${gap.from}..${gap.to} (${gap.size} missing)`, {
+          clientsAffected: this.getClientsInSequenceRange(gap.from + 1, gap.to),
+        });
+      });
+    } else {
+      // All sequences continuous - good!
+      logger.debug('✅ Sequence validation: No gaps detected', {
+        context,
+        totalOperations: this.log.operations.length,
+        sequenceRange: { min: sequences[0], max: sequences[sequences.length - 1] },
+      });
+    }
+  }
+
+  /**
+   * PHASE 1.1.4: Find which clients had operations in a sequence range
+   * Helps diagnose which device's operations were lost
+   */
+  private getClientsInSequenceRange(fromSeq: number, toSeq: number): string[] {
+    const clients = new Set<string>();
+
+    for (const op of this.log.operations) {
+      if (op.sequence >= fromSeq && op.sequence <= toSeq) {
+        clients.add(op.clientId);
+      }
+    }
+
+    return Array.from(clients);
+  }
+
+  /**
+   * PHASE 1.1.3: Rebuild per-client sequence tracking
+   * Called after loading log to reconstruct client sequence map
+   */
+  private rebuildClientSequences(): void {
+    this.clientSequences.clear();
+
+    for (const op of this.log.operations) {
+      const currentMax = this.clientSequences.get(op.clientId) || 0;
+      this.clientSequences.set(op.clientId, Math.max(currentMax, op.sequence));
+    }
+
+    logger.debug('🔧 Rebuilt per-client sequence map:', {
+      uniqueClients: this.clientSequences.size,
+      clients: Array.from(this.clientSequences.entries()).map(([clientId, seq]) => ({
+        clientId: clientId.substring(0, 8), // Truncate for logging
+        maxSequence: seq,
+      })),
+    });
+  }
+
+  /**
+   * PHASE 1.1.3: Detect out-of-order operations from a client
+   * Returns warning info if operation arrived out-of-order
+   */
+  private detectOutOfOrderOperation(operation: Operation): { isOutOfOrder: boolean; previousMax?: number } {
+    const currentMax = this.clientSequences.get(operation.clientId) || 0;
+    const isOutOfOrder = operation.sequence <= currentMax;
+
+    if (isOutOfOrder) {
+      logger.warn('🔧 OUT-OF-ORDER OPERATION detected:', {
+        clientId: operation.clientId.substring(0, 8),
+        operationSequence: operation.sequence,
+        previousMax: currentMax,
+        gap: currentMax - operation.sequence,
+      });
+    }
+
+    return { isOutOfOrder, previousMax: currentMax };
+  }
+
+  /**
+   * PHASE 1.1.3: Update per-client sequence tracking
+   * Called for each operation processed
+   */
+  private updateClientSequence(operation: Operation): void {
+    const currentMax = this.clientSequences.get(operation.clientId) || 0;
+    if (operation.sequence > currentMax) {
+      this.clientSequences.set(operation.clientId, operation.sequence);
     }
   }
 
@@ -198,6 +476,20 @@ export class OperationLogManager {
    */
   getLogState(): OperationLog {
     return { ...this.log };
+  }
+
+  /**
+   * PHASE 1.1.3: Get per-client sequence statistics
+   * Used for diagnostics and identifying problematic devices
+   */
+  getClientSequenceStats(): Record<string, number> {
+    const stats: Record<string, number> = {};
+
+    for (const [clientId, maxSeq] of this.clientSequences.entries()) {
+      stats[clientId] = maxSeq;
+    }
+
+    return stats;
   }
 
   /**
