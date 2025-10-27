@@ -247,34 +247,50 @@ export class OperationLogManager {
   /**
    * 🔧 CRITICAL FIX: Clear operations but preserve sequence continuity for restore
    * This prevents sequence gaps during backup restore by:
-   * 1. Saving the current lastSyncSequence (what's already synced to cloud)
-   * 2. Clearing all local operations
-   * 3. Setting sequence counter to lastSyncSequence + 1
-   * This ensures new operations don't conflict with old ones already on the cloud
+   * 1. Detecting if lastSyncSequence is corrupted (unreasonably high)
+   * 2. If corrupted, reset to 0 to start fresh
+   * 3. If valid, preserve it to continue sequence from cloud
+   * 4. Setting sequence counter appropriately
+   * This ensures new operations don't conflict with old ones, and doesn't perpetuate corruption
    */
   async clearForRestore(): Promise<void> {
     const previousLastSynced = this.log.lastSyncSequence;
+    const maxLocalSeq = this.log.operations.length > 0
+      ? Math.max(...this.log.operations.map(op => op.sequence))
+      : 0;
+
+    // 🔧 CRITICAL: Detect corrupted lastSyncSequence
+    // If lastSyncSequence > maxLocalSeq, it's corrupted (came from cloud operations with huge sequence numbers)
+    const isCorrupted = previousLastSynced > maxLocalSeq;
+
+    const nextLastSynced = isCorrupted ? 0 : previousLastSynced;
 
     logger.info('🔧 RESTORE: Clearing operation log with sequence preservation:', {
       previousLastSynced,
+      maxLocalSeq,
+      isCorrupted,
+      nextLastSynced,
       operationsCleared: this.log.operations.length,
     });
 
-    // Clear operations but preserve sequence continuity
+    // Clear operations and reset sequence if corrupted
     this.log = {
       operations: [],
-      lastSequence: previousLastSynced, // Continue from where we left off
-      lastSyncSequence: previousLastSynced, // Mark as already synced (since we're discarding them)
+      lastSequence: nextLastSynced,
+      lastSyncSequence: nextLastSynced,
       checksum: '',
     };
 
-    // Set sequence counter to lastSyncSequence + 1 so new operations don't conflict
-    setSequence(previousLastSynced);
+    // Set sequence counter - if it was corrupted, reset to 0 so we start fresh
+    // This prevents perpetuating huge sequence numbers from cloud
+    setSequence(nextLastSynced);
 
     await this.persist();
 
-    logger.info('✅ RESTORE: Operation log cleared, sequence continuity preserved:', {
-      newStartSequence: previousLastSynced + 1,
+    logger.info('✅ RESTORE: Operation log cleared, sequence state reset:', {
+      newLastSynced: nextLastSynced,
+      newStartSequence: nextLastSynced + 1,
+      corruptionDetected: isCorrupted,
     });
   }
 

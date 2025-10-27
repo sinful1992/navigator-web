@@ -214,7 +214,24 @@ export function useOperationSync(): UseOperationSync {
 
               if (myOpsToMarkSynced.length > 0) {
                 const maxMySeq = Math.max(...myOpsToMarkSynced);
-                if (Number.isFinite(maxMySeq)) {
+
+                // 🔧 CRITICAL FIX: Detect corrupted sequence numbers from cloud
+                // If all local operations are much lower than cloud sequence, cloud is corrupted
+                const localMaxSeq = operationLog.current.getAllOperations().length > 0
+                  ? Math.max(...operationLog.current.getAllOperations().map(op => op.sequence))
+                  : 0;
+
+                const isCloudCorrupted = maxMySeq > (localMaxSeq + 1000); // Allow some margin
+
+                if (isCloudCorrupted) {
+                  logger.error('🚨 BOOTSTRAP: Cloud operations have corrupted sequence numbers!', {
+                    cloudMaxSeq: maxMySeq,
+                    localMaxSeq,
+                    gap: maxMySeq - localMaxSeq,
+                  });
+                  // DON'T use this corrupted sequence - it will poison our local sequence generator
+                  logger.info('📥 BOOTSTRAP: Skipping corrupted sequence number marking');
+                } else if (Number.isFinite(maxMySeq)) {
                   await operationLog.current.markSyncedUpTo(maxMySeq);
                   logger.info(`📥 BOOTSTRAP: Marked sequences up to ${maxMySeq} as synced (from this device)`);
                 }
