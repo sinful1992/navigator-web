@@ -55,7 +55,6 @@ export class OperationLogManager {
   // PHASE 1.1.3: Track per-client sequence for out-of-order detection
   private clientSequences: Map<string, number> = new Map();
 
-  private transaction: TransactionLog | null = null;
   private deviceId: string;
   private isLoaded = false;
 
@@ -279,8 +278,8 @@ export class OperationLogManager {
       const newOperations: Operation[] = [];
 
       for (const remoteOp of operationsToMerge) {
-        // PHASE 1.1.3: Detect out-of-order operations
-        const outOfOrderInfo = this.detectOutOfOrderOperation(remoteOp);
+        // PHASE 1.1.3: Detect out-of-order operations (logs warnings if detected)
+        this.detectOutOfOrderOperation(remoteOp);
 
         this.log.operations.push(remoteOp);
         newOperations.push(remoteOp);

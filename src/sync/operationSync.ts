@@ -252,6 +252,9 @@ export function useOperationSync(): UseOperationSync {
   // State change listeners (for notifying App.tsx of local operations)
   const stateChangeListeners = useRef<Set<(operations: Operation[]) => void>>(new Set());
 
+  // forceSync will be defined later but we need a ref to it for the online/offline effect
+  const forceSyncRef = useRef<(() => Promise<void>) | null>(null);
+
   const clearError = useCallback(() => setError(null), []);
 
   // Initialize device ID and operation log
@@ -397,12 +400,12 @@ export function useOperationSync(): UseOperationSync {
                 continue;
               }
 
-              // SECURITY: Check for replay attacks (duplicate nonce)
-              if (!checkAndRegisterNonce(row.operation_data?.nonce)) {
+              // SECURITY: Check for replay attacks (use nonce if present, else operation ID)
+              const nonce = (row.operation_data as any)?.nonce || row.operation_data?.id;
+              if (!checkAndRegisterNonce(nonce)) {
                 logger.error('🚨 SECURITY: Rejecting operation - replay attack detected (duplicate nonce):', {
                   opId: row.operation_data?.id,
                   opType: row.operation_data?.type,
-                  nonce: row.operation_data?.nonce?.substring(0, 10) + '...',
                 });
                 invalidOps.push({
                   raw: row.operation_data,
@@ -522,8 +525,8 @@ export function useOperationSync(): UseOperationSync {
     const handleOnline = () => {
       setIsOnline(true);
       // Trigger sync when coming back online
-      if (user && operationLog.current) {
-        setTimeout(() => forceSync(), 100);
+      if (user && operationLog.current && forceSyncRef.current) {
+        setTimeout(() => forceSyncRef.current?.(), 100);
       }
     };
 
@@ -536,7 +539,7 @@ export function useOperationSync(): UseOperationSync {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [user, forceSync]);
+  }, [user]);
 
   // Operation batching for backpressure control
   const batchTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -913,6 +916,9 @@ export function useOperationSync(): UseOperationSync {
     ]);
   }, [syncOperationsToCloud, fetchOperationsFromCloud]);
 
+  // Set ref for use in online/offline event listeners
+  forceSyncRef.current = forceSync;
+
   // Subscribe to operation changes
   const subscribeToOperations = useCallback(
     (onOperations: (operations: Operation[]) => void) => {
@@ -993,12 +999,12 @@ export function useOperationSync(): UseOperationSync {
               return;
             }
 
-            // SECURITY: Check for replay attacks (duplicate nonce)
-            if (!checkAndRegisterNonce(operation?.nonce)) {
+            // SECURITY: Check for replay attacks (use nonce if present, else operation ID)
+            const opNonce = (operation as any)?.nonce || operation?.id;
+            if (!checkAndRegisterNonce(opNonce)) {
               logger.error('🚨 SECURITY: Rejecting operation - replay attack detected (real-time):', {
                 opType: operation?.type,
                 opId: operation?.id,
-                nonce: operation?.nonce?.substring(0, 10) + '...',
               });
               return;
             }
