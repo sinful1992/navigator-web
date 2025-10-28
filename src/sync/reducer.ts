@@ -1,6 +1,9 @@
 // src/sync/reducer.ts - State reconstruction from operations
+// PHASE 1.3: Enhanced with vector clock-based conflict resolution
 import type { AppState } from '../types';
 import type { Operation } from './operations';
+import { OperationLogManager } from './operationLog';
+import { processOperationsWithConflictResolution } from './conflictResolution';
 import { logger } from '../utils/logger';
 
 /**
@@ -273,6 +276,51 @@ export function reconstructState(
     arrangements: finalState.arrangements?.length || 0,
     daySessions: finalState.daySessions?.length || 0,
     currentListVersion: finalState.currentListVersion,
+  });
+
+  return finalState;
+}
+
+/**
+ * PHASE 1.3: Reconstruct state with vector clock-based conflict resolution
+ * Applies conflict resolution before replaying operations for more accurate state
+ */
+export function reconstructStateWithConflictResolution(
+  initialState: AppState,
+  operations: Operation[],
+  manager?: OperationLogManager
+): AppState {
+  logger.info('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION START:', {
+    totalOperations: operations.length,
+    hasVectorClocks: operations.some(op => !!op.vectorClock),
+  });
+
+  // Apply conflict resolution
+  const { validOperations, conflictsResolved, operationsRejected } =
+    processOperationsWithConflictResolution(operations, initialState, manager);
+
+  if (conflictsResolved > 0 || operationsRejected > 0) {
+    logger.info('Conflict resolution applied:', {
+      conflictsResolved,
+      operationsRejected,
+      validOperations: validOperations.length,
+    });
+  }
+
+  // Sort resolved operations by sequence
+  const sortedOps = [...validOperations].sort((a, b) => a.sequence - b.sequence);
+
+  // Apply resolved operations to state
+  const finalState = sortedOps.reduce(applyOperation, initialState);
+
+  logger.info('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION COMPLETE:', {
+    addresses: finalState.addresses?.length || 0,
+    completions: finalState.completions?.length || 0,
+    arrangements: finalState.arrangements?.length || 0,
+    daySessions: finalState.daySessions?.length || 0,
+    currentListVersion: finalState.currentListVersion,
+    conflictsResolved,
+    operationsRejected,
   });
 
   return finalState;
