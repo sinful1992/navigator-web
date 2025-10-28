@@ -1,4 +1,4 @@
-// src/useAppState.ts - FIXED VERSION - Prevent state corruption
+// src/useAppState.ts - REFACTORED VERSION - Composed from 7 focused hooks
 import * as React from "react";
 import { storageManager } from "./utils/storageManager";
 import { logger } from "./utils/logger";
@@ -27,6 +27,19 @@ import {
   clearProtectionFlag,
   isProtectionActive,
 } from "./utils/protectionFlags";
+// Extracted hooks
+import { usePersistedState } from "./hooks/usePersistedState";
+import { useCompletionState } from "./hooks/useCompletionState";
+import { useTimeTracking } from "./hooks/useTimeTracking";
+import { useAddressState } from "./hooks/useAddressState";
+import { useArrangementState } from "./hooks/useArrangementState";
+import { useSettingsState } from "./hooks/useSettingsState";
+import { useSyncState } from "./hooks/useSyncState";
+// Utility functions
+import { validateAppState, validateAddressRow, stampCompletionsWithVersion, generateOperationId } from "./utils/validationUtils";
+import { applyOptimisticUpdates } from "./utils/optimisticUpdatesUtils";
+import { getOrCreateDeviceId } from "./services/deviceIdService";
+import { prepareEndDaySessions } from "./services/daySessionService";
 
 const STORAGE_KEY = "navigator_state_v5";
 const CURRENT_SCHEMA_VERSION = 5;
@@ -452,22 +465,65 @@ type SubmitOperationCallback = (operation: {
 }) => Promise<void>;
 
 export function useAppState(userId?: string, submitOperation?: SubmitOperationCallback) {
-  const [baseState, setBaseState] = React.useState<AppState>(initial);
-  const [optimisticState, setOptimisticState] =
-    React.useState<OptimisticState>({
-      updates: new Map(),
-      pendingOperations: new Set(),
-    });
-  const [loading, setLoading] = React.useState(true);
+  // ---- Composed hooks ----
+  // 1. Persistence hook (loads/saves state)
+  const { state: baseState, setState: setBaseState, loading, ownerMetadata } = usePersistedState(userId);
 
-  // stable device id
-  const deviceId = React.useMemo(() => getOrCreateDeviceId(), []);
+  // 2. Sync hook (optimistic updates, conflicts, device ID)
+  const {
+    optimisticUpdates,
+    pendingOperations,
+    conflicts,
+    deviceId,
+    addOptimisticUpdate,
+    confirmOptimisticUpdate,
+    revertOptimisticUpdate,
+    clearOptimisticUpdates,
+    enqueueOp,
+    resolveConflict,
+    setConflicts,
+    setOwnerMetadata: syncSetOwnerMetadata,
+  } = useSyncState();
 
-  // Store current user ID for ownership tracking
-  const ownerUserIdRef = React.useRef<string | undefined>(userId);
-  React.useEffect(() => {
-    ownerUserIdRef.current = userId;
-  }, [userId]);
+  // 3. Completion hook (complete, update, undo)
+  const { complete, updateCompletion, undo, pendingCompletions } = useCompletionState({
+    baseState,
+    addOptimisticUpdate,
+    confirmOptimisticUpdate,
+    submitOperation,
+    setBaseState,
+  });
+
+  // 4. Time tracking hook (setActive, cancelActive)
+  const { setActive, cancelActive, activeIndex: _, activeStartTime: __, getTimeSpent } = useTimeTracking({
+    baseState,
+    setBaseState,
+    submitOperation,
+  });
+
+  // 5. Address hook (setAddresses, addAddress)
+  const { setAddresses, addAddress } = useAddressState({
+    baseState,
+    addOptimisticUpdate,
+    confirmOptimisticUpdate,
+    submitOperation,
+    setBaseState,
+  });
+
+  // 6. Arrangement hook (addArrangement, updateArrangement, deleteArrangement)
+  const { addArrangement, updateArrangement, deleteArrangement } = useArrangementState({
+    baseState,
+    addOptimisticUpdate,
+    confirmOptimisticUpdate,
+    submitOperation,
+    setBaseState,
+  });
+
+  // 7. Settings hook (setSubscription, updateReminderSettings, updateBonusSettings)
+  const { setSubscription, updateReminderSettings, updateBonusSettings } = useSettingsState({
+    submitOperation,
+    setBaseState,
+  });
 
   // Computed state with optimistic updates applied
   const state = React.useMemo(() => {
@@ -479,145 +535,10 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       // Update baseState immediately
       setTimeout(() => setBaseState(patchedBaseState), 0);
     }
-    return applyOptimisticUpdates(patchedBaseState, optimisticState.updates);
-  }, [baseState, optimisticState.updates]);
+    return applyOptimisticUpdates(patchedBaseState, optimisticUpdates);
+  }, [baseState, optimisticUpdates, setBaseState]);
 
-  // Track conflicts
-  const [conflicts, setConflicts] = React.useState<Map<string, any>>(
-    new Map()
-  );
-
-  // Track loaded owner metadata for ownership verification
-  const [ownerMetadata, setOwnerMetadata] = React.useState<{
-    ownerUserId?: string;
-    ownerChecksum?: string;
-  }>({});
-
-  // ---- load from IndexedDB (with validation and migration) ----
-  React.useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const saved = (await storageManager.queuedGet(STORAGE_KEY)) as any;
-        if (!alive) return;
-
-        if (saved) {
-          // 🔒 SECURITY: Validate IndexedDB data ownership
-          const loadedOwnerUserId = saved._ownerUserId;
-          const loadedOwnerChecksum = saved._ownerChecksum;
-          const expectedUserId = localStorage.getItem('navigator_expected_user_id');
-
-          // Critical validation: Check if IndexedDB data belongs to current user
-          if (expectedUserId && loadedOwnerUserId && loadedOwnerUserId !== expectedUserId) {
-            logger.error(`🚨 INDEXEDDB CONTAMINATION: Data belongs to ${loadedOwnerUserId} but expected ${expectedUserId}`);
-
-            // Create emergency backup
-            const emergencyBackup = {
-              timestamp: new Date().toISOString(),
-              contaminatedData: saved,
-              expectedUserId,
-              actualUserId: loadedOwnerUserId,
-              reason: 'indexeddb_contamination'
-            };
-            localStorage.setItem(`navigator_emergency_backup_${Date.now()}`, JSON.stringify(emergencyBackup));
-
-            // Clear contaminated data and start fresh
-            await storageManager.queuedSet(STORAGE_KEY, null);
-            logger.warn('🔒 SECURITY: Cleared contaminated IndexedDB data');
-
-            setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
-            return;
-          }
-
-          // Store owner metadata for verification
-          setOwnerMetadata({
-            ownerUserId: loadedOwnerUserId,
-            ownerChecksum: loadedOwnerChecksum
-          });
-
-          // Validate loaded data
-          if (!validateAppState(saved)) {
-            logger.warn('Loaded data failed validation, using initial state');
-            setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
-            return;
-          }
-
-          const version =
-            typeof saved.currentListVersion === "number"
-              ? saved.currentListVersion
-              : 1;
-          const next: AppState = {
-            addresses: saved.addresses.filter(validateAddressRow),
-            activeIndex: (typeof saved.activeIndex === "number") ? saved.activeIndex : null,
-            completions: stampCompletionsWithVersion(saved.completions, version),
-            daySessions: Array.isArray(saved.daySessions) ? saved.daySessions : [],
-            arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
-            currentListVersion: version,
-            subscription: saved.subscription || null,
-            reminderSettings: saved.reminderSettings || DEFAULT_REMINDER_SETTINGS,
-            reminderNotifications: Array.isArray(saved.reminderNotifications) ? saved.reminderNotifications : [],
-            lastReminderProcessed: saved.lastReminderProcessed,
-            bonusSettings: saved.bonusSettings || DEFAULT_BONUS_SETTINGS,
-            _schemaVersion: CURRENT_SCHEMA_VERSION,
-          };
-
-          logger.info('State loaded from IndexedDB:', {
-            hasBonusSettings: !!next.bonusSettings,
-            bonusSettings: next.bonusSettings
-          });
-
-          setBaseState(next);
-        } else {
-          // No saved data, use initial state with current schema version
-          setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
-        }
-      } catch (error) {
-        logger.error("Failed to load state from IndexedDB:", error);
-        // Use safe fallback
-        setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // ---- persist to IndexedDB (debounced with error handling) ----
-  React.useEffect(() => {
-    if (loading) return;
-
-    const t = setTimeout(async () => {
-      try {
-        // Add schema version and owner signature before saving
-        const stateToSave: any = {
-          ...baseState,
-          _schemaVersion: CURRENT_SCHEMA_VERSION
-        };
-
-        // Add immutable owner signature if authenticated
-        if (ownerUserIdRef.current) {
-          stateToSave._ownerUserId = ownerUserIdRef.current;
-          // Create tamper-detection hash: hash(userId + timestamp + data checksum)
-          const dataChecksum = JSON.stringify({
-            addressCount: baseState.addresses.length,
-            completionCount: baseState.completions.length,
-            listVersion: baseState.currentListVersion
-          });
-          const signatureInput = `${ownerUserIdRef.current}|${dataChecksum}`;
-          stateToSave._ownerChecksum = btoa(signatureInput).slice(0, 32);
-        }
-
-        await storageManager.queuedSet(STORAGE_KEY, stateToSave);
-
-      } catch (error: unknown) {
-        logger.error('Failed to persist state to IndexedDB:', error);
-      }
-    }, 150);
-
-    return () => clearTimeout(t);
-  }, [baseState, loading]);
+  // ---- Note: Load/persist effects now handled by usePersistedState hook ----
 
   // ---- optimistic update helpers ----
   const addOptimisticUpdate = React.useCallback(
