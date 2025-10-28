@@ -22,6 +22,7 @@ import {
   DEFAULT_REMINDER_SETTINGS,
 } from "./services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "./utils/bonusCalculator";
+import { setProtectionFlag, clearProtectionFlag } from "./utils/protectionFlags";
 
 const STORAGE_KEY = "navigator_state_v5";
 const CURRENT_SCHEMA_VERSION = 5;
@@ -848,7 +849,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   const setActive = React.useCallback((idx: number) => {
     // 🔧 CRITICAL FIX: Set protection flag (no timeout - cleared on Complete/Cancel)
-    localStorage.setItem('navigator_active_protection', 'true');
+    setProtectionFlag('navigator_active_protection');
 
     const now = new Date().toISOString();
     let shouldSubmit = false;
@@ -899,7 +900,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   const cancelActive = React.useCallback(() => {
     // 🔧 FIX: Clear protection to resume cloud sync
-    localStorage.removeItem('navigator_active_protection');
+    clearProtectionFlag('navigator_active_protection');
 
     setBaseState((s) => {
       logger.info(`📍 CANCELING ACTIVE: Clearing active state - SYNC RESUMED`);
@@ -1052,7 +1053,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         setBaseState((s) => {
           if (s.activeIndex === index) {
             // 🔧 FIX: Clear protection when completing active address
-            localStorage.removeItem('navigator_active_protection');
+            clearProtectionFlag('navigator_active_protection');
             logger.info(`📍 COMPLETED ACTIVE ADDRESS: Clearing active state - SYNC RESUMED`);
           }
 
@@ -1240,6 +1241,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       });
 
       logger.info('Starting new day session:', sess);
+      setProtectionFlag('navigator_day_session_protection');
       shouldSubmit = true;
 
       return {
@@ -1288,6 +1290,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       }
 
       logger.info("Ending day session:", endedSession);
+      clearProtectionFlag('navigator_day_session_protection');
       return { ...s, daySessions: updatedSessions };
     });
 
