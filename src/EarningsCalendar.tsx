@@ -41,7 +41,7 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
 
   const toggleWorkingDay = (date: string) => {
     setManualWorkingDays(prev => {
-      const newSet = new Set<string>(prev || new Set<string>());
+      const newSet = prev ? new Set<string>(prev) : new Set<string>();
       if (newSet.has(date)) {
         newSet.delete(date);
       } else {
@@ -78,7 +78,7 @@ export function EarningsCalendar({ state, user }: EarningsCalendarProps) {
 
     // Initialize manual working days on first load
     if (manualWorkingDays === null && completionDates.size > 0) {
-      setManualWorkingDays(new Set(completionDates));
+      setManualWorkingDays(new Set<string>(completionDates));
     }
 
     // Use manual selection if available, otherwise use all completion dates
