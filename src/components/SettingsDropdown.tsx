@@ -1,20 +1,27 @@
 // src/components/SettingsDropdown.tsx - Modern Redesign
-import React, { useState, useRef, useEffect } from 'react';
+// PHASE 2 Task 2: Refactored to use extracted components and state hook
+import React from 'react';
 import { useSettings, isSupabaseConfigured } from '../hooks/useSettings';
+import { useSettingsDropdown } from '../hooks/useSettingsDropdown';
 import { ReminderSettings } from './ReminderSettings';
 import { BonusSettingsModal } from './BonusSettingsModal';
 import { SyncDebugModal } from './SyncDebugModal';
-import { AddressAutocomplete } from './AddressAutocomplete';
 import type { ReminderSettings as ReminderSettingsType, BonusSettings } from '../types';
 import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
 import type { AppState } from '../types';
 import {
   exportDataAsJSON,
-  getStorageInfo,
   clearLocalCaches
 } from '../utils/dataExport';
-import { isHybridRoutingAvailable } from '../services/hybridRouting';
 import { SETTINGS_STYLES } from './SettingsStyles';
+import {
+  SettingsSection,
+  SettingsToggle,
+  SettingsActionButton,
+  StorageInfo,
+  HomeAddressEditor,
+  SubsectionTitle,
+} from './SettingsComponents';
 // @ts-ignore
 import packageJson from '../../package.json';
 
@@ -45,58 +52,6 @@ interface SettingsDropdownProps {
   hasSupabase?: boolean;
 }
 
-// CRITICAL FIX: Define components OUTSIDE to prevent remounting on every render
-const ToggleSwitch: React.FC<{
-  checked: boolean;
-  onChange: () => void;
-  id: string;
-}> = ({ checked, onChange, id }) => (
-  <div className="modern-toggle-switch" onClick={onChange}>
-    <input
-      type="checkbox"
-      id={id}
-      checked={checked}
-      onChange={onChange}
-      className="modern-toggle-input"
-    />
-    <div className={`modern-toggle-slider ${checked ? 'checked' : ''}`}>
-      <div className="modern-toggle-thumb"></div>
-    </div>
-  </div>
-);
-
-const CollapsibleSection: React.FC<{
-  title: string;
-  icon: string;
-  sectionKey: string;
-  children: React.ReactNode;
-  isExpanded: boolean;
-  onToggle: (key: string) => void;
-}> = ({ title, icon, sectionKey, children, isExpanded, onToggle }) => {
-  return (
-    <div className="modern-settings-section-container">
-      <button
-        type="button"
-        className="modern-section-header"
-        onClick={() => onToggle(sectionKey)}
-      >
-        <div className="modern-section-title-area">
-          <span className="modern-section-icon">{icon}</span>
-          <span className="modern-section-title">{title}</span>
-        </div>
-        <span className={`modern-section-chevron ${isExpanded ? 'expanded' : ''}`}>
-          ›
-        </span>
-      </button>
-
-      <div className={`modern-section-content ${isExpanded ? 'expanded' : ''}`}>
-        <div className="modern-section-inner">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   trigger,
@@ -122,16 +77,8 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   onSignOut,
   hasSupabase
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [showSMSSettings, setShowSMSSettings] = useState(false);
-  const [showBonusSettings, setShowBonusSettings] = useState(false);
-  const [showSyncDebug, setShowSyncDebug] = useState(false);
-  const [storageInfo, setStorageInfo] = useState<{ usedMB: string; quotaMB: string; percentage: number } | null>(null);
-  const [expandedSection, setExpandedSection] = useState<string | null>('general');
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const panelBodyRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const restoreInputRef = useRef<HTMLInputElement>(null);
+  // Extract state and actions from hook
+  const { state, actions, refs } = useSettingsDropdown();
 
   const {
     settings,
@@ -146,71 +93,22 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
     clearHomeAddress,
   } = useSettings();
 
-  // Home address editing state
-  const [isEditingHomeAddress, setIsEditingHomeAddress] = useState(false);
-  const [tempHomeAddress, setTempHomeAddress] = useState("");
-
-  // Load storage info when dropdown opens
-  useEffect(() => {
-    if (isOpen && !storageInfo) {
-      getStorageInfo().then(setStorageInfo);
-    }
-  }, [isOpen, storageInfo]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
-
-  // Close on escape key
-  useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-        setExpandedSection(null);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isOpen]);
-
-  const toggleSection = (section: string) => {
-    setExpandedSection(prev => prev === section ? null : section);
-  };
-
+  // File input handler
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && onImportExcel) {
       onImportExcel(file);
-      setIsOpen(false);
+      actions.closeDropdown();
     }
   };
 
   return (
-    <div className="modern-settings-dropdown" ref={dropdownRef}>
+    <div className="modern-settings-dropdown" ref={refs.dropdownRef}>
       <button
         type="button"
         className="modern-settings-trigger"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-expanded={isOpen}
+        onClick={actions.toggleDropdown}
+        aria-expanded={state.isOpen}
         aria-haspopup="true"
       >
         {trigger || (
@@ -221,7 +119,7 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
         )}
       </button>
 
-      {isOpen && (
+      {state.isOpen && (
         <div className="modern-settings-panel">
           <div className="modern-panel-header">
             <div className="modern-header-content">
@@ -231,364 +129,216 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
             <button
               type="button"
               className="modern-close-button"
-              onClick={() => setIsOpen(false)}
+              onClick={actions.closeDropdown}
               aria-label="Close settings"
             >
               ✕
             </button>
           </div>
 
-          <div className="modern-panel-body" ref={panelBodyRef}>
+          <div className="modern-panel-body" ref={refs.panelBodyRef}>
             {/* General Settings */}
-            <CollapsibleSection
+            <SettingsSection
               title="General"
               icon="📱"
               sectionKey="general"
-              isExpanded={expandedSection === 'general'}
-              onToggle={toggleSection}
+              isExpanded={state.expandedSection === 'general'}
+              onToggle={actions.toggleSection}
             >
-              <div className="modern-setting-row">
-                <div className="modern-setting-info">
-                  <div className="modern-setting-label">Dark Mode</div>
-                  <div className="modern-setting-desc">Switch between light and dark theme</div>
-                </div>
-                <ToggleSwitch
-                  id="dark-mode"
-                  checked={settings.darkMode}
-                  onChange={toggleDarkMode}
-                />
-              </div>
+              <SettingsToggle
+                id="dark-mode"
+                checked={settings.darkMode}
+                onChange={toggleDarkMode}
+                label="Dark Mode"
+                description="Switch between light and dark theme"
+              />
 
-              <div className="modern-setting-row">
-                <div className="modern-setting-info">
-                  <div className="modern-setting-label">Push Notifications</div>
-                  <div className="modern-setting-desc">Receive arrangement reminders</div>
-                </div>
-                <ToggleSwitch
-                  id="push-notifs"
-                  checked={settings.pushNotifications}
-                  onChange={togglePushNotifications}
-                />
-              </div>
+              <SettingsToggle
+                id="push-notifs"
+                checked={settings.pushNotifications}
+                onChange={togglePushNotifications}
+                label="Push Notifications"
+                description="Receive arrangement reminders"
+              />
 
-              <div className="modern-setting-row">
-                <div className="modern-setting-info">
-                  <div className="modern-setting-label">Auto-sync on startup</div>
-                  <div className="modern-setting-desc">Automatically sync when app opens</div>
-                </div>
-                <ToggleSwitch
-                  id="auto-sync"
-                  checked={settings.autoSyncOnStart}
-                  onChange={toggleAutoSync}
-                />
-              </div>
-            </CollapsibleSection>
+              <SettingsToggle
+                id="auto-sync"
+                checked={settings.autoSyncOnStart}
+                onChange={toggleAutoSync}
+                label="Auto-sync on startup"
+                description="Automatically sync when app opens"
+              />
+            </SettingsSection>
 
             {/* Data & Backup */}
-            <CollapsibleSection
+            <SettingsSection
               title="Data & Backup"
               icon="💾"
               sectionKey="data"
-              isExpanded={expandedSection === 'data'}
-              onToggle={toggleSection}
+              isExpanded={state.expandedSection === 'data'}
+              onToggle={actions.toggleSection}
             >
               {/* Import/Export */}
               <div className="modern-subsection">
-                <div className="modern-subsection-title">Import & Export</div>
+                <SubsectionTitle>Import & Export</SubsectionTitle>
 
                 <input
                   type="file"
-                  ref={fileInputRef}
+                  ref={refs.fileInputRef}
                   accept=".xlsx,.xls,.csv"
                   onChange={handleFileSelect}
                   style={{ display: 'none' }}
                 />
 
-                <button
-                  className="modern-action-button"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <span className="modern-button-icon">📊</span>
-                  <span className="modern-button-text">Import Excel/CSV</span>
-                </button>
+                <SettingsActionButton
+                  icon="📊"
+                  text="Import Excel/CSV"
+                  onClick={() => refs.fileInputRef.current?.click()}
+                />
 
                 {appState && (
-                  <button
+                  <SettingsActionButton
+                    icon="💾"
+                    text="Backup All Data"
+                    variant="primary"
                     onClick={() => {
                       exportDataAsJSON(appState, userEmail);
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }}
-                    className="modern-action-button primary"
-                  >
-                    <span className="modern-button-icon">💾</span>
-                    <span className="modern-button-text">Backup All Data</span>
-                  </button>
+                  />
                 )}
               </div>
 
               {/* Backup Management */}
               <div className="modern-subsection">
-                <div className="modern-subsection-title">Backup Management</div>
+                <SubsectionTitle>Backup Management</SubsectionTitle>
 
                 <input
                   type="file"
-                  ref={restoreInputRef}
+                  ref={refs.restoreInputRef}
                   accept="application/json"
                   onChange={(e) => {
                     if (onRestoreBackup) {
                       onRestoreBackup(e);
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }
                   }}
                   style={{ display: 'none' }}
                 />
 
-                <button
-                  className="modern-action-button"
-                  onClick={() => restoreInputRef.current?.click()}
-                >
-                  <span className="modern-button-icon">📂</span>
-                  <span className="modern-button-text">Restore from Backup</span>
-                </button>
+                <SettingsActionButton
+                  icon="📂"
+                  text="Restore from Backup"
+                  onClick={() => refs.restoreInputRef.current?.click()}
+                />
 
                 {onShowBackupManager && (
-                  <button
-                    className="modern-action-button"
+                  <SettingsActionButton
+                    icon="💾"
+                    text="Local Backup Manager"
                     onClick={() => {
                       onShowBackupManager();
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }}
-                  >
-                    <span className="modern-button-icon">💾</span>
-                    <span className="modern-button-text">Local Backup Manager</span>
-                  </button>
+                  />
                 )}
 
                 {hasSupabase && onShowCloudBackups && (
-                  <button
-                    className="modern-action-button"
+                  <SettingsActionButton
+                    icon="☁️"
+                    text="Cloud Backups (Last 7 Days)"
                     onClick={() => {
                       onShowCloudBackups();
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }}
-                  >
-                    <span className="modern-button-icon">☁️</span>
-                    <span className="modern-button-text">Cloud Backups (Last 7 Days)</span>
-                  </button>
+                  />
                 )}
 
                 {!hasSupabase && onShowSupabaseSetup && (
-                  <button
-                    className="modern-action-button"
+                  <SettingsActionButton
+                    icon="🔗"
+                    text="Connect Cloud Storage"
                     onClick={() => {
                       onShowSupabaseSetup();
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }}
-                  >
-                    <span className="modern-button-icon">🔗</span>
-                    <span className="modern-button-text">Connect Cloud Storage</span>
-                  </button>
+                  />
                 )}
 
-                <div className="modern-setting-row">
-                  <div className="modern-setting-info">
-                    <div className="modern-setting-label">Auto-backup on end of day</div>
-                    <div className="modern-setting-desc">
-                      {isSupabaseConfigured()
-                        ? "Automatic backup when finishing your day"
-                        : "Local backup only (cloud not configured)"}
-                    </div>
-                  </div>
-                  <ToggleSwitch
-                    id="backup-toggle"
-                    checked={settings.backupOnEndOfDay}
-                    onChange={toggleBackup}
-                  />
-                </div>
+                <SettingsToggle
+                  id="backup-toggle"
+                  checked={settings.backupOnEndOfDay}
+                  onChange={toggleBackup}
+                  label="Auto-backup on end of day"
+                  description={
+                    isSupabaseConfigured()
+                      ? "Automatic backup when finishing your day"
+                      : "Local backup only (cloud not configured)"
+                  }
+                />
               </div>
 
               {/* Sync */}
               {onManualSync && (
                 <div className="modern-subsection">
-                  <div className="modern-subsection-title">Cloud Sync</div>
-                  <button
-                    className="modern-action-button"
+                  <SubsectionTitle>Cloud Sync</SubsectionTitle>
+                  <SettingsActionButton
+                    icon={isSyncing ? "⟳" : "🔄"}
+                    text={isSyncing ? "Syncing..." : "Sync Now"}
                     onClick={() => {
                       onManualSync();
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }}
                     disabled={isSyncing}
-                  >
-                    <span className="modern-button-icon">
-                      {isSyncing ? "⟳" : "🔄"}
-                    </span>
-                    <span className="modern-button-text">
-                      {isSyncing ? "Syncing..." : "Sync Now"}
-                    </span>
-                  </button>
+                  />
 
-                  <button
-                    className="modern-action-button"
+                  <SettingsActionButton
+                    icon="🛠️"
+                    text="Sync Diagnostics"
                     onClick={() => {
-                      setShowSyncDebug(true);
-                      setIsOpen(false);
+                      actions.showSyncDebugModal();
                     }}
                     style={{ marginTop: '0.5rem' }}
-                  >
-                    <span className="modern-button-icon">🛠️</span>
-                    <span className="modern-button-text">Sync Diagnostics</span>
-                  </button>
+                  />
                 </div>
               )}
-            </CollapsibleSection>
+            </SettingsSection>
 
             {/* Route Planning */}
-            <CollapsibleSection
+            <SettingsSection
               title="Route Planning"
               icon="🗺️"
               sectionKey="routing"
-              isExpanded={expandedSection === 'routing'}
-              onToggle={toggleSection}
+              isExpanded={state.expandedSection === 'routing'}
+              onToggle={actions.toggleSection}
             >
-              <div className="modern-setting-row">
-                <div className="modern-setting-info">
-                  <div className="modern-setting-label">Avoid Tolls</div>
-                  <div className="modern-setting-desc">Route optimization will avoid toll roads when possible</div>
-                </div>
-                <ToggleSwitch
-                  id="avoid-tolls"
-                  checked={settings.avoidTolls}
-                  onChange={toggleAvoidTolls}
-                />
-              </div>
+              <SettingsToggle
+                id="avoid-tolls"
+                checked={settings.avoidTolls}
+                onChange={toggleAvoidTolls}
+                label="Avoid Tolls"
+                description="Route optimization will avoid toll roads when possible"
+              />
 
-              {/* Home Address Setting */}
-              <div className="modern-setting-column" style={{ marginTop: '1rem' }}>
-                <div className="modern-setting-label" style={{ marginBottom: '0.5rem' }}>
-                  🏠 Home Address
-                </div>
-
-                {!isEditingHomeAddress && !settings.homeAddress && (
-                  <div style={{
-                    padding: '0.875rem',
-                    background: 'rgba(99, 102, 241, 0.05)',
-                    borderRadius: '10px',
-                    border: '1.5px dashed rgba(99, 102, 241, 0.2)',
-                    textAlign: 'center',
-                    marginBottom: '0.5rem'
-                  }}>
-                    <p style={{ margin: '0 0 0.75rem 0', color: '#6b7280', fontSize: '0.8125rem' }}>
-                      Set your home address to optimize routes that end near home
-                    </p>
-                    <button
-                      className="modern-action-button primary small"
-                      onClick={() => setIsEditingHomeAddress(true)}
-                      style={{ margin: '0 auto', maxWidth: '200px' }}
-                    >
-                      <span className="modern-button-icon">+</span>
-                      <span className="modern-button-text">Set Home Address</span>
-                    </button>
-                  </div>
-                )}
-
-                {!isEditingHomeAddress && settings.homeAddress && (
-                  <div style={{
-                    padding: '0.875rem',
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    borderRadius: '10px',
-                    border: '1.5px solid rgba(16, 185, 129, 0.3)',
-                    marginBottom: '0.5rem'
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      justifyContent: 'space-between',
-                      gap: '0.75rem'
-                    }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{
-                          fontWeight: '600',
-                          color: '#059669',
-                          marginBottom: '0.25rem',
-                          fontSize: '0.8125rem'
-                        }}>
-                          ✓ Routes will end near home
-                        </div>
-                        <div style={{ color: '#374151', fontSize: '0.8125rem' }}>
-                          {settings.homeAddress}
-                        </div>
-                      </div>
-                      <div className="modern-inline-button-group">
-                        <button
-                          className="modern-inline-button primary"
-                          onClick={() => {
-                            setTempHomeAddress(settings.homeAddress);
-                            setIsEditingHomeAddress(true);
-                          }}
-                        >
-                          Change
-                        </button>
-                        <button
-                          className="modern-inline-button danger"
-                          onClick={() => {
-                            if (confirm("Clear your home address? You can set it again anytime.")) {
-                              clearHomeAddress();
-                            }
-                          }}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {isEditingHomeAddress && (
-                  <div style={{ marginBottom: '0.5rem' }}>
-                    <AddressAutocomplete
-                      id="settings-home-address-input"
-                      value={tempHomeAddress}
-                      onChange={setTempHomeAddress}
-                      onSelect={(address, lat, lng) => {
-                        updateHomeAddress(address, lat, lng);
-                        setIsEditingHomeAddress(false);
-                        setTempHomeAddress("");
-                      }}
-                      placeholder="Type your home address..."
-                      disabled={!isHybridRoutingAvailable()}
-                    />
-                    <button
-                      className="modern-action-button small"
-                      onClick={() => {
-                        setIsEditingHomeAddress(false);
-                        setTempHomeAddress("");
-                      }}
-                      style={{ marginTop: '0.5rem' }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
-
-                <div className="modern-setting-desc">
-                  When set, route optimization will create routes that end near your home address
-                </div>
-              </div>
-            </CollapsibleSection>
+              <HomeAddressEditor
+                homeAddress={settings.homeAddress}
+                onUpdateAddress={updateHomeAddress}
+                onClearAddress={clearHomeAddress}
+              />
+            </SettingsSection>
 
             {/* Reminders & SMS */}
-            <CollapsibleSection
+            <SettingsSection
               title="Reminders & SMS"
               icon="🔔"
               sectionKey="reminders"
-              isExpanded={expandedSection === 'reminders'}
-              onToggle={toggleSection}
+              isExpanded={state.expandedSection === 'reminders'}
+              onToggle={actions.toggleSection}
             >
               <button
                 className="modern-feature-button"
                 onClick={() => {
-                  setShowSMSSettings(true);
-                  setIsOpen(false);
+                  actions.showSMSModal();
                 }}
               >
                 <div className="modern-feature-content">
@@ -599,21 +349,20 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                 </div>
                 <span className="modern-feature-arrow">→</span>
               </button>
-            </CollapsibleSection>
+            </SettingsSection>
 
             {/* Earnings & Bonus */}
-            <CollapsibleSection
+            <SettingsSection
               title="Earnings & Bonus"
               icon="💰"
               sectionKey="earnings"
-              isExpanded={expandedSection === 'earnings'}
-              onToggle={toggleSection}
+              isExpanded={state.expandedSection === 'earnings'}
+              onToggle={actions.toggleSection}
             >
               <button
                 className="modern-feature-button"
                 onClick={() => {
-                  setShowBonusSettings(true);
-                  setIsOpen(false);
+                  actions.showBonusModal();
                 }}
               >
                 <div className="modern-feature-content">
@@ -624,27 +373,23 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                 </div>
                 <span className="modern-feature-arrow">→</span>
               </button>
-            </CollapsibleSection>
+            </SettingsSection>
 
             {/* Privacy & Safety */}
-            <CollapsibleSection
+            <SettingsSection
               title="Privacy & Safety"
               icon="🔒"
               sectionKey="privacy"
-              isExpanded={expandedSection === 'privacy'}
-              onToggle={toggleSection}
+              isExpanded={state.expandedSection === 'privacy'}
+              onToggle={actions.toggleSection}
             >
-              <div className="modern-setting-row">
-                <div className="modern-setting-info">
-                  <div className="modern-setting-label">Confirm before deleting</div>
-                  <div className="modern-setting-desc">Ask for confirmation on deletions</div>
-                </div>
-                <ToggleSwitch
-                  id="confirm-delete"
-                  checked={settings.confirmBeforeDelete}
-                  onChange={toggleConfirmBeforeDelete}
-                />
-              </div>
+              <SettingsToggle
+                id="confirm-delete"
+                checked={settings.confirmBeforeDelete}
+                onChange={toggleConfirmBeforeDelete}
+                label="Confirm before deleting"
+                description="Ask for confirmation on deletions"
+              />
 
               <div className="modern-setting-column">
                 <label htmlFor="data-retention" className="modern-setting-label">
@@ -667,35 +412,22 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
               </div>
 
               {/* Storage Usage */}
-              {storageInfo && (
-                <div className="modern-storage-card">
-                  <div className="modern-storage-header">
-                    <span className="modern-storage-label">Storage Usage</span>
-                    <span className="modern-storage-value">
-                      {storageInfo.usedMB} / {storageInfo.quotaMB} MB
-                    </span>
-                  </div>
-                  <div className="modern-storage-bar">
-                    <div
-                      className={`modern-storage-fill ${storageInfo.percentage > 80 ? 'warning' : ''}`}
-                      style={{ width: `${storageInfo.percentage}%` }}
-                    />
-                  </div>
-                  <div className="modern-storage-percent">{storageInfo.percentage}% used</div>
-                </div>
+              {state.storageInfo && (
+                <StorageInfo
+                  usedMB={state.storageInfo.usedMB}
+                  quotaMB={state.storageInfo.quotaMB}
+                  percentage={state.storageInfo.percentage}
+                />
               )}
 
-              <button
+              <SettingsActionButton
+                icon="🗑️"
+                text="Clear Cache & Temporary Data"
                 onClick={async () => {
                   await clearLocalCaches();
-                  setStorageInfo(null);
-                  setTimeout(() => getStorageInfo().then(setStorageInfo), 500);
+                  actions.refreshStorageInfo();
                 }}
-                className="modern-action-button"
-              >
-                <span className="modern-button-icon">🗑️</span>
-                <span className="modern-button-text">Clear Cache & Temporary Data</span>
-              </button>
+              />
 
               <div className="modern-link-group">
                 <a
@@ -717,87 +449,74 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                   <span className="modern-button-text">Terms of Use</span>
                 </a>
               </div>
-            </CollapsibleSection>
+            </SettingsSection>
 
             {/* Account */}
-            <CollapsibleSection
+            <SettingsSection
               title="Account"
               icon="👤"
               sectionKey="account"
-              isExpanded={expandedSection === 'account'}
-              onToggle={toggleSection}
+              isExpanded={state.expandedSection === 'account'}
+              onToggle={actions.toggleSection}
             >
               <div className="modern-subsection">
-                <div className="modern-subsection-title">Account Settings</div>
+                <SubsectionTitle>Account Settings</SubsectionTitle>
 
                 {onShowSubscription && (
-                  <button
-                    className="modern-action-button accent"
+                  <SettingsActionButton
+                    icon="⭐"
+                    text="Subscription"
+                    variant="accent"
                     onClick={() => {
                       onShowSubscription();
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }}
-                  >
-                    <span className="modern-button-icon">⭐</span>
-                    <span className="modern-button-text">Subscription</span>
-                  </button>
+                  />
                 )}
 
                 {onChangePassword && (
-                  <button
-                    className="modern-action-button"
+                  <SettingsActionButton
+                    icon="🔑"
+                    text="Change Password"
                     onClick={() => {
                       onChangePassword();
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }}
-                  >
-                    <span className="modern-button-icon">🔑</span>
-                    <span className="modern-button-text">Change Password</span>
-                  </button>
+                  />
                 )}
 
                 {onChangeEmail && (
-                  <button
-                    className="modern-action-button"
+                  <SettingsActionButton
+                    icon="📧"
+                    text="Change Email"
                     onClick={() => {
                       onChangeEmail();
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }}
-                  >
-                    <span className="modern-button-icon">📧</span>
-                    <span className="modern-button-text">Change Email</span>
-                  </button>
+                  />
                 )}
 
                 {onSignOut && (
-                  <button
-                    className="modern-action-button"
+                  <SettingsActionButton
+                    icon="🚪"
+                    text="Sign Out"
                     onClick={() => {
                       onSignOut();
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }}
-                  >
-                    <span className="modern-button-icon">🚪</span>
-                    <span className="modern-button-text">Sign Out</span>
-                  </button>
+                  />
                 )}
 
                 {onResolveDataOwnership && hasOwnershipIssue && (
-                  <button
-                    className="modern-action-button"
-                    style={{
-                      background: 'rgba(245, 158, 11, 0.1)',
-                      borderColor: 'rgba(245, 158, 11, 0.3)',
-                      color: '#b45309'
-                    }}
+                  <SettingsActionButton
+                    icon="⚠️"
+                    text="Resolve Data Ownership"
+                    variant="accent"
                     onClick={() => {
                       onResolveDataOwnership();
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }}
-                  >
-                    <span className="modern-button-icon">⚠️</span>
-                    <span className="modern-button-text">Resolve Data Ownership</span>
-                  </button>
+                  />
                 )}
               </div>
 
@@ -807,23 +526,22 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                   <div className="modern-danger-zone-header">
                     <span className="modern-danger-icon">⚠️</span>
                     <div>
-                      <div className="modern-subsection-title danger">Danger Zone</div>
+                      <SubsectionTitle isDanger>Danger Zone</SubsectionTitle>
                       <div className="modern-danger-desc">Irreversible actions</div>
                     </div>
                   </div>
-                  <button
-                    className="modern-action-button danger-full"
+                  <SettingsActionButton
+                    icon="🗑️"
+                    text="Delete Account Permanently"
+                    variant="danger-full"
                     onClick={() => {
                       onDeleteAccount();
-                      setIsOpen(false);
+                      actions.closeDropdown();
                     }}
-                  >
-                    <span className="modern-button-icon">🗑️</span>
-                    <span className="modern-button-text">Delete Account Permanently</span>
-                  </button>
+                  />
                 </div>
               )}
-            </CollapsibleSection>
+            </SettingsSection>
           </div>
 
           {/* Footer */}
@@ -836,35 +554,35 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
       )}
 
       {/* SMS Template Settings Modal */}
-      {showSMSSettings && (
+      {state.showSMSSettings && (
         <ReminderSettings
           settings={reminderSettings || DEFAULT_REMINDER_SETTINGS}
           onUpdateSettings={(settings) => {
             if (onUpdateReminderSettings) {
               onUpdateReminderSettings(settings);
             }
-            setShowSMSSettings(false);
+            actions.hideSMSModal();
           }}
-          onClose={() => setShowSMSSettings(false)}
+          onClose={() => actions.hideSMSModal()}
         />
       )}
 
       {/* Bonus Settings Modal */}
-      {showBonusSettings && bonusSettings && onUpdateBonusSettings && (
+      {state.showBonusSettings && bonusSettings && onUpdateBonusSettings && (
         <BonusSettingsModal
           settings={bonusSettings}
           onUpdateSettings={(settings) => {
             onUpdateBonusSettings(settings);
-            setShowBonusSettings(false);
+            actions.hideBonusModal();
           }}
-          onClose={() => setShowBonusSettings(false)}
+          onClose={() => actions.hideBonusModal()}
         />
       )}
 
       {/* Sync Debug Modal */}
-      {showSyncDebug && (
+      {state.showSyncDebug && (
         <SyncDebugModal
-          onClose={() => setShowSyncDebug(false)}
+          onClose={() => actions.hideSyncDebugModal()}
         />
       )}
 
