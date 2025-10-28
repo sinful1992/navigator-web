@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import type { AppState } from "../types";
 import type { Operation } from "./operations";
 import { OperationLogManager, getOperationLog, clearOperationLogsForUser, getOperationLogStats } from "./operationLog";
-import { reconstructState } from "./reducer";
+import { reconstructState, reconstructStateWithConflictResolution } from "./reducer";
 import { logger } from "../utils/logger";
 import { DEFAULT_REMINDER_SETTINGS } from "../services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "../utils/bonusCalculator";
@@ -478,9 +478,14 @@ export function useOperationSync(): UseOperationSync {
               }
 
               // Reconstruct state with merged operations
+              // PHASE 1.3: Use conflict resolution for vector clock-based integrity
               const allOps = operationLog.current.getAllOperations();
               logger.info(`🔄 BOOTSTRAP: Reconstructing state from ${allOps.length} total operations`);
-              const newState = reconstructState(INITIAL_STATE, allOps);
+              const newState = reconstructStateWithConflictResolution(
+                INITIAL_STATE,
+                allOps,
+                operationLog.current
+              );
               logger.info('📊 BOOTSTRAP: Reconstructed state:', {
                 addresses: newState.addresses?.length || 0,
                 completions: newState.completions?.length || 0,
@@ -890,8 +895,13 @@ export function useOperationSync(): UseOperationSync {
           }
 
           // Reconstruct state from all operations
+          // PHASE 1.3: Use conflict resolution for vector clock-based integrity
           const allOperations = operationLog.current.getAllOperations();
-          const newState = reconstructState(INITIAL_STATE, allOperations);
+          const newState = reconstructStateWithConflictResolution(
+            INITIAL_STATE,
+            allOperations,
+            operationLog.current
+          );
           setCurrentState(newState);
 
           logger.info('✅ FETCH SUCCESS: State updated with remote operations');
@@ -1037,8 +1047,13 @@ export function useOperationSync(): UseOperationSync {
                 }
 
                 // Reconstruct state and notify
+                // PHASE 1.3: Use conflict resolution for vector clock-based integrity
                 const allOperations = operationLog.current.getAllOperations();
-                const newState = reconstructState(INITIAL_STATE, allOperations);
+                const newState = reconstructStateWithConflictResolution(
+                  INITIAL_STATE,
+                  allOperations,
+                  operationLog.current
+                );
                 setCurrentState(newState);
                 onOperations(newOps);
 

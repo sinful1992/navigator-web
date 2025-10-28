@@ -116,6 +116,28 @@ export const ENABLE_SEQUENCE_CONTINUITY_VALIDATION = true;
 export const ENABLE_VECTOR_CLOCKS = false;
 
 /**
+ * PHASE 1.3: Automatic Conflict Resolution
+ *
+ * Enable vector clock-based conflict resolution in state reconstruction.
+ * Applies intelligent resolution strategies before replaying operations.
+ *
+ * Implementation:
+ * - Concurrent Completions: Priority-based (PIF > ARR > Done > DA)
+ * - Concurrent Active Index: Vector clock causality determines winner
+ * - Concurrent Edits: Field-level merge with last-writer-wins
+ * - Race Conditions: Timestamp + clientId tiebreaker
+ *
+ * Current: true (enabled by default, required for Phase 1.3)
+ * Requires: Vector clocks in operations (Phase 1.2.1+)
+ * Fallback: Graceful degradation to timestamp-based if no vector clocks
+ * Impact: ~1-2% performance overhead for conflict detection/resolution
+ * Benefit: Prevents data loss in multi-device scenarios
+ *
+ * Safety: Fully backward compatible - works without vector clocks
+ */
+export const ENABLE_CONFLICT_RESOLUTION = true;
+
+/**
  * PHASE 1.2: IndexedDB for Protection Flags
  *
  * Use IndexedDB for atomic protection flag storage.
@@ -220,6 +242,12 @@ export function validateSyncConfig(): { valid: boolean; errors: string[] } {
 
   if (MAX_OPERATIONS_IN_LOG < 1000) {
     errors.push('MAX_OPERATIONS_IN_LOG too low - insufficient operation buffering');
+  }
+
+  // PHASE 1.3: Conflict resolution validation
+  // No specific minimum values, but log if disabled (for awareness)
+  if (!ENABLE_CONFLICT_RESOLUTION) {
+    errors.push('⚠️  ENABLE_CONFLICT_RESOLUTION is disabled - concurrent operation handling may be less robust');
   }
 
   return {
