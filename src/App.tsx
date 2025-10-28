@@ -446,6 +446,10 @@ function AuthedApp() {
         logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
         return;
       }
+      if (isProtectionActive('navigator_day_session_protection')) {
+        logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
+        return;
+      }
 
       logger.info('✅ APP: No protection flags active, applying state update');
 
