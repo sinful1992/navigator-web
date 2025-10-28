@@ -728,9 +728,16 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     (rows: AddressRow[], preserveCompletions = true) => {
       logger.info(`🔄 IMPORT START: Importing ${rows.length} addresses, preserveCompletions=${preserveCompletions}`);
 
+      // 🔧 CRITICAL FIX: Prevent import while address is active
+      if (baseState.activeIndex !== null) {
+        const activeAddress = baseState.addresses[baseState.activeIndex];
+        logger.error(`❌ IMPORT BLOCKED: Cannot import while address is active: "${activeAddress?.address}"`);
+        showError(`Please complete or cancel the active address before importing a new list.`);
+        return;
+      }
+
       // 🔧 CRITICAL FIX: Set import protection flag to prevent cloud sync override
-      const importTime = Date.now();
-      localStorage.setItem('navigator_import_in_progress', importTime.toString());
+      const importTime = setProtectionFlag('navigator_import_in_progress');
       logger.info('🛡️ IMPORT PROTECTION ACTIVATED:', new Date(importTime).toISOString());
 
       const operationId = generateOperationId("update", "address", {
@@ -771,6 +778,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
           ...s,
           addresses: validRows,
           activeIndex: null,
+          activeStartTime: null, // 🔧 CRITICAL FIX: Clear activeStartTime when clearing activeIndex
           currentListVersion: newListVersion,
           completions: preserveCompletions ? s.completions : [],
         };
@@ -798,11 +806,11 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
       // 🔧 CRITICAL FIX: Clear import protection flag after a delay to allow state to settle
       setTimeout(() => {
-        localStorage.removeItem('navigator_import_in_progress');
+        clearProtectionFlag('navigator_import_in_progress');
         logger.info('🛡️ IMPORT PROTECTION CLEARED after import completion');
       }, 2000); // 2 second protection window
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, baseState.activeIndex, baseState.addresses]
   );
 
   /** Add a single address (used by Arrangements "manual address"). Returns new index. */

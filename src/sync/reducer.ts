@@ -32,6 +32,8 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           ),
           // Clear active index if this completion was for the active address
           activeIndex: state.activeIndex === completion.index ? null : state.activeIndex,
+          // 🔧 CRITICAL FIX: Also clear activeStartTime to prevent orphaned time tracking
+          activeStartTime: state.activeIndex === completion.index ? null : state.activeStartTime,
         };
       }
 
@@ -89,6 +91,7 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           currentListVersion: newListVersion,
           completions: preserveCompletions ? state.completions : [],
           activeIndex: null, // Reset active index on bulk import
+          activeStartTime: null, // 🔧 CRITICAL FIX: Also clear activeStartTime to prevent orphaned time tracking
         };
       }
 
