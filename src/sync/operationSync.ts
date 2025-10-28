@@ -582,13 +582,26 @@ export function useOperationSync(): UseOperationSync {
     }, 2000); // 2 second debounce
   }, [isOnline, user]);
 
+  // PHASE 1.3: Track current user to detect signout during operation submission
+  const currentUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
   // Submit a new operation
   const submitOperation = useCallback(async (
     operationData: Omit<Operation, 'id' | 'timestamp' | 'clientId' | 'sequence'>
   ): Promise<void> => {
+    // PHASE 1.3: CRITICAL FIX - Validate operation can be submitted to correct user's log
     if (!operationLog.current) {
       logger.error('❌ SYNC FAILURE: Operation log not initialized');
       throw new Error('Operation log not initialized');
+    }
+
+    // Verify user hasn't signed out since this operation was initiated
+    if (!currentUserIdRef.current) {
+      logger.error('❌ SYNC FAILURE: User signed out - rejecting operation');
+      throw new Error('User signed out - cannot submit operation');
     }
 
     if (!user) {
@@ -1132,19 +1145,31 @@ export function useOperationSync(): UseOperationSync {
     }
     if (!supabase) return;
 
-    // Clear operation logs for this user BEFORE signing out
+    // PHASE 1.3: CRITICAL FIX - Prevent user data leakage on signout
+    // 1. Immediately nullify the operation log reference to prevent further writes
+    //    This ensures no pending operations can be appended to the old user's log
+    const oldLog = operationLog.current;
+    operationLog.current = null;
+
+    // 2. Clear operation logs for this user from the global cache
     if (user?.id) {
       clearOperationLogsForUser(user.id);
     }
 
+    // 3. If there was an old log, clear it to release memory
+    if (oldLog) {
+      try {
+        await oldLog.clear();
+      } catch (err) {
+        logger.error('Failed to clear old operation log:', err);
+      }
+    }
+
+    // 4. Sign out from Supabase
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
 
-    // Clear local operation log reference
-    if (operationLog.current) {
-      await operationLog.current.clear();
-      operationLog.current = null;
-    }
+    // 5. Reset app state
     setCurrentState(INITIAL_STATE);
   }, [user]);
 
@@ -1185,13 +1210,24 @@ export function useOperationSync(): UseOperationSync {
       return;
     }
 
+    // PHASE 1.3: CRITICAL FIX - Track pending timer to prevent memory leak
+    let autoSyncTimerRef: NodeJS.Timeout | null = null;
+    let isMounted = true;
+
     const checkAndSyncUnsynced = async () => {
       try {
         const unsyncedOps = operationLog.current?.getUnsyncedOperations() || [];
         if (unsyncedOps.length > 0) {
           logger.info(`📤 AUTO-SYNC: Found ${unsyncedOps.length} unsynced operations on startup, triggering upload`);
+          // PHASE 1.3: CRITICAL FIX - Track timer for proper cleanup
           // Delay slightly to ensure everything is ready
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise<void>(resolve => {
+            autoSyncTimerRef = setTimeout(() => {
+              if (isMounted) {
+                resolve();
+              }
+            }, 2000);
+          });
 
           // Inline sync to avoid dependency issues
           if (operationLog.current && user && isOnline && supabase) {
@@ -1340,6 +1376,15 @@ export function useOperationSync(): UseOperationSync {
     };
 
     checkAndSyncUnsynced();
+
+    // PHASE 1.3: CRITICAL FIX - Cleanup timer on unmount or dependency change
+    return () => {
+      isMounted = false;
+      if (autoSyncTimerRef) {
+        clearTimeout(autoSyncTimerRef);
+        autoSyncTimerRef = null;
+      }
+    };
   }, [user?.id, isOnline, isLoading]);
 
   // Cleanup batch timer on unmount

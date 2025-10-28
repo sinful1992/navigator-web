@@ -149,7 +149,8 @@ export function createOperation<T extends Operation>(
   } as T;
 }
 
-// Thread-safe sequence generator to prevent race conditions
+// PHASE 1.3: Thread-safe sequence generator with atomic operations
+// Prevents race conditions where two operations could get the same sequence number
 class SequenceGenerator {
   private sequence = 0;
   private lock = Promise.resolve();
@@ -170,6 +171,23 @@ class SequenceGenerator {
     }
   }
 
+  // PHASE 1.3: CRITICAL FIX - Make set() also respect the lock
+  // Prevents race condition where set() and next() could execute concurrently
+  async setAsync(seq: number): Promise<void> {
+    const myTurn = this.lock;
+    let release: () => void = () => {};
+    this.lock = new Promise<void>(resolve => { release = resolve; });
+
+    await myTurn; // Wait for previous operations
+
+    try {
+      this.sequence = Math.max(this.sequence, seq);
+    } finally {
+      release(); // Let next request proceed
+    }
+  }
+
+  // Synchronous version for backward compatibility (e.g., in error recovery paths)
   set(seq: number): void {
     this.sequence = Math.max(this.sequence, seq);
   }
@@ -188,4 +206,10 @@ export function nextSequence(): Promise<number> {
 
 export function setSequence(seq: number): void {
   sequenceGenerator.set(seq);
+}
+
+// PHASE 1.3: Atomic version of setSequence (respects the lock)
+// Use this when you need to guarantee atomicity with next()
+export function setSequenceAsync(seq: number): Promise<void> {
+  return sequenceGenerator.setAsync(seq);
 }
