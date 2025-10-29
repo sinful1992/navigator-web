@@ -182,7 +182,7 @@ export function useSubscription(user: User | null): UseSubscription {
 
     } catch (e: unknown) {
       logger.error('Failed to load subscription:', e);
-      setError(e?.message || 'Failed to load subscription');
+      setError((e as Error)?.message || 'Failed to load subscription');
       setSubscription(null);
     } finally {
       setIsLoading(false);
@@ -304,7 +304,7 @@ export function useSubscription(user: User | null): UseSubscription {
 
     } catch (e: unknown) {
       logger.error('Failed to start trial:', e);
-      setError(e?.message || 'Failed to start trial');
+      setError((e as Error)?.message || 'Failed to start trial');
       throw e;
     } finally {
       setIsLoading(false);
@@ -381,7 +381,7 @@ export function useSubscription(user: User | null): UseSubscription {
 
     } catch (e: unknown) {
       logger.error('Failed to subscribe:', e);
-      setError(e?.message || 'Failed to subscribe');
+      setError((e as Error)?.message || 'Failed to subscribe');
       throw e;
     } finally {
       setIsLoading(false);
@@ -417,7 +417,7 @@ export function useSubscription(user: User | null): UseSubscription {
 
     } catch (e: unknown) {
       logger.error('Failed to cancel subscription:', e);
-      setError(e?.message || 'Failed to cancel subscription');
+      setError((e as Error)?.message || 'Failed to cancel subscription');
       throw e;
     } finally {
       setIsLoading(false);

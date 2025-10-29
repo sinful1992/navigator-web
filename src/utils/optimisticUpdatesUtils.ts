@@ -8,10 +8,20 @@ import { logger } from './logger';
  * Optimistic update type - describes what changed before cloud sync
  */
 export type StateUpdate = {
+  id: string;
   entity: 'completion' | 'arrangement' | 'address' | 'session';
-  operation: 'create' | 'update' | 'delete' | 'reverted';
+  operation: 'create' | 'update' | 'delete';
   data: any;
   timestamp: string;
+  type: 'optimistic' | 'confirmed' | 'reverted';
+};
+
+/**
+ * Optimistic state container - holds all pending updates
+ */
+export type OptimisticState = {
+  updates: Map<string, StateUpdate>;
+  pendingOperations: Set<string>;
 };
 
 /**

@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { logger } from '../utils/logger';
-import type { AppState, Arrangement, UserSubscription } from '../types';
+import type { AppState, Arrangement } from '../types';
 import type { SubmitOperationCallback } from '../types/operations';
 import { generateOperationId } from '../utils/validationUtils';
 

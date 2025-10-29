@@ -1,7 +1,7 @@
 // src/services/__tests__/operationValidators.test.ts
 // PHASE 3: Test suite for sync operation validators
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { validateSyncOperation } from '../operationValidators';
 import { ValidationErrorCode } from '../../types/validation';
 

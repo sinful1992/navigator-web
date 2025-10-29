@@ -364,3 +364,15 @@ export function validateNumericField(value: unknown, fieldName: string, min = 0,
 
   return ValidationSuccess(num);
 }
+
+/**
+ * ============================================================================
+ * ERROR UTILITIES
+ * ============================================================================
+ */
+
+/**
+ * Group validation errors by field name
+ * Exports the utility from validation.ts for component use
+ */
+export { groupValidationErrorsByField } from '../types/validation';

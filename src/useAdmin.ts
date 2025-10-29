@@ -91,7 +91,7 @@ export function useAdmin(user: User | null): UseAdmin {
 
     } catch (e: unknown) {
       // Don't set error for permission issues - just not admin
-      logger.info('Admin check failed:', e.message);
+      logger.info('Admin check failed:', (e as Error).message);
       setIsAdmin(false);
       setIsOwner(false);
       setAdminUser(null);

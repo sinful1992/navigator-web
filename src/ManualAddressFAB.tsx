@@ -54,7 +54,7 @@ export default function ManualAddressFAB({ onAdd, inline }: Props) {
       reset();
       setOpen(false);
     } catch (e: unknown) {
-      setErr(e?.message || String(e));
+      setErr((e as Error).message || String(e));
     } finally {
       busyRef.current = false;
       setBusy(false);

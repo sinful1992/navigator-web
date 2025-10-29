@@ -41,7 +41,7 @@ export function DeleteAccountModal({ open, onClose, onConfirm }: DeleteAccountMo
             window.alert('Account deleted successfully');
             onClose();
           } catch (err: unknown) {
-            window.alert('Error: ' + err.message);
+            window.alert('Error: ' + (err as Error).message);
           }
         }}>
           <div style={{ marginBottom: '1rem' }}>

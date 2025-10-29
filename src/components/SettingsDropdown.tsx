@@ -533,7 +533,7 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                   <SettingsActionButton
                     icon="🗑️"
                     text="Delete Account Permanently"
-                    variant="danger-full"
+                    variant="danger"
                     onClick={() => {
                       onDeleteAccount();
                       actions.closeDropdown();

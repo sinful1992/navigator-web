@@ -1,31 +1,14 @@
 // src/hooks/__tests__/hooks.test.ts
 // PHASE 3: Comprehensive test suite for all custom hooks
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
-import type { AppState, Completion, AddressRow, Arrangement } from '../../types';
+import { describe, it, expect, vi } from 'vitest';
+import type { AppState, Completion, AddressRow } from '../../types';
 
 /**
  * ============================================================================
  * TEST SETUP & UTILITIES
  * ============================================================================
  */
-
-// Mock IndexedDB
-const mockIndexedDB = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-};
-
-// Mock localStorage
-const mockStorage = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-};
 
 // Utility to create initial test state
 function createTestState(overrides?: Partial<AppState>): AppState {
@@ -42,13 +25,33 @@ function createTestState(overrides?: Partial<AppState>): AppState {
     currentListVersion: 1,
     subscription: null,
     reminderSettings: {
-      enabled: true,
-      days: [3, 1, 0],
-      time: '09:00',
+      defaultSchedule: {
+        daysBeforePayment: [3, 1, 0],
+        enabled: true,
+      },
+      globalEnabled: true,
+      smsEnabled: false,
+      agentProfile: {
+        name: 'Test Agent',
+        title: 'Enforcement Agent',
+        signature: 'Test Agent',
+      },
+      messageTemplates: [],
+      activeTemplateId: '',
+      customizableSchedule: {
+        threeDayReminder: true,
+        oneDayReminder: true,
+        dayOfReminder: true,
+        customDays: [],
+      },
     },
     reminderNotifications: [],
     lastReminderProcessed: undefined,
-    bonusSettings: { enabled: false },
+    bonusSettings: {
+      enabled: false,
+      calculationType: 'simple',
+      adjustForWorkingDays: false,
+    },
     ...overrides,
   };
 }
@@ -98,7 +101,7 @@ describe('Custom Hooks - Behavior and Integration', () => {
     });
 
     it('should handle state updates through setState', () => {
-      let state = createTestState();
+      const state = createTestState();
       const newState = createTestState({
         currentListVersion: 2,
         addresses: [{ address: '789 Elm St' }],
@@ -493,22 +496,40 @@ describe('Custom Hooks - Behavior and Integration', () => {
 
     it('should manage reminder settings', () => {
       const reminderSettings = {
-        enabled: true,
-        days: [3, 1, 0],
-        time: '09:00',
+        defaultSchedule: {
+          daysBeforePayment: [3, 1, 0],
+          enabled: true,
+        },
+        globalEnabled: true,
+        smsEnabled: false,
+        agentProfile: {
+          name: 'Test Agent',
+          title: 'Enforcement Agent',
+          signature: 'Test Agent',
+        },
+        messageTemplates: [],
+        activeTemplateId: '',
+        customizableSchedule: {
+          threeDayReminder: true,
+          oneDayReminder: true,
+          dayOfReminder: true,
+          customDays: [],
+        },
       };
 
-      expect(reminderSettings.enabled).toBe(true);
-      expect(reminderSettings.days).toEqual([3, 1, 0]);
+      expect(reminderSettings.globalEnabled).toBe(true);
+      expect(reminderSettings.defaultSchedule.daysBeforePayment).toEqual([3, 1, 0]);
     });
 
     it('should manage bonus settings', () => {
       const bonusSettings = {
         enabled: false,
-        percentage: 0,
+        calculationType: 'simple' as const,
+        adjustForWorkingDays: false,
       };
 
       expect(bonusSettings.enabled).toBe(false);
+      expect(bonusSettings.calculationType).toBe('simple');
     });
   });
 
@@ -702,10 +723,10 @@ describe('Custom Hooks - Behavior and Integration', () => {
       let state = createTestState();
 
       for (let i = 0; i < 100; i++) {
-        state = createTestState({
-          ...state,
+        state = {
+          ...createTestState(),
           currentListVersion: i,
-        });
+        };
       }
 
       expect(state.currentListVersion).toBe(99);

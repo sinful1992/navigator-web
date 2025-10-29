@@ -13,14 +13,10 @@ import type {
   Arrangement,
   DaySession,
   Outcome,
-  UserSubscription,
-  ReminderSettings,
-  BonusSettings,
 } from '../types';
 import type { SubmitOperation } from '../types/operations';
 import type {
   ValidationResult,
-  Validator,
 } from '../types/validation';
 import {
   ValidationSuccess,

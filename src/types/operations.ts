@@ -16,22 +16,18 @@ import type {
  * Completion operation payloads
  */
 export type CompletionCreatePayload = {
-  index: number;
-  outcome: Completion['outcome'];
-  amount?: string;
-  timeSpentSeconds?: number;
-  arrangementId?: string;
-  caseReference?: string;
-  numberOfCases?: number;
-  enforcementFees?: number[];
-  address?: string;
-  lat?: number | null;
-  lng?: number | null;
+  completion: Completion;
 };
 
 export type CompletionUpdatePayload = {
-  index: number;
+  originalTimestamp: string;
   updates: Partial<Completion>;
+};
+
+export type CompletionDeletePayload = {
+  timestamp: string;
+  index: number;
+  listVersion: number;
 };
 
 /**
@@ -40,6 +36,12 @@ export type CompletionUpdatePayload = {
 export type AddressImportPayload = {
   addresses: AddressRow[];
   preserveCompletions?: boolean;
+};
+
+export type AddressBulkImportPayload = {
+  addresses: AddressRow[];
+  newListVersion: number;
+  preserveCompletions: boolean;
 };
 
 export type AddressAddPayload = {
@@ -51,6 +53,10 @@ export type AddressAddPayload = {
  */
 export type ArrangementAddPayload = {
   data: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>;
+};
+
+export type ArrangementCreatePayload = {
+  arrangement: Arrangement;
 };
 
 export type ArrangementUpdatePayload = {
@@ -86,17 +92,28 @@ export type SessionUpdatePayload = {
 };
 
 /**
+ * Active index tracking payloads
+ */
+export type ActiveIndexSetPayload = {
+  index: number | null;
+  startTime?: string | null;
+};
+
+/**
  * Discriminated union of all operation types
  */
 export type SubmitOperation =
   // Completion operations
   | { type: 'COMPLETION_CREATE'; payload: CompletionCreatePayload }
   | { type: 'COMPLETION_UPDATE'; payload: CompletionUpdatePayload }
+  | { type: 'COMPLETION_DELETE'; payload: CompletionDeletePayload }
   // Address operations
   | { type: 'ADDRESS_IMPORT'; payload: AddressImportPayload }
+  | { type: 'ADDRESS_BULK_IMPORT'; payload: AddressBulkImportPayload }
   | { type: 'ADDRESS_ADD'; payload: AddressAddPayload }
   // Arrangement operations
   | { type: 'ARRANGEMENT_ADD'; payload: ArrangementAddPayload }
+  | { type: 'ARRANGEMENT_CREATE'; payload: ArrangementCreatePayload }
   | { type: 'ARRANGEMENT_UPDATE'; payload: ArrangementUpdatePayload }
   | { type: 'ARRANGEMENT_DELETE'; payload: ArrangementDeletePayload }
   // Settings operations
@@ -105,7 +122,9 @@ export type SubmitOperation =
   | { type: 'SETTINGS_UPDATE_BONUS'; payload: SettingsUpdateBonusPayload }
   // Session operations
   | { type: 'SESSION_CREATE'; payload: SessionCreatePayload }
-  | { type: 'SESSION_UPDATE'; payload: SessionUpdatePayload };
+  | { type: 'SESSION_UPDATE'; payload: SessionUpdatePayload }
+  // Active index tracking
+  | { type: 'ACTIVE_INDEX_SET'; payload: ActiveIndexSetPayload };
 
 /**
  * Callback for submitting operations to cloud sync

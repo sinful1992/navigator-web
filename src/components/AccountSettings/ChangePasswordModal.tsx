@@ -80,7 +80,7 @@ export function ChangePasswordModal({ open, onClose, onUpdatePassword }: ChangeP
           } catch (err: unknown) {
             await alert({
               title: 'Update Failed',
-              message: err.message || 'Failed to update password. Please try again.',
+              message: (err as Error).message || 'Failed to update password. Please try again.',
               type: 'error'
             });
           }

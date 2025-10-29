@@ -1,12 +1,16 @@
 // src/sync/operations.ts - Event-based sync operations
 import type { Completion, AddressRow, DaySession, Arrangement, UserSubscription, ReminderSettings, BonusSettings } from '../types';
 
+// Vector clock type for conflict detection
+export type VectorClock = Record<string, number>;
+
 // Base operation structure
 export type BaseOperation = {
   id: string;
   timestamp: string;
   clientId: string; // Which device created this
   sequence: number; // For ordering
+  vectorClock?: VectorClock; // Optional vector clock for conflict detection
 };
 
 // All possible operations in the system

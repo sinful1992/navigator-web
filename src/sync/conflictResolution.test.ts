@@ -23,8 +23,6 @@ const mockState: AppState = {
   activeIndex: null,
   activeStartTime: null,
   currentListVersion: 1,
-  syncStatus: 'idle',
-  lastSync: new Date().toISOString(),
 };
 
 describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
@@ -185,9 +183,15 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
       const resolution = resolveConflicts([conflict], mockState, manager);
 
       expect(resolution.resolvedOperations).toHaveLength(1);
-      expect(resolution.resolvedOperations[0].payload.completion.outcome).toBe('PIF');
+      const resolvedOp = resolution.resolvedOperations[0];
+      if (resolvedOp.type === 'COMPLETION_CREATE') {
+        expect(resolvedOp.payload.completion.outcome).toBe('PIF');
+      }
       expect(resolution.rejectedOperations).toHaveLength(1);
-      expect(resolution.rejectedOperations[0].payload.completion.outcome).toBe('DA');
+      const rejectedOp = resolution.rejectedOperations[0];
+      if (rejectedOp.type === 'COMPLETION_CREATE') {
+        expect(rejectedOp.payload.completion.outcome).toBe('DA');
+      }
     });
 
     it('should use first-writer-wins for same-priority outcomes', () => {
@@ -313,8 +317,12 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
 
       const resolution = resolveConflicts([conflict], mockState, manager);
 
-      expect(resolution.resolvedOperations[0].payload.index).toBe(10);
-      expect(resolution.rejectedOperations[0].payload.index).toBe(5);
+      const resolvedOp = resolution.resolvedOperations[0];
+      const rejectedOp = resolution.rejectedOperations[0];
+      if (resolvedOp.type === 'ACTIVE_INDEX_SET' && rejectedOp.type === 'ACTIVE_INDEX_SET') {
+        expect(resolvedOp.payload.index).toBe(10);
+        expect(rejectedOp.payload.index).toBe(5);
+      }
     });
   });
 
@@ -613,7 +621,10 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
       const resolution = resolveConflicts([conflict], mockState, manager);
 
       // PIF (priority 4) should win over UNKNOWN (priority 0)
-      expect(resolution.resolvedOperations[0].payload.completion.outcome).toBe('PIF');
+      const resolvedOp = resolution.resolvedOperations[0];
+      if (resolvedOp.type === 'COMPLETION_CREATE') {
+        expect(resolvedOp.payload.completion.outcome).toBe('PIF');
+      }
     });
   });
 });

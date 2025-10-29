@@ -246,29 +246,30 @@ describe('Protection Flags System (Phase 1.2.2)', () => {
 
   describe('Input Validation (FIX #5)', () => {
     it('should validate BroadcastChannel messages', async () => {
-      // Test with invalid message (malformed)
+      // Test with invalid message (malformed) - should be safely rejected
       if (typeof BroadcastChannel !== 'undefined') {
         const bc = new BroadcastChannel('navigator-protection-flags');
 
-        // Send invalid message - should be safely rejected
+        // Set a flag first
+        setProtectionFlag('navigator_import_in_progress');
+        expect(isProtectionActive('navigator_import_in_progress')).toBe(true);
+
+        // Send invalid message with NaN values - should not crash or clear valid flags
         bc.postMessage({
-          flag: 'invalid_flag',
+          flag: 'navigator_import_in_progress',
           data: { timestamp: NaN, expiresAt: NaN },
         });
 
         await new Promise(resolve => setTimeout(resolve, 100));
 
-        // Should not affect cache
-        expect(isProtectionActive('invalid_flag')).toBe(false);
+        // Original flag should still be active (invalid message rejected)
+        expect(isProtectionActive('navigator_import_in_progress')).toBe(true);
 
         bc.close();
       }
     });
 
     it('should reject timestamps outside valid range', async () => {
-      // Very old timestamp (before 1970 + 1 year)
-      const oldTimestamp = new Date('1969-01-01').getTime();
-
       // Should handle gracefully (timestamp will be validated)
       setProtectionFlag('navigator_active_protection');
       expect(isProtectionActive('navigator_active_protection')).toBe(true);

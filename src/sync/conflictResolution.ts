@@ -1,8 +1,7 @@
 // src/sync/conflictResolution.ts - Conflict resolution for concurrent operations
 // PHASE 1.3: Vector clock-based conflict detection and resolution
-import type { Operation } from './operations';
+import type { Operation, VectorClock } from './operations';
 import type { AppState } from '../types';
-import type { VectorClock } from './operationLog';
 import { OperationLogManager } from './operationLog';
 import { logger } from '../utils/logger';
 
@@ -290,6 +289,11 @@ function resolveConcurrentCompletions(
   op2: Operation,
   manager?: OperationLogManager
 ): ConflictResolution {
+  // Type guard to ensure we're working with COMPLETION_CREATE operations
+  if (op1.type !== 'COMPLETION_CREATE' || op2.type !== 'COMPLETION_CREATE') {
+    return resolveRaceCondition(op1, op2);
+  }
+
   const comp1 = op1.payload.completion;
   const comp2 = op2.payload.completion;
 
@@ -302,10 +306,13 @@ function resolveConcurrentCompletions(
     const winner = priority1 > priority2 ? op1 : op2;
     const loser = winner === op1 ? op2 : op1;
 
+    const winnerOutcome = winner.type === 'COMPLETION_CREATE' ? winner.payload.completion.outcome : 'unknown';
+    const loserOutcome = loser.type === 'COMPLETION_CREATE' ? loser.payload.completion.outcome : 'unknown';
+
     logger.info('Resolved concurrent completion by priority:', {
-      winner: winner.payload.completion.outcome,
+      winner: winnerOutcome,
       priority: Math.max(priority1, priority2),
-      loser: loser.payload.completion.outcome,
+      loser: loserOutcome,
     });
 
     trackConflictMetric('resolution_strategy', 'priority_based');
@@ -373,6 +380,11 @@ function resolveConcurrentActiveIndex(
   op2: Operation,
   manager?: OperationLogManager
 ): ConflictResolution {
+  // Type guard to ensure we're working with ACTIVE_INDEX_SET operations
+  if (op1.type !== 'ACTIVE_INDEX_SET' || op2.type !== 'ACTIVE_INDEX_SET') {
+    return resolveRaceCondition(op1, op2);
+  }
+
   // Try to use vector clock causality if available
   if (manager && op1.vectorClock && op2.vectorClock) {
     const relationship = manager.compareVectorClocks(op1.vectorClock, op2.vectorClock);

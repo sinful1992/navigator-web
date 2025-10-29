@@ -47,7 +47,7 @@ export function SupabaseSetup({ onSetupComplete, onSkip, isOpen }: SupabaseSetup
       logger.info('Supabase connection test successful');
     } catch (error: unknown) {
       setConnectionStatus('error');
-      setErrorMessage(error.message || 'Connection failed');
+      setErrorMessage((error as Error).message || 'Connection failed');
       logger.error('Supabase connection test failed:', error);
     } finally {
       setIsTestingConnection(false);
