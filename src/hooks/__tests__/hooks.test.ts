@@ -1,8 +1,8 @@
 // src/hooks/__tests__/hooks.test.ts
 // PHASE 3: Comprehensive test suite for all custom hooks
 
-import { describe, it, expect, vi } from 'vitest';
-import type { AppState, Completion, AddressRow } from '../../types';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { AppState, Completion, AddressRow, Arrangement } from '../../types';
 
 /**
  * ============================================================================
@@ -80,7 +80,7 @@ describe('Custom Hooks - Behavior and Integration', () => {
       // Expected interface:
       const expectedInterface = {
         state: {} as AppState,
-        setState: (state: AppState) => {},
+        setState: (_state: AppState) => {},
         loading: true,
         ownerMetadata: {},
       };
@@ -147,12 +147,12 @@ describe('Custom Hooks - Behavior and Integration', () => {
       // Expected interface
       const expectedInterface = {
         complete: async (
-          index: number,
-          outcome: string,
-          amount?: string
+          _index: number,
+          _outcome: string,
+          _amount?: string
         ) => 'operation-id',
-        updateCompletion: (index: number, updates: Partial<Completion>) => {},
-        undo: (index: number) => {},
+        updateCompletion: (_index: number, _updates: Partial<Completion>) => {},
+        undo: (_index: number) => {},
         pendingCompletions: new Set<number>(),
       };
 
@@ -260,11 +260,11 @@ describe('Custom Hooks - Behavior and Integration', () => {
   describe('useTimeTracking', () => {
     it('should have interface for time tracking operations', () => {
       const expectedInterface = {
-        setActive: (index: number) => {},
+        setActive: (_index: number) => {},
         cancelActive: () => {},
         activeIndex: null as number | null,
         activeStartTime: null as string | null,
-        getTimeSpent: (index: number, startTime: string) => 0,
+        getTimeSpent: (_index: number, _startTime: string) => 0,
       };
 
       expect(typeof expectedInterface.setActive).toBe('function');
@@ -330,8 +330,8 @@ describe('Custom Hooks - Behavior and Integration', () => {
   describe('useAddressState', () => {
     it('should have interface for address management', () => {
       const expectedInterface = {
-        setAddresses: (rows: AddressRow[], preserveCompletions?: boolean) => {},
-        addAddress: (address: AddressRow) => {},
+        setAddresses: (_rows: AddressRow[], _preserveCompletions?: boolean) => {},
+        addAddress: (_address: AddressRow) => {},
       };
 
       expect(typeof expectedInterface.setAddresses).toBe('function');
@@ -411,9 +411,9 @@ describe('Custom Hooks - Behavior and Integration', () => {
   describe('useArrangementState', () => {
     it('should have interface for arrangement CRUD', () => {
       const expectedInterface = {
-        addArrangement: (arrangement: Partial<Arrangement>) => {},
-        updateArrangement: (id: string, updates: Partial<Arrangement>) => {},
-        deleteArrangement: (id: string) => {},
+        addArrangement: (_arrangement: Partial<Arrangement>) => {},
+        updateArrangement: (_id: string, _updates: Partial<Arrangement>) => {},
+        deleteArrangement: (_id: string) => {},
       };
 
       expect(typeof expectedInterface.addArrangement).toBe('function');
@@ -477,9 +477,9 @@ describe('Custom Hooks - Behavior and Integration', () => {
   describe('useSettingsState', () => {
     it('should have interface for settings management', () => {
       const expectedInterface = {
-        setSubscription: (status: string) => {},
-        updateReminderSettings: (settings: any) => {},
-        updateBonusSettings: (settings: any) => {},
+        setSubscription: (_status: string) => {},
+        updateReminderSettings: (_settings: any) => {},
+        updateBonusSettings: (_settings: any) => {},
       };
 
       expect(typeof expectedInterface.setSubscription).toBe('function');
@@ -546,13 +546,13 @@ describe('Custom Hooks - Behavior and Integration', () => {
         conflicts: [],
         deviceId: 'device-123',
         addOptimisticUpdate: (
-          operation: string,
-          entity: string,
-          data: unknown,
-          operationId?: string
+          _operation: string,
+          _entity: string,
+          _data: unknown,
+          _operationId?: string
         ) => 'op-id',
-        confirmOptimisticUpdate: (operationId: string, confirmedData?: unknown) => {},
-        revertOptimisticUpdate: (operationId: string) => {},
+        confirmOptimisticUpdate: (_operationId: string, _confirmedData?: unknown) => {},
+        revertOptimisticUpdate: (_operationId: string) => {},
       };
 
       expect(expectedInterface).toHaveProperty('optimisticUpdates');
@@ -578,14 +578,12 @@ describe('Custom Hooks - Behavior and Integration', () => {
     });
 
     it('should confirm optimistic updates after 5 seconds', () => {
-      const updateId = 'op-1';
       const confirmDelay = 5000; // 5 seconds
 
       expect(confirmDelay).toBe(5000);
     });
 
     it('should revert optimistic updates after 1 second', () => {
-      const updateId = 'op-1';
       const revertDelay = 1000; // 1 second
 
       expect(revertDelay).toBe(1000);
@@ -684,7 +682,6 @@ describe('Custom Hooks - Behavior and Integration', () => {
 
     it('should prevent data races', () => {
       const state = createTestState();
-      const updateCount = 0;
 
       // Simulating concurrent updates
       const update1 = { ...state };

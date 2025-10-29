@@ -2,35 +2,27 @@
 import * as React from "react";
 import { storageManager } from "./utils/storageManager";
 import { logger } from "./utils/logger";
-import { showWarning, showError } from "./utils/toast";
 import type {
-  AddressRow,
   AppState,
   Completion,
-  Outcome,
   DaySession,
   Arrangement,
-  UserSubscription,
-  ReminderSettings,
   ReminderNotification,
-  BonusSettings,
 } from "./types";
 import {
   processArrangementReminders,
   updateReminderStatus,
   cleanupOldNotifications,
-  DEFAULT_REMINDER_SETTINGS,
 } from "./services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "./utils/bonusCalculator";
 import {
   setProtectionFlag,
-  clearProtectionFlag,
 } from "./utils/protectionFlags";
 // Extracted hooks
 import { usePersistedState } from "./hooks/usePersistedState";
 import { useSyncState } from "./hooks/useSyncState";
 // Utility functions
-import { stampCompletionsWithVersion, generateOperationId } from "./utils/validationUtils";
+import { stampCompletionsWithVersion } from "./utils/validationUtils";
 import { applyOptimisticUpdates } from "./utils/optimisticUpdatesUtils";
 
 const STORAGE_KEY = "navigator_state_v5";
@@ -210,14 +202,12 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     pendingOperations,
     conflicts,
     deviceId,
-    addOptimisticUpdate,
     confirmOptimisticUpdate,
     revertOptimisticUpdate,
     clearOptimisticUpdates,
     enqueueOp,
     resolveConflict,
     setConflicts,
-    setOwnerMetadata: syncSetOwnerMetadata,
   } = useSyncState();
 
   // Computed state with optimistic updates applied
@@ -228,7 +218,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       logger.warn('Missing bonusSettings in baseState, applying default');
       patchedBaseState = { ...baseState, bonusSettings: DEFAULT_BONUS_SETTINGS };
       // Update baseState immediately
-      setTimeout(() => setBaseState((s) => ({ ...s, bonusSettings: DEFAULT_BONUS_SETTINGS })), 0);
+      setTimeout(() => setBaseState((s: AppState) => ({ ...s, bonusSettings: DEFAULT_BONUS_SETTINGS })), 0);
     }
     return applyOptimisticUpdates(patchedBaseState, optimisticUpdates);
   }, [baseState, optimisticUpdates, setBaseState]);
@@ -270,9 +260,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
     let shouldSubmit = false;
 
-    setBaseState((s) => {
+    setBaseState((s: AppState) => {
       // 🔧 IMPROVED: More specific check - only block if there's an active session TODAY
-      const activeTodaySession = s.daySessions.find((d) => d.date === today && !d.end);
+      const activeTodaySession = s.daySessions.find((d: DaySession) => d.date === today && !d.end);
 
       if (activeTodaySession) {
         logger.info('Day already active for today, skipping start');
@@ -280,7 +270,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       }
 
       // 🔧 IMPROVED: Auto-close any stale sessions from previous days
-      const updatedSessions = s.daySessions.map((session) => {
+      const updatedSessions = s.daySessions.map((session: DaySession) => {
         if (session.date < today && !session.end) {
           logger.info('Auto-closing stale session from previous day:', session);
           return {
@@ -319,7 +309,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
     let endedSession: DaySession | undefined;
 
-    setBaseState((s) => {
+    setBaseState((s: AppState) => {
       const {
         updatedSessions,
         closedSessions,
@@ -328,7 +318,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
       endedSession = session;
 
-      closedSessions.forEach((session) =>
+      closedSessions.forEach((session: DaySession) =>
         logger.info("Auto-closing stale day session before ending today", session)
       );
 
@@ -361,7 +351,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   const updateReminderNotification = React.useCallback(
     (notificationId: string, status: ReminderNotification['status'], message?: string) => {
-      setBaseState((s) => ({
+      setBaseState((s: AppState) => ({
         ...s,
         reminderNotifications: updateReminderStatus(
           s.reminderNotifications || [],
@@ -375,10 +365,10 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   );
 
   const processReminders = React.useCallback(() => {
-    setBaseState((s) => {
+    setBaseState((s: AppState) => {
       const newNotifications = processArrangementReminders(s);
       const cleanedNotifications = cleanupOldNotifications(newNotifications, s.arrangements);
-      
+
       return {
         ...s,
         reminderNotifications: cleanedNotifications,

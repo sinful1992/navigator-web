@@ -5,8 +5,6 @@ import { describe, it, expect } from 'vitest';
 import {
   validateCompletion,
   validateAddressRow,
-  validateAppState,
-  validateArrangement,
   validateDaySession,
   validateAmount,
   validateDate,
@@ -17,11 +15,9 @@ import {
   isValidIndex,
   isWithinRange,
   isOneOf,
-  isValidCompletionTimestamp,
   isValidOutcome,
   validateCompletionArray,
   validateAddressArray,
-  validateSubmitOperation,
 } from '../validationService';
 import { ValidationErrorCode } from '../../types/validation';
 

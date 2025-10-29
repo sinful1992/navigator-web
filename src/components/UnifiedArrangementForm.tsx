@@ -216,7 +216,7 @@ export default function UnifiedArrangementForm({
     const result = validateArrangementAmount(value);
     if (!result.success) {
       const errors = groupValidationErrorsByField(result);
-      setFormErrors(prev => ({ ...prev, amount: errors.totalAmount?.[0] || 'Invalid amount' }));
+      setFormErrors(prev => ({ ...prev, amount: errors.totalAmount?.[0]?.message || 'Invalid amount' }));
       return false;
     }
     setFormErrors(prev => ({ ...prev, amount: undefined }));
@@ -246,7 +246,7 @@ export default function UnifiedArrangementForm({
       const addressResult = validateManualAddress(formData.manualAddress);
       if (!addressResult.success) {
         const errors = groupValidationErrorsByField(addressResult);
-        setFormErrors(prev => ({ ...prev, address: errors.address?.[0] || 'Invalid address' }));
+        setFormErrors(prev => ({ ...prev, address: errors.address?.[0]?.message || 'Invalid address' }));
         isValid = false;
       }
     }

@@ -172,7 +172,7 @@ export function useOperationSync(): UseOperationSync {
         if (authErr) throw authErr;
         if (mounted) setUser(data.user ?? null);
       } catch (e: unknown) {
-        if (mounted) setError(e?.message || String(e));
+        if (mounted) setError((e as Error)?.message || String(e));
       } finally {
         if (mounted) setIsLoading(false);
       }

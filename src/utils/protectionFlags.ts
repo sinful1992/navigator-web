@@ -426,7 +426,7 @@ export function clearProtectionFlag(flag: ProtectionFlag): void {
     try {
       const store = await getStore('readwrite');
 
-      return new Promise<void>((resolve, reject) => {
+      return new Promise<void>((resolve, _reject) => {
         const request = store.delete(flag);
 
         request.onsuccess = () => {
@@ -437,7 +437,7 @@ export function clearProtectionFlag(flag: ProtectionFlag): void {
 
         request.onerror = () => {
           logger.error(`Failed to delete protection flag ${flag}:`, request.error);
-          reject(request.error);
+          _reject(request.error);
         };
       });
     } catch (err) {

@@ -1,6 +1,6 @@
 // src/sync/conflictResolution.ts - Conflict resolution for concurrent operations
 // PHASE 1.3: Vector clock-based conflict detection and resolution
-import type { Operation, VectorClock } from './operations';
+import type { Operation } from './operations';
 import type { AppState } from '../types';
 import { OperationLogManager } from './operationLog';
 import { logger } from '../utils/logger';

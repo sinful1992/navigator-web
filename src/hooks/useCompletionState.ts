@@ -6,7 +6,7 @@ import React from 'react';
 import { logger } from '../utils/logger';
 import { showWarning, showError } from '../utils/toast';
 import type { AppState, Completion, Outcome } from '../types';
-import type { SubmitOperationCallback, CompletionCreatePayload, CompletionUpdatePayload } from '../types/operations';
+import type { SubmitOperationCallback } from '../types/operations';
 import { generateOperationId } from '../utils/validationUtils';
 
 // PHASE 2 Task 3: Updated to use proper SubmitOperationCallback type
@@ -345,7 +345,7 @@ export function useCompletionState({
           payload: {
             timestamp: completionToDelete.timestamp,
             index: completionToDelete.index,
-            listVersion: completionToDelete.listVersion,
+            listVersion: completionToDelete.listVersion ?? 1,
           }
         }).catch(err => {
           logger.error('Failed to submit completion delete operation:', err);

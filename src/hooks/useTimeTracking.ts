@@ -21,7 +21,7 @@ export interface UseTimeTrackingReturn {
   cancelActive: () => void;
   activeIndex: number | null;
   activeStartTime: string | null;
-  getTimeSpent: (index: number, startTime?: string) => number | undefined;
+  getTimeSpent: (index: number, startTime?: string | null) => number | undefined;
 }
 
 /**
@@ -145,7 +145,7 @@ export function useTimeTracking({
    * @returns Time spent in seconds, or undefined if not active
    */
   const getTimeSpent = React.useCallback(
-    (index: number, startTime?: string): number | undefined => {
+    (index: number, startTime?: string | null): number | undefined => {
       const currentState = baseState;
 
       // Only calculate time if this address was the active one

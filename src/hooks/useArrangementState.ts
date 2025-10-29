@@ -45,7 +45,6 @@ export interface UseArrangementStateReturn {
  * @returns Object with arrangement CRUD actions
  */
 export function useArrangementState({
-  baseState,
   addOptimisticUpdate,
   confirmOptimisticUpdate,
   submitOperation,

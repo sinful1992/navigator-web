@@ -3,7 +3,6 @@
 // Maintains backward compatibility while centralizing all validation logic
 
 import type { AppState, Completion, AddressRow } from '../types';
-import type { ValidationResult } from '../types/validation';
 import {
   validateCompletion as validateCompletionImpl,
   validateAddressRow as validateAddressRowImpl,
