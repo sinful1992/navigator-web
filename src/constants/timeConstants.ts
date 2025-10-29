@@ -51,6 +51,12 @@ export const CHANGE_TRACKER_TTL_MS = 5 * 60 * 1000; // 5 minutes
 /** Maximum age for recent activity tracking (ms) */
 export const RECENT_ACTIVITY_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+/** Interval for cleaning up old completion tracking entries from memory */
+export const COMPLETION_MEMORY_CLEANUP_INTERVAL_MS = 15 * 1000; // 15 seconds
+
+/** Time window for duplicate completion detection (within 5 seconds = duplicate) */
+export const DUPLICATE_COMPLETION_TOLERANCE_MS = 5000; // 5 seconds
+
 /**
  * ============================================================================
  * OPTIMISTIC UPDATE CLEANUP
@@ -86,6 +92,30 @@ export const PLACES_DETAILS_CACHE_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 
 
 /** Time tracking display update interval (ms) */
 export const ACTIVE_TIME_DISPLAY_UPDATE_INTERVAL_MS = 1000; // 1 second
+
+/**
+ * ============================================================================
+ * LOADING & INITIALIZATION TIMEOUTS
+ * ============================================================================
+ */
+
+/** Delay before showing loading screen (ms) - most sessions restore instantly */
+export const LOADING_SCREEN_DELAY_MS = 500; // 500ms
+
+/** Timeout for offline mode detection (ms) - skip loading if offline */
+export const OFFLINE_DETECTION_TIMEOUT_MS = 3 * 1000; // 3 seconds
+
+/** Absolute maximum loading timeout (ms) - never block longer */
+export const MAX_LOADING_TIMEOUT_MS = 10 * 1000; // 10 seconds
+
+/** Delay for data integrity checks (ms) */
+export const DATA_INTEGRITY_CHECK_DELAY_MS = 3 * 1000; // 3 seconds
+
+/** Timeout for app stabilization before operations (ms) */
+export const APP_STABILIZATION_TIMEOUT_MS = 5 * 1000; // 5 seconds
+
+/** Timeout for operation timeouts in async operations (ms) */
+export const ASYNC_OPERATION_TIMEOUT_MS = 15 * 1000; // 15 seconds
 
 /**
  * ============================================================================

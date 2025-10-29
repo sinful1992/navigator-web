@@ -9,6 +9,7 @@ import { DEFAULT_BONUS_SETTINGS } from '../utils/bonusCalculator';
 import { storageManager } from '../utils/storageManager';
 import { validateAppState, validateAddressRow, stampCompletionsWithVersion } from '../utils/validationUtils';
 import { logger } from '../utils/logger';
+import { STATE_PERSISTENCE_DEBOUNCE_MS } from '../constants';
 
 // Constants
 const STORAGE_KEY = "navigator_state_v5";
@@ -207,7 +208,7 @@ export function usePersistedState(userId?: string): UsePersistedStateReturn {
       } catch (error) {
         logger.error('Failed to persist state to IndexedDB:', error);
       }
-    }, 150); // 150ms debounce for frequent updates
+    }, STATE_PERSISTENCE_DEBOUNCE_MS); // Debounce for frequent updates
 
     return () => clearTimeout(timeoutId);
   }, [baseState, loading]);

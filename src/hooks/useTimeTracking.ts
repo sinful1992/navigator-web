@@ -1,6 +1,7 @@
 // src/hooks/useTimeTracking.ts
 // Time tracking for active addresses - Start, Cancel, Complete
 // PHASE 2 Task 1: Extracted from useAppState.ts (lines 853-922, plus time calculation logic)
+import type { SubmitOperationCallback } from '../types/operations';
 
 import React from 'react';
 import { logger } from '../utils/logger';
@@ -8,7 +9,6 @@ import { showWarning } from '../utils/toast';
 import type { AppState } from '../types';
 import { setProtectionFlag, clearProtectionFlag } from '../utils/protectionFlags';
 
-export type SubmitOperationCallback = (operation: any) => Promise<void>;
 
 export interface UseTimeTrackingProps {
   baseState: AppState;

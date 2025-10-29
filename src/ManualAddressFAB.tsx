@@ -53,7 +53,7 @@ export default function ManualAddressFAB({ onAdd, inline }: Props) {
       await onAdd({ address: trimmed, lat: latNum, lng: lngNum } as AddressRow);
       reset();
       setOpen(false);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setErr(e?.message || String(e));
     } finally {
       busyRef.current = false;

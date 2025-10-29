@@ -1,12 +1,12 @@
 // src/hooks/useSettingsState.ts
 // Settings management - Subscription, Reminders, Bonus settings
 // PHASE 2 Task 1: Extracted from useAppState.ts (lines 1470-1514)
+import type { SubmitOperationCallback } from '../types/operations';
 
 import React from 'react';
 import { logger } from '../utils/logger';
 import type { AppState, UserSubscription, ReminderSettings, BonusSettings } from '../types';
 
-export type SubmitOperationCallback = (operation: any) => Promise<void>;
 
 export interface UseSettingsStateProps {
   submitOperation?: SubmitOperationCallback;

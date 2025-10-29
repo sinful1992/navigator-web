@@ -3,6 +3,12 @@ import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome } fr
 import { LoadingButton } from './LoadingButton';
 import { addWeeks, addMonths, format, parseISO } from 'date-fns';
 import { logger } from '../utils/logger';
+// PHASE 4: Import form validators
+import {
+  validateArrangementAmount,
+  validateManualAddress,
+  groupValidationErrorsByField,
+} from '../services/formValidators';
 
 import './arrangementForm.css';
 
@@ -205,11 +211,12 @@ export default function UnifiedArrangementForm({
     }
   }, [arrangement, state.addresses]);
 
-  // Validation
+  // Validation - PHASE 4: Integrated with centralized validators
   const validateAmount = (value: string) => {
-    const amt = parseFloat(value || '0');
-    if (!value || Number.isNaN(amt) || amt <= 0) {
-      setFormErrors(prev => ({ ...prev, amount: 'Please enter a valid total amount' }));
+    const result = validateArrangementAmount(value);
+    if (!result.success) {
+      const errors = groupValidationErrorsByField(result);
+      setFormErrors(prev => ({ ...prev, amount: errors.totalAmount?.[0] || 'Invalid amount' }));
       return false;
     }
     setFormErrors(prev => ({ ...prev, amount: undefined }));
@@ -234,9 +241,14 @@ export default function UnifiedArrangementForm({
       isValid = false;
     }
 
-    if (addressMode === "manual" && !formData.manualAddress.trim()) {
-      setFormErrors(prev => ({ ...prev, address: 'Please enter an address' }));
-      isValid = false;
+    // PHASE 4: Use centralized validator for manual address
+    if (addressMode === "manual") {
+      const addressResult = validateManualAddress(formData.manualAddress);
+      if (!addressResult.success) {
+        const errors = groupValidationErrorsByField(addressResult);
+        setFormErrors(prev => ({ ...prev, address: errors.address?.[0] || 'Invalid address' }));
+        isValid = false;
+      }
     }
 
     return isValid;

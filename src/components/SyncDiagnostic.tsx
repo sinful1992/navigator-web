@@ -148,7 +148,7 @@ export function SyncDiagnostic({ userId, currentState }: {
         recommendations,
       });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error('Diagnostic error:', err);
       setError(err.message || String(err));
     } finally {
@@ -170,7 +170,7 @@ export function SyncDiagnostic({ userId, currentState }: {
       } else {
         throw new Error('Repair utility not available');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       alert('❌ Upload failed: ' + err.message);
     } finally {
       setLoading(false);

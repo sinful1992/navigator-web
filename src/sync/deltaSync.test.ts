@@ -1,6 +1,6 @@
 // src/sync/deltaSync.test.ts - Comprehensive delta sync integration tests
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useUnifiedSync } from './migrationAdapter';
 import type { AppState } from '../types';
 
@@ -52,6 +52,11 @@ describe('Delta Sync Integration', () => {
     localStorage.setItem('navigator_sync_mode_override', 'operations');
   });
 
+  afterEach(() => {
+    // Clean up localStorage after each test
+    localStorage.clear();
+  });
+
   describe('Sync Mode Configuration', () => {
     it('should use operations mode by default', () => {
       const { result } = renderHook(() => useUnifiedSync());
@@ -59,12 +64,14 @@ describe('Delta Sync Integration', () => {
       expect(result.current.currentSyncMode).toBe('operations');
     });
 
-    it('should respect localStorage override', () => {
+    it('should always use operations mode (legacy mode no longer supported)', () => {
+      // Legacy mode has been removed - system is now operations-only
       localStorage.setItem('navigator_sync_mode_override', 'legacy');
 
       const { result } = renderHook(() => useUnifiedSync());
 
-      expect(result.current.currentSyncMode).toBe('legacy');
+      // Should always be operations mode now
+      expect(result.current.currentSyncMode).toBe('operations');
     });
 
     it('should expose migration status', () => {
@@ -88,12 +95,15 @@ describe('Delta Sync Integration', () => {
       expect(typeof result.current.submitOperation).toBe('function');
     });
 
-    it('should not have submitOperation method in legacy mode', () => {
+    it('should always have submitOperation method (operations mode only)', () => {
+      // Legacy mode has been removed - system is now operations-only
+      // submitOperation is always available
       localStorage.setItem('navigator_sync_mode_override', 'legacy');
 
       const { result } = renderHook(() => useUnifiedSync());
 
-      expect(result.current.submitOperation).toBeUndefined();
+      expect(result.current.submitOperation).toBeDefined();
+      expect(typeof result.current.submitOperation).toBe('function');
     });
 
     it('should submit completion create operation', async () => {
@@ -101,8 +111,13 @@ describe('Delta Sync Integration', () => {
 
       const { result } = renderHook(() => useUnifiedSync());
 
+      // Wait for user to be authenticated before submitting operation
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      }, { timeout: 1000 });
+
       await act(async () => {
-        if (result.current.submitOperation) {
+        if (result.current.submitOperation && result.current.user) {
           await result.current.submitOperation({
             type: 'COMPLETION_CREATE',
             payload: {
@@ -126,8 +141,13 @@ describe('Delta Sync Integration', () => {
 
       const { result } = renderHook(() => useUnifiedSync());
 
+      // Wait for user to be authenticated before submitting operation
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      }, { timeout: 1000 });
+
       await act(async () => {
-        if (result.current.submitOperation) {
+        if (result.current.submitOperation && result.current.user) {
           await result.current.submitOperation({
             type: 'ARRANGEMENT_CREATE',
             payload: {
@@ -155,8 +175,13 @@ describe('Delta Sync Integration', () => {
 
       const { result } = renderHook(() => useUnifiedSync());
 
+      // Wait for user to be authenticated before submitting operation
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      }, { timeout: 1000 });
+
       await act(async () => {
-        if (result.current.submitOperation) {
+        if (result.current.submitOperation && result.current.user) {
           await result.current.submitOperation({
             type: 'ADDRESS_BULK_IMPORT',
             payload: {
@@ -259,9 +284,14 @@ describe('Delta Sync Integration', () => {
 
       const { result } = renderHook(() => useUnifiedSync());
 
+      // Wait for user to be authenticated before submitting operation
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      }, { timeout: 1000 });
+
       // Device 1 completes an address
       await act(async () => {
-        if (result.current.submitOperation) {
+        if (result.current.submitOperation && result.current.user) {
           await result.current.submitOperation({
             type: 'COMPLETION_CREATE',
             payload: {
@@ -285,9 +315,14 @@ describe('Delta Sync Integration', () => {
 
       const { result } = renderHook(() => useUnifiedSync());
 
+      // Wait for user to be authenticated before submitting operation
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      }, { timeout: 1000 });
+
       // Device 2 creates an arrangement
       await act(async () => {
-        if (result.current.submitOperation) {
+        if (result.current.submitOperation && result.current.user) {
           await result.current.submitOperation({
             type: 'ARRANGEMENT_CREATE',
             payload: {

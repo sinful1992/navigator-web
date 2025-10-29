@@ -1,4 +1,5 @@
 // src/App.tsx - Complete Modern Design with Right Sidebar
+// PHASE 6: Code splitting optimizations - lazy load tab-based components
 import * as React from "react";
 import "./App.css"; // Use the updated modern CSS
 import { useAppState } from "./useAppState";
@@ -8,9 +9,7 @@ import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";
 import { Auth } from "./Auth";
 import { AddressList } from "./AddressList";
-import Completed from "./Completed";
 import { DayPanel } from "./DayPanel";
-import { Arrangements } from "./Arrangements";
 import { readJsonFile } from "./backup";
 import type { AddressRow, Outcome, Completion } from "./types";
 import { supabase } from "./lib/supabaseClient";
@@ -19,8 +18,28 @@ import { SubscriptionManager } from "./SubscriptionManager";
 import { AdminDashboard } from "./AdminDashboard";
 import { useSubscription } from "./useSubscription";
 import { useAdmin } from "./useAdmin";
-import { EarningsCalendar } from "./EarningsCalendar";
-import { RoutePlanning } from "./RoutePlanning";
+
+// PHASE 6: Lazy load heavy tab components (code splitting)
+const Completed = React.lazy(() => import("./Completed"));
+const Arrangements = React.lazy(() => import("./Arrangements").then(m => ({ default: m.Arrangements })));
+const EarningsCalendar = React.lazy(() => import("./EarningsCalendar").then(m => ({ default: m.EarningsCalendar })));
+const RoutePlanning = React.lazy(() => import("./RoutePlanning").then(m => ({ default: m.RoutePlanning })));
+
+// PHASE 6: Loading fallback for lazy-loaded components
+function TabLoadingFallback() {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '60vh',
+      fontSize: '1rem',
+      color: 'var(--text-secondary)',
+    }}>
+      <span>⏳ Loading...</span>
+    </div>
+  );
+}
 import { SupabaseSetup } from "./components/SupabaseSetup";
 import { BackupManager } from "./components/BackupManager";
 import { LocalBackupManager } from "./utils/localBackup";
@@ -41,6 +60,15 @@ import { useStats } from "./hooks/useStats";
 import { OwnershipPrompt } from "./components/OwnershipPrompt";
 import { Sidebar } from "./components/Sidebar";
 import { SyncDiagnostic } from "./components/SyncDiagnostic";
+// PHASE 5: Add timing constants for loading and initialization
+import {
+  LOADING_SCREEN_DELAY_MS,
+  OFFLINE_DETECTION_TIMEOUT_MS,
+  MAX_LOADING_TIMEOUT_MS,
+  DATA_INTEGRITY_CHECK_DELAY_MS,
+  APP_STABILIZATION_TIMEOUT_MS,
+  ASYNC_OPERATION_TIMEOUT_MS,
+} from "./constants";
 
 export type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
@@ -136,22 +164,22 @@ export default function App() {
 
   React.useEffect(() => {
     if (cloudSync.isLoading) {
-      // Delay showing loading screen by 500ms - most sessions restore instantly
-      const timer = setTimeout(() => setShowLoading(true), 500);
+      // Delay showing loading screen - most sessions restore instantly
+      const timer = setTimeout(() => setShowLoading(true), LOADING_SCREEN_DELAY_MS);
 
-      // 🔧 CRITICAL FIX: If offline, skip loading after 3 seconds and let user access local data
+      // 🔧 CRITICAL FIX: If offline, skip loading and let user access local data
       const offlineTimer = setTimeout(() => {
         if (!navigator.onLine) {
           logger.warn('🔌 OFFLINE: Force skipping loading screen to allow local data access');
           setForceSkipLoading(true);
         }
-      }, 3000);
+      }, OFFLINE_DETECTION_TIMEOUT_MS);
 
-      // 🔧 CRITICAL FIX: Absolute timeout - never block for more than 10 seconds
+      // 🔧 CRITICAL FIX: Absolute timeout - never block
       const maxTimer = setTimeout(() => {
-        logger.warn('⏱️ TIMEOUT: Force skipping loading screen after 10 seconds');
+        logger.warn('⏱️ TIMEOUT: Force skipping loading screen after max timeout');
         setForceSkipLoading(true);
-      }, 10000);
+      }, MAX_LOADING_TIMEOUT_MS);
 
       return () => {
         clearTimeout(timer);
@@ -348,8 +376,9 @@ function AuthedApp() {
 
       const data = (q.data ?? []) as CloudBackupRow[];
       setCloudBackups(data);
-    } catch (e: any) {
-      setCloudErr(e?.message || String(e));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      setCloudErr(message);
     } finally {
       setCloudBusy(false);
     }
@@ -416,8 +445,9 @@ function AuthedApp() {
           type: "success"
         });
         setCloudMenuOpen(false);
-      } catch (e: any) {
-        setCloudErr(e?.message || String(e));
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        setCloudErr(message);
       } finally {
         setCloudBusy(false);
       }
@@ -639,8 +669,8 @@ function AuthedApp() {
     // Check integrity every 30 seconds
     const integrityInterval = setInterval(checkDataIntegrity, 30 * 1000);
 
-    // Run initial check
-    setTimeout(checkDataIntegrity, 3000);
+    // Run initial check with semantic constant delay
+    setTimeout(checkDataIntegrity, DATA_INTEGRITY_CHECK_DELAY_MS);
 
     return () => clearInterval(integrityInterval);
   }, [safeState, cloudSync.user, cloudSync.isSyncing, cloudSync.lastSyncTime, hydrated, loading]);
@@ -845,11 +875,12 @@ function AuthedApp() {
         message: "Restore completed successfully!",
         type: "success"
       });
-    } catch (err: any) {
-      logger.error('Restore failed:', err);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('Restore failed:', message);
       await alert({
         title: "Error",
-        message: "Restore failed: " + (err?.message || err),
+        message: "Restore failed: " + message,
         type: "error"
       });
     } finally {
@@ -990,7 +1021,7 @@ function AuthedApp() {
     if (stats.count === 0 || (safeState.completions.length > 0 && stats.count < 3)) {
       setTimeout(async () => {
         await periodicBackup();
-      }, 5000); // After 5 seconds to allow app to stabilize
+      }, APP_STABILIZATION_TIMEOUT_MS); // Allow app to stabilize
     }
 
     return () => {
@@ -1245,10 +1276,10 @@ function AuthedApp() {
                   );
 
                   try {
-                    // Local backup with 15 second timeout (no cloud backup needed with delta sync)
+                    // Local backup with timeout (no cloud backup needed with delta sync)
                     await Promise.race([
                       LocalBackupManager.performCriticalBackup(snap, "day-end"),
-                      timeoutPromise(15000)
+                      timeoutPromise(ASYNC_OPERATION_TIMEOUT_MS)
                     ]);
                     logger.info("Local backup at day end successful");
                   } catch (error) {
@@ -1329,38 +1360,46 @@ function AuthedApp() {
           )}
 
           {tab === "completed" && (
-            <Completed
-              state={safeState}
-              onChangeOutcome={handleChangeOutcome}
-              onAddArrangement={addArrangement}
-              onComplete={handleComplete}
-            />
+            <React.Suspense fallback={<TabLoadingFallback />}>
+              <Completed
+                state={safeState}
+                onChangeOutcome={handleChangeOutcome}
+                onAddArrangement={addArrangement}
+                onComplete={handleComplete}
+              />
+            </React.Suspense>
           )}
 
           {tab === "arrangements" && (
-            <Arrangements
-              state={safeState}
-              onAddArrangement={addArrangement}
-              onUpdateArrangement={updateArrangement}
-              onDeleteArrangement={deleteArrangement}
-              onAddAddress={async (addr: AddressRow) => addAddress(addr)}
-              onComplete={handleComplete}
-              autoCreateForAddress={autoCreateArrangementFor}
-              onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
-            />
+            <React.Suspense fallback={<TabLoadingFallback />}>
+              <Arrangements
+                state={safeState}
+                onAddArrangement={addArrangement}
+                onUpdateArrangement={updateArrangement}
+                onDeleteArrangement={deleteArrangement}
+                onAddAddress={async (addr: AddressRow) => addAddress(addr)}
+                onComplete={handleComplete}
+                autoCreateForAddress={autoCreateArrangementFor}
+                onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
+              />
+            </React.Suspense>
           )}
 
           {tab === "earnings" && (
-            <EarningsCalendar state={safeState} user={cloudSync.user} />
+            <React.Suspense fallback={<TabLoadingFallback />}>
+              <EarningsCalendar state={safeState} user={cloudSync.user} />
+            </React.Suspense>
           )}
 
           {tab === "planning" && (
-            <RoutePlanning 
-              user={cloudSync.user}
-              onAddressesReady={(newAddresses) => {
-                setAddresses(newAddresses);
-              }}
-            />
+            <React.Suspense fallback={<TabLoadingFallback />}>
+              <RoutePlanning
+                user={cloudSync.user}
+                onAddressesReady={(newAddresses) => {
+                  setAddresses(newAddresses);
+                }}
+              />
+            </React.Suspense>
           )}
         </div>
 

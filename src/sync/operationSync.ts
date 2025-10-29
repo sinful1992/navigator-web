@@ -10,6 +10,7 @@ import { logger } from "../utils/logger";
 import { DEFAULT_REMINDER_SETTINGS } from "../services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "../utils/bonusCalculator";
 import { SEQUENCE_CORRUPTION_THRESHOLD } from "./syncConfig";
+import { validateSyncOperation } from "../services/operationValidators";
 
 /**
  * SECURITY: Track used operation nonces to prevent replay attacks
@@ -51,146 +52,9 @@ function checkAndRegisterNonce(nonce: string | undefined): boolean {
 }
 
 /**
- * SECURITY: Validate operation payload before accepting from cloud
- * Prevents malformed data from corrupting application state
+ * SECURITY: Operation validation is now centralized in operationValidators
+ * @see ../services/operationValidators.ts validateSyncOperation()
  */
-function validateOperationPayload(operation: any): { valid: boolean; error?: string } {
-  // Check base fields
-  if (!operation || typeof operation !== 'object') {
-    return { valid: false, error: 'Operation must be an object' };
-  }
-
-  if (typeof operation.id !== 'string' || !operation.id) {
-    return { valid: false, error: 'Missing or invalid operation.id' };
-  }
-
-  if (typeof operation.timestamp !== 'string' || !operation.timestamp) {
-    return { valid: false, error: 'Missing or invalid operation.timestamp' };
-  }
-
-  if (typeof operation.clientId !== 'string' || !operation.clientId) {
-    return { valid: false, error: 'Missing or invalid operation.clientId' };
-  }
-
-  if (!Number.isInteger(operation.sequence) || operation.sequence < 0) {
-    return { valid: false, error: 'Missing or invalid operation.sequence' };
-  }
-
-  if (typeof operation.type !== 'string' || !operation.type) {
-    return { valid: false, error: 'Missing or invalid operation.type' };
-  }
-
-  // Validate timestamp is reasonable (not more than 24 hours in future to prevent clock skew attacks)
-  const opTime = new Date(operation.timestamp).getTime();
-  const now = Date.now();
-  const maxFutureMs = 24 * 60 * 60 * 1000; // 24 hours
-
-  if (isNaN(opTime)) {
-    return { valid: false, error: 'Invalid timestamp format' };
-  }
-
-  if (opTime > now + maxFutureMs) {
-    return { valid: false, error: 'Operation timestamp too far in future (clock skew attack?)' };
-  }
-
-  // Validate payload exists and is an object
-  if (!operation.payload || typeof operation.payload !== 'object') {
-    return { valid: false, error: 'Missing or invalid operation.payload' };
-  }
-
-  // Type-specific payload validation
-  switch (operation.type) {
-    case 'COMPLETION_CREATE':
-      if (!operation.payload.completion || typeof operation.payload.completion !== 'object') {
-        return { valid: false, error: 'COMPLETION_CREATE: Missing completion object' };
-      }
-      if (!operation.payload.completion.timestamp || !operation.payload.completion.index) {
-        return { valid: false, error: 'COMPLETION_CREATE: Missing required completion fields' };
-      }
-      break;
-
-    case 'COMPLETION_UPDATE':
-      if (!operation.payload.originalTimestamp || typeof operation.payload.originalTimestamp !== 'string') {
-        return { valid: false, error: 'COMPLETION_UPDATE: Missing originalTimestamp' };
-      }
-      if (!operation.payload.updates || typeof operation.payload.updates !== 'object') {
-        return { valid: false, error: 'COMPLETION_UPDATE: Missing updates object' };
-      }
-      break;
-
-    case 'COMPLETION_DELETE':
-      if (!operation.payload.timestamp || typeof operation.payload.timestamp !== 'string') {
-        return { valid: false, error: 'COMPLETION_DELETE: Missing timestamp' };
-      }
-      if (!Number.isInteger(operation.payload.index) || operation.payload.index < 0) {
-        return { valid: false, error: 'COMPLETION_DELETE: Invalid index' };
-      }
-      break;
-
-    case 'ADDRESS_BULK_IMPORT':
-      if (!Array.isArray(operation.payload.addresses)) {
-        return { valid: false, error: 'ADDRESS_BULK_IMPORT: addresses must be an array' };
-      }
-      if (!Number.isInteger(operation.payload.newListVersion) || operation.payload.newListVersion < 1) {
-        return { valid: false, error: 'ADDRESS_BULK_IMPORT: Invalid newListVersion' };
-      }
-      break;
-
-    case 'ADDRESS_ADD':
-      if (!operation.payload.address || typeof operation.payload.address !== 'object') {
-        return { valid: false, error: 'ADDRESS_ADD: Missing address object' };
-      }
-      break;
-
-    case 'SESSION_START':
-    case 'SESSION_END':
-      if (!operation.payload || typeof operation.payload !== 'object') {
-        return { valid: false, error: `${operation.type}: Missing payload` };
-      }
-      break;
-
-    case 'ARRANGEMENT_CREATE':
-      if (!operation.payload.arrangement || typeof operation.payload.arrangement !== 'object') {
-        return { valid: false, error: 'ARRANGEMENT_CREATE: Missing arrangement object' };
-      }
-      break;
-
-    case 'ARRANGEMENT_UPDATE':
-      if (!operation.payload.id || typeof operation.payload.id !== 'string') {
-        return { valid: false, error: 'ARRANGEMENT_UPDATE: Missing id' };
-      }
-      if (!operation.payload.updates || typeof operation.payload.updates !== 'object') {
-        return { valid: false, error: 'ARRANGEMENT_UPDATE: Missing updates object' };
-      }
-      break;
-
-    case 'ARRANGEMENT_DELETE':
-      if (!operation.payload.id || typeof operation.payload.id !== 'string') {
-        return { valid: false, error: 'ARRANGEMENT_DELETE: Missing id' };
-      }
-      break;
-
-    case 'ACTIVE_INDEX_SET':
-      if (!('index' in operation.payload)) {
-        return { valid: false, error: 'ACTIVE_INDEX_SET: Missing index' };
-      }
-      break;
-
-    case 'SETTINGS_UPDATE_SUBSCRIPTION':
-    case 'SETTINGS_UPDATE_REMINDER':
-    case 'SETTINGS_UPDATE_BONUS':
-      // These can have null/undefined payloads, just validate structure
-      if (!operation.payload) {
-        return { valid: false, error: `${operation.type}: Missing payload` };
-      }
-      break;
-
-    default:
-      return { valid: false, error: `Unknown operation type: ${operation.type}` };
-  }
-
-  return { valid: true };
-}
 
 type UseOperationSync = {
   user: User | null;
@@ -307,7 +171,7 @@ export function useOperationSync(): UseOperationSync {
         const { data, error: authErr } = await supabase.auth.getUser();
         if (authErr) throw authErr;
         if (mounted) setUser(data.user ?? null);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (mounted) setError(e?.message || String(e));
       } finally {
         if (mounted) setIsLoading(false);
@@ -386,16 +250,17 @@ export function useOperationSync(): UseOperationSync {
 
             // SECURITY: Validate each operation before accepting (prevents malformed data corruption)
             for (const row of data) {
-              const validation = validateOperationPayload(row.operation_data);
-              if (!validation.valid) {
+              const validation = validateSyncOperation(row.operation_data);
+              if (!validation.success) {
+                const errorMsg = validation.errors?.[0]?.message || 'Unknown validation error';
                 logger.warn('🚨 SECURITY: Rejecting invalid operation from cloud:', {
-                  error: validation.error,
+                  error: errorMsg,
                   opId: row.operation_data?.id,
                   opType: row.operation_data?.type,
                 });
                 invalidOps.push({
                   raw: row.operation_data,
-                  error: validation.error || 'Unknown validation error'
+                  error: errorMsg
                 });
                 continue;
               }
@@ -863,14 +728,15 @@ export function useOperationSync(): UseOperationSync {
 
         // SECURITY: Validate each operation before accepting (prevents malformed data corruption)
         for (const row of data) {
-          const validation = validateOperationPayload(row.operation_data);
-          if (!validation.valid) {
+          const validation = validateSyncOperation(row.operation_data);
+          if (!validation.success) {
+            const errorMsg = validation.errors?.[0]?.message || 'Unknown validation error';
             logger.warn('🚨 SECURITY: Rejecting invalid operation from cloud:', {
-              error: validation.error,
+              error: errorMsg,
               opType: row.operation_data?.type,
             });
             invalidOps.push({
-              error: validation.error || 'Unknown validation error',
+              error: errorMsg,
               opType: row.operation_data?.type
             });
             continue;
@@ -1012,10 +878,11 @@ export function useOperationSync(): UseOperationSync {
             const operation: Operation = payload.new.operation_data;
 
             // SECURITY: Validate operation before processing (prevents malformed data corruption)
-            const validation = validateOperationPayload(operation);
-            if (!validation.valid) {
+            const validation = validateSyncOperation(operation);
+            if (!validation.success) {
+              const errorMsg = validation.errors?.[0]?.message || 'Unknown validation error';
               logger.error('🚨 SECURITY: Rejecting invalid real-time operation:', {
-                error: validation.error,
+                error: errorMsg,
                 opType: operation?.type,
                 opId: operation?.id,
               });

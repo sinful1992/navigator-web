@@ -172,7 +172,7 @@ export const changeTrackingTests: TestSuite = {
             details: { changeId, tracked },
             duration: Date.now() - startTime,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -214,7 +214,7 @@ export const changeTrackingTests: TestSuite = {
               : 'Echo NOT detected (expected to be detected)',
             duration: Date.now() - startTime,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -247,7 +247,7 @@ export const changeTrackingTests: TestSuite = {
             details: { removedCount },
             duration: Date.now() - startTime,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -326,7 +326,7 @@ export const optimisticUITests: TestSuite = {
             details: { updateId },
             duration: Date.now() - startTime,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -397,7 +397,7 @@ export const optimisticUITests: TestSuite = {
             details: { updateId, hadRollbackState: !!rollbackState, stillPending: !!stillPending },
             duration: Date.now() - startTime,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -472,7 +472,7 @@ export const optimisticUITests: TestSuite = {
             },
             duration: Date.now() - startTime,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -523,7 +523,7 @@ export const echoFilterTests: TestSuite = {
             details: { result1, result2 },
             duration: Date.now() - startTime,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -562,7 +562,7 @@ export const echoFilterTests: TestSuite = {
             details: { result1, result2 },
             duration: Date.now() - startTime,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -607,7 +607,7 @@ export const echoFilterTests: TestSuite = {
             details: { stats },
             duration: Date.now() - startTime,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -697,7 +697,7 @@ export const integrationTests: TestSuite = {
             details: { updateId, tracked, echoResult },
             duration: Date.now() - startTime,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -730,7 +730,7 @@ export const integrationTests: TestSuite = {
             details: { stats },
             duration: Date.now() - startTime,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           return {
             passed: false,
             message: `Error: ${error.message}`,
@@ -890,7 +890,7 @@ export async function runSmokeTest(): Promise<boolean> {
 
     logger.info('🎉 Smoke test passed!');
     return true;
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('❌ Smoke test failed:', error.message);
     // Clean up even on failure
     await cleanupTestState();

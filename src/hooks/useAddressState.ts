@@ -5,15 +5,17 @@
 import React from 'react';
 import { logger } from '../utils/logger';
 import type { AppState, AddressRow } from '../types';
+import type { SubmitOperationCallback } from '../types/operations';
 import { validateAddressRow, generateOperationId } from '../utils/validationUtils';
 import { setProtectionFlag, clearProtectionFlag } from '../utils/protectionFlags';
 
-export type SubmitOperationCallback = (operation: any) => Promise<void>;
+// PHASE 2 Task 3: Updated to use proper SubmitOperationCallback type
+export type { SubmitOperationCallback } from '../types/operations';
 
 export interface UseAddressStateProps {
   baseState: AppState;
-  addOptimisticUpdate: (operation: string, entity: string, data: any, operationId: string) => void;
-  confirmOptimisticUpdate: (operationId: string) => void;
+  addOptimisticUpdate: (operation: string, entity: string, data: unknown, operationId?: string) => string;
+  confirmOptimisticUpdate: (operationId: string, confirmedData?: unknown) => void;
   submitOperation?: SubmitOperationCallback;
   setBaseState: (updater: (state: AppState) => AppState) => void;
 }

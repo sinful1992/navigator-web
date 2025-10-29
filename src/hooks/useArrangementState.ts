@@ -5,14 +5,16 @@
 import React from 'react';
 import { logger } from '../utils/logger';
 import type { AppState, Arrangement, UserSubscription } from '../types';
+import type { SubmitOperationCallback } from '../types/operations';
 import { generateOperationId } from '../utils/validationUtils';
 
-export type SubmitOperationCallback = (operation: any) => Promise<void>;
+// PHASE 2 Task 3: Updated to use proper SubmitOperationCallback type
+export type { SubmitOperationCallback } from '../types/operations';
 
 export interface UseArrangementStateProps {
   baseState: AppState;
-  addOptimisticUpdate: (operation: string, entity: string, data: any, operationId: string) => void;
-  confirmOptimisticUpdate: (operationId: string) => void;
+  addOptimisticUpdate: (operation: string, entity: string, data: unknown, operationId?: string) => string;
+  confirmOptimisticUpdate: (operationId: string, confirmedData?: unknown) => void;
   submitOperation?: SubmitOperationCallback;
   setBaseState: (updater: (state: AppState) => AppState) => void;
 }

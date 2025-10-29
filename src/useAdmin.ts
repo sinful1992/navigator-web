@@ -89,7 +89,7 @@ export function useAdmin(user: User | null): UseAdmin {
         setAdminUser(null);
       }
 
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Don't set error for permission issues - just not admin
       logger.info('Admin check failed:', e.message);
       setIsAdmin(false);

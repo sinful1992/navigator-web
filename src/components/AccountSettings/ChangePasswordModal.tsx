@@ -77,7 +77,7 @@ export function ChangePasswordModal({ open, onClose, onUpdatePassword }: ChangeP
               message: 'Your password has been updated successfully!',
               type: 'success'
             });
-          } catch (err: any) {
+          } catch (err: unknown) {
             await alert({
               title: 'Update Failed',
               message: err.message || 'Failed to update password. Please try again.',

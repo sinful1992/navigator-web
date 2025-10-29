@@ -40,9 +40,18 @@ import { validateAppState, validateAddressRow, stampCompletionsWithVersion, gene
 import { applyOptimisticUpdates } from "./utils/optimisticUpdatesUtils";
 import { getOrCreateDeviceId } from "./services/deviceIdService";
 import { prepareEndDaySessions } from "./services/daySessionService";
+// Constants
+import {
+  CONFIRMED_UPDATE_CLEANUP_DELAY_MS,
+  COMPLETION_MEMORY_CLEANUP_INTERVAL_MS,
+  DUPLICATE_COMPLETION_TOLERANCE_MS,
+} from "./constants";
 
 const STORAGE_KEY = "navigator_state_v5";
 const CURRENT_SCHEMA_VERSION = 5;
+
+// PHASE 2 Task 3: Improved StateUpdate type with better data typing
+type StateUpdateData = Completion | AddressRow | Arrangement | DaySession | unknown;
 
 type StateUpdate = {
   id: string;
@@ -50,7 +59,7 @@ type StateUpdate = {
   type: "optimistic" | "confirmed" | "reverted";
   operation: "create" | "update" | "delete";
   entity: "completion" | "arrangement" | "address" | "session";
-  data: any;
+  data: StateUpdateData;
 };
 
 type OptimisticState = {
@@ -74,48 +83,59 @@ const initial: AppState = {
 };
 
 // 🔧 CRITICAL FIX: Safer deep copy that preserves data integrity
-// Data validation functions
-function validateCompletion(c: any): c is Completion {
-  return c &&
-    typeof c.index === 'number' &&
-    typeof c.address === 'string' &&
-    typeof c.outcome === 'string' &&
-    ['PIF', 'DA', 'Done', 'ARR'].includes(c.outcome) &&
-    typeof c.timestamp === 'string' &&
-    !isNaN(new Date(c.timestamp).getTime());
+// PHASE 2 Task 3: Improved type safety for validation functions
+// Data validation functions using type guards
+
+function validateCompletion(c: unknown): c is Completion {
+  return (
+    c !== null &&
+    typeof c === 'object' &&
+    typeof (c as Record<string, unknown>).index === 'number' &&
+    typeof (c as Record<string, unknown>).address === 'string' &&
+    typeof (c as Record<string, unknown>).outcome === 'string' &&
+    ['PIF', 'DA', 'Done', 'ARR'].includes((c as Record<string, unknown>).outcome as string) &&
+    typeof (c as Record<string, unknown>).timestamp === 'string' &&
+    !isNaN(new Date((c as Record<string, unknown>).timestamp as string).getTime())
+  );
 }
 
-function validateAddressRow(a: any): a is AddressRow {
-  return a &&
-    typeof a.address === 'string' &&
-    a.address.trim().length > 0;
+function validateAddressRow(a: unknown): a is AddressRow {
+  return (
+    a !== null &&
+    typeof a === 'object' &&
+    typeof (a as Record<string, unknown>).address === 'string' &&
+    ((a as Record<string, unknown>).address as string).trim().length > 0
+  );
 }
 
-function validateAppState(state: any): state is AppState {
-  return state &&
-    Array.isArray(state.addresses) &&
-    Array.isArray(state.completions) &&
-    Array.isArray(state.daySessions) &&
-    Array.isArray(state.arrangements) &&
-    (state.activeIndex === null || typeof state.activeIndex === 'number') &&
-    typeof state.currentListVersion === 'number';
+function validateAppState(state: unknown): state is AppState {
+  return (
+    state !== null &&
+    typeof state === 'object' &&
+    Array.isArray((state as Record<string, unknown>).addresses) &&
+    Array.isArray((state as Record<string, unknown>).completions) &&
+    Array.isArray((state as Record<string, unknown>).daySessions) &&
+    Array.isArray((state as Record<string, unknown>).arrangements) &&
+    ((state as Record<string, unknown>).activeIndex === null || typeof (state as Record<string, unknown>).activeIndex === 'number') &&
+    typeof (state as Record<string, unknown>).currentListVersion === 'number'
+  );
 }
 
 function stampCompletionsWithVersion(
-  completions: any[] | undefined,
+  completions: unknown[] | undefined,
   version: number
 ): Completion[] {
   const src = Array.isArray(completions) ? completions : [];
   return src
     .filter(validateCompletion)
-    .map((c: any) => ({
+    .map((c: Completion) => ({
       ...c,
       listVersion: typeof c?.listVersion === "number" ? c.listVersion : version,
     }));
 }
 
 // Generate a deterministic ID for operations
-function generateOperationId(type: string, entity: string, data: any): string {
+function generateOperationId(type: string, entity: string, data: StateUpdateData): string {
   const key = `${type}_${entity}_${JSON.stringify(data).slice(0, 50)}_${Date.now()}`;
   // Use encodeURIComponent to handle Unicode characters before base64 encoding
   const unicodeSafeKey = encodeURIComponent(key);
@@ -601,7 +621,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
           updates.delete(operationId);
           return { ...prev, updates };
         });
-      }, 5000);
+      }, CONFIRMED_UPDATE_CLEANUP_DELAY_MS);
     },
     []
   );
@@ -866,7 +886,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       if (removedCount > 0) {
         logger.debug(`🧹 Cleaned up ${removedCount} old completion entries from memory`);
       }
-    }, 15000); // Run cleanup every 15 seconds
+    }, COMPLETION_MEMORY_CLEANUP_INTERVAL_MS); // Run cleanup at regular interval
 
     return () => clearInterval(cleanupInterval);
   }, []);
@@ -1815,7 +1835,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
               Math.abs(
                 new Date(c.timestamp).getTime() -
                   new Date(incoming.timestamp).getTime()
-              ) < 5000
+              ) < DUPLICATE_COMPLETION_TOLERANCE_MS
           );
 
           if (existing && existing.timestamp !== incoming.timestamp) {
