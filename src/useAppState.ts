@@ -9,6 +9,7 @@ import type {
   Arrangement,
   ReminderNotification,
 } from "./types";
+import type { SubmitOperationCallback } from "./types/operations";
 import {
   processArrangementReminders,
   updateReminderStatus,
@@ -186,15 +187,6 @@ function prepareEndDaySessions(
     endedSession,
   };
 }
-
-/**
- * Submit operation callback for delta sync
- * Called whenever a state-changing operation occurs
- */
-type SubmitOperationCallback = (operation: {
-  type: 'ADDRESS_BULK_IMPORT' | 'COMPLETION_CREATE' | 'ACTIVE_INDEX_SET' | 'ARRANGEMENT_CREATE' | 'ARRANGEMENT_UPDATE' | 'ARRANGEMENT_DELETE' | 'COMPLETION_UPDATE' | 'COMPLETION_DELETE' | 'ADDRESS_ADD' | 'SESSION_START' | 'SESSION_END' | 'SETTINGS_UPDATE_SUBSCRIPTION' | 'SETTINGS_UPDATE_REMINDER' | 'SETTINGS_UPDATE_BONUS';
-  payload: any;
-}) => Promise<void>;
 
 export function useAppState(userId?: string, submitOperation?: SubmitOperationCallback) {
   // ---- Composed hooks ----
@@ -862,10 +854,6 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     // Backup/restore
     backupState,
     restoreState,
-
-    // Reminder system
-    updateReminderNotification,
-    processReminders,
 
     // ---- Composed hook exports ----
 

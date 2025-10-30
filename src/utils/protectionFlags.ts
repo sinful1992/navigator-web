@@ -275,7 +275,7 @@ export async function initializeProtectionFlags(): Promise<void> {
 
     const store = await getStore('readonly');
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const request = store.getAll();
 
       request.onsuccess = () => {
