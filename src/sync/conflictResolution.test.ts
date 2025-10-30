@@ -51,6 +51,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'PIF',
             amount: 100,
@@ -69,6 +70,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'DA',
             amount: 0,
@@ -98,6 +100,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'PIF',
             amount: '100',
@@ -116,6 +119,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'DA',
             amount: '0',
@@ -146,6 +150,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'PIF',
             amount: '100',
@@ -164,6 +169,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'DA',
             amount: '0',
@@ -208,6 +214,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'PIF',
             amount: '100',
@@ -226,6 +233,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'PIF',
             amount: '150',
@@ -339,6 +347,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'PIF',
             amount: 100,
@@ -357,6 +366,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'DA',
             amount: 0,
@@ -394,6 +404,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'PIF',
             amount: 100,
@@ -412,6 +423,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'DA',
             amount: 0,
@@ -474,6 +486,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'PIF',
             amount: '100',
@@ -492,6 +505,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'DA',
             amount: '0',
@@ -516,6 +530,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'PIF',
             amount: '100',
@@ -533,6 +548,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'DA',
             amount: '0',
@@ -584,6 +600,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'PIF',
             amount: '100',
@@ -602,6 +619,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: {
           completion: {
             index: 5,
+            address: '123 Test St',
             listVersion: 1,
             outcome: 'PIF',
             amount: '100',

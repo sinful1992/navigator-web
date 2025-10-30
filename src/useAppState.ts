@@ -21,6 +21,11 @@ import {
 // Extracted hooks
 import { usePersistedState } from "./hooks/usePersistedState";
 import { useSyncState } from "./hooks/useSyncState";
+import { useCompletionState } from "./hooks/useCompletionState";
+import { useAddressState } from "./hooks/useAddressState";
+import { useArrangementState } from "./hooks/useArrangementState";
+import { useSettingsState } from "./hooks/useSettingsState";
+import { useTimeTracking } from "./hooks/useTimeTracking";
 // Utility functions
 import { stampCompletionsWithVersion } from "./utils/validationUtils";
 import { applyOptimisticUpdates } from "./utils/optimisticUpdatesUtils";
@@ -210,6 +215,16 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     setConflicts,
   } = useSyncState();
 
+  // Helper function to wrap enqueueOp for extracted hooks
+  const addOptimisticUpdate = React.useCallback(
+    (operation: string, entity: string, data: unknown, operationId?: string): string => {
+      const id = operationId || `${operation}_${entity}_${Date.now()}`;
+      enqueueOp(id, { operation, entity, data });
+      return id;
+    },
+    [enqueueOp]
+  );
+
   // Computed state with optimistic updates applied
   const state = React.useMemo(() => {
     // 🔧 FIX: Ensure bonusSettings exists (migration for existing users)
@@ -222,6 +237,48 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     }
     return applyOptimisticUpdates(patchedBaseState, optimisticUpdates);
   }, [baseState, optimisticUpdates, setBaseState]);
+
+  // ---- Call extracted hooks ----
+
+  // 3. Completion state (create, update, delete completions)
+  const completionState = useCompletionState({
+    baseState,
+    addOptimisticUpdate,
+    confirmOptimisticUpdate,
+    submitOperation,
+    setBaseState,
+  });
+
+  // 4. Address state (bulk import, add addresses)
+  const addressState = useAddressState({
+    baseState,
+    addOptimisticUpdate,
+    confirmOptimisticUpdate,
+    submitOperation,
+    setBaseState,
+  });
+
+  // 5. Arrangement state (create, update, delete arrangements)
+  const arrangementState = useArrangementState({
+    baseState,
+    addOptimisticUpdate,
+    confirmOptimisticUpdate,
+    submitOperation,
+    setBaseState,
+  });
+
+  // 6. Settings state (subscription, reminder, bonus settings)
+  const settingsState = useSettingsState({
+    submitOperation,
+    setBaseState,
+  });
+
+  // 7. Time tracking (active address, start/cancel time tracking)
+  const timeTrackingState = useTimeTracking({
+    baseState,
+    setBaseState,
+    submitOperation,
+  });
 
   // Track recent completions to protect against cloud sync rollbacks
   const recentCompletionsRef = React.useRef<Map<string, { timestamp: number; completion: Completion }>>(new Map());
@@ -809,5 +866,34 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     // Reminder system
     updateReminderNotification,
     processReminders,
+
+    // ---- Composed hook exports ----
+
+    // Completion management
+    complete: completionState.complete,
+    updateCompletion: completionState.updateCompletion,
+    undo: completionState.undo,
+    pendingCompletions: completionState.pendingCompletions,
+
+    // Address management
+    setAddresses: addressState.setAddresses,
+    addAddress: addressState.addAddress,
+
+    // Arrangement management
+    addArrangement: arrangementState.addArrangement,
+    updateArrangement: arrangementState.updateArrangement,
+    deleteArrangement: arrangementState.deleteArrangement,
+
+    // Settings management
+    setSubscription: settingsState.setSubscription,
+    updateReminderSettings: settingsState.updateReminderSettings,
+    updateBonusSettings: settingsState.updateBonusSettings,
+
+    // Time tracking
+    setActive: timeTrackingState.setActive,
+    cancelActive: timeTrackingState.cancelActive,
+    activeIndex: timeTrackingState.activeIndex,
+    activeStartTime: timeTrackingState.activeStartTime,
+    getTimeSpent: timeTrackingState.getTimeSpent,
   };
 }
