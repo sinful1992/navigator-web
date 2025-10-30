@@ -6,18 +6,20 @@
  * Standard validation error codes
  * Used consistently across all validators
  */
-export enum ValidationErrorCode {
-  REQUIRED = 'REQUIRED',
-  INVALID_TYPE = 'INVALID_TYPE',
-  INVALID_FORMAT = 'INVALID_FORMAT',
-  OUT_OF_RANGE = 'OUT_OF_RANGE',
-  INVALID_VALUE = 'INVALID_VALUE',
-  NOT_FOUND = 'NOT_FOUND',
-  DUPLICATE = 'DUPLICATE',
-  CLOCK_SKEW = 'CLOCK_SKEW',
-  INVALID_STATE = 'INVALID_STATE',
-  CUSTOM = 'CUSTOM',
-}
+export const ValidationErrorCode = {
+  REQUIRED: 'REQUIRED',
+  INVALID_TYPE: 'INVALID_TYPE',
+  INVALID_FORMAT: 'INVALID_FORMAT',
+  OUT_OF_RANGE: 'OUT_OF_RANGE',
+  INVALID_VALUE: 'INVALID_VALUE',
+  NOT_FOUND: 'NOT_FOUND',
+  DUPLICATE: 'DUPLICATE',
+  CLOCK_SKEW: 'CLOCK_SKEW',
+  INVALID_STATE: 'INVALID_STATE',
+  CUSTOM: 'CUSTOM',
+} as const;
+
+export type ValidationErrorCode = typeof ValidationErrorCode[keyof typeof ValidationErrorCode];
 
 /**
  * Validation error with field, code, and message

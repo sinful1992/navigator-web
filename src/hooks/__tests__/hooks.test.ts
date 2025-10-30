@@ -340,10 +340,11 @@ describe('Custom Hooks - Behavior and Integration', () => {
 
     it('should handle address import with version bump', () => {
       let currentListVersion = 1;
-      const addresses: AddressRow[] = [
-        { address: '123 Main St' },
-        { address: '456 Oak Ave' },
-      ];
+      // Addresses would be used in actual import
+      // const addresses: AddressRow[] = [
+      //   { address: '123 Main St' },
+      //   { address: '456 Oak Ave' },
+      // ];
 
       // Simulate import
       currentListVersion = 2;

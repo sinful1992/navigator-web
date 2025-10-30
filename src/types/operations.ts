@@ -90,6 +90,13 @@ export type SessionCreatePayload = DaySession;
 export type SessionUpdatePayload = {
   updates: Partial<DaySession>;
 };
+export type SessionStartPayload = {
+  session: DaySession;
+};
+export type SessionEndPayload = {
+  date: string;
+  endTime: string;
+};
 
 /**
  * Active index tracking payloads
@@ -108,11 +115,9 @@ export type SubmitOperation =
   | { type: 'COMPLETION_UPDATE'; payload: CompletionUpdatePayload }
   | { type: 'COMPLETION_DELETE'; payload: CompletionDeletePayload }
   // Address operations
-  | { type: 'ADDRESS_IMPORT'; payload: AddressImportPayload }
   | { type: 'ADDRESS_BULK_IMPORT'; payload: AddressBulkImportPayload }
   | { type: 'ADDRESS_ADD'; payload: AddressAddPayload }
   // Arrangement operations
-  | { type: 'ARRANGEMENT_ADD'; payload: ArrangementAddPayload }
   | { type: 'ARRANGEMENT_CREATE'; payload: ArrangementCreatePayload }
   | { type: 'ARRANGEMENT_UPDATE'; payload: ArrangementUpdatePayload }
   | { type: 'ARRANGEMENT_DELETE'; payload: ArrangementDeletePayload }
@@ -123,6 +128,8 @@ export type SubmitOperation =
   // Session operations
   | { type: 'SESSION_CREATE'; payload: SessionCreatePayload }
   | { type: 'SESSION_UPDATE'; payload: SessionUpdatePayload }
+  | { type: 'SESSION_START'; payload: SessionStartPayload }
+  | { type: 'SESSION_END'; payload: SessionEndPayload }
   // Active index tracking
   | { type: 'ACTIVE_INDEX_SET'; payload: ActiveIndexSetPayload };
 

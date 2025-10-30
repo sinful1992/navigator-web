@@ -17,7 +17,7 @@ export interface UseAddressStateProps {
   addOptimisticUpdate: (operation: string, entity: string, data: unknown, operationId?: string) => string;
   confirmOptimisticUpdate: (operationId: string, confirmedData?: unknown) => void;
   submitOperation?: SubmitOperationCallback;
-  setBaseState: (updater: (state: AppState) => AppState) => void;
+  setBaseState: React.Dispatch<React.SetStateAction<AppState>>;
 }
 
 export interface UseAddressStateReturn {

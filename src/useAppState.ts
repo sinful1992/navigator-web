@@ -7,12 +7,10 @@ import type {
   Completion,
   DaySession,
   Arrangement,
-  ReminderNotification,
 } from "./types";
 import type { SubmitOperationCallback } from "./types/operations";
 import {
   processArrangementReminders,
-  updateReminderStatus,
   cleanupOldNotifications,
 } from "./services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "./utils/bonusCalculator";
@@ -211,7 +209,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   const addOptimisticUpdate = React.useCallback(
     (operation: string, entity: string, data: unknown, operationId?: string): string => {
       const id = operationId || `${operation}_${entity}_${Date.now()}`;
-      enqueueOp(id, { operation, entity, data });
+      // enqueueOp expects: (entity, operation, data, operationId)
+      enqueueOp(entity as 'completion' | 'arrangement' | 'address' | 'session', operation as 'create' | 'update' | 'delete', data, id);
       return id;
     },
     [enqueueOp]
@@ -396,22 +395,6 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       });
     }
   }, [submitOperation]);
-
-
-  const updateReminderNotification = React.useCallback(
-    (notificationId: string, status: ReminderNotification['status'], message?: string) => {
-      setBaseState((s: AppState) => ({
-        ...s,
-        reminderNotifications: updateReminderStatus(
-          s.reminderNotifications || [],
-          notificationId,
-          status,
-          message
-        ),
-      }));
-    },
-    []
-  );
 
   const processReminders = React.useCallback(() => {
     setBaseState((s: AppState) => {
@@ -662,7 +645,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   // Enhanced setState for cloud sync with conflict detection and completion protection
   const setState = React.useCallback(
-    (updater: (state: AppState) => AppState) => {
+    (updaterOrState: AppState | ((state: AppState) => AppState)) => {
+      const updater = typeof updaterOrState === 'function' ? updaterOrState : () => updaterOrState;
       // Check if we recently restored data and log any state changes
       const lastRestore = localStorage.getItem('navigator_last_restore');
       if (lastRestore) {

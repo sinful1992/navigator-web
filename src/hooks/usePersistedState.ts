@@ -46,7 +46,7 @@ export type OwnerMetadata = {
  */
 export interface UsePersistedStateReturn {
   state: AppState;
-  setState: (state: AppState) => void;
+  setState: React.Dispatch<React.SetStateAction<AppState>>;
   loading: boolean;
   ownerMetadata: OwnerMetadata;
 }

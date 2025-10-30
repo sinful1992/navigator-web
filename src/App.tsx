@@ -11,7 +11,7 @@ import { Auth } from "./Auth";
 import { AddressList } from "./AddressList";
 import { DayPanel } from "./DayPanel";
 import { readJsonFile } from "./backup";
-import type { AddressRow, Outcome, Completion } from "./types";
+import type { AddressRow, Outcome, Completion, DaySession } from "./types";
 import { supabase } from "./lib/supabaseClient";
 import ManualAddressFAB from "./ManualAddressFAB";
 import { SubscriptionManager } from "./SubscriptionManager";
@@ -133,35 +133,6 @@ export default function App() {
   const [showLoading, setShowLoading] = React.useState(false);
   const [forceSkipLoading, setForceSkipLoading] = React.useState(false);
 
-  // 🔧 PHASE 1.2.2 (REVISED): Initialize hybrid protection flags cache on app startup
-  // FIX #3: Track readiness state to prevent race condition at startup
-  // Hybrid architecture: in-memory cache for fast synchronous reads, IndexedDB for atomic updates
-  const [protectionFlagsReady, setProtectionFlagsReady] = React.useState(false);
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        await initializeProtectionFlags();
-        if (!cancelled) {
-          logger.debug('✅ Protection flags cache initialized (hybrid cache + IndexedDB)');
-          setProtectionFlagsReady(true);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          logger.warn('⚠️ Failed to initialize protection flags cache:', err);
-          // Continue anyway - fallback to empty cache, operations will still work
-          setProtectionFlagsReady(true);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []); // Run once on mount
-
   React.useEffect(() => {
     if (cloudSync.isLoading) {
       // Delay showing loading screen - most sessions restore instantly
@@ -246,6 +217,35 @@ export default function App() {
 function AuthedApp() {
   const cloudSync = useUnifiedSync();
 
+  // 🔧 PHASE 1.2.2 (REVISED): Initialize hybrid protection flags cache on app startup
+  // FIX #3: Track readiness state to prevent race condition at startup
+  // Hybrid architecture: in-memory cache for fast synchronous reads, IndexedDB for atomic updates
+  const protectionFlagsReadyRef = React.useRef(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await initializeProtectionFlags();
+        if (!cancelled) {
+          logger.debug('✅ Protection flags cache initialized (hybrid cache + IndexedDB)');
+          protectionFlagsReadyRef.current = true;
+        }
+      } catch (err) {
+        if (!cancelled) {
+          logger.warn('⚠️ Failed to initialize protection flags cache:', err);
+          // Continue anyway - fallback to empty cache, operations will still work
+          protectionFlagsReadyRef.current = true;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []); // Run once on mount
+
   const {
     state,
     loading,
@@ -270,16 +270,12 @@ function AuthedApp() {
     updateArrangement,
     deleteArrangement,
     // Settings management (from useSettingsState)
-    setSubscription,
     updateReminderSettings,
     updateBonusSettings,
     // Time tracking (from useTimeTracking)
     setActive,
     cancelActive,
-    activeIndex,
-    activeStartTime,
-    getTimeSpent,
-  } = useAppState(cloudSync.user?.id, cloudSync.submitOperation);
+  } = useAppState(cloudSync.user?.id, cloudSync.submitOperation as any);
 
   const { confirm, alert } = useModalContext();
   const { settings } = useSettings();
@@ -506,7 +502,7 @@ function AuthedApp() {
       }
 
       // 🔧 FIX #3: Block updates until protection flags are ready to prevent startup race
-      if (!protectionFlagsReady) {
+      if (!protectionFlagsReadyRef.current) {
         logger.info('⏳ APP: Protection flags not ready yet, deferring update');
         return;
       }
@@ -731,8 +727,8 @@ function AuthedApp() {
       
       setBaseState((s) => {
         const arr = s.daySessions.slice();
-        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
-        let targetSession: any;
+        let sessionIndex = arr.findIndex((d: DaySession) => d.date === dayKey);
+        let targetSession: DaySession;
 
         if (sessionIndex >= 0) {
           targetSession = { ...arr[sessionIndex], start: newISO };
@@ -756,8 +752,8 @@ function AuthedApp() {
         }
 
         const now = new Date().toISOString();
-        targetSession.updatedAt = now;
-        targetSession.updatedBy = deviceId;
+        (targetSession as any).updatedAt = now;
+        (targetSession as any).updatedBy = deviceId;
 
         const operationId = `edit_start_${dayKey}_${Date.now()}`;
         const forServer = {
@@ -794,8 +790,8 @@ function AuthedApp() {
 
       setBaseState((s) => {
         const arr = s.daySessions.slice();
-        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
-        let targetSession: any;
+        let sessionIndex = arr.findIndex((d: DaySession) => d.date === dayKey);
+        let targetSession: DaySession;
 
         if (sessionIndex >= 0) {
           targetSession = { ...arr[sessionIndex] };
@@ -823,8 +819,8 @@ function AuthedApp() {
         }
 
         const now = new Date().toISOString();
-        targetSession.updatedAt = now;
-        targetSession.updatedBy = deviceId;
+        (targetSession as any).updatedAt = now;
+        (targetSession as any).updatedBy = deviceId;
 
         const operationId = `edit_end_${dayKey}_${Date.now()}`;
         const forServer = {

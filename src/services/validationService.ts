@@ -237,13 +237,13 @@ export function validateSubmitOperation(value: unknown): ValidationResult<Submit
       }
       break;
 
-    case 'ADDRESS_IMPORT':
+    case 'ADDRESS_BULK_IMPORT':
       if (!Array.isArray((obj.payload as Record<string, unknown>).addresses)) {
         return ValidationFailure('payload.addresses', ValidationErrorCode.REQUIRED, 'Addresses array is required');
       }
       break;
 
-    case 'ARRANGEMENT_ADD':
+    case 'ARRANGEMENT_CREATE':
     case 'ARRANGEMENT_UPDATE':
     case 'ARRANGEMENT_DELETE':
       if (typeof (obj.payload as Record<string, unknown>).id !== 'string') {

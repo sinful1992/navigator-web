@@ -10,7 +10,7 @@ import type { AppState, UserSubscription, ReminderSettings, BonusSettings } from
 
 export interface UseSettingsStateProps {
   submitOperation?: SubmitOperationCallback;
-  setBaseState: (updater: (state: AppState) => AppState) => void;
+  setBaseState: React.Dispatch<React.SetStateAction<AppState>>;
 }
 
 export interface UseSettingsStateReturn {

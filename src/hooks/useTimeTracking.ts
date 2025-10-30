@@ -12,7 +12,7 @@ import { setProtectionFlag, clearProtectionFlag } from '../utils/protectionFlags
 
 export interface UseTimeTrackingProps {
   baseState: AppState;
-  setBaseState: (updater: (state: AppState) => AppState) => void;
+  setBaseState: React.Dispatch<React.SetStateAction<AppState>>;
   submitOperation?: SubmitOperationCallback;
 }
 
@@ -20,7 +20,7 @@ export interface UseTimeTrackingReturn {
   setActive: (index: number) => void;
   cancelActive: () => void;
   activeIndex: number | null;
-  activeStartTime: string | null;
+  activeStartTime?: string | null;
   getTimeSpent: (index: number, startTime?: string | null) => number | undefined;
 }
 
