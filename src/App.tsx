@@ -258,6 +258,27 @@ function AuthedApp() {
     deviceId,
     enqueueOp,
     ownerMetadata,
+    // Completion management (from useCompletionState)
+    complete,
+    updateCompletion,
+    undo,
+    // Address management (from useAddressState)
+    setAddresses,
+    addAddress,
+    // Arrangement management (from useArrangementState)
+    addArrangement,
+    updateArrangement,
+    deleteArrangement,
+    // Settings management (from useSettingsState)
+    setSubscription,
+    updateReminderSettings,
+    updateBonusSettings,
+    // Time tracking (from useTimeTracking)
+    setActive,
+    cancelActive,
+    activeIndex,
+    activeStartTime,
+    getTimeSpent,
   } = useAppState(cloudSync.user?.id, cloudSync.submitOperation);
 
   const { confirm, alert } = useModalContext();
@@ -547,7 +568,7 @@ function AuthedApp() {
           arrangements: normalized.arrangements?.length || 0,
         });
 
-        setState(normalized);
+        setState(() => normalized);
         lastFromCloudRef.current = JSON.stringify(normalized);
         logger.info('✅ APP: setState called successfully');
       }
@@ -1590,14 +1611,14 @@ function AuthedApp() {
           lastFromCloudRef.current = JSON.stringify(state);
         }}
         onDiscardData={() => {
-          setState({
+          setState(() => ({
             addresses: [],
             completions: [],
             arrangements: [],
             daySessions: [],
             activeIndex: null,
             currentListVersion: 1
-          });
+          }));
         }}
       />
 
