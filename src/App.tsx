@@ -136,7 +136,6 @@ export default function App() {
   // 🔧 PHASE 1.2.2 (REVISED): Initialize hybrid protection flags cache on app startup
   // FIX #3: Track readiness state to prevent race condition at startup
   // Hybrid architecture: in-memory cache for fast synchronous reads, IndexedDB for atomic updates
-  const [protectionFlagsReady, setProtectionFlagsReady] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -145,7 +144,6 @@ export default function App() {
       try {
         await initializeProtectionFlags();
         if (!cancelled) {
-          setProtectionFlagsReady(true);
           logger.debug('✅ Protection flags cache initialized (hybrid cache + IndexedDB)');
         }
       } catch (err) {
@@ -249,27 +247,17 @@ function AuthedApp() {
   const {
     state,
     loading,
-    setAddresses,
-    addAddress,
-    setActive,
-    cancelActive,
-    complete,
-    undo,
-    updateCompletion,
     startDay,
     endDay,
     backupState,
     restoreState,
-    addArrangement,
-    updateArrangement,
-    deleteArrangement,
     setState,
     setBaseState,
     deviceId,
     enqueueOp,
-    updateReminderSettings,
-    updateBonusSettings,
     ownerMetadata,
+    updateReminderNotification,
+    processReminders,
   } = useAppState(cloudSync.user?.id, cloudSync.submitOperation);
 
   const { confirm, alert } = useModalContext();
