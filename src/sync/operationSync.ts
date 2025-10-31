@@ -353,13 +353,114 @@ export function useOperationSync(): UseOperationSync {
               });
             }
 
-            logger.info('📊 BOOTSTRAP: Operation types:', remoteOperations.reduce((acc, op) => {
+            const remoteByType = remoteOperations.reduce((acc, op) => {
               acc[op.type] = (acc[op.type] || 0) + 1;
               return acc;
-            }, {} as Record<string, number>));
+            }, {} as Record<string, number>);
+
+            logger.info('📊 BOOTSTRAP: Remote operations by type:', {
+              ...remoteByType,
+              total: remoteOperations.length,
+              sessionStartCount: remoteByType['SESSION_START'] || 0,
+              completionCount: remoteByType['COMPLETION_CREATE'] || 0,
+            });
+
+            // 🔍 DEBUG: Get local operation counts BEFORE merge
+            const localOpsBefore = operationLog.current.getAllOperations();
+            const localByTypeBefore = localOpsBefore.reduce((acc, op) => {
+              acc[op.type] = (acc[op.type] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>);
+
+            logger.info('📊 BOOTSTRAP: Local operations BEFORE merge:', {
+              ...localByTypeBefore,
+              total: localOpsBefore.length,
+              sessionStartCount: localByTypeBefore['SESSION_START'] || 0,
+              completionCount: localByTypeBefore['COMPLETION_CREATE'] || 0,
+            });
+
+            // 🔧 CRITICAL FIX: Detect corrupted sequence numbers BEFORE merging
+            // If cloud operations have huge sequence numbers compared to local ones, they're likely corrupted
+            const localMaxSeqBefore = localOpsBefore.length > 0
+              ? Math.max(...localOpsBefore.map(op => op.sequence))
+              : 0;
+
+            const cloudMaxSeq = remoteOperations.length > 0
+              ? Math.max(...remoteOperations.map(op => op.sequence))
+              : 0;
+
+            const seqGap = cloudMaxSeq - localMaxSeqBefore;
+            const isCloudSequencesCorrupted = seqGap > SEQUENCE_CORRUPTION_THRESHOLD && localMaxSeqBefore > 100;
+
+            if (isCloudSequencesCorrupted) {
+              logger.error('🚨 BOOTSTRAP: Cloud operations have corrupted sequence numbers - REJECTING ALL:', {
+                cloudMaxSeq,
+                localMaxSeqBefore,
+                gap: seqGap,
+                threshold: SEQUENCE_CORRUPTION_THRESHOLD,
+                remoteOpsCount: remoteOperations.length,
+                message: 'Corrupted sequences detected - will skip merge to prevent poisoning local sequence generator'
+              });
+              // DON'T merge these corrupted operations - they would corrupt our sequence generator
+              // Instead, just return empty array to indicate nothing was merged
+              const emptyMergeResult: Operation[] = [];
+              logger.warn('📥 BOOTSTRAP: Skipped merging corrupted operations', {
+                reason: 'Sequence corruption detected',
+                operationsSkipped: remoteOperations.length,
+              });
+              // Continue to state reconstruction with just local operations
+              const allOps = operationLog.current.getAllOperations();
+              logger.info(`🔄 BOOTSTRAP: Reconstructing state from ${allOps.length} local operations only (cloud rejected)`);
+              const newState = reconstructStateWithConflictResolution(
+                INITIAL_STATE,
+                allOps,
+                operationLog.current
+              );
+              logger.info('📊 BOOTSTRAP: Reconstructed state (from local only):', {
+                addresses: newState.addresses?.length || 0,
+                completions: newState.completions?.length || 0,
+                arrangements: newState.arrangements?.length || 0,
+                daySessions: newState.daySessions?.length || 0,
+                currentListVersion: newState.currentListVersion,
+              });
+              stateCache.current = { operationCount: allOps.length, state: newState };
+              setCurrentState(newState);
+
+              // CRITICAL: Notify listeners so App.tsx updates UI!
+              for (const listener of stateChangeListeners.current) {
+                try {
+                  listener(allOps);
+                } catch (err) {
+                  logger.error('Error in state change listener:', err);
+                }
+              }
+
+              return; // Skip the normal merge path
+            }
 
             const newOps = await operationLog.current.mergeRemoteOperations(remoteOperations);
-            logger.info(`📥 BOOTSTRAP: Merged ${newOps.length} new operations (${remoteOperations.length - newOps.length} were duplicates)`);
+
+            // 🔍 DEBUG: Get local operation counts AFTER merge
+            const localOpsAfter = operationLog.current.getAllOperations();
+            const localByTypeAfter = localOpsAfter.reduce((acc, op) => {
+              acc[op.type] = (acc[op.type] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>);
+
+            logger.info('📥 BOOTSTRAP MERGE COMPLETE:', {
+              newOpsCount: newOps.length,
+              duplicateCount: remoteOperations.length - newOps.length,
+              localBefore: localByTypeBefore,
+              localAfter: localByTypeAfter,
+              newOpsAdded: newOps.reduce((acc, op) => {
+                acc[op.type] = (acc[op.type] || 0) + 1;
+                return acc;
+              }, {} as Record<string, number>),
+              // 🔍 CRITICAL: Did SESSION_START operations get merged?
+              sessionStartBefore: localByTypeBefore['SESSION_START'] || 0,
+              sessionStartAfter: localByTypeAfter['SESSION_START'] || 0,
+              sessionStartAdded: newOps.filter(op => op.type === 'SESSION_START').length,
+            });
 
             if (newOps.length > 0) {
               // 🔧 CRITICAL FIX: Only mark as synced if operations are from THIS device

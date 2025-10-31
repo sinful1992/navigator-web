@@ -97,6 +97,59 @@ export class OperationLogManager {
 
       if (saved) {
         this.log = saved;
+
+        // 🔧 CRITICAL FIX: Detect and cleanup corrupted sequences in local log
+        // This happens when operations were created with huge sequence numbers (e.g., Unix timestamps)
+        const sequences = this.log.operations.map(op => op.sequence).sort((a, b) => a - b);
+        const maxSeq = sequences[sequences.length - 1] || 0;
+        const minSeq = sequences[0] || 0;
+
+        // If we have a huge gap in sequences (e.g., gap > 10000), it indicates corruption
+        // Example: sequences [1, 2, 46, 1758009505, 1758009894] - big jump after 46
+        let hasCorruptedSequences = false;
+        if (sequences.length > 2) {
+          for (let i = 1; i < sequences.length - 1; i++) {
+            const gap = sequences[i + 1] - sequences[i];
+            if (gap > SEQUENCE_CORRUPTION_THRESHOLD && i < sequences.length - 2) {
+              // Found a huge jump - likely corruption
+              hasCorruptedSequences = true;
+              logger.warn('🔧 LOAD: Detected corrupted sequences in local log', {
+                gapAt: `${sequences[i]}...${sequences[i + 1]}`,
+                gapSize: gap,
+                threshold: SEQUENCE_CORRUPTION_THRESHOLD,
+              });
+              break;
+            }
+          }
+        }
+
+        // If corrupted, reassign proper sequential numbers
+        if (hasCorruptedSequences) {
+          logger.info('🔧 LOAD: Fixing corrupted sequences - reassigning sequential numbers');
+
+          // Sort operations by their original sequence to maintain relative order
+          const sortedOps = [...this.log.operations].sort((a, b) => a.sequence - b.sequence);
+
+          // Reassign clean sequential numbers
+          for (let i = 0; i < sortedOps.length; i++) {
+            sortedOps[i].sequence = i + 1;
+          }
+
+          this.log.operations = sortedOps;
+          this.log.lastSequence = this.log.operations.length;
+          this.log.lastSyncSequence = Math.min(this.log.lastSyncSequence, 0); // Reset to safe value
+          this.log.checksum = this.computeChecksum();
+
+          // Persist the fixed log immediately
+          await this.persist();
+
+          logger.info('✅ LOAD: Fixed corrupted sequences - reassigned', {
+            totalOperations: this.log.operations.length,
+            newLastSequence: this.log.lastSequence,
+            newLastSyncSequence: this.log.lastSyncSequence,
+          });
+        }
+
         setSequence(this.log.lastSequence);
 
         // PHASE 1.1.3: Rebuild per-client sequence map
@@ -107,12 +160,25 @@ export class OperationLogManager {
           this.vectorClock = { ...saved.vectorClock };
         }
 
+        // 🔍 DEBUG: Log operation types breakdown
+        const byType: Record<string, number> = {};
+        for (const op of this.log.operations) {
+          byType[op.type] = (byType[op.type] || 0) + 1;
+        }
+
         logger.info('Loaded operation log:', {
           operationCount: this.log.operations.length,
           lastSequence: this.log.lastSequence,
           lastSyncSequence: this.log.lastSyncSequence,
           uniqueClients: this.clientSequences.size,
           vectorClock: this.vectorClock,
+          // 🔍 DEBUG: Show operation type breakdown
+          operationsByType: byType,
+          // 🔍 CRITICAL: How many SESSION_START operations are loaded?
+          sessionStartCount: byType['SESSION_START'] || 0,
+          completionCount: byType['COMPLETION_CREATE'] || 0,
+          completionUpdateCount: byType['COMPLETION_UPDATE'] || 0,
+          corruptedSequencesDetected: hasCorruptedSequences,
         });
       }
 
@@ -275,20 +341,69 @@ export class OperationLogManager {
       await this.load();
     }
 
+    // 🔍 DEBUG: Track deduplication
+    const duplicatesByType: Record<string, number> = {};
+    const newByType: Record<string, number> = {};
+    const ownDeviceCount = { count: 0 };
+    const duplicateOperations: Operation[] = [];
+
     // Step 1: Validate all operations BEFORE any state changes
     const operationsToMerge = remoteOps.filter(remoteOp => {
       // Skip operations from this device (we already have them)
       if (remoteOp.clientId === this.deviceId) {
+        ownDeviceCount.count++;
         return false;
       }
 
       // Check if we already have this operation
       const exists = this.log.operations.some(localOp => localOp.id === remoteOp.id);
-      return !exists;
+
+      if (exists) {
+        // 🔍 DEBUG: Track which operation types are being marked as duplicates
+        duplicatesByType[remoteOp.type] = (duplicatesByType[remoteOp.type] || 0) + 1;
+        duplicateOperations.push(remoteOp);
+        logger.debug('🔍 DEDUP: Skipping duplicate operation', {
+          opId: remoteOp.id.substring(0, 8),
+          type: remoteOp.type,
+          sequence: remoteOp.sequence,
+          clientId: remoteOp.clientId.substring(0, 8),
+        });
+        return false;
+      }
+
+      // 🔍 DEBUG: Track which operation types are new
+      newByType[remoteOp.type] = (newByType[remoteOp.type] || 0) + 1;
+      logger.debug('🔍 DEDUP: NEW operation from cloud', {
+        opId: remoteOp.id.substring(0, 8),
+        type: remoteOp.type,
+        sequence: remoteOp.sequence,
+        clientId: remoteOp.clientId.substring(0, 8),
+      });
+      return true;
+    });
+
+    // 🔍 DEBUG: Log summary of deduplication
+    logger.info('🔍 DEDUP SUMMARY', {
+      totalRemoteOps: remoteOps.length,
+      ownDeviceOps: ownDeviceCount.count,
+      duplicateOps: duplicateOperations.length,
+      newOpsToMerge: operationsToMerge.length,
+      duplicatesByType: Object.keys(duplicatesByType).length > 0 ? duplicatesByType : 'none',
+      newByType: Object.keys(newByType).length > 0 ? newByType : 'none',
+      // 🔍 CRITICAL: Show if SESSION_START is missing from local operations
+      sessionStartInDuplicates: duplicatesByType['SESSION_START'] || 0,
+      sessionStartInNew: newByType['SESSION_START'] || 0,
+      localSessionStarts: this.log.operations.filter(op => op.type === 'SESSION_START').length,
     });
 
     if (operationsToMerge.length === 0) {
       // No new operations to merge
+      logger.warn('🔍 WARNING: All remote operations were duplicates', {
+        remoteCount: remoteOps.length,
+        localCount: this.log.operations.length,
+        duplicatesByType,
+        possibleIssue: 'Cloud operations may not match local operation IDs - deduplication may be broken',
+      });
       return [];
     }
 
