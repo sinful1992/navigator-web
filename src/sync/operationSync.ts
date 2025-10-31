@@ -294,14 +294,14 @@ export function useOperationSync(): UseOperationSync {
         if (isOnline && supabase) {
           logger.info('🔄 BOOTSTRAP: Fetching operations from cloud for user:', user.id);
 
-          // Inline fetch to avoid dependency issues
-          const lastSequence = operationLog.current.getLogState().lastSyncSequence;
-
+          // 🔧 CRITICAL FIX: On bootstrap, fetch ALL operations for the user, not just ones after lastSequence
+          // WHY: lastSyncSequence can get out of sync and cause operations to be skipped
+          // The merge logic will deduplicate anyway, and we get a complete picture
+          // This ensures we never miss operations due to sequence tracking issues
           const { data, error } = await supabase
             .from('navigator_operations')
             .select('operation_data')
             .eq('user_id', user.id)
-            .gt('sequence_number', lastSequence)
             .order('sequence_number', { ascending: true });
 
           if (error) {
