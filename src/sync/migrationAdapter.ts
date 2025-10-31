@@ -14,6 +14,14 @@ export function useUnifiedSync() {
   // Wrap subscribeToOperations to match the expected interface
   const subscribeToData = (onChange: React.Dispatch<React.SetStateAction<AppState>>): (() => void) => {
     return operationSync.subscribeToOperations((_operations) => {
+      // 🔧 CRITICAL FIX: Only notify subscriber if we have actual operations
+      // This prevents race condition where currentState is still INITIAL_STATE during initialization
+      // Operations come from the operation log - if empty, wait for next update
+      if (!_operations || _operations.length === 0) {
+        logger.debug('📤 subscribeToData: Skipping notification - no operations yet (operation log still loading)');
+        return;
+      }
+
       // Reconstruct state from operations and notify
       const state = operationSync.getStateFromOperations();
       console.log('📤 subscribeToData: Notifying App.tsx with state:', {
