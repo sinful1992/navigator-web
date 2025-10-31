@@ -393,35 +393,55 @@ export function useOperationSync(): UseOperationSync {
             const isCloudSequencesCorrupted = seqGap > SEQUENCE_CORRUPTION_THRESHOLD && localMaxSeqBefore > 100;
 
             if (isCloudSequencesCorrupted) {
-              logger.error('🚨 BOOTSTRAP: Cloud operations have corrupted sequence numbers - REJECTING ALL:', {
+              logger.error('🚨 BOOTSTRAP: Cloud operations have corrupted sequence numbers:', {
                 cloudMaxSeq,
                 localMaxSeqBefore,
                 gap: seqGap,
                 threshold: SEQUENCE_CORRUPTION_THRESHOLD,
                 remoteOpsCount: remoteOperations.length,
-                message: 'Corrupted sequences detected - will skip merge to prevent poisoning local sequence generator'
               });
-              // DON'T merge these corrupted operations - they would corrupt our sequence generator
-              logger.warn('📥 BOOTSTRAP: Skipped merging corrupted operations', {
-                reason: 'Sequence corruption detected',
-                operationsSkipped: remoteOperations.length,
+
+              // 🆕 IMPROVEMENT: Extract valid data from corrupted operations instead of discarding
+              // The operation data is valid, only the sequence numbers are corrupted
+              // Re-assign clean sequential numbers and apply them
+              logger.info('🔧 BOOTSTRAP: Sanitizing corrupted operations - extracting valid data and re-sequencing', {
+                corruptedOpsCount: remoteOperations.length
               });
-              // Continue to state reconstruction with just local operations
-              const allOps = operationLog.current.getAllOperations();
-              logger.info(`🔄 BOOTSTRAP: Reconstructing state from ${allOps.length} local operations only (cloud rejected)`);
+
+              // Re-assign clean sequences starting after local max
+              let nextSequence = localMaxSeqBefore + 1;
+              const sanitizedOps = remoteOperations.map((op: Operation) => ({
+                ...op,
+                sequence: nextSequence++
+              }));
+
+              logger.info('✅ BOOTSTRAP: Sanitized corrupted operations', {
+                corruptedCount: remoteOperations.length,
+                newSequenceRange: `${localMaxSeqBefore + 1} - ${nextSequence - 1}`,
+                operationTypes: sanitizedOps.reduce((acc: any, op: Operation) => {
+                  acc[op.type] = (acc[op.type] || 0) + 1;
+                  return acc;
+                }, {})
+              });
+
+              // Merge sanitized operations with local operations
+              const mergedOps = [...localOpsBefore, ...sanitizedOps];
+
+              // Continue to state reconstruction with merged operations
               const newState = reconstructStateWithConflictResolution(
                 INITIAL_STATE,
-                allOps,
+                mergedOps,
                 operationLog.current
               );
-              logger.info('📊 BOOTSTRAP: Reconstructed state (from local only):', {
+              logger.info('📊 BOOTSTRAP: Reconstructed state (from local + sanitized cloud):', {
                 addresses: newState.addresses?.length || 0,
                 completions: newState.completions?.length || 0,
                 arrangements: newState.arrangements?.length || 0,
                 daySessions: newState.daySessions?.length || 0,
                 currentListVersion: newState.currentListVersion,
+                mergedOperations: mergedOps.length,
               });
-              stateCache.current = { operationCount: allOps.length, state: newState };
+              stateCache.current = { operationCount: mergedOps.length, state: newState };
               setCurrentState(newState);
 
               // CRITICAL: Notify listeners so App.tsx updates UI!
