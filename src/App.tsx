@@ -853,20 +853,53 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       const backupData = normalizeBackupData(raw);
       const currentSessions = safeState.daySessions; // Preserve current session state
 
+      // 🔧 CRITICAL FIX: Extract unique dates from completions and create SESSION_START operations
+      // This ensures all historical completions become visible by creating DaySession records
+      const completions = (backupData as any).completions || [];
+      const dateToStartTime = new Map<string, string>();
+
+      completions.forEach((c: any) => {
+        const date = c.timestamp.split('T')[0];
+        const currentStart = dateToStartTime.get(date);
+        // Keep the earliest timestamp for each date
+        if (!currentStart || c.timestamp < currentStart) {
+          dateToStartTime.set(date, c.timestamp);
+        }
+      });
+
+      // Create SESSION_START operations for dates without sessions
+      const existingDateSessions = new Set<string>();
+      (backupData as any).daySessions?.forEach((ds: any) => {
+        existingDateSessions.add(ds.date);
+      });
+
+      const generatedSessions: any[] = [];
+      dateToStartTime.forEach((startTime, date) => {
+        if (!existingDateSessions.has(date)) {
+          generatedSessions.push({
+            date,
+            start: startTime.substring(0, 19), // ISO format without Z
+            end: null
+          });
+        }
+      });
+
       // 🔧 CRITICAL FIX: Merge historical sessions from backup with current sessions
       // Backup may have daySessions from weeks ago. We need to restore those
       // so completions from historical dates become visible and queryable.
       const backupSessions = (backupData as any).daySessions || [];
       const mergedSessions = [
         ...backupSessions,
+        ...generatedSessions,
         ...currentSessions.filter(cs =>
-          !backupSessions.some((bs: any) => bs.date === cs.date && bs.start === cs.start)
+          !backupSessions.some((bs: any) => bs.date === cs.date && bs.start === cs.start) &&
+          !generatedSessions.some((gs: any) => gs.date === cs.date && gs.start === cs.start)
         )
       ];
 
       const data = {
         ...backupData,
-        daySessions: mergedSessions // Merge backup + current sessions
+        daySessions: mergedSessions // Merge backup + current sessions + generated sessions
       };
 
       restoreState(data);
@@ -874,6 +907,28 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       // 🔧 CRITICAL FIX: Clear operation log with sequence preservation before syncing
       // This prevents sequence gaps that cause sync to get stuck
       await cloudSync.clearOperationLogForRestore?.();
+
+      // 🔧 ENHANCEMENT: Submit generated SESSION_START operations to sync
+      // This ensures historical completions are visible across devices
+      if (generatedSessions.length > 0) {
+        logger.info(`📅 RESTORE: Generated ${generatedSessions.length} SESSION_START operations for historical dates`, {
+          dates: generatedSessions.map(s => s.date).join(', ')
+        });
+
+        // Submit operations after a short delay
+        setTimeout(async () => {
+          for (const session of generatedSessions) {
+            try {
+              await cloudSync.submitOperation({
+                type: 'SESSION_START',
+                payload: { session }
+              });
+            } catch (err) {
+              logger.warn(`📅 RESTORE: Failed to submit SESSION_START for ${session.date}`, err);
+            }
+          }
+        }, 100);
+      }
 
       // 🔧 CRITICAL FIX: Wait for restore protection window before syncing
       setTimeout(async () => {
