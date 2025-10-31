@@ -3,7 +3,7 @@ import type { Operation } from './operations';
 import { nextSequence, setSequence } from './operations';
 import { storageManager } from '../utils/storageManager';
 import { logger } from '../utils/logger';
-import { ENABLE_SEQUENCE_CONTINUITY_VALIDATION } from './syncConfig';
+import { ENABLE_SEQUENCE_CONTINUITY_VALIDATION, SEQUENCE_CORRUPTION_THRESHOLD } from './syncConfig';
 
 const OPERATION_LOG_KEY = 'navigator_operation_log_v1';
 const TRANSACTION_LOG_KEY = 'navigator_transaction_log_v1';
@@ -100,13 +100,13 @@ export class OperationLogManager {
 
         // 🔧 CRITICAL FIX: Detect and cleanup corrupted sequences in local log
         // This happens when operations were created with huge sequence numbers (e.g., Unix timestamps)
+        let hasCorruptedSequences = false;
         try {
           const sequences = this.log.operations.map(op => op.sequence).sort((a, b) => a - b);
           const maxSeq = sequences[sequences.length - 1] || 0;
 
           // If we have a huge gap in sequences (e.g., gap > 10000), it indicates corruption
           // Example: sequences [1, 2, 46, 1758009505, 1758009894] - big jump after 46
-          let hasCorruptedSequences = false;
           if (sequences.length > 2) {
             for (let i = 0; i < sequences.length - 1; i++) {
               const gap = sequences[i + 1] - sequences[i];
@@ -152,8 +152,13 @@ export class OperationLogManager {
             });
           }
         } catch (error) {
-          logger.warn('🔧 LOAD: Error during corruption detection/fix (continuing anyway):', error);
+          logger.warn('🔧 LOAD: Error during corruption detection/fix (continuing anyway):', {
+            error: String(error),
+            message: (error as Error).message || 'Unknown error',
+            stack: (error as Error).stack?.split('\n').slice(0, 3).join(' ') || 'No stack'
+          });
           // Continue loading - corruption fix is not critical to load
+          // Even if corruption detection fails, we can continue with the log as-is
         }
 
         setSequence(this.log.lastSequence);
