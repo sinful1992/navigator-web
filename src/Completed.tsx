@@ -280,10 +280,6 @@ function getCompletionDateKey(c: Completion, fallbackSessions: DaySession[]): st
 const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArrangement, onComplete }: Props) {
   const { addresses, completions, daySessions, arrangements } = state;
 
-  // Track which PIF amounts are being edited
-  const [editingPifAmount, setEditingPifAmount] = React.useState<number | null>(null);
-  const [tempPifAmount, setTempPifAmount] = React.useState<string>("");
-
   // Track which completion is showing PIF details modal
   const [showPifModal, setShowPifModal] = React.useState<{
     completionIndex: number;
@@ -492,147 +488,58 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
                                 <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                                   {"Index " + String(comp.index)}
                                   {comp.outcome === "PIF" && (
-                                    <span style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                      {editingPifAmount === compIndex ? (
-                                        <>
-                                          <span>· £</span>
-                                          <label
-                                            htmlFor={`pif-amount-${compIndex}`}
-                                            style={{
-                                              position: 'absolute',
-                                              width: 1,
-                                              height: 1,
-                                              padding: 0,
-                                              margin: -1,
-                                              overflow: 'hidden',
-                                              clip: 'rect(0,0,0,0)',
-                                              whiteSpace: 'nowrap',
-                                              border: 0
-                                            }}
-                                          >
-                                            PIF Amount
-                                          </label>
-                                          <input
-                                            id={`pif-amount-${compIndex}`}
-                                            name="pifAmount"
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            inputMode="decimal"
-                                            style={{
-                                              width: 70,
-                                              padding: "2px 4px",
-                                              fontSize: 12,
-                                              border: "1px solid var(--border)",
-                                              borderRadius: 3,
-                                              background: "var(--surface)"
-                                            }}
-                                            value={tempPifAmount}
-                                            onChange={(e) => setTempPifAmount(e.target.value)}
-                                            onKeyDown={(e) => {
-                                              if (e.key === "Enter") {
-                                                const amount = parseFloat(tempPifAmount);
-                                                if (isFinite(amount) && amount >= 0) {
-                                                  onChangeOutcome(compIndex, "PIF", amount.toFixed(2), comp.arrangementId, comp.caseReference, comp.numberOfCases, comp.enforcementFees);
-                                                  setEditingPifAmount(null);
-                                                  setTempPifAmount("");
-                                                }
-                                              } else if (e.key === "Escape") {
-                                                setEditingPifAmount(null);
-                                                setTempPifAmount("");
-                                              }
-                                            }}
-                                            autoFocus
-                                          />
-                                          <button
-                                            style={{
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                              background: "var(--success)",
-                                              color: "white",
-                                              border: "none",
-                                              borderRadius: 3,
-                                              cursor: "pointer"
-                                            }}
-                                            onClick={() => {
-                                              const amount = parseFloat(tempPifAmount);
-                                              if (isFinite(amount) && amount >= 0) {
-                                                onChangeOutcome(compIndex, "PIF", amount.toFixed(2), comp.arrangementId, comp.caseReference, comp.numberOfCases, comp.enforcementFees);
-                                                setEditingPifAmount(null);
-                                                setTempPifAmount("");
-                                              }
-                                            }}
-                                          >
-                                            ✓
-                                          </button>
-                                          <button
-                                            style={{
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                              background: "var(--danger)",
-                                              color: "white",
-                                              border: "none",
-                                              borderRadius: 3,
-                                              cursor: "pointer"
-                                            }}
-                                            onClick={() => {
-                                              setEditingPifAmount(null);
-                                              setTempPifAmount("");
-                                            }}
-                                          >
-                                            ✕
-                                          </button>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <span>· £{comp.amount || "0.00"}</span>
-                                          <button
-                                            style={{
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                              background: "var(--primary)",
-                                              color: "white",
-                                              border: "none",
-                                              borderRadius: 3,
-                                              cursor: "pointer",
-                                              marginLeft: 4
-                                            }}
-                                            onClick={() => {
-                                              setEditingPifAmount(compIndex);
-                                              setTempPifAmount(comp.amount || "");
-                                            }}
-                                            title="Edit PIF amount"
-                                          >
-                                            ✏️
-                                          </button>
-                                          {comp.caseReference && (
-                                            <span style={{ marginLeft: 8 }}>
-                                              · Ref: {comp.caseReference}
+                                    <span style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                                      <span>· £{comp.amount || "0.00"}</span>
+                                      <button
+                                        style={{
+                                          fontSize: 10,
+                                          padding: "2px 6px",
+                                          background: "var(--primary)",
+                                          color: "white",
+                                          border: "none",
+                                          borderRadius: 3,
+                                          cursor: "pointer",
+                                          marginLeft: 4
+                                        }}
+                                        onClick={() => {
+                                          setShowPifModal({
+                                            completionIndex: compIndex,
+                                            currentAmount: comp.amount,
+                                            currentCaseRef: comp.caseReference,
+                                            currentNumberOfCases: comp.numberOfCases,
+                                            currentEnforcementFees: comp.enforcementFees
+                                          });
+                                        }}
+                                        title="Edit PIF details"
+                                      >
+                                        ✏️
+                                      </button>
+                                      {comp.caseReference && (
+                                        <span style={{ marginLeft: 8 }}>
+                                          · Ref: {comp.caseReference}
+                                        </span>
+                                      )}
+                                      {comp.numberOfCases && comp.numberOfCases > 1 && (
+                                        <span style={{ marginLeft: 8 }}>
+                                          · {comp.numberOfCases} cases
+                                        </span>
+                                      )}
+                                      {/* Display enforcement fees (NEW: array format) */}
+                                      {comp.enforcementFees && comp.enforcementFees.length > 0 && (
+                                        <span style={{ marginLeft: 8 }}>
+                                          · Enf Fees: {comp.enforcementFees.map((fee: number) => `£${fee.toFixed(2)}`).join(", ")}
+                                          {comp.numberOfCases && comp.numberOfCases > comp.enforcementFees.length && (
+                                            <span style={{ color: "var(--primary)", fontWeight: 600, marginLeft: 4 }}>
+                                              + {comp.numberOfCases - comp.enforcementFees.length} linked (£10 each)
                                             </span>
                                           )}
-                                          {comp.numberOfCases && comp.numberOfCases > 1 && (
-                                            <span style={{ marginLeft: 8 }}>
-                                              · {comp.numberOfCases} cases
-                                            </span>
-                                          )}
-                                          {/* Display enforcement fees (NEW: array format) */}
-                                          {comp.enforcementFees && comp.enforcementFees.length > 0 && (
-                                            <span style={{ marginLeft: 8 }}>
-                                              · Enf Fees: {comp.enforcementFees.map((fee: number) => `£${fee.toFixed(2)}`).join(", ")}
-                                              {comp.numberOfCases && comp.numberOfCases > comp.enforcementFees.length && (
-                                                <span style={{ color: "var(--primary)", fontWeight: 600, marginLeft: 4 }}>
-                                                  + {comp.numberOfCases - comp.enforcementFees.length} linked (£10 each)
-                                                </span>
-                                              )}
-                                            </span>
-                                          )}
-                                          {/* Legacy: Display total enforcement fees (backward compatibility) */}
-                                          {!comp.enforcementFees && comp.totalEnforcementFees !== undefined && comp.totalEnforcementFees !== null && (
-                                            <span style={{ marginLeft: 8 }}>
-                                              · Enf: £{comp.totalEnforcementFees.toFixed(2)}
-                                            </span>
-                                          )}
-                                        </>
+                                        </span>
+                                      )}
+                                      {/* Legacy: Display total enforcement fees (backward compatibility) */}
+                                      {!comp.enforcementFees && comp.totalEnforcementFees !== undefined && comp.totalEnforcementFees !== null && (
+                                        <span style={{ marginLeft: 8 }}>
+                                          · Enf: £{comp.totalEnforcementFees.toFixed(2)}
+                                        </span>
                                       )}
                                     </span>
                                   )}
