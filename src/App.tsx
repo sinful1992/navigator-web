@@ -208,14 +208,13 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ModalProvider>
-        <AuthedApp />
+        <AuthedApp cloudSync={cloudSync} />
       </ModalProvider>
     </ErrorBoundary>
   );
 }
 
-function AuthedApp() {
-  const cloudSync = useUnifiedSync();
+function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync> }) {
 
   // 🔧 PHASE 1.2.2 (REVISED): Initialize hybrid protection flags cache on app startup
   // FIX #3: Track readiness state to prevent race condition at startup
