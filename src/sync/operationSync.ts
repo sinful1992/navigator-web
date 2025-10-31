@@ -852,7 +852,24 @@ export function useOperationSync(): UseOperationSync {
 
           logger.info('✅ FETCH SUCCESS: State updated with remote operations');
         } else {
-          logger.debug('No new operations after merge (already had them)');
+          // 🔧 CRITICAL DEBUG: All operations marked as duplicates - verify state completeness
+          logger.debug('⚠️ BOOTSTRAP: All cloud operations were duplicates - verifying state completeness');
+
+          const allOperations = operationLog.current.getAllOperations();
+          const reconstructedState = reconstructStateWithConflictResolution(
+            INITIAL_STATE,
+            allOperations,
+            operationLog.current
+          );
+
+          // Check if state looks incomplete (completions without sessions)
+          if (reconstructedState.completions.length > 0 && reconstructedState.daySessions.length === 0) {
+            logger.warn('⚠️ BOOTSTRAP WARNING: Completions exist but NO day sessions - data structure incomplete!');
+            logger.warn(`📊 Completions: ${reconstructedState.completions.length}, Sessions: ${reconstructedState.daySessions.length}`);
+          } else if (reconstructedState.completions.length > 0 && reconstructedState.daySessions.length < 5) {
+            logger.warn('⚠️ BOOTSTRAP WARNING: Few sessions but many completions - may be showing filtered view');
+            logger.warn(`📊 Completions: ${reconstructedState.completions.length}, Sessions: ${reconstructedState.daySessions.length}`);
+          }
         }
       } else {
         logger.debug('✅ No new operations on server');
