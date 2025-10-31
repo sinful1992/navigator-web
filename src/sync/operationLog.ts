@@ -100,54 +100,60 @@ export class OperationLogManager {
 
         // 🔧 CRITICAL FIX: Detect and cleanup corrupted sequences in local log
         // This happens when operations were created with huge sequence numbers (e.g., Unix timestamps)
-        const sequences = this.log.operations.map(op => op.sequence).sort((a, b) => a - b);
-        const maxSeq = sequences[sequences.length - 1] || 0;
-        const minSeq = sequences[0] || 0;
+        try {
+          const sequences = this.log.operations.map(op => op.sequence).sort((a, b) => a - b);
+          const maxSeq = sequences[sequences.length - 1] || 0;
 
-        // If we have a huge gap in sequences (e.g., gap > 10000), it indicates corruption
-        // Example: sequences [1, 2, 46, 1758009505, 1758009894] - big jump after 46
-        let hasCorruptedSequences = false;
-        if (sequences.length > 2) {
-          for (let i = 1; i < sequences.length - 1; i++) {
-            const gap = sequences[i + 1] - sequences[i];
-            if (gap > SEQUENCE_CORRUPTION_THRESHOLD && i < sequences.length - 2) {
-              // Found a huge jump - likely corruption
-              hasCorruptedSequences = true;
-              logger.warn('🔧 LOAD: Detected corrupted sequences in local log', {
-                gapAt: `${sequences[i]}...${sequences[i + 1]}`,
-                gapSize: gap,
-                threshold: SEQUENCE_CORRUPTION_THRESHOLD,
-              });
-              break;
+          // If we have a huge gap in sequences (e.g., gap > 10000), it indicates corruption
+          // Example: sequences [1, 2, 46, 1758009505, 1758009894] - big jump after 46
+          let hasCorruptedSequences = false;
+          if (sequences.length > 2) {
+            for (let i = 0; i < sequences.length - 1; i++) {
+              const gap = sequences[i + 1] - sequences[i];
+              if (gap > SEQUENCE_CORRUPTION_THRESHOLD) {
+                // Found a huge jump - likely corruption
+                hasCorruptedSequences = true;
+                logger.warn('🔧 LOAD: Detected corrupted sequences in local log', {
+                  gapAt: `${sequences[i]}...${sequences[i + 1]}`,
+                  gapSize: gap,
+                  threshold: SEQUENCE_CORRUPTION_THRESHOLD,
+                });
+                break;
+              }
             }
           }
-        }
 
-        // If corrupted, reassign proper sequential numbers
-        if (hasCorruptedSequences) {
-          logger.info('🔧 LOAD: Fixing corrupted sequences - reassigning sequential numbers');
+          // If corrupted, reassign proper sequential numbers
+          if (hasCorruptedSequences) {
+            logger.info('🔧 LOAD: Fixing corrupted sequences - reassigning sequential numbers');
 
-          // Sort operations by their original sequence to maintain relative order
-          const sortedOps = [...this.log.operations].sort((a, b) => a.sequence - b.sequence);
+            // Sort operations by their original sequence to maintain relative order
+            const sortedOps = [...this.log.operations].sort((a, b) => a.sequence - b.sequence);
 
-          // Reassign clean sequential numbers
-          for (let i = 0; i < sortedOps.length; i++) {
-            sortedOps[i].sequence = i + 1;
+            // Reassign clean sequential numbers
+            for (let i = 0; i < sortedOps.length; i++) {
+              sortedOps[i].sequence = i + 1;
+            }
+
+            this.log.operations = sortedOps;
+            this.log.lastSequence = this.log.operations.length;
+            this.log.lastSyncSequence = 0; // Reset to 0 to resync everything
+            this.log.checksum = this.computeChecksum();
+
+            // Persist the fixed log immediately - but don't block on it
+            this.persist().catch(err => {
+              logger.error('🔧 LOAD: Failed to persist fixed sequences:', err);
+            });
+
+            logger.info('✅ LOAD: Fixed corrupted sequences - reassigned', {
+              totalOperations: this.log.operations.length,
+              newLastSequence: this.log.lastSequence,
+              newLastSyncSequence: this.log.lastSyncSequence,
+            });
           }
-
-          this.log.operations = sortedOps;
-          this.log.lastSequence = this.log.operations.length;
-          this.log.lastSyncSequence = Math.min(this.log.lastSyncSequence, 0); // Reset to safe value
-          this.log.checksum = this.computeChecksum();
-
-          // Persist the fixed log immediately
-          await this.persist();
-
-          logger.info('✅ LOAD: Fixed corrupted sequences - reassigned', {
-            totalOperations: this.log.operations.length,
-            newLastSequence: this.log.lastSequence,
-            newLastSyncSequence: this.log.lastSyncSequence,
-          });
+        } catch (error) {
+          logger.warn('🔧 LOAD: Error during corruption detection/fix (continuing anyway):', error);
+          // Continue loading - corruption fix is not critical to load
         }
 
         setSequence(this.log.lastSequence);
