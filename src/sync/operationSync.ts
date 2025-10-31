@@ -402,8 +402,6 @@ export function useOperationSync(): UseOperationSync {
                 message: 'Corrupted sequences detected - will skip merge to prevent poisoning local sequence generator'
               });
               // DON'T merge these corrupted operations - they would corrupt our sequence generator
-              // Instead, just return empty array to indicate nothing was merged
-              const emptyMergeResult: Operation[] = [];
               logger.warn('📥 BOOTSTRAP: Skipped merging corrupted operations', {
                 reason: 'Sequence corruption detected',
                 operationsSkipped: remoteOperations.length,

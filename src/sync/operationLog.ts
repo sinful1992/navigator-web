@@ -103,7 +103,6 @@ export class OperationLogManager {
         let hasCorruptedSequences = false;
         try {
           const sequences = this.log.operations.map(op => op.sequence).sort((a, b) => a - b);
-          const maxSeq = sequences[sequences.length - 1] || 0;
 
           // If we have a huge gap in sequences (e.g., gap > 10000), it indicates corruption
           // Example: sequences [1, 2, 46, 1758009505, 1758009894] - big jump after 46
