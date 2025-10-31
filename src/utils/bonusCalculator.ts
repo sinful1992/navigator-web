@@ -17,7 +17,7 @@ export const DEFAULT_BONUS_SETTINGS: BonusSettings = {
     baseEnforcementFee: 235,      // £235 enforcement fee
     basePifBonus: 100,            // £100 for standard PIF
     largePifThreshold: 1500,      // £1500 debt threshold
-    largePifPercentage: 0.001875, // 2.5% of 7.5% = 0.025 * 0.075
+    largePifPercentage: 0.025,    // 2.5% of amount over £1500
     largePifCap: 500,             // £500 max bonus per PIF
     smallPifBonus: 30,            // £30 for balance < £100
     linkedCaseBonus: 10,          // £10 for linked cases with 0 fee
