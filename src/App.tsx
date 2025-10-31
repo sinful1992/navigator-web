@@ -853,9 +853,20 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       const backupData = normalizeBackupData(raw);
       const currentSessions = safeState.daySessions; // Preserve current session state
 
+      // 🔧 CRITICAL FIX: Merge historical sessions from backup with current sessions
+      // Backup may have daySessions from weeks ago. We need to restore those
+      // so completions from historical dates become visible and queryable.
+      const backupSessions = backupData.daySessions || [];
+      const mergedSessions = [
+        ...backupSessions,
+        ...currentSessions.filter(cs =>
+          !backupSessions.some(bs => bs.date === cs.date && bs.start === cs.start)
+        )
+      ];
+
       const data = {
         ...backupData,
-        daySessions: currentSessions // Keep current sessions, don't restore from backup
+        daySessions: mergedSessions // Merge backup + current sessions
       };
 
       restoreState(data);
