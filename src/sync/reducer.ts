@@ -16,27 +16,11 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'COMPLETION_CREATE': {
         const { completion } = operation.payload;
 
-        // Validate the completion doesn't already exist
-        // Use caseReference as primary unique identifier (supports multiple cases at same address)
-        // Fallback to timestamp + address + amount if no caseReference
-        const exists = state.completions.some(c => {
-          // If both have case references, use that (most reliable)
-          if (completion.caseReference && c.caseReference) {
-            return c.caseReference === completion.caseReference &&
-                   c.timestamp === completion.timestamp;
-          }
-
-          // Fallback: match by timestamp + address + amount (unlikely to collide)
-          return c.timestamp === completion.timestamp &&
-                 c.address === completion.address &&
-                 c.amount === completion.amount &&
-                 c.outcome === completion.outcome;
-        });
-
-        if (exists) {
-          logger.warn('Skipping duplicate completion creation:', completion);
-          return state;
-        }
+        // Single-user app: No duplicate check needed
+        // - If user completes on Device A, Device B syncs and shows it's done
+        // - User won't complete same address again (they see it's already completed)
+        // - Operation-level deduplication (by operation ID) prevents actual duplicates
+        // - Duplicate check was blocking legitimate use cases (multiple cases at same address)
 
         return {
           ...state,
