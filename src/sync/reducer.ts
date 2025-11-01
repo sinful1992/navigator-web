@@ -17,12 +17,21 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
         const { completion } = operation.payload;
 
         // Validate the completion doesn't already exist
-        // Use address + timestamp as unique identifier (more reliable than index + outcome)
-        const exists = state.completions.some(c =>
-          c.address === completion.address &&
-          c.timestamp === completion.timestamp &&
-          c.outcome === completion.outcome
-        );
+        // Use caseReference as primary unique identifier (supports multiple cases at same address)
+        // Fallback to timestamp + address + amount if no caseReference
+        const exists = state.completions.some(c => {
+          // If both have case references, use that (most reliable)
+          if (completion.caseReference && c.caseReference) {
+            return c.caseReference === completion.caseReference &&
+                   c.timestamp === completion.timestamp;
+          }
+
+          // Fallback: match by timestamp + address + amount (unlikely to collide)
+          return c.timestamp === completion.timestamp &&
+                 c.address === completion.address &&
+                 c.amount === completion.amount &&
+                 c.outcome === completion.outcome;
+        });
 
         if (exists) {
           logger.warn('Skipping duplicate completion creation:', completion);
