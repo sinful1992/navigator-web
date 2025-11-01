@@ -158,6 +158,7 @@ export function createOperation<T extends Operation>(
 class SequenceGenerator {
   private sequence = 0;
   private lock = Promise.resolve();
+  private readonly MAX_REASONABLE_SEQUENCE = 1000000; // Max reasonable value (10 years of heavy use)
 
   async next(): Promise<number> {
     // Queue this request and wait for previous ones to complete
@@ -185,7 +186,17 @@ class SequenceGenerator {
     await myTurn; // Wait for previous operations
 
     try {
-      this.sequence = Math.max(this.sequence, seq);
+      // 🚨 CRITICAL: Cap unreasonable sequences (likely Unix timestamps)
+      const cappedSeq = Math.min(seq, this.MAX_REASONABLE_SEQUENCE);
+      if (cappedSeq < seq) {
+        console.error('🚨 CRITICAL: Sequence capped to prevent timestamp poisoning', {
+          original: seq,
+          capped: cappedSeq,
+          reason: 'Sequence number exceeded maximum (likely Unix timestamp)',
+          stack: new Error().stack?.split('\n').slice(0, 3).join('\n'),
+        });
+      }
+      this.sequence = Math.max(this.sequence, cappedSeq);
     } finally {
       release(); // Let next request proceed
     }
@@ -193,7 +204,17 @@ class SequenceGenerator {
 
   // Synchronous version for backward compatibility (e.g., in error recovery paths)
   set(seq: number): void {
-    this.sequence = Math.max(this.sequence, seq);
+    // 🚨 CRITICAL: Cap unreasonable sequences instead of silently accepting them
+    const cappedSeq = Math.min(seq, this.MAX_REASONABLE_SEQUENCE);
+    if (cappedSeq < seq) {
+      console.error('🚨 CRITICAL: Sequence capped to prevent timestamp poisoning', {
+        original: seq,
+        capped: cappedSeq,
+        reason: 'Sequence number exceeded maximum (likely Unix timestamp)',
+        stack: new Error().stack?.split('\n').slice(0, 3).join('\n'),
+      });
+    }
+    this.sequence = Math.max(this.sequence, cappedSeq);
   }
 
   get current(): number {
@@ -209,40 +230,15 @@ export function nextSequence(): Promise<number> {
 }
 
 export function setSequence(seq: number): void {
-  // 🚨 CRITICAL: Validate sequence numbers - reject unreasonable values
-  // This prevents poisoning the sequence counter with Unix timestamps (1.7B+)
-  // Max reasonable sequence for 10 years of heavy use: ~1M operations
-  const MAX_REASONABLE_SEQUENCE = 1000000;
-
-  if (seq > MAX_REASONABLE_SEQUENCE) {
-    console.error('🚨 CRITICAL: Rejecting unreasonable sequence number:', {
-      value: seq,
-      max: MAX_REASONABLE_SEQUENCE,
-      reason: 'Value is likely a Unix timestamp (Date.now()), not a sequence number',
-      stack: new Error().stack?.split('\n').slice(0, 5).join('\n'),
-    });
-    // Don't update the sequence - silently ignore to prevent poisoning
-    return;
-  }
-
+  // Delegates to SequenceGenerator which caps unreasonable values
+  // No need for separate validation here - generator handles it
   sequenceGenerator.set(seq);
 }
 
 // PHASE 1.3: Atomic version of setSequence (respects the lock)
 // Use this when you need to guarantee atomicity with next()
 export async function setSequenceAsync(seq: number): Promise<void> {
-  // 🚨 CRITICAL: Same validation as setSequence() but async
-  const MAX_REASONABLE_SEQUENCE = 1000000;
-
-  if (seq > MAX_REASONABLE_SEQUENCE) {
-    console.error('🚨 CRITICAL: Rejecting unreasonable sequence number (async):', {
-      value: seq,
-      max: MAX_REASONABLE_SEQUENCE,
-      reason: 'Value is likely a Unix timestamp (Date.now()), not a sequence number',
-      stack: new Error().stack?.split('\n').slice(0, 5).join('\n'),
-    });
-    return; // Don't poison the counter
-  }
-
+  // Delegates to SequenceGenerator which caps unreasonable values
+  // No need for separate validation here - generator handles it
   return sequenceGenerator.setAsync(seq);
 }

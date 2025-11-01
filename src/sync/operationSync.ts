@@ -677,26 +677,8 @@ export function useOperationSync(): UseOperationSync {
     } as Omit<Operation, 'sequence'> & { nonce: string };
 
     // Add to local log (assigns sequence internally)
+    // SequenceGenerator automatically caps unreasonable sequences to prevent timestamp poisoning
     const persistedOperation = await operationLog.current.append(operationEnvelope);
-
-    // 🚨 CRITICAL VALIDATION: Check for corrupted sequence before proceeding
-    // This catches sequence poisoning early, before it reaches other devices
-    const MAX_REASONABLE_SEQUENCE = 1000000;
-    if (persistedOperation.sequence > MAX_REASONABLE_SEQUENCE) {
-      logger.error('🚨 CRITICAL: Operation has corrupted sequence - WILL NOT SYNC', {
-        sequence: persistedOperation.sequence,
-        type: persistedOperation.type,
-        operationId: persistedOperation.id,
-        reason: 'Sequence number exceeds reasonable limit (likely Unix timestamp)',
-        action: 'Operation stored locally but blocked from cloud sync to prevent corruption',
-      });
-
-      // Don't throw - allow operation to exist locally (user's data)
-      // But prevent it from syncing to cloud (prevent spreading corruption)
-      // User can refresh and data may recover via sanitization path
-      setCurrentState(rebuildStateIfNeeded(true));
-      return; // Exit early - don't schedule sync
-    }
 
     // Apply to local state immediately for optimistic update
     // 🔧 PERFORMANCE: Only rebuild if operations changed (most calls do, but cache handles edge cases)
