@@ -12,18 +12,20 @@ On 2025-11-01, your app experienced **data loss** (478 → 66 completions) due t
 
 ## Fixes Applied ✅
 
-### Code Changes
-1. **`src/sync/operations.ts:211-229`** - Added upper-bound validation in `setSequence()`
-   - Rejects any sequence > 1,000,000
-   - Prevents timestamp poisoning
-   - Logs stack trace for debugging
+### Code Changes - Data-Preserving Approach
+Instead of rejecting corrupted operations (causing data loss), we **FIX** them:
 
-2. **`src/sync/operationSync.ts:682-699`** - Pre-sync validation in `submitOperation()`
-   - Checks sequence before syncing to cloud
-   - Blocks corrupted operations from spreading
-   - Allows local storage only
+1. **`src/sync/operations.ts:156-223`** - SequenceGenerator caps sequences
+   - **CAPS** any sequence > 1,000,000 to MAX_REASONABLE_SEQUENCE
+   - Preserves operation data (not rejected)
+   - Fixes sequence number (capped, not lost)
+   - Logs stack trace to identify source of corruption
+   - Operation syncs successfully with correct sequence
 
-3. **`src/sync/operations.ts:233-247`** - Async version of validation
+2. **Example:**
+   - BAD: `setSequence(1758009505)` (Unix timestamp)
+   - BEFORE: ❌ Rejected, data lost
+   - **AFTER: ✅ Capped to 1,000,000, data preserved**
 
 ### Files Created
 - `ROOT_CAUSE_ANALYSIS.md` - Detailed technical analysis

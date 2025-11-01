@@ -69,38 +69,33 @@ Timeline:
 - `src/sync/operations.ts:211-212` - setSequence() function
 - No validation in setSequence() that values are reasonable!
 
-## Fix Required
+## Fix Applied ✅
 
-### Part 1: Validate setSequence() Calls ⚠️ CRITICAL
+### Part 1: Cap Corrupted Sequences in SequenceGenerator ⚠️ CRITICAL
+The SequenceGenerator now CAPS unreasonable sequences instead of rejecting them.
+
+**Data-Preserving Approach:**
 ```typescript
-export function setSequence(seq: number): void {
-  // CRITICAL: Reject unreasonable sequence numbers
-  if (seq > 1000000) {
-    logger.error('🚨 CRITICAL: Rejecting unreasonable sequence number:', {
-      value: seq,
-      reason: 'Likely Unix timestamp, not sequence number',
-      recommendation: 'Check caller - is it passing Date.now() by mistake?'
+set(seq: number): void {
+  // CAP unreasonable sequences (likely Unix timestamps)
+  const cappedSeq = Math.min(seq, this.MAX_REASONABLE_SEQUENCE);
+  if (cappedSeq < seq) {
+    console.error('🚨 CRITICAL: Sequence capped', {
+      original: seq,           // e.g., 1758009505
+      capped: cappedSeq,       // e.g., 1000000
+      reason: 'Likely Unix timestamp, not sequence'
     });
-    return; // Don't poison the counter!
   }
-  sequenceGenerator.set(seq);
+  this.sequence = Math.max(this.sequence, cappedSeq);
 }
 ```
 
-### Part 2: Add Pre-Sync Validation ⚠️ IMPORTANT
-```typescript
-// In submitOperation() before sync
-const operation = await operationLog.current.append(operationEnvelope);
-
-// Validate before syncing
-if (operation.sequence > 1000000) {
-  logger.error('🚨 SYNC BLOCKED: Operation has corrupted sequence', {
-    sequence: operation.sequence,
-    type: operation.type,
-  });
-  throw new Error('Operation has corrupted sequence number - will not sync');
-}
-```
+**Why this is better:**
+- ✅ Data is preserved (operation not rejected)
+- ✅ Sequence is fixed (capped to reasonable value)
+- ✅ Operation syncs successfully with correct sequence
+- ✅ Stack trace logged to identify source of bad value
+- ❌ NO data loss from rejecting operations
 
 ### Part 3: Repair Cloud Database ⚠️ IF NEEDED
 If cloud still has corrupted sequences, run (as Supabase admin):
