@@ -427,6 +427,13 @@ export function useOperationSync(): UseOperationSync {
               // Merge sanitized operations with local operations
               const mergedOps = [...localOpsBefore, ...sanitizedOps];
 
+              // CRITICAL FIX: Persist sanitized operations to IndexedDB immediately
+              // Otherwise they'll be lost on page refresh (causing 494→164 data loss)
+              await operationLog.current.mergeRemoteOperations(sanitizedOps);
+              logger.info('✅ BOOTSTRAP: Persisted sanitized operations to IndexedDB', {
+                persistedCount: sanitizedOps.length,
+              });
+
               // Continue to state reconstruction with merged operations
               const newState = reconstructStateWithConflictResolution(
                 INITIAL_STATE,

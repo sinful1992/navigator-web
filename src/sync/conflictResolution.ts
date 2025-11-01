@@ -280,9 +280,15 @@ function resolveConflict(
 }
 
 /**
- * PHASE 1.3: Resolve concurrent completions using priority-based strategy
- * Higher priority outcomes win in concurrent scenarios
- * Same priority: first-writer-wins based on vector clock causality
+ * PHASE 1.4: Single-User App Fix - Never Reject Completions
+ *
+ * For a single-user app, concurrent completions are not a conflict:
+ * - If user completes on Device A, they see it's done
+ * - User won't complete same address on Device B (they see it exists)
+ * - Both operations are legitimate and should be preserved
+ * - Reducer handles duplicates by keeping latest completion per address
+ *
+ * This fixes data loss where ~494 completions were being rejected permanently.
  */
 function resolveConcurrentCompletions(
   op1: Operation,
@@ -297,78 +303,24 @@ function resolveConcurrentCompletions(
   const comp1 = op1.payload.completion;
   const comp2 = op2.payload.completion;
 
-  // Get outcome priorities (default to 0 for unknown outcomes)
-  const priority1 = OUTCOME_PRIORITY[comp1.outcome] || 0;
-  const priority2 = OUTCOME_PRIORITY[comp2.outcome] || 0;
-
-  // Different priorities: highest priority wins
-  if (priority1 !== priority2) {
-    const winner = priority1 > priority2 ? op1 : op2;
-    const loser = winner === op1 ? op2 : op1;
-
-    const winnerOutcome = winner.type === 'COMPLETION_CREATE' ? winner.payload.completion.outcome : 'unknown';
-    const loserOutcome = loser.type === 'COMPLETION_CREATE' ? loser.payload.completion.outcome : 'unknown';
-
-    logger.info('Resolved concurrent completion by priority:', {
-      winner: winnerOutcome,
-      priority: Math.max(priority1, priority2),
-      loser: loserOutcome,
-    });
-
-    trackConflictMetric('resolution_strategy', 'priority_based');
-
-    return {
-      resolvedOperations: [winner],
-      rejectedOperations: [loser],
-      transformedOperations: [],
-    };
-  }
-
-  // Same priority: use vector clock causality if available
-  if (manager && op1.vectorClock && op2.vectorClock) {
-    const relationship = manager.compareVectorClocks(op1.vectorClock, op2.vectorClock);
-
-    if (relationship === 'before') {
-      // op1 happened before op2 - keep op1 (first writer wins)
-      logger.info('Resolved concurrent completion by vector clock causality:', {
-        outcome: comp1.outcome,
-        winner: 'op1 (before op2)',
-      });
-
-      trackConflictMetric('resolution_strategy', 'first_writer_wins');
-
-      return {
-        resolvedOperations: [op1],
-        rejectedOperations: [op2],
-        transformedOperations: [],
-      };
-    } else if (relationship === 'after') {
-      logger.info('Resolved concurrent completion by vector clock causality:', {
-        outcome: comp2.outcome,
-        winner: 'op2 (before op1)',
-      });
-
-      trackConflictMetric('resolution_strategy', 'first_writer_wins');
-
-      return {
-        resolvedOperations: [op2],
-        rejectedOperations: [op1],
-        transformedOperations: [],
-      };
-    }
-    // If concurrent, fall through to timestamp tiebreaker
-  }
-
-  // Concurrent and same priority: use timestamp + clientId tiebreaker
-  logger.info('Resolved concurrent completion by timestamp tiebreaker:', {
-    outcome: comp1.outcome,
-    op1Timestamp: op1.timestamp,
-    op2Timestamp: op2.timestamp,
+  // SINGLE-USER APP FIX: Keep both operations, never reject
+  logger.info('Single-user app: Keeping both concurrent completions (no rejection)', {
+    address: comp1.index,
+    outcome1: comp1.outcome,
+    outcome2: comp2.outcome,
+    timestamp1: op1.timestamp,
+    timestamp2: op2.timestamp,
   });
 
-  trackConflictMetric('resolution_strategy', 'timestamp_tiebreaker');
+  trackConflictMetric('resolution_strategy', 'single_user_keep_both');
 
-  return resolveRaceCondition(op1, op2);
+  // Return both as resolved - never reject
+  // Reducer will handle by showing latest completion per address
+  return {
+    resolvedOperations: [op1, op2],
+    rejectedOperations: [],
+    transformedOperations: [],
+  };
 }
 
 /**

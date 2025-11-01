@@ -16,17 +16,25 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'COMPLETION_CREATE': {
         const { completion } = operation.payload;
 
-        // Single-user app: No duplicate check needed
+        // Single-user app: Keep all operations, show latest per address
         // - If user completes on Device A, Device B syncs and shows it's done
         // - User won't complete same address again (they see it's already completed)
         // - Operation-level deduplication (by operation ID) prevents actual duplicates
-        // - Duplicate check was blocking legitimate use cases (multiple cases at same address)
+        // - This handles concurrent completions by keeping latest completion per address
+
+        // For same address + listVersion, keep only the latest completion
+        const otherCompletions = state.completions.filter(c =>
+          !(c.index === completion.index && c.listVersion === completion.listVersion)
+        );
+
+        // Add new completion and sort by timestamp (latest first)
+        const allCompletions = [completion, ...otherCompletions].sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
 
         return {
           ...state,
-          completions: [completion, ...state.completions].sort(
-            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          ),
+          completions: allCompletions,
           // Clear active index if this completion was for the active address
           activeIndex: state.activeIndex === completion.index ? null : state.activeIndex,
         };

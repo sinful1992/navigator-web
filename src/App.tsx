@@ -45,7 +45,7 @@ import { BackupManager } from "./components/BackupManager";
 import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
-import { isProtectionActive, initializeProtectionFlags } from "./utils/protectionFlags";
+import { isProtectionActive, initializeProtectionFlags, setProtectionFlag } from "./utils/protectionFlags";
 import { PrivacyConsent } from "./components/PrivacyConsent";
 import { EnhancedOfflineIndicator } from "./components/EnhancedOfflineIndicator";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
@@ -427,6 +427,12 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           daySessions: currentSessions // Keep current sessions, don't restore from backup
         };
 
+        // 🔧 CRITICAL FIX: Set protection flag before restore
+        // Prevents real-time subscription from interfering with restore
+        // This blocks cloud sync during the 60-second restore window
+        setProtectionFlag('navigator_restore_in_progress');
+        logger.info('🔒 RESTORE: Protection flag set (60 seconds)');
+
         restoreState(data);
 
         // 🔧 CRITICAL FIX: Clear operation log with sequence preservation before syncing
@@ -437,6 +443,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         setTimeout(async () => {
           await cloudSync.syncData(data);
           lastFromCloudRef.current = JSON.stringify(data);
+          logger.info('✅ RESTORE: Sync complete, protection window expired');
         }, 61000); // Wait 61 seconds (after 60s protection window expires)
 
         // ARCHITECTURAL FIX: Post-restore session reconciliation
@@ -902,6 +909,11 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         daySessions: mergedSessions // Merge backup + current sessions + generated sessions
       };
 
+      // 🔧 CRITICAL FIX: Set protection flag before restore
+      // Prevents real-time subscription from interfering with restore
+      setProtectionFlag('navigator_restore_in_progress');
+      logger.info('🔒 FILE RESTORE: Protection flag set (60 seconds)');
+
       restoreState(data);
 
       // 🔧 CRITICAL FIX: Clear operation log with sequence preservation before syncing
@@ -1139,12 +1151,18 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
             daySessions: currentSessions // Keep current sessions, don't restore from backup
           };
 
+          // 🔧 CRITICAL FIX: Set protection flag before restore
+          // Prevents real-time subscription from interfering with restore
+          setProtectionFlag('navigator_restore_in_progress');
+          logger.info('🔒 BACKUP MANAGER RESTORE: Protection flag set (60 seconds)');
+
           restoreState(mergedData);
           if (cloudSync.user && supabase) {
             // 🔧 CRITICAL FIX: Wait for restore protection window before syncing
             setTimeout(async () => {
               await cloudSync.syncData(mergedData);
-            }, 31000); // Wait 31 seconds (after protection window expires)
+              logger.info('✅ BACKUP MANAGER: Sync complete, protection window expired');
+            }, 61000); // Wait 61 seconds (after protection window expires)
 
             // ARCHITECTURAL FIX: Post-restore session reconciliation
             reconcileSessionState(cloudSync, setState, supabase);
