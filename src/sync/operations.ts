@@ -209,11 +209,40 @@ export function nextSequence(): Promise<number> {
 }
 
 export function setSequence(seq: number): void {
+  // 🚨 CRITICAL: Validate sequence numbers - reject unreasonable values
+  // This prevents poisoning the sequence counter with Unix timestamps (1.7B+)
+  // Max reasonable sequence for 10 years of heavy use: ~1M operations
+  const MAX_REASONABLE_SEQUENCE = 1000000;
+
+  if (seq > MAX_REASONABLE_SEQUENCE) {
+    console.error('🚨 CRITICAL: Rejecting unreasonable sequence number:', {
+      value: seq,
+      max: MAX_REASONABLE_SEQUENCE,
+      reason: 'Value is likely a Unix timestamp (Date.now()), not a sequence number',
+      stack: new Error().stack?.split('\n').slice(0, 5).join('\n'),
+    });
+    // Don't update the sequence - silently ignore to prevent poisoning
+    return;
+  }
+
   sequenceGenerator.set(seq);
 }
 
 // PHASE 1.3: Atomic version of setSequence (respects the lock)
 // Use this when you need to guarantee atomicity with next()
-export function setSequenceAsync(seq: number): Promise<void> {
+export async function setSequenceAsync(seq: number): Promise<void> {
+  // 🚨 CRITICAL: Same validation as setSequence() but async
+  const MAX_REASONABLE_SEQUENCE = 1000000;
+
+  if (seq > MAX_REASONABLE_SEQUENCE) {
+    console.error('🚨 CRITICAL: Rejecting unreasonable sequence number (async):', {
+      value: seq,
+      max: MAX_REASONABLE_SEQUENCE,
+      reason: 'Value is likely a Unix timestamp (Date.now()), not a sequence number',
+      stack: new Error().stack?.split('\n').slice(0, 5).join('\n'),
+    });
+    return; // Don't poison the counter
+  }
+
   return sequenceGenerator.setAsync(seq);
 }
