@@ -51,17 +51,25 @@ export function calculateDebtFromTotal(
   const N = numberOfCases;
   const T = totalAmount;
 
+  // DEBUG: Log for large amounts
+  if (T > 6000) {
+    logger.info('🔍 DEBT CALC:', { T, N, totalEnforcementFees });
+  }
+
   // If total enforcement fees are provided, use direct calculation
   if (totalEnforcementFees !== undefined && totalEnforcementFees !== null) {
     // T = Total_Debt + E_total + (75N + 122.5)
     // Therefore: Total_Debt = T - E_total - (75N + 122.5)
     const D = T - totalEnforcementFees - (75 * N + 122.5);
+    if (T > 6000) logger.info('🔍 DEBT RESULT (with fees):', D);
     return Math.max(0, D);
   }
 
   // Legacy formula: assumes one enforcement fee embedded in 1.075 multiplier
   // D = (T - (75N + 122.5)) / 1.075
   const D = (T - (75 * N + 122.5)) / 1.075;
+
+  if (T > 6000) logger.info('🔍 DEBT RESULT (legacy):', D);
 
   return Math.max(0, D); // Debt can't be negative
 }
@@ -141,6 +149,18 @@ export function calculateComplexBonus(
 
     const amount = parseFloat(completion.amount || '0');
     const actualCases = completion.numberOfCases || 1;
+
+    // DEBUG: Log case details for amounts over £6000
+    if (amount > 6000) {
+      logger.info('🔍 BONUS DEBUG:', {
+        amount,
+        caseRef: completion.caseReference,
+        numberOfCases: completion.numberOfCases,
+        actualCases,
+        totalEnforcementFees: completion.totalEnforcementFees,
+        enforcementFees: completion.enforcementFees
+      });
+    }
 
     // Check if we have individual enforcement fees
     if (completion.enforcementFees && completion.enforcementFees.length > 0) {
