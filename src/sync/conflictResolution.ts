@@ -36,14 +36,15 @@ export type ConflictMetrics = {
 
 /**
  * PHASE 1.3: Outcome priority for concurrent completions
- * Higher priority wins in concurrent scenarios
+ * DEPRECATED: Single-user app now keeps both operations instead of using priority
+ * Kept for reference only - no longer used in conflict resolution
  */
-const OUTCOME_PRIORITY: Record<string, number> = {
-  'PIF': 4,      // Paid in Full - highest priority
-  'ARR': 3,      // Arrangement - medium-high
-  'Done': 2,     // Done - medium
-  'DA': 1,       // Did not attend - lowest priority
-};
+// const OUTCOME_PRIORITY: Record<string, number> = {
+//   'PIF': 4,      // Paid in Full - highest priority
+//   'ARR': 3,      // Arrangement - medium-high
+//   'Done': 2,     // Done - medium
+//   'DA': 1,       // Did not attend - lowest priority
+// };
 
 /**
  * PHASE 1.3: Global conflict metrics
@@ -250,9 +251,9 @@ function resolveConflict(
 
   switch (conflictType) {
     case 'duplicate':
-      // PHASE 1.3: For concurrent completions, use priority-based resolution
+      // PHASE 1.4: For concurrent completions, keep both (single-user app)
       if (op1.type === 'COMPLETION_CREATE' && op2.type === 'COMPLETION_CREATE') {
-        return resolveConcurrentCompletions(op1, op2, manager);
+        return resolveConcurrentCompletions(op1, op2);
       }
       return resolveDuplicateConflict(op1, op2);
 
@@ -292,8 +293,7 @@ function resolveConflict(
  */
 function resolveConcurrentCompletions(
   op1: Operation,
-  op2: Operation,
-  manager?: OperationLogManager
+  op2: Operation
 ): ConflictResolution {
   // Type guard to ensure we're working with COMPLETION_CREATE operations
   if (op1.type !== 'COMPLETION_CREATE' || op2.type !== 'COMPLETION_CREATE') {
