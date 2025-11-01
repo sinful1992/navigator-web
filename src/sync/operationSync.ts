@@ -447,7 +447,7 @@ export function useOperationSync(): UseOperationSync {
               // CRITICAL: Notify listeners so App.tsx updates UI!
               for (const listener of stateChangeListeners.current) {
                 try {
-                  listener(allOps);
+                  listener(mergedOps);
                 } catch (err) {
                   logger.error('Error in state change listener:', err);
                 }
