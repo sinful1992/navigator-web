@@ -17,9 +17,10 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
         const { completion } = operation.payload;
 
         // Validate the completion doesn't already exist
+        // Use address + timestamp as unique identifier (more reliable than index + outcome)
         const exists = state.completions.some(c =>
+          c.address === completion.address &&
           c.timestamp === completion.timestamp &&
-          c.index === completion.index &&
           c.outcome === completion.outcome
         );
 
