@@ -101,15 +101,11 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'SESSION_START': {
         const { session } = operation.payload;
 
-        // Check if we already have an active session for this date
-        const hasActiveToday = state.daySessions.some(s =>
-          s.date === session.date && !s.end
-        );
-
-        if (hasActiveToday) {
-          logger.warn('Skipping session start - already active for date:', session.date);
-          return state;
-        }
+        // Single-user app: No duplicate check needed
+        // - If user starts session on Device A, Device B syncs and shows it
+        // - User won't start another session for same date (they see it's already started)
+        // - Operation-level deduplication (by operation ID) prevents actual duplicates
+        // - Duplicate check was blocking legitimate operations during state reconstruction
 
         // Auto-close any stale sessions from previous days
         const today = session.date;
@@ -158,12 +154,11 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'ARRANGEMENT_CREATE': {
         const { arrangement } = operation.payload;
 
-        // Check if arrangement already exists
-        const exists = state.arrangements.some(a => a.id === arrangement.id);
-        if (exists) {
-          logger.warn('Skipping duplicate arrangement creation:', arrangement.id);
-          return state;
-        }
+        // Single-user app: No duplicate check needed
+        // - If user creates arrangement on Device A, Device B syncs and shows it
+        // - User won't create same arrangement again (they see it already exists)
+        // - Operation-level deduplication (by operation ID) prevents actual duplicates
+        // - Duplicate check was blocking legitimate operations during state reconstruction
 
         return {
           ...state,
