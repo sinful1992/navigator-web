@@ -303,22 +303,48 @@ export function useOperationSync(): UseOperationSync {
           // WHY: lastSyncSequence can get out of sync and cause operations to be skipped
           // The merge logic will deduplicate anyway, and we get a complete picture
           // This ensures we never miss operations due to sequence tracking issues
-          const { data, error } = await supabase
-            .from('navigator_operations')
-            .select('operation_data')
-            .eq('user_id', user.id)
-            .order('sequence_number', { ascending: true });
 
-          if (error) {
-            logger.error('❌ BOOTSTRAP FETCH FAILED:', error.message);
-          } else if (data && data.length > 0) {
-            logger.info(`📥 BOOTSTRAP: Received ${data.length} operations from cloud`);
+          // 🔧 CRITICAL FIX: Paginate to fetch ALL operations (Supabase default limit is 1000)
+          // WHY: Users with >1000 operations would only get first 1000, causing data loss on refresh
+          const BATCH_SIZE = 1000;
+          let allData: any[] = [];
+          let page = 0;
+          let hasMore = true;
+          let fetchError: any = null;
+
+          while (hasMore && !fetchError) {
+            const { data, error } = await supabase
+              .from('navigator_operations')
+              .select('operation_data')
+              .eq('user_id', user.id)
+              .order('sequence_number', { ascending: true })
+              .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
+
+            if (error) {
+              fetchError = error;
+              break;
+            }
+
+            if (data && data.length > 0) {
+              allData = allData.concat(data);
+              logger.info(`📥 BOOTSTRAP: Fetched page ${page + 1} (${data.length} operations)`);
+              hasMore = data.length === BATCH_SIZE; // Continue if we got a full batch
+              page++;
+            } else {
+              hasMore = false;
+            }
+          }
+
+          if (fetchError) {
+            logger.error('❌ BOOTSTRAP FETCH FAILED:', fetchError.message);
+          } else if (allData.length > 0) {
+            logger.info(`📥 BOOTSTRAP: Received ${allData.length} total operations from cloud`);
 
             const remoteOperations: Operation[] = [];
             const invalidOps: Array<{raw: any; error: string}> = [];
 
             // SECURITY: Validate each operation before accepting (prevents malformed data corruption)
-            for (const row of data) {
+            for (const row of allData) {
               const validation = validateSyncOperation(row.operation_data);
               if (!validation.success) {
                 const errorMsg = validation.errors?.[0]?.message || 'Unknown validation error';
@@ -353,7 +379,7 @@ export function useOperationSync(): UseOperationSync {
             }
 
             if (invalidOps.length > 0) {
-              logger.error(`❌ BOOTSTRAP: Rejected ${invalidOps.length}/${data.length} malformed operations`, {
+              logger.error(`❌ BOOTSTRAP: Rejected ${invalidOps.length}/${allData.length} malformed operations`, {
                 sample: invalidOps.slice(0, 3)
               });
             }
@@ -930,30 +956,50 @@ export function useOperationSync(): UseOperationSync {
       logger.info(`📥 FETCHING operations from cloud (after sequence ${lastSequence})...`);
 
       // BEST PRACTICE: Wrap fetch in retry logic to handle transient network failures
+      // 🔧 CRITICAL FIX: Paginate to fetch ALL new operations (Supabase default limit is 1000)
       const data = await retryWithBackoff(
         async () => {
-          const { data: fetchedData, error } = await supabase!
-            .from('navigator_operations')
-            .select('operation_data')
-            .eq('user_id', user.id)
-            .gt('sequence_number', lastSequence)
-            .order('sequence_number', { ascending: true });
+          const BATCH_SIZE = 1000;
+          let allFetchedData: any[] = [];
+          let page = 0;
+          let hasMore = true;
 
-          if (error) {
-            // Convert Supabase error to Error with status code for retry logic
-            const errorObj = new Error(error.message);
-            // Map Supabase error codes to HTTP status codes
-            (errorObj as any).status = error.code === 'PGRST116' ? 503 : 500;
-            logger.error('❌ FETCH FAILED:', {
-              error: error.message,
-              code: error.code,
-              details: error.details,
-              hint: error.hint,
-            });
-            throw errorObj;
+          while (hasMore) {
+            const { data: fetchedData, error } = await supabase!
+              .from('navigator_operations')
+              .select('operation_data')
+              .eq('user_id', user.id)
+              .gt('sequence_number', lastSequence)
+              .order('sequence_number', { ascending: true })
+              .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
+
+            if (error) {
+              // Convert Supabase error to Error with status code for retry logic
+              const errorObj = new Error(error.message);
+              // Map Supabase error codes to HTTP status codes
+              (errorObj as any).status = error.code === 'PGRST116' ? 503 : 500;
+              logger.error('❌ FETCH FAILED:', {
+                error: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint,
+              });
+              throw errorObj;
+            }
+
+            if (fetchedData && fetchedData.length > 0) {
+              allFetchedData = allFetchedData.concat(fetchedData);
+              hasMore = fetchedData.length === BATCH_SIZE;
+              page++;
+              if (hasMore) {
+                logger.info(`📥 FETCH: Fetched page ${page} (${fetchedData.length} operations), continuing...`);
+              }
+            } else {
+              hasMore = false;
+            }
           }
 
-          return fetchedData || [];
+          return allFetchedData;
         },
         'Fetch operations from cloud',
         {
@@ -1018,21 +1064,44 @@ export function useOperationSync(): UseOperationSync {
           let totalRecovered = 0;
           for (const gap of gaps) {
             try {
-              // Fetch missing operations from cloud
-              const { data: gapData, error: gapError } = await supabase!
-                .from('navigator_operations')
-                .select('operation_data')
-                .eq('user_id', user.id)
-                .gte('sequence_number', gap.from + 1)
-                .lte('sequence_number', gap.to - 1)
-                .order('sequence_number', { ascending: true });
+              // Fetch missing operations from cloud with pagination
+              // 🔧 CRITICAL FIX: Paginate gap recovery (gaps could be >1000 operations)
+              const BATCH_SIZE = 1000;
+              let gapData: any[] = [];
+              let page = 0;
+              let hasMore = true;
+              let gapError: any = null;
+
+              while (hasMore && !gapError) {
+                const { data: fetchedGapData, error } = await supabase!
+                  .from('navigator_operations')
+                  .select('operation_data')
+                  .eq('user_id', user.id)
+                  .gte('sequence_number', gap.from + 1)
+                  .lte('sequence_number', gap.to - 1)
+                  .order('sequence_number', { ascending: true })
+                  .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
+
+                if (error) {
+                  gapError = error;
+                  break;
+                }
+
+                if (fetchedGapData && fetchedGapData.length > 0) {
+                  gapData = gapData.concat(fetchedGapData);
+                  hasMore = fetchedGapData.length === BATCH_SIZE;
+                  page++;
+                } else {
+                  hasMore = false;
+                }
+              }
 
               if (gapError) {
                 logger.error(`Failed to fetch gap ${gap.from}...${gap.to}:`, gapError);
                 continue;
               }
 
-              if (gapData && gapData.length > 0) {
+              if (gapData.length > 0) {
                 logger.info(`📥 RECOVERY: Found ${gapData.length} operations for gap ${gap.from}...${gap.to}`);
 
                 const gapOperations: Operation[] = gapData
