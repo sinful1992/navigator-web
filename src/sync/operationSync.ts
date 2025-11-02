@@ -11,7 +11,7 @@ import { DEFAULT_REMINDER_SETTINGS } from "../services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "../utils/bonusCalculator";
 import { SEQUENCE_CORRUPTION_THRESHOLD } from "./syncConfig";
 import { validateSyncOperation } from "../services/operationValidators";
-import { retryWithCustom, isRetryableError, DEFAULT_RETRY_CONFIG } from "../utils/retryUtils";
+import { retryWithCustom, retryWithBackoff, isRetryableError, DEFAULT_RETRY_CONFIG } from "../utils/retryUtils";
 
 /**
  * SECURITY: Track used operation nonces to prevent replay attacks
@@ -1498,7 +1498,7 @@ export function useOperationSync(): UseOperationSync {
                   || payload?.id
                   || operation.id;
 
-                const { error } = await supabase
+                const { error } = await supabase!
                   .from('navigator_operations')
                   .upsert({
                     // New columns
@@ -1551,7 +1551,7 @@ export function useOperationSync(): UseOperationSync {
               if (successfulSequences.length > 0) {
                 successfulSequences.sort((a, b) => a - b);
 
-                const currentLastSynced = operationLog.current.getLogState().lastSyncSequence;
+                const currentLastSynced = operationLog.current!.getLogState().lastSyncSequence;
 
                 // Find the highest continuous sequence starting from currentLastSynced + 1
                 let maxContinuousSeq = currentLastSynced;
@@ -1567,7 +1567,7 @@ export function useOperationSync(): UseOperationSync {
 
                 // Only update if we actually advanced
                 if (maxContinuousSeq > currentLastSynced) {
-                  await operationLog.current.markSyncedUpTo(maxContinuousSeq);
+                  await operationLog.current!.markSyncedUpTo(maxContinuousSeq);
 
                   logger.info('✅ AUTO-SYNC COMPLETE:', {
                     total: opsToSync.length,
