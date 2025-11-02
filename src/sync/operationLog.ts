@@ -177,12 +177,11 @@ export class OperationLogManager {
             this.log.lastSyncSequence = 0; // Reset to 0 to resync everything
             this.log.checksum = this.computeChecksum();
 
-            // Persist the fixed log immediately - but don't block on it
-            this.persist().catch(err => {
-              logger.error('🔧 LOAD: Failed to persist fixed sequences:', err);
-            });
+            // CRITICAL FIX: MUST await persist() to ensure corruption fix is saved to IndexedDB
+            // Without await, persist() might not complete before next page load, causing corruption to reappear
+            await this.persist();
 
-            logger.info('✅ LOAD: Fixed corrupted sequences - reassigned', {
+            logger.info('✅ LOAD: Fixed and persisted corrupted sequences', {
               totalOperations: this.log.operations.length,
               newLastSequence: this.log.lastSequence,
               newLastSyncSequence: this.log.lastSyncSequence,
@@ -395,7 +394,7 @@ export class OperationLogManager {
     const ownDeviceCount = { count: 0 };
     const duplicateOperations: Operation[] = [];
 
-    // Step 1: Validate all operations BEFORE any state changes
+    // Filter operations to merge (deduplication)
     const operationsToMerge = remoteOps.filter(remoteOp => {
       // Skip operations from this device (we already have them)
       if (remoteOp.clientId === this.deviceId) {
