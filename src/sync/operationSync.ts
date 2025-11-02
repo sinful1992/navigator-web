@@ -774,9 +774,9 @@ export function useOperationSync(): UseOperationSync {
         // If transient failure occurs (network, timeout, 5xx), retry automatically
         // If permanent failure (4xx), fail immediately
         try {
-          const uploadResult = await retryWithCustom(
+          await retryWithCustom(
             async () => {
-              const { error, status } = await supabase
+              const { error, status } = await supabase!
                 .from('navigator_operations')
                 .upsert({
                   // New columns
