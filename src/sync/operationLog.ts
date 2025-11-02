@@ -430,7 +430,7 @@ export class OperationLogManager {
     });
 
     // 🔍 DEBUG: Log summary of deduplication
-    logger.info('🔍 DEDUP SUMMARY', {
+    const dedupSummary = {
       totalRemoteOps: remoteOps.length,
       ownDeviceOps: ownDeviceCount.count,
       duplicateOps: duplicateOperations.length,
@@ -441,7 +441,10 @@ export class OperationLogManager {
       sessionStartInDuplicates: duplicatesByType['SESSION_START'] || 0,
       sessionStartInNew: newByType['SESSION_START'] || 0,
       localSessionStarts: this.log.operations.filter(op => op.type === 'SESSION_START').length,
-    });
+      localTotalOps: this.log.operations.length,
+    };
+    logger.info('🔍 DEDUP SUMMARY', dedupSummary);
+    console.log('🔍 DEDUP SUMMARY (console):', dedupSummary);
 
     if (operationsToMerge.length === 0) {
       // No new operations to merge

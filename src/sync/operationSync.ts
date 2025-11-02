@@ -394,12 +394,16 @@ export function useOperationSync(): UseOperationSync {
               return acc;
             }, {} as Record<string, number>);
 
-            logger.info('📊 BOOTSTRAP: Remote operations by type:', {
+            const validationSummary = {
+              fetchedTotal: allData.length,
+              validPassed: remoteOperations.length,
+              invalidRejected: invalidOps.length,
               ...remoteByType,
-              total: remoteOperations.length,
               sessionStartCount: remoteByType['SESSION_START'] || 0,
               completionCount: remoteByType['COMPLETION_CREATE'] || 0,
-            });
+            };
+            logger.info('📊 BOOTSTRAP: Remote operations by type:', validationSummary);
+            console.log('📊 BOOTSTRAP VALIDATION RESULT:', validationSummary);
 
             // 🔍 DEBUG: Get local operation counts BEFORE merge
             const localOpsBefore = operationLog.current.getAllOperations();
@@ -525,7 +529,20 @@ export function useOperationSync(): UseOperationSync {
               return; // Skip the normal merge path
             }
 
+            // 🔍 DEBUG: Log what we're passing to merge
+            console.log('🔍 BEFORE MERGE:', {
+              remoteOpsCount: remoteOperations.length,
+              remoteOpIds: remoteOperations.slice(0, 5).map(op => ({id: op.id.substring(0, 8), type: op.type, seq: op.sequence, clientId: op.clientId.substring(0, 8)})),
+              totalRemote: remoteOperations.length,
+            });
+
             const newOps = await operationLog.current.mergeRemoteOperations(remoteOperations);
+
+            // 🔍 DEBUG: Log what came back from merge
+            console.log('🔍 AFTER MERGE:', {
+              newOpsCount: newOps.length,
+              newOpIds: newOps.slice(0, 5).map(op => ({id: op.id.substring(0, 8), type: op.type})),
+            });
 
             // 🔍 DEBUG: Get local operation counts AFTER merge
             const localOpsAfter = operationLog.current.getAllOperations();
