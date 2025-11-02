@@ -467,28 +467,27 @@ export function useOperationSync(): UseOperationSync {
                 actuallyMergedCount: newOpsFromSanitized.length,
               });
 
-              // 🔧 CRITICAL VERIFICATION: Only mark synced what's actually in the log
-              // If merge failed, newOpsFromSanitized will be empty and we won't mark anything
-              if (newOpsFromSanitized.length > 0) {
-                // Get ACTUAL state from operation log after merge
-                const logStateAfterMerge = operationLog.current.getAllOperations();
-                const actualMaxSeq = logStateAfterMerge.length > 0
-                  ? Math.max(...logStateAfterMerge.map(op => op.sequence))
-                  : 0;
+              // 🔧 CRITICAL VERIFICATION: Mark synced based on ACTUAL log state
+              // Even if merge returns 0 (deduplication), we must mark actual ops as synced
+              const logStateAfterMerge = operationLog.current.getAllOperations();
+              const actualMaxSeq = logStateAfterMerge.length > 0
+                ? Math.max(...logStateAfterMerge.map(op => op.sequence))
+                : 0;
 
-                if (Number.isFinite(actualMaxSeq)) {
-                  await operationLog.current.markSyncedUpTo(actualMaxSeq);
-                  logger.info('✅ BOOTSTRAP: Marked ALL sequences as synced (corruption path)', {
-                    sanitizedOpsRequested: sanitizedOps.length,
-                    sanitizedOpsMerged: newOpsFromSanitized.length,
-                    totalOpsInLog: logStateAfterMerge.length,
-                    maxSequenceInLog: actualMaxSeq,
-                  });
-                }
+              if (Number.isFinite(actualMaxSeq) && actualMaxSeq > 0) {
+                await operationLog.current.markSyncedUpTo(actualMaxSeq);
+                logger.info('✅ BOOTSTRAP: Marked ALL sequences as synced (corruption path)', {
+                  sanitizedOpsRequested: sanitizedOps.length,
+                  sanitizedOpsMerged: newOpsFromSanitized.length,
+                  totalOpsInLog: logStateAfterMerge.length,
+                  maxSequenceInLog: actualMaxSeq,
+                  status: newOpsFromSanitized.length > 0 ? 'merged' : 'deduplicated',
+                });
               } else {
-                logger.warn('⚠️ BOOTSTRAP: Merge of sanitized operations returned 0 operations (possible deduplication)', {
+                logger.warn('⚠️ BOOTSTRAP: Unable to mark synced - no operations in log', {
                   requestedCount: sanitizedOps.length,
                   actualMergedCount: newOpsFromSanitized.length,
+                  logSize: logStateAfterMerge.length,
                 });
               }
 
