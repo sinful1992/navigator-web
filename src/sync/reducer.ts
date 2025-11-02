@@ -16,6 +16,14 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'COMPLETION_CREATE': {
         const { completion } = operation.payload;
 
+        if (!completion) {
+          logger.error('❌ COMPLETION_CREATE: completion is undefined!', {
+            operation: operation.id,
+            payload: operation.payload,
+          });
+          return state;
+        }
+
         // USER REQUIREMENT: Duplicate = Same timestamp (system bug creating 2 completions at exact same time)
         // - Different timestamps = Different completions (even if same address/case)
         // - Allows: Same address visited multiple times (2 people at same house)
@@ -32,6 +40,15 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           });
           return state; // Skip this duplicate
         }
+
+        // 🔍 DEBUG: Log completion being added
+        console.log('📥 COMPLETION_CREATE applied:', {
+          seq: operation.sequence,
+          timestamp: completion.timestamp,
+          address: completion.address,
+          outcome: completion.outcome,
+          currentTotal: state.completions.length + 1
+        });
 
         return {
           ...state,
@@ -290,30 +307,39 @@ export function reconstructStateWithConflictResolution(
   operations: Operation[],
   manager?: OperationLogManager
 ): AppState {
-  logger.info('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION START:', {
+  const reconstructionInfo = {
     totalOperations: operations.length,
     hasVectorClocks: operations.some(op => !!op.vectorClock),
-  });
+    completionOps: operations.filter(op => op.type === 'COMPLETION_CREATE').length,
+  };
+  logger.info('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION START:', reconstructionInfo);
+  console.log('🔄 RECONSTRUCTION START:', reconstructionInfo);
 
   // Apply conflict resolution
   const { validOperations, conflictsResolved, operationsRejected } =
     processOperationsWithConflictResolution(operations, initialState, manager);
 
+  const conflictInfo = {
+    conflictsResolved,
+    operationsRejected,
+    validOperations: validOperations.length,
+    validCompletions: validOperations.filter(op => op.type === 'COMPLETION_CREATE').length,
+  };
+
   if (conflictsResolved > 0 || operationsRejected > 0) {
-    logger.info('Conflict resolution applied:', {
-      conflictsResolved,
-      operationsRejected,
-      validOperations: validOperations.length,
-    });
+    logger.info('Conflict resolution applied:', conflictInfo);
+    console.log('Conflict resolution applied:', conflictInfo);
   }
 
   // Sort resolved operations by sequence
   const sortedOps = [...validOperations].sort((a, b) => a.sequence - b.sequence);
 
+  console.log('🔄 About to apply', sortedOps.length, 'operations (', sortedOps.filter(op => op.type === 'COMPLETION_CREATE').length, 'completions)');
+
   // Apply resolved operations to state
   const finalState = sortedOps.reduce(applyOperation, initialState);
 
-  logger.info('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION COMPLETE:', {
+  const finalInfo = {
     addresses: finalState.addresses?.length || 0,
     completions: finalState.completions?.length || 0,
     arrangements: finalState.arrangements?.length || 0,
@@ -321,7 +347,9 @@ export function reconstructStateWithConflictResolution(
     currentListVersion: finalState.currentListVersion,
     conflictsResolved,
     operationsRejected,
-  });
+  };
+  logger.info('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION COMPLETE:', finalInfo);
+  console.log('🔄 RECONSTRUCTION COMPLETE:', finalInfo);
 
   return finalState;
 }
