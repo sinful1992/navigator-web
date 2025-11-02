@@ -16,21 +16,19 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'COMPLETION_CREATE': {
         const { completion } = operation.payload;
 
-        // CRITICAL FIX: Filter out EXACT duplicates (same timestamp + index + listVersion)
-        // - Allows multiple completions for same address (different timestamps)
-        // - Prevents duplicate operations from creating duplicate completions
-        // - Each completion has unique timestamp, so exact duplicates = duplicate operations
-        const isDuplicate = state.completions.some(c =>
-          c.timestamp === completion.timestamp &&
-          c.index === completion.index &&
-          c.listVersion === completion.listVersion
-        );
+        // USER REQUIREMENT: Duplicate = Same timestamp (system bug creating 2 completions at exact same time)
+        // - Different timestamps = Different completions (even if same address/case)
+        // - Allows: Same address visited multiple times (2 people at same house)
+        // - Blocks: System creating duplicate completions with identical timestamp
+        const isDuplicate = state.completions.some(c => c.timestamp === completion.timestamp);
 
         if (isDuplicate) {
-          logger.debug('Skipping duplicate completion (exact match):', {
+          logger.warn('🚨 DUPLICATE DETECTED: Skipping completion with identical timestamp', {
             timestamp: completion.timestamp,
-            index: completion.index,
+            address: completion.address,
             caseRef: completion.caseReference,
+            outcome: completion.outcome,
+            amount: completion.amount,
           });
           return state; // Skip this duplicate
         }
