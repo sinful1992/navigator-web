@@ -16,11 +16,24 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'COMPLETION_CREATE': {
         const { completion } = operation.payload;
 
-        // Single-user app: Keep ALL completions
-        // - User may visit same address multiple times (2 people at same address)
-        // - Each completion is unique: different timestamp, caseReference, or outcome
-        // - Operation-level deduplication (by operation ID) prevents true duplicates
-        // - Just add the completion without filtering anything out
+        // CRITICAL FIX: Filter out EXACT duplicates (same timestamp + index + listVersion)
+        // - Allows multiple completions for same address (different timestamps)
+        // - Prevents duplicate operations from creating duplicate completions
+        // - Each completion has unique timestamp, so exact duplicates = duplicate operations
+        const isDuplicate = state.completions.some(c =>
+          c.timestamp === completion.timestamp &&
+          c.index === completion.index &&
+          c.listVersion === completion.listVersion
+        );
+
+        if (isDuplicate) {
+          logger.debug('Skipping duplicate completion (exact match):', {
+            timestamp: completion.timestamp,
+            index: completion.index,
+            caseRef: completion.caseReference,
+          });
+          return state; // Skip this duplicate
+        }
 
         return {
           ...state,
