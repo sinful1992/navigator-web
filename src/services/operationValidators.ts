@@ -49,9 +49,9 @@ export function validateSyncOperation(operation: unknown): ValidationResult<Sync
     return ValidationFailure('timestamp', ValidationErrorCode.INVALID_FORMAT, 'Operation timestamp must be a valid ISO date string');
   }
 
-  // Check for clock skew (operation timestamp not more than 24 hours in future)
+  // BEST PRACTICE: Check for clock skew (reduced from 24h to 5min)
   const now = Date.now();
-  const maxFutureMs = 24 * 60 * 60 * 1000; // 24 hours
+  const maxFutureMs = 5 * 60 * 1000; // 5 minutes
 
   if (opTime > now + maxFutureMs) {
     return ValidationFailure(
@@ -59,6 +59,18 @@ export function validateSyncOperation(operation: unknown): ValidationResult<Sync
       ValidationErrorCode.CLOCK_SKEW,
       'Operation timestamp too far in future (clock skew attack?)',
       { maxFutureMs, received: opTime, now }
+    );
+  }
+
+  // BEST PRACTICE: Check for operations from distant past (replay attack prevention)
+  const maxAgeMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+  if (opTime < now - maxAgeMs) {
+    return ValidationFailure(
+      'timestamp',
+      ValidationErrorCode.CLOCK_SKEW,
+      'Operation timestamp too old (>30 days) - possible replay attack',
+      { maxAgeMs, received: opTime, now, ageMs: now - opTime }
     );
   }
 

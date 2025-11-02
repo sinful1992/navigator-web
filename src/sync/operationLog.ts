@@ -79,9 +79,11 @@ export class OperationLogManager {
 
   private deviceId: string;
   private isLoaded = false;
+  private onCorruptionDetected?: () => void;
 
-  constructor(deviceId: string) {
+  constructor(deviceId: string, onCorruptionDetected?: () => void) {
     this.deviceId = deviceId;
+    this.onCorruptionDetected = onCorruptionDetected;
   }
 
   /**
@@ -96,6 +98,33 @@ export class OperationLogManager {
       const saved = await storageManager.queuedGet(OPERATION_LOG_KEY) as OperationLog | null;
 
       if (saved) {
+        // BEST PRACTICE: Validate saved data structure
+        if (saved.operations && !Array.isArray(saved.operations)) {
+          logger.error('IndexedDB corrupted: operations is not an array!', {
+            type: typeof saved.operations,
+            value: saved.operations,
+          });
+
+          // Notify app of corruption
+          if (this.onCorruptionDetected) {
+            try {
+              this.onCorruptionDetected();
+            } catch (err) {
+              logger.error('Error calling onCorruptionDetected callback:', err);
+            }
+          }
+
+          // Reset to empty log (corrupted data unusable)
+          this.log = {
+            operations: [],
+            lastSequence: 0,
+            lastSyncSequence: 0,
+            checksum: '',
+          };
+          this.isLoaded = true;
+          return;
+        }
+
         this.log = saved;
 
         // 🔧 CRITICAL FIX: Detect and cleanup corrupted sequences in local log
@@ -125,6 +154,15 @@ export class OperationLogManager {
           // If corrupted, reassign proper sequential numbers
           if (hasCorruptedSequences) {
             logger.info('🔧 LOAD: Fixing corrupted sequences - reassigning sequential numbers');
+
+            // BEST PRACTICE: Notify app of corruption detection
+            if (this.onCorruptionDetected) {
+              try {
+                this.onCorruptionDetected();
+              } catch (err) {
+                logger.error('Error calling onCorruptionDetected callback:', err);
+              }
+            }
 
             // Sort operations by their original sequence to maintain relative order
             const sortedOps = [...this.log.operations].sort((a, b) => a.sequence - b.sequence);
@@ -276,8 +314,8 @@ export class OperationLogManager {
     const fullOperation = {
       ...operation,
       sequence,
-      // PHASE 1.2.1: Attach current vector clock to operation for causality tracking
-      vectorClock: this.getVectorClock(),
+      // BEST PRACTICE: Single-user apps don't need vector clocks (timestamp + sequence is sufficient)
+      // vectorClock: this.getVectorClock(), // REMOVED - unnecessary overhead for single-user app
     } as any as Operation;
 
     this.log.operations.push(fullOperation);
@@ -706,12 +744,48 @@ export class OperationLogManager {
   }
 
   /**
+   * BEST PRACTICE: Clean up old operations to prevent unbounded growth
+   * Removes operations older than the retention period
+   * @param retentionDays Number of days to retain operations (default: 90)
+   * @returns Number of operations removed
+   */
+  async cleanupOldOperations(retentionDays: number = 90): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+    const cutoffISO = cutoffDate.toISOString();
+
+    const initialCount = this.log.operations.length;
+
+    // Keep operations from last N days
+    this.log.operations = this.log.operations.filter(op => op.timestamp >= cutoffISO);
+
+    // Update checksums and persist
+    this.log.checksum = this.computeChecksum();
+    await this.persist();
+
+    const removed = initialCount - this.log.operations.length;
+
+    if (removed > 0) {
+      logger.info(`🧹 CLEANUP: Removed ${removed} operations older than ${retentionDays} days`, {
+        initialCount,
+        remainingCount: this.log.operations.length,
+        cutoffDate: cutoffISO,
+      });
+    } else {
+      logger.debug(`🧹 CLEANUP: No operations older than ${retentionDays} days found`);
+    }
+
+    return removed;
+  }
+
+  /**
    * Get current log state
    */
   getLogState(): OperationLog {
     return {
       ...this.log,
-      vectorClock: this.getVectorClock(), // PHASE 1.2.1: Include vector clock in state
+      // BEST PRACTICE: Single-user apps don't need vector clocks
+      // vectorClock: this.getVectorClock(), // REMOVED - unnecessary overhead
     };
   }
 

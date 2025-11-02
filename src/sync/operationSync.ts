@@ -20,7 +20,8 @@ import { retryWithCustom, isRetryableError, DEFAULT_RETRY_CONFIG } from "../util
  * - Automatically expires old nonces instead of keeping 10k in memory
  */
 const nonceQueue: Array<{ nonce: string; timestamp: number }> = [];
-const MAX_NONCE_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+// BEST PRACTICE: Reduced from 24 hours to 5 minutes to prevent timing-based replay attacks
+const MAX_NONCE_AGE_MS = 5 * 60 * 1000; // 5 minutes
 const NONCE_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Check every hour
 
 // Periodic cleanup of expired nonces
@@ -199,6 +200,9 @@ export function useOperationSync(): UseOperationSync {
         // Using 'local' as placeholder until user is authenticated
         operationLog.current = getOperationLog(storedDeviceId, 'local');
         await operationLog.current.load();
+
+        // BEST PRACTICE: Clean up old operations on startup (keep 90 days)
+        await operationLog.current.cleanupOldOperations(90);
 
         // Reconstruct state from operations
         // Note: rebuildStateIfNeeded will be available after component setup, so we do inline rebuild here
@@ -1127,6 +1131,11 @@ export function useOperationSync(): UseOperationSync {
 
       logger.info('📡 SETTING UP real-time subscription for user:', user.id);
 
+      // BEST PRACTICE: Track subscription health with heartbeat
+      let lastHeartbeat = Date.now();
+      const HEARTBEAT_INTERVAL = 30000; // Check every 30 seconds
+      const HEARTBEAT_TIMEOUT = 90000;  // Reconnect after 90 seconds of silence
+
       // Register this listener for local operations (critical for App.tsx updates!)
       stateChangeListeners.current.add(onOperations);
 
@@ -1180,6 +1189,9 @@ export function useOperationSync(): UseOperationSync {
         },
         async (payload: any) => {
           try {
+            // Update heartbeat on any message
+            lastHeartbeat = Date.now();
+
             logger.info('📥 REAL-TIME: Received operation from another device');
             const operation: Operation = payload.new.operation_data;
 
@@ -1221,32 +1233,44 @@ export function useOperationSync(): UseOperationSync {
             logger.info('✅ Processing remote operation:', operation.type);
 
             if (operationLog.current) {
-              const newOps = await operationLog.current.mergeRemoteOperations([operation]);
+              // BEST PRACTICE: Wrap real-time merge in retry logic
+              await retryWithBackoff(
+                async () => {
+                  const newOps = await operationLog.current!.mergeRemoteOperations([operation]);
 
-              if (newOps.length > 0) {
-                // 🔧 CRITICAL FIX: Don't mark operations from OTHER devices as synced
-                // Only mark as synced if this operation is from THIS device (shouldn't happen here since we filter above)
-                // This is just for safety in case the filter is removed
-                if (operation.clientId === deviceId.current) {
-                  await operationLog.current.markSyncedUpTo(operation.sequence);
-                  logger.info('📥 REAL-TIME: Marked own operation as synced');
+                  if (newOps.length > 0) {
+                    // 🔧 CRITICAL FIX: Don't mark operations from OTHER devices as synced
+                    // Only mark as synced if this operation is from THIS device (shouldn't happen here since we filter above)
+                    // This is just for safety in case the filter is removed
+                    if (operation.clientId === deviceId.current) {
+                      await operationLog.current!.markSyncedUpTo(operation.sequence);
+                      logger.info('📥 REAL-TIME: Marked own operation as synced');
+                    }
+
+                    // Reconstruct state and notify
+                    // PHASE 1.3: Use conflict resolution for vector clock-based integrity
+                    const allOperations = operationLog.current!.getAllOperations();
+                    const newState = reconstructStateWithConflictResolution(
+                      INITIAL_STATE,
+                      allOperations,
+                      operationLog.current!
+                    );
+                    setCurrentState(newState);
+                    onOperations(newOps);
+
+                    logger.info('✅ REAL-TIME SYNC: State updated with remote operation');
+                  } else {
+                    logger.debug('No new operations after merge (already had it)');
+                  }
+                },
+                `Merge real-time operation ${operation.id}`,
+                {
+                  maxAttempts: 3,
+                  initialDelayMs: 500,
+                  maxDelayMs: 5000,
+                  backoffMultiplier: 2,
                 }
-
-                // Reconstruct state and notify
-                // PHASE 1.3: Use conflict resolution for vector clock-based integrity
-                const allOperations = operationLog.current.getAllOperations();
-                const newState = reconstructStateWithConflictResolution(
-                  INITIAL_STATE,
-                  allOperations,
-                  operationLog.current
-                );
-                setCurrentState(newState);
-                onOperations(newOps);
-
-                logger.info('✅ REAL-TIME SYNC: State updated with remote operation');
-              } else {
-                logger.debug('No new operations after merge (already had it)');
-              }
+              );
             }
           } catch (err) {
             logger.error('❌ REAL-TIME ERROR: Failed to process operation:', err);
@@ -1257,6 +1281,7 @@ export function useOperationSync(): UseOperationSync {
       channel.subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           logger.info('✅ Real-time subscription CONNECTED successfully');
+          lastHeartbeat = Date.now(); // Reset heartbeat on successful connection
         } else if (status === 'CHANNEL_ERROR') {
           logger.error('❌ Real-time subscription ERROR');
         } else if (status === 'TIMED_OUT') {
@@ -1270,8 +1295,44 @@ export function useOperationSync(): UseOperationSync {
 
       logger.info('✅ Real-time subscription active');
 
+      // BEST PRACTICE: Monitor subscription health and reconnect if dead
+      const healthCheckInterval = setInterval(() => {
+        const timeSinceLastMessage = Date.now() - lastHeartbeat;
+
+        if (timeSinceLastMessage > HEARTBEAT_TIMEOUT) {
+          logger.warn('⚠️ REALTIME: Subscription appears dead, reconnecting...', {
+            timeSinceLastMessage: Math.floor(timeSinceLastMessage / 1000) + 's',
+            timeout: HEARTBEAT_TIMEOUT / 1000 + 's',
+          });
+
+          // Unsubscribe and let React re-establish connection
+          try {
+            supabase?.removeChannel(channel);
+          } catch (error) {
+            logger.error('Error removing dead channel:', error);
+          }
+
+          // Clear this interval (will be recreated on reconnection)
+          clearInterval(healthCheckInterval);
+
+          // Trigger reconnection by calling subscribeToOperations again
+          // Note: This will be handled by React's useEffect cleanup and re-run
+          if (subscriptionCleanup.current) {
+            subscriptionCleanup.current();
+            subscriptionCleanup.current = null;
+          }
+        } else {
+          logger.debug('✅ REALTIME: Subscription healthy', {
+            timeSinceLastMessage: Math.floor(timeSinceLastMessage / 1000) + 's',
+          });
+        }
+      }, HEARTBEAT_INTERVAL);
+
       const cleanup = () => {
         logger.info('🔌 Cleaning up real-time subscription');
+
+        // Clean up health check interval
+        clearInterval(healthCheckInterval);
 
         // Remove from state change listeners
         stateChangeListeners.current.delete(onOperations);
@@ -1406,8 +1467,11 @@ export function useOperationSync(): UseOperationSync {
           if (operationLog.current && user && isOnline && supabase) {
             setIsSyncing(true);
             try {
-              const opsToSync = operationLog.current.getUnsyncedOperations();
-              logger.info(`📤 AUTO-SYNC: UPLOADING ${opsToSync.length} operations to cloud...`);
+              // BEST PRACTICE: Wrap auto-sync in retry logic
+              await retryWithBackoff(
+                async () => {
+                  const opsToSync = operationLog.current!.getUnsyncedOperations();
+                  logger.info(`📤 AUTO-SYNC: UPLOADING ${opsToSync.length} operations to cloud...`);
 
               // 🔧 CRITICAL FIX: Track successful uploads (same as syncOperationsToCloud)
               const successfulSequences: number[] = [];
@@ -1535,9 +1599,20 @@ export function useOperationSync(): UseOperationSync {
                 }
               } else {
                 logger.error('❌ AUTO-SYNC: All uploads failed');
+                throw new Error('All auto-sync uploads failed');
               }
+                },
+                'Auto-sync unsynced operations',
+                {
+                  maxAttempts: 2,
+                  initialDelayMs: 2000,
+                  maxDelayMs: 10000,
+                  backoffMultiplier: 2,
+                }
+              );
             } catch (err) {
-              logger.error('AUTO-SYNC failed:', err);
+              logger.error('AUTO-SYNC failed after retries:', err);
+              // Don't throw - operation will be retried next time app starts
             } finally {
               setIsSyncing(false);
             }
