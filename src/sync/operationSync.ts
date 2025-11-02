@@ -460,17 +460,35 @@ export function useOperationSync(): UseOperationSync {
 
               // CRITICAL FIX: Persist sanitized operations to IndexedDB immediately
               // Otherwise they'll be lost on page refresh (causing 494→164 data loss)
-              await operationLog.current.mergeRemoteOperations(sanitizedOps);
+              const newOpsFromSanitized = await operationLog.current.mergeRemoteOperations(sanitizedOps);
+
               logger.info('✅ BOOTSTRAP: Persisted sanitized operations to IndexedDB', {
-                persistedCount: sanitizedOps.length,
+                requestedCount: sanitizedOps.length,
+                actuallyMergedCount: newOpsFromSanitized.length,
               });
 
-              // Mark all sanitized operations as synced (important for incremental sync)
-              const maxSanitizedSeq = Math.max(...sanitizedOps.map(op => op.sequence));
-              if (Number.isFinite(maxSanitizedSeq)) {
-                await operationLog.current.markSyncedUpTo(maxSanitizedSeq);
-                logger.info('✅ BOOTSTRAP: Marked sanitized operations as synced', {
-                  maxSequence: maxSanitizedSeq,
+              // 🔧 CRITICAL VERIFICATION: Only mark synced what's actually in the log
+              // If merge failed, newOpsFromSanitized will be empty and we won't mark anything
+              if (newOpsFromSanitized.length > 0) {
+                // Get ACTUAL state from operation log after merge
+                const logStateAfterMerge = operationLog.current.getAllOperations();
+                const actualMaxSeq = logStateAfterMerge.length > 0
+                  ? Math.max(...logStateAfterMerge.map(op => op.sequence))
+                  : 0;
+
+                if (Number.isFinite(actualMaxSeq)) {
+                  await operationLog.current.markSyncedUpTo(actualMaxSeq);
+                  logger.info('✅ BOOTSTRAP: Marked ALL sequences as synced (corruption path)', {
+                    sanitizedOpsRequested: sanitizedOps.length,
+                    sanitizedOpsMerged: newOpsFromSanitized.length,
+                    totalOpsInLog: logStateAfterMerge.length,
+                    maxSequenceInLog: actualMaxSeq,
+                  });
+                }
+              } else {
+                logger.warn('⚠️ BOOTSTRAP: Merge of sanitized operations returned 0 operations (possible deduplication)', {
+                  requestedCount: sanitizedOps.length,
+                  actualMergedCount: newOpsFromSanitized.length,
                 });
               }
 
@@ -557,15 +575,25 @@ export function useOperationSync(): UseOperationSync {
                   // DON'T use this corrupted sequence - it will poison our local sequence generator
                   logger.info('📥 BOOTSTRAP: Skipping corrupted sequence number marking (would cause sequence collision)');
                 } else if (Number.isFinite(maxCloudSeq)) {
-                  // Sequence is valid - mark ALL remote operations as synced
-                  await operationLog.current.markSyncedUpTo(maxCloudSeq);
-                  logger.info(`✅ BOOTSTRAP: Marked ALL sequences up to ${maxCloudSeq} as synced (${remoteOperations.length} operations)`, {
-                    gap,
-                    threshold: SEQUENCE_CORRUPTION_THRESHOLD,
-                    status: 'valid',
-                    localMaxSeq,
-                    cloudMaxSeq,
-                  });
+                  // 🔧 CRITICAL FIX: Use ACTUAL max sequence in log, not cloud max sequence
+                  // Cloud sequence might be higher than local due to deduplication or gaps
+                  const actualMaxSeqAfterMerge = operationLog.current.getAllOperations().length > 0
+                    ? Math.max(...operationLog.current.getAllOperations().map(op => op.sequence))
+                    : 0;
+
+                  if (actualMaxSeqAfterMerge > 0) {
+                    await operationLog.current.markSyncedUpTo(actualMaxSeqAfterMerge);
+                    logger.info(`✅ BOOTSTRAP: Marked ALL sequences as synced (normal path)`, {
+                      cloudMaxSeq,
+                      localMaxSeqBefore: localMaxSeq,
+                      actualMaxSeqInLog: actualMaxSeqAfterMerge,
+                      totalOpsInLog: operationLog.current.getAllOperations().length,
+                      totalRemoteOps: remoteOperations.length,
+                      gap,
+                      threshold: SEQUENCE_CORRUPTION_THRESHOLD,
+                      status: 'valid',
+                    });
+                  }
                 }
               } else {
                 logger.info(`📥 BOOTSTRAP: No remote operations to mark as synced`);
@@ -1116,11 +1144,15 @@ export function useOperationSync(): UseOperationSync {
                   .map(row => row.operation_data)
                   .filter(op => op && typeof op === 'object');
 
-                // Merge recovered operations
-                await operationLog.current!.mergeRemoteOperations(gapOperations);
-                totalRecovered += gapOperations.length;
+                // Merge recovered operations and track what was actually merged
+                const actuallyMerged = await operationLog.current!.mergeRemoteOperations(gapOperations);
+                totalRecovered += actuallyMerged.length;
 
-                logger.info(`✅ RECOVERY: Merged ${gapOperations.length} operations for gap ${gap.from}...${gap.to}`);
+                logger.info(`✅ RECOVERY: Merged ${actuallyMerged.length}/${gapOperations.length} operations for gap ${gap.from}...${gap.to}`, {
+                  requested: gapOperations.length,
+                  merged: actuallyMerged.length,
+                  duplicates: gapOperations.length - actuallyMerged.length,
+                });
               } else {
                 logger.warn(`⚠️ RECOVERY: Gap ${gap.from}...${gap.to} not found in cloud (may have been deleted)`);
               }
@@ -1137,15 +1169,24 @@ export function useOperationSync(): UseOperationSync {
         }
 
         if (newOperations.length > 0) {
-          const maxRemoteSequence = Math.max(...remoteOperations.map(op => op.sequence));
+          // 🔧 CRITICAL FIX: Mark synced based on ACTUAL max in log, not cloud max
+          // Cloud max might be higher due to deduplication or gaps
+          const allOperations = operationLog.current.getAllOperations();
+          const actualMaxSequence = allOperations.length > 0
+            ? Math.max(...allOperations.map(op => op.sequence))
+            : 0;
 
-          if (Number.isFinite(maxRemoteSequence)) {
-            await operationLog.current!.markSyncedUpTo(maxRemoteSequence);
+          if (Number.isFinite(actualMaxSequence) && actualMaxSequence > 0) {
+            await operationLog.current!.markSyncedUpTo(actualMaxSequence);
+            logger.info('✅ INCREMENTAL SYNC: Marked synced up to actual max sequence', {
+              actualMaxSequence,
+              newOpsCount: newOperations.length,
+              totalOpsInLog: allOperations.length,
+            });
           }
 
           // Reconstruct state from all operations
           // PHASE 1.3: Use conflict resolution for vector clock-based integrity
-          const allOperations = operationLog.current.getAllOperations();
           const newState = reconstructStateWithConflictResolution(
             INITIAL_STATE,
             allOperations,
