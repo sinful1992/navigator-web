@@ -29,19 +29,19 @@ describe('bonusCalculator', () => {
 
   describe('calculateDebtFromTotal', () => {
     it('should calculate debt from total using reverse formula', () => {
-      // Example from PDF: Total £500, 1 case
-      // D = (500 - (75 * 1 + 122.5)) / 1.075
-      // D = (500 - 197.5) / 1.075 = 281.40
+      // Example: Total £500, 1 case
+      // D = (500 - 75) / 1.075
+      // D = 425 / 1.075 = 395.35
       const debt = calculateDebtFromTotal(500, 1);
-      expect(debt).toBeCloseTo(281.40, 2);
+      expect(debt).toBeCloseTo(395.35, 2);
     });
 
     it('should handle multiple cases', () => {
       // Total £1000, 3 cases
-      // D = (1000 - (75 * 3 + 122.5)) / 1.075
-      // D = (1000 - 347.5) / 1.075 = 606.98
+      // D = (1000 - 75 * 3) / 1.075
+      // D = (1000 - 225) / 1.075 = 720.93
       const debt = calculateDebtFromTotal(1000, 3);
-      expect(debt).toBeCloseTo(606.98, 2);
+      expect(debt).toBeCloseTo(720.93, 2);
     });
 
     it('should return 0 for negative debt', () => {
@@ -154,7 +154,6 @@ describe('bonusCalculator', () => {
         smallPifBonus: 30,
         linkedCaseBonus: 10,
         complianceFeePerCase: 75,
-        complianceFeeFixed: 122.5,
         dailyThreshold: 100,
       },
       adjustForWorkingDays: true,
@@ -162,7 +161,7 @@ describe('bonusCalculator', () => {
 
     it('should calculate standard PIF bonus (£100)', () => {
       // Amount £500, 1 case
-      // Debt = (500 - 197.5) / 1.075 = 281.40
+      // Debt = (500 - 75) / 1.075 = 395.35
       // Debt < £1500, so standard bonus = £100
       const completions = [createCompletion('PIF', '500', 1)];
       const workingDays = 1;
@@ -174,23 +173,23 @@ describe('bonusCalculator', () => {
 
     it('should calculate large PIF bonus', () => {
       // Amount £2000, 1 case
-      // Debt = (2000 - 197.5) / 1.075 = 1676.74
-      // Debt > £1500, so bonus = £100 + 0.001875 * (1676.74 - 1500)
-      // Bonus = £100 + 0.33 = £100.33
+      // Debt = (2000 - 75) / 1.075 = 1790.70
+      // Debt > £1500, so bonus = £100 + 0.001875 * (1790.70 - 1500)
+      // Bonus = £100 + 0.545 = £100.545
       const completions = [createCompletion('PIF', '2000', 1)];
       const workingDays = 1;
 
       const bonus = calculateBonus(completions, workingDays, complexSettings);
-      // £100.33 - £100 = £0.33
-      expect(bonus).toBeCloseTo(0.33, 2);
+      // £100.545 - £100 = £0.545
+      expect(bonus).toBeCloseTo(0.545, 2);
     });
 
     it('should cap large PIF bonus at £500', () => {
       // Very large amount to exceed cap
       // To reach £500 cap: £500 = £100 + 0.001875 * (D - 1500)
       // D = 1500 + (400 / 0.001875) = 214833.33
-      // T = 214833.33 * 1.075 + 197.5 = 231293.33
-      const completions = [createCompletion('PIF', '231300', 1)];
+      // T = 214833.33 * 1.075 + 75 = 231070.83
+      const completions = [createCompletion('PIF', '231071', 1)];
       const workingDays = 1;
 
       const breakdown = calculateBonusBreakdown(completions, workingDays, complexSettings);
@@ -222,15 +221,15 @@ describe('bonusCalculator', () => {
 
     it('should handle multiple linked cases with large debt', () => {
       // £5000, 3 cases
-      // Debt = (5000 - (75*3 + 122.5)) / 1.075 = (5000 - 347.5) / 1.075 = 4327.91
-      // Bonus = £100 + 0.001875 * (4327.91 - 1500) = £100 + 5.30 = £105.30
+      // Debt = (5000 - 75*3) / 1.075 = (5000 - 225) / 1.075 = 4441.86
+      // Bonus = £100 + 0.001875 * (4441.86 - 1500) = £100 + 5.52 = £105.52
       // Count as 1 PIF (not multiplied by cases)
       const completions = [createCompletion('PIF', '5000', 3)];
       const workingDays = 1;
 
       const bonus = calculateBonus(completions, workingDays, complexSettings);
-      // £105.30 - £100 = £5.30
-      expect(bonus).toBeCloseTo(5.30, 2);
+      // £105.52 - £100 = £5.52
+      expect(bonus).toBeCloseTo(5.52, 2);
     });
 
     it('should calculate mixed PIFs correctly', () => {
@@ -393,7 +392,6 @@ describe('bonusCalculator', () => {
           smallPifBonus: 30,
           linkedCaseBonus: 10,
           complianceFeePerCase: 75,
-          complianceFeeFixed: 122.5,
           dailyThreshold: 100,
         },
         adjustForWorkingDays: true,
