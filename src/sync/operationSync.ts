@@ -465,6 +465,15 @@ export function useOperationSync(): UseOperationSync {
                 persistedCount: sanitizedOps.length,
               });
 
+              // Mark all sanitized operations as synced (important for incremental sync)
+              const maxSanitizedSeq = Math.max(...sanitizedOps.map(op => op.sequence));
+              if (Number.isFinite(maxSanitizedSeq)) {
+                await operationLog.current.markSyncedUpTo(maxSanitizedSeq);
+                logger.info('✅ BOOTSTRAP: Marked sanitized operations as synced', {
+                  maxSequence: maxSanitizedSeq,
+                });
+              }
+
               // Continue to state reconstruction with merged operations
               const newState = reconstructStateWithConflictResolution(
                 INITIAL_STATE,
@@ -519,18 +528,15 @@ export function useOperationSync(): UseOperationSync {
             });
 
             if (newOps.length > 0) {
-              // 🔧 CRITICAL FIX: Only mark as synced if operations are from THIS device
-              // Downloaded operations from other devices don't count as "synced" because WE didn't upload them
-              const myOpsToMarkSynced = remoteOperations
-                .filter(op => op.clientId === deviceId.current)
-                .map(op => op.sequence);
+              // 🔧 CRITICAL FIX: Mark ALL remote operations as synced after bootstrap
+              // WHY: Bootstrap fetches ALL operations (paginated), so all should be marked as synced
+              // If we only mark "this device's" operations, other devices' operations get re-fetched
+              // and then deduplicated away, causing data loss on page refresh (29 PIFs → 10 PIFs)
 
-              if (myOpsToMarkSynced.length > 0) {
-                const maxMySeq = Math.max(...myOpsToMarkSynced);
+              const allRemoteSequences = remoteOperations.map(op => op.sequence);
 
-                // 🔧 CRITICAL FIX: Detect corrupted sequence numbers from cloud
-                // If all local operations are much lower than cloud sequence, cloud is corrupted
-                // However, legitimate gaps occur from multiple devices
+              if (allRemoteSequences.length > 0) {
+                const maxCloudSeq = Math.max(...allRemoteSequences);
                 const localMaxSeq = operationLog.current.getAllOperations().length > 0
                   ? Math.max(...operationLog.current.getAllOperations().map(op => op.sequence))
                   : 0;
@@ -538,29 +544,31 @@ export function useOperationSync(): UseOperationSync {
                 // PHASE 1.1.2 FIX: Use configurable threshold for sequence corruption detection
                 // The SEQUENCE_CORRUPTION_THRESHOLD is defined in syncConfig.ts
                 // Increased from 1000 to 10000 to reduce false positives
-                const gap = maxMySeq - localMaxSeq;
+                const gap = maxCloudSeq - localMaxSeq;
                 const isCloudCorrupted = gap > SEQUENCE_CORRUPTION_THRESHOLD && localMaxSeq > 100;
 
                 if (isCloudCorrupted) {
                   logger.error('🚨 BOOTSTRAP: Cloud operations have corrupted sequence numbers!', {
-                    cloudMaxSeq: maxMySeq,
+                    cloudMaxSeq: maxCloudSeq,
                     localMaxSeq,
                     gap,
                     threshold: SEQUENCE_CORRUPTION_THRESHOLD,
                   });
                   // DON'T use this corrupted sequence - it will poison our local sequence generator
                   logger.info('📥 BOOTSTRAP: Skipping corrupted sequence number marking (would cause sequence collision)');
-                } else if (Number.isFinite(maxMySeq)) {
-                  // Sequence is valid - use it
-                  await operationLog.current.markSyncedUpTo(maxMySeq);
-                  logger.info(`📥 BOOTSTRAP: Marked sequences up to ${maxMySeq} as synced (from this device)`, {
+                } else if (Number.isFinite(maxCloudSeq)) {
+                  // Sequence is valid - mark ALL remote operations as synced
+                  await operationLog.current.markSyncedUpTo(maxCloudSeq);
+                  logger.info(`✅ BOOTSTRAP: Marked ALL sequences up to ${maxCloudSeq} as synced (${remoteOperations.length} operations)`, {
                     gap,
                     threshold: SEQUENCE_CORRUPTION_THRESHOLD,
                     status: 'valid',
+                    localMaxSeq,
+                    cloudMaxSeq,
                   });
                 }
               } else {
-                logger.info(`📥 BOOTSTRAP: No operations from this device to mark as synced`);
+                logger.info(`📥 BOOTSTRAP: No remote operations to mark as synced`);
               }
 
               // Reconstruct state with merged operations
