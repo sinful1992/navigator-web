@@ -709,20 +709,39 @@ export function useOperationSync(): UseOperationSync {
     }
 
     batchTimerRef.current = setTimeout(async () => {
-      if (!isOnline || !user || !operationLog.current) return;
+      console.log('🔄 BATCH SYNC CHECK:', {
+        isOnline,
+        hasUser: !!user,
+        hasOperationLog: !!operationLog.current,
+        willSync: isOnline && !!user && !!operationLog.current
+      });
+
+      if (!isOnline || !user || !operationLog.current) {
+        console.log('⏭️ BATCH SYNC SKIPPED - preconditions not met:', {
+          isOnline,
+          user: user ? 'authenticated' : 'NOT AUTHENTICATED',
+          operationLog: operationLog.current ? 'loaded' : 'NOT LOADED',
+        });
+        return;
+      }
 
       const unsyncedCount = operationLog.current.getUnsyncedOperations().length;
+      console.log('📋 UNSYNCED OPERATIONS:', unsyncedCount);
 
       // Only sync if we have operations to sync
       if (unsyncedCount > 0) {
+        console.log('📤 STARTING BATCH SYNC for', unsyncedCount, 'operations');
         try {
           pendingBatchRef.current = true;
           await syncOperationsToCloud();
         } catch (err) {
           logger.warn('Batch sync failed:', err);
+          console.error('❌ BATCH SYNC ERROR:', err);
         } finally {
           pendingBatchRef.current = false;
         }
+      } else {
+        console.log('⏭️ NO UNSYNCED OPERATIONS - skipping sync');
       }
     }, 2000); // 2 second debounce
   }, [isOnline, user]);
@@ -811,7 +830,13 @@ export function useOperationSync(): UseOperationSync {
 
   // Sync operations to cloud
   const syncOperationsToCloud = useCallback(async () => {
+    console.log('🔄 syncOperationsToCloud called');
     if (!operationLog.current || !user || !supabase) {
+      console.log('⏭️ SYNC SKIPPED - missing prerequisites:', {
+        operationLog: !!operationLog.current,
+        user: !!user,
+        supabase: !!supabase,
+      });
       logger.warn('⚠️ SYNC SKIPPED:', {
         hasOperationLog: !!operationLog.current,
         hasUser: !!user,
@@ -823,13 +848,17 @@ export function useOperationSync(): UseOperationSync {
     setIsSyncing(true);
     try {
       const unsyncedOps = operationLog.current.getUnsyncedOperations();
+      console.log('📋 Unsynced operations:', unsyncedOps.length);
 
       if (unsyncedOps.length === 0) {
+        console.log('✅ No unsynced operations');
         logger.debug('✅ No unsynced operations');
         return; // Nothing to sync
       }
 
-      logger.info(`📤 UPLOADING ${unsyncedOps.length} operations to cloud...`);
+      const uploadMsg = `📤 UPLOADING ${unsyncedOps.length} operations to cloud...`;
+      logger.info(uploadMsg);
+      console.log(uploadMsg);
 
       // 🔧 CRITICAL FIX: Track successful uploads instead of assuming all succeed
       const successfulSequences: number[] = [];
@@ -959,33 +988,39 @@ export function useOperationSync(): UseOperationSync {
           await operationLog.current.markSyncedUpTo(maxContinuousSeq);
           setLastSyncTime(new Date());
 
-          logger.info('✅ SYNC COMPLETE:', {
+          const syncSummary = {
             total: unsyncedOps.length,
             succeeded: successfulSequences.length,
             failed: failedOps.length,
             previousLastSynced: currentLastSynced,
             newLastSynced: maxContinuousSeq,
             advanced: maxContinuousSeq - currentLastSynced,
-          });
+          };
+          logger.info('✅ SYNC COMPLETE:', syncSummary);
+          console.log('✅ SYNC COMPLETE:', syncSummary);
 
           if (failedOps.length > 0) {
             logger.error('⚠️ FAILED OPERATIONS (will retry):', failedOps);
+            console.error('⚠️ FAILED OPERATIONS:', failedOps);
           }
         } else {
           // 🔧 FIX: Only log "NO PROGRESS" once every 30 seconds to prevent spam
           const now = Date.now();
           if (now - lastNoProgressLogRef.current > 30000) {
-            logger.warn('⚠️ NO PROGRESS: Successful uploads exist but not continuous from last synced', {
+            const noProgressInfo = {
               currentLastSynced,
               successfulSequences: successfulSequences.slice(0, 5), // Show first 5
               firstGap: successfulSequences[0] > currentLastSynced + 1
                 ? currentLastSynced + 1
                 : 'unknown',
-            });
+            };
+            logger.warn('⚠️ NO PROGRESS: Successful uploads exist but not continuous from last synced', noProgressInfo);
+            console.warn('⚠️ NO PROGRESS:', noProgressInfo);
             lastNoProgressLogRef.current = now;
           }
         }
       } else {
+        console.error('❌ ALL UPLOADS FAILED - no operations marked as synced');
         logger.error('❌ ALL UPLOADS FAILED - no operations marked as synced');
       }
     } catch (err) {
