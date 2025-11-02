@@ -209,8 +209,7 @@ export type BonusSettings = {
     largePifCap: number;           // £500 max bonus
     smallPifBonus: number;         // £30 for balance < £100
     linkedCaseBonus: number;       // £10 for linked cases with 0 fee
-    complianceFeePerCase: number;  // £75 per case
-    complianceFeeFixed: number;    // £122.5 fixed fee
+    complianceFeePerCase: number;  // £75 per case (no fixed fee)
     dailyThreshold: number;        // £100 per working day
   };
 
