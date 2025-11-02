@@ -11,6 +11,7 @@ import { DEFAULT_REMINDER_SETTINGS } from "../services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "../utils/bonusCalculator";
 import { SEQUENCE_CORRUPTION_THRESHOLD } from "./syncConfig";
 import { validateSyncOperation } from "../services/operationValidators";
+import { retryWithCustom, isRetryableError, DEFAULT_RETRY_CONFIG } from "../utils/retryUtils";
 
 /**
  * SECURITY: Track used operation nonces to prevent replay attacks
@@ -747,7 +748,7 @@ export function useOperationSync(): UseOperationSync {
       const successfulSequences: number[] = [];
       const failedOps: Array<{seq: number; type: string; error: string}> = [];
 
-      // Upload operations to cloud
+      // Upload operations to cloud with retry logic
       for (const operation of unsyncedOps) {
         logger.debug('Uploading operation:', operation.type, operation.id, 'seq:', operation.sequence);
 
@@ -769,54 +770,81 @@ export function useOperationSync(): UseOperationSync {
           || payload?.id
           || operation.id;
 
-        const { error } = await supabase
-          .from('navigator_operations')
-          .upsert({
-            // New columns
-            user_id: user.id,
-            operation_id: operation.id,
-            sequence_number: operation.sequence,
-            operation_type: operation.type,
-            operation_data: operation,
-            client_id: operation.clientId,
-            timestamp: operation.timestamp,
-            // Old columns (still required for backwards compatibility)
-            type: operation.type,
-            entity: entity,
-            entity_id: String(entityId),
-            data: operation.payload,
-            device_id: operation.clientId,
-            local_timestamp: operation.timestamp,
-          }, {
-            onConflict: 'user_id,operation_id',
-            ignoreDuplicates: true,
-          });
+        // 🔧 IMPROVEMENT: Upload with retry logic (exponential backoff)
+        // If transient failure occurs (network, timeout, 5xx), retry automatically
+        // If permanent failure (4xx), fail immediately
+        try {
+          const uploadResult = await retryWithCustom(
+            async () => {
+              const { error, status } = await supabase
+                .from('navigator_operations')
+                .upsert({
+                  // New columns
+                  user_id: user.id,
+                  operation_id: operation.id,
+                  sequence_number: operation.sequence,
+                  operation_type: operation.type,
+                  operation_data: operation,
+                  client_id: operation.clientId,
+                  timestamp: operation.timestamp,
+                  // Old columns (still required for backwards compatibility)
+                  type: operation.type,
+                  entity: entity,
+                  entity_id: String(entityId),
+                  data: operation.payload,
+                  device_id: operation.clientId,
+                  local_timestamp: operation.timestamp,
+                }, {
+                  onConflict: 'user_id,operation_id',
+                  ignoreDuplicates: true,
+                });
 
-        if (error && error.code !== '23505') { // Ignore duplicate key errors
-          logger.error('❌ UPLOAD FAILED:', {
+              // Return error for retry logic to evaluate
+              if (error) {
+                const errorObj = new Error(error.message);
+                (errorObj as any).status = status;
+                (errorObj as any).code = error.code;
+                (errorObj as any).details = error.details;
+                throw errorObj;
+              }
+
+              return { success: true };
+            },
+            `Upload operation ${operation.type} seq=${operation.sequence}`,
+            (error, attempt) => {
+              // Only retry on transient errors
+              const shouldRetry = isRetryableError(error);
+              if (!shouldRetry) {
+                logger.error(`❌ Permanent error (not retrying):`, {
+                  error: error.message,
+                  attempt,
+                });
+              }
+              return shouldRetry;
+            },
+            // Use slightly different config for uploads: fewer retries, faster timeout
+            { ...DEFAULT_RETRY_CONFIG, maxAttempts: 2 }
+          );
+
+          // ✅ Track this as successfully uploaded
+          successfulSequences.push(operation.sequence);
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+
+          logger.error('❌ UPLOAD FAILED (after retries):', {
             operation: operation.type,
             sequence: operation.sequence,
-            error: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint,
+            error: errorMsg,
           });
 
-          // 🔧 CRITICAL FIX: Don't throw - track failure and continue with other operations
+          // Track failure for retry on next sync cycle
           failedOps.push({
             seq: operation.sequence,
             type: operation.type,
-            error: error.message
+            error: errorMsg
           });
-          continue; // Skip to next operation
+          // Continue to next operation instead of stopping
         }
-
-        if (error?.code === '23505') {
-          logger.debug('⚠️ Duplicate operation (already uploaded):', operation.id);
-        }
-
-        // 🔧 FIX: Track this as successfully uploaded (including duplicates)
-        successfulSequences.push(operation.sequence);
       }
 
       // 🔧 CRITICAL FIX: Only mark continuous sequences FROM current lastSyncSequence
