@@ -149,7 +149,7 @@ describe('bonusCalculator', () => {
         baseEnforcementFee: 235,
         basePifBonus: 100,
         largePifThreshold: 1500,
-        largePifPercentage: 0.001875, // 2.5% of 7.5%
+        largePifPercentage: 0.025, // 2.5% of amount over £1500
         largePifCap: 500,
         smallPifBonus: 30,
         linkedCaseBonus: 10,
@@ -174,22 +174,22 @@ describe('bonusCalculator', () => {
     it('should calculate large PIF bonus', () => {
       // Amount £2000, 1 case
       // Debt = (2000 - 75) / 1.075 = 1790.70
-      // Debt > £1500, so bonus = £100 + 0.001875 * (1790.70 - 1500)
-      // Bonus = £100 + 0.545 = £100.545
+      // Debt > £1500, so bonus = £100 + 0.025 * (1790.70 - 1500)
+      // Bonus = £100 + 7.27 = £107.27
       const completions = [createCompletion('PIF', '2000', 1)];
       const workingDays = 1;
 
       const bonus = calculateBonus(completions, workingDays, complexSettings);
-      // £100.545 - £100 = £0.545
-      expect(bonus).toBeCloseTo(0.545, 2);
+      // £107.27 - £100 = £7.27
+      expect(bonus).toBeCloseTo(7.27, 2);
     });
 
     it('should cap large PIF bonus at £500', () => {
       // Very large amount to exceed cap
-      // To reach £500 cap: £500 = £100 + 0.001875 * (D - 1500)
-      // D = 1500 + (400 / 0.001875) = 214833.33
-      // T = 214833.33 * 1.075 + 75 = 231070.83
-      const completions = [createCompletion('PIF', '231071', 1)];
+      // To reach £500 cap: £500 = £100 + 0.025 * (D - 1500)
+      // D = 1500 + (400 / 0.025) = 17500
+      // T = 17500 * 1.075 + 75 = 18962.5
+      const completions = [createCompletion('PIF', '18963', 1)];
       const workingDays = 1;
 
       const breakdown = calculateBonusBreakdown(completions, workingDays, complexSettings);
@@ -220,16 +220,16 @@ describe('bonusCalculator', () => {
     });
 
     it('should handle multiple linked cases with large debt', () => {
-      // £5000, 3 cases
+      // Total collected £5000, 3 cases
       // Debt = (5000 - 75*3) / 1.075 = (5000 - 225) / 1.075 = 4441.86
-      // Bonus = £100 + 0.001875 * (4441.86 - 1500) = £100 + 5.52 = £105.52
+      // Bonus = £100 + 0.025 * (4441.86 - 1500) = £100 + 73.55 = £173.55
       // Count as 1 PIF (not multiplied by cases)
       const completions = [createCompletion('PIF', '5000', 3)];
       const workingDays = 1;
 
       const bonus = calculateBonus(completions, workingDays, complexSettings);
-      // £105.52 - £100 = £5.52
-      expect(bonus).toBeCloseTo(5.52, 2);
+      // £173.55 - £100 = £73.55
+      expect(bonus).toBeCloseTo(73.55, 2);
     });
 
     it('should calculate mixed PIFs correctly', () => {
@@ -387,7 +387,7 @@ describe('bonusCalculator', () => {
           baseEnforcementFee: 235,
           basePifBonus: 100,
           largePifThreshold: 1500,
-          largePifPercentage: 0.001875,
+          largePifPercentage: 0.025, // 2.5% of amount over £1500
           largePifCap: 500,
           smallPifBonus: 30,
           linkedCaseBonus: 10,
