@@ -858,11 +858,14 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       const raw = await readJsonFile(file);
       // ARCHITECTURAL FIX: File restore also preserves current session state
       const backupData = normalizeBackupData(raw);
+      console.log('📥 RESTORE: normalizeBackupData returned', backupData.completions.length, 'completions');
+
       const currentSessions = safeState.daySessions; // Preserve current session state
 
       // 🔧 CRITICAL FIX: Extract unique dates from completions and create SESSION_START operations
       // This ensures all historical completions become visible by creating DaySession records
       const completions = (backupData as any).completions || [];
+      console.log('📥 RESTORE: completions array has', completions.length, 'items');
       const dateToStartTime = new Map<string, string>();
 
       completions.forEach((c: any) => {
