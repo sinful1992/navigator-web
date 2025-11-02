@@ -925,22 +925,40 @@ export function useOperationSync(): UseOperationSync {
 
       logger.info(`📥 FETCHING operations from cloud (after sequence ${lastSequence})...`);
 
-      const { data, error } = await supabase
-        .from('navigator_operations')
-        .select('operation_data')
-        .eq('user_id', user.id)
-        .gt('sequence_number', lastSequence)
-        .order('sequence_number', { ascending: true });
+      // BEST PRACTICE: Wrap fetch in retry logic to handle transient network failures
+      const data = await retryWithBackoff(
+        async () => {
+          const { data: fetchedData, error } = await supabase!
+            .from('navigator_operations')
+            .select('operation_data')
+            .eq('user_id', user.id)
+            .gt('sequence_number', lastSequence)
+            .order('sequence_number', { ascending: true });
 
-      if (error) {
-        logger.error('❌ FETCH FAILED:', {
-          error: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint,
-        });
-        throw error;
-      }
+          if (error) {
+            // Convert Supabase error to Error with status code for retry logic
+            const errorObj = new Error(error.message);
+            // Map Supabase error codes to HTTP status codes
+            (errorObj as any).status = error.code === 'PGRST116' ? 503 : 500;
+            logger.error('❌ FETCH FAILED:', {
+              error: error.message,
+              code: error.code,
+              details: error.details,
+              hint: error.hint,
+            });
+            throw errorObj;
+          }
+
+          return fetchedData || [];
+        },
+        'Fetch operations from cloud',
+        {
+          maxAttempts: 3,
+          initialDelayMs: 1000,
+          maxDelayMs: 10000,
+          backoffMultiplier: 2,
+        }
+      );
 
       if (data && data.length > 0) {
         logger.info(`📥 RECEIVED ${data.length} operations from cloud`);
@@ -987,6 +1005,55 @@ export function useOperationSync(): UseOperationSync {
 
         // Merge remote operations and resolve conflicts
         const newOperations = await operationLog.current!.mergeRemoteOperations(remoteOperations);
+
+        // BEST PRACTICE: Check for sequence gaps after merge and attempt recovery
+        const gaps = operationLog.current!.validateSequenceContinuity('after fetch and merge');
+        if (gaps.length > 0) {
+          logger.info(`🔄 GAP RECOVERY: Detected ${gaps.length} gaps, attempting recovery...`);
+
+          let totalRecovered = 0;
+          for (const gap of gaps) {
+            try {
+              // Fetch missing operations from cloud
+              const { data: gapData, error: gapError } = await supabase!
+                .from('navigator_operations')
+                .select('operation_data')
+                .eq('user_id', user.id)
+                .gte('sequence_number', gap.from + 1)
+                .lte('sequence_number', gap.to - 1)
+                .order('sequence_number', { ascending: true });
+
+              if (gapError) {
+                logger.error(`Failed to fetch gap ${gap.from}...${gap.to}:`, gapError);
+                continue;
+              }
+
+              if (gapData && gapData.length > 0) {
+                logger.info(`📥 RECOVERY: Found ${gapData.length} operations for gap ${gap.from}...${gap.to}`);
+
+                const gapOperations: Operation[] = gapData
+                  .map(row => row.operation_data)
+                  .filter(op => op && typeof op === 'object');
+
+                // Merge recovered operations
+                await operationLog.current!.mergeRemoteOperations(gapOperations);
+                totalRecovered += gapOperations.length;
+
+                logger.info(`✅ RECOVERY: Merged ${gapOperations.length} operations for gap ${gap.from}...${gap.to}`);
+              } else {
+                logger.warn(`⚠️ RECOVERY: Gap ${gap.from}...${gap.to} not found in cloud (may have been deleted)`);
+              }
+            } catch (error) {
+              logger.error(`❌ RECOVERY: Failed to recover gap ${gap.from}...${gap.to}:`, error);
+            }
+          }
+
+          if (totalRecovered > 0) {
+            logger.info(`✅ GAP RECOVERY COMPLETE: Recovered ${totalRecovered} operations`);
+          } else {
+            logger.warn(`⚠️ GAP RECOVERY: No operations recovered (gaps may be from deleted operations)`);
+          }
+        }
 
         if (newOperations.length > 0) {
           const maxRemoteSequence = Math.max(...remoteOperations.map(op => op.sequence));

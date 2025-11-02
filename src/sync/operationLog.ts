@@ -505,14 +505,16 @@ export class OperationLogManager {
    * 4. Clock jump - sequence counter got corrupted
    *
    * This is critical to detect because gaps = silent data loss!
+   *
+   * @returns Array of detected gaps for potential recovery
    */
-  private validateSequenceContinuity(context: string): void {
+  validateSequenceContinuity(context: string): Array<{ from: number; to: number; size: number; lostOps: number }> {
     if (!ENABLE_SEQUENCE_CONTINUITY_VALIDATION) {
-      return; // Validation disabled, skip
+      return []; // Validation disabled, skip
     }
 
     if (this.log.operations.length === 0) {
-      return; // Empty log, nothing to validate
+      return []; // Empty log, nothing to validate
     }
 
     const sequences = this.log.operations.map(op => op.sequence).sort((a, b) => a - b);
@@ -562,6 +564,8 @@ export class OperationLogManager {
         sequenceRange: { min: sequences[0], max: sequences[sequences.length - 1] },
       });
     }
+
+    return gaps;
   }
 
   /**

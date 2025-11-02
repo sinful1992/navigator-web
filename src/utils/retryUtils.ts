@@ -135,8 +135,8 @@ export function isRetryableError(error: any): boolean {
 
   // Supabase errors - check status code
   if (error.status) {
-    // 429 (rate limit), 502 (bad gateway), 503 (unavailable), 504 (gateway timeout)
-    const retryableStatuses = [429, 502, 503, 504];
+    // 408 (request timeout), 429 (rate limit), 502 (bad gateway), 503 (unavailable), 504 (gateway timeout)
+    const retryableStatuses = [408, 429, 502, 503, 504];
     return retryableStatuses.includes(error.status);
   }
 
