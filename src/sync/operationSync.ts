@@ -315,7 +315,7 @@ export function useOperationSync(): UseOperationSync {
           while (hasMore && !fetchError) {
             const { data, error } = await supabase
               .from('navigator_operations')
-              .select('operation_data')
+              .select('operation_data, sequence_number')
               .eq('user_id', user.id)
               .order('sequence_number', { ascending: true })
               .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
@@ -375,7 +375,12 @@ export function useOperationSync(): UseOperationSync {
               }
 
               // All security checks passed
-              remoteOperations.push(row.operation_data);
+              // 🔧 CRITICAL FIX: Use database sequence_number (correct) instead of operation_data.sequence (corrupted)
+              const operation = { ...row.operation_data };
+              if (row.sequence_number && typeof row.sequence_number === 'number') {
+                operation.sequence = row.sequence_number;
+              }
+              remoteOperations.push(operation);
             }
 
             if (invalidOps.length > 0) {
@@ -1002,7 +1007,7 @@ export function useOperationSync(): UseOperationSync {
           while (hasMore) {
             const { data: fetchedData, error } = await supabase!
               .from('navigator_operations')
-              .select('operation_data')
+              .select('operation_data, sequence_number')
               .eq('user_id', user.id)
               .gt('sequence_number', lastSequence)
               .order('sequence_number', { ascending: true })
@@ -1081,7 +1086,12 @@ export function useOperationSync(): UseOperationSync {
           }
 
           // All security checks passed
-          remoteOperations.push(row.operation_data);
+          // 🔧 CRITICAL FIX: Use database sequence_number (correct) instead of operation_data.sequence (corrupted)
+          const operation = { ...row.operation_data };
+          if (row.sequence_number && typeof row.sequence_number === 'number') {
+            operation.sequence = row.sequence_number;
+          }
+          remoteOperations.push(operation);
         }
 
         if (invalidOps.length > 0) {
@@ -1110,7 +1120,7 @@ export function useOperationSync(): UseOperationSync {
               while (hasMore && !gapError) {
                 const { data: fetchedGapData, error } = await supabase!
                   .from('navigator_operations')
-                  .select('operation_data')
+                  .select('operation_data, sequence_number')
                   .eq('user_id', user.id)
                   .gte('sequence_number', gap.from + 1)
                   .lte('sequence_number', gap.to - 1)
@@ -1140,7 +1150,14 @@ export function useOperationSync(): UseOperationSync {
                 logger.info(`📥 RECOVERY: Found ${gapData.length} operations for gap ${gap.from}...${gap.to}`);
 
                 const gapOperations: Operation[] = gapData
-                  .map(row => row.operation_data)
+                  .map(row => {
+                    // 🔧 CRITICAL FIX: Use database sequence_number (correct) instead of operation_data.sequence (corrupted)
+                    const operation = { ...row.operation_data };
+                    if (row.sequence_number && typeof row.sequence_number === 'number') {
+                      operation.sequence = row.sequence_number;
+                    }
+                    return operation;
+                  })
                   .filter(op => op && typeof op === 'object');
 
                 // Merge recovered operations and track what was actually merged
