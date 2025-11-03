@@ -1371,206 +1371,192 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   // ---- enhanced arrangements ----
 
   const addArrangement = React.useCallback(
-    (
-      arrangementData: Omit<Arrangement, "id" | "createdAt" | "updatedAt">
-    ): Promise<string> => {
-      return new Promise((resolve) => {
-        const now = new Date().toISOString();
-        const id = `arr_${Date.now()}_${Math.random()
-          .toString(36)
-          .slice(2, 11)}`;
-        const newArrangement: Arrangement = {
-          ...arrangementData,
-          id,
-          createdAt: now,
-          updatedAt: now,
-        };
+    async (arrangementData: Omit<Arrangement, "id" | "createdAt" | "updatedAt">): Promise<string> => {
+      if (!services) {
+        logger.error('Services not initialized');
+        return '';
+      }
 
-        const operationId = generateOperationId(
-          "create",
-          "arrangement",
-          newArrangement
-        );
-        addOptimisticUpdate(
-          "create",
-          "arrangement",
-          newArrangement,
-          operationId
-        );
+      try {
+        // Delegate to ArrangementService (handles ID generation, validation, operation submission)
+        const newArrangement = await services.arrangement.createArrangement(arrangementData);
 
+        const operationId = generateOperationId("create", "arrangement", newArrangement);
+
+        // Apply optimistic update
+        addOptimisticUpdate("create", "arrangement", newArrangement, operationId);
+
+        // Update local state
         setBaseState((s) => {
-          setTimeout(() => {
-            confirmOptimisticUpdate(operationId);
-            resolve(id);
-          }, 0);
           return { ...s, arrangements: [...s.arrangements, newArrangement] };
         });
 
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
-          submitOperation({
-            type: 'ARRANGEMENT_CREATE',
-            payload: { arrangement: newArrangement }
-          }).catch(err => {
-            logger.error('Failed to submit arrangement create operation:', err);
-          });
-        }
-      });
+        // Confirm operation
+        setTimeout(() => confirmOptimisticUpdate(operationId), 0);
+
+        return newArrangement.id;
+
+      } catch (error) {
+        logger.error('Failed to create arrangement:', error);
+        showError(`Failed to create arrangement: ${(error as Error).message}`);
+        return '';
+      }
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
+    [services, addOptimisticUpdate, confirmOptimisticUpdate]
   );
 
   const updateArrangement = React.useCallback(
-    (id: string, updates: Partial<Arrangement>): Promise<void> => {
-      return new Promise((resolve) => {
-        let shouldSubmit = false;
+    async (id: string, updates: Partial<Arrangement>): Promise<void> => {
+      if (!services) {
+        logger.error('Services not initialized');
+        return;
+      }
 
-        const operationId = generateOperationId("update", "arrangement", {
-          id,
+      // Check if arrangement exists
+      const arrangement = baseState.arrangements.find((arr) => arr.id === id);
+      if (!arrangement) {
+        logger.warn(`Cannot update arrangement ${id} - not found`);
+        return;
+      }
+
+      try {
+        // Delegate to ArrangementService (handles validation and operation submission)
+        await services.arrangement.updateArrangement(id, updates);
+
+        const operationId = generateOperationId("update", "arrangement", { id, ...updates });
+
+        const updatedArrangement = {
           ...updates,
-        });
+          id,
+          updatedAt: new Date().toISOString(),
+        };
 
+        // Apply optimistic update
+        addOptimisticUpdate("update", "arrangement", updatedArrangement, operationId);
+
+        // Update local state
         setBaseState((s) => {
-          // Check if arrangement exists before updating
-          const arrangement = s.arrangements.find((arr) => arr.id === id);
-          if (!arrangement) {
-            logger.warn(`Cannot update arrangement ${id} - not found`);
-            resolve();
-            return s;
-          }
-
-          const updatedArrangement = {
-            ...updates,
-            id,
-            updatedAt: new Date().toISOString(),
-          };
-          addOptimisticUpdate(
-            "update",
-            "arrangement",
-            updatedArrangement,
-            operationId
-          );
-
           const arrangements = s.arrangements.map((arr) =>
             arr.id === id
               ? { ...arr, ...updates, updatedAt: new Date().toISOString() }
               : arr
           );
-
-          setTimeout(() => {
-            confirmOptimisticUpdate(operationId);
-            resolve();
-          }, 0);
-
-          shouldSubmit = true;
           return { ...s, arrangements };
         });
 
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if update occurred)
-        if (shouldSubmit && submitOperation) {
-          submitOperation({
-            type: 'ARRANGEMENT_UPDATE',
-            payload: { id, updates }
-          }).catch(err => {
-            logger.error('Failed to submit arrangement update operation:', err);
-          });
-        }
-      });
+        // Confirm operation
+        setTimeout(() => confirmOptimisticUpdate(operationId), 0);
+
+      } catch (error) {
+        logger.error('Failed to update arrangement:', error);
+        showError(`Failed to update arrangement: ${(error as Error).message}`);
+      }
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
+    [services, baseState, addOptimisticUpdate, confirmOptimisticUpdate]
   );
 
   const deleteArrangement = React.useCallback(
-    (id: string): Promise<void> => {
-      return new Promise((resolve) => {
-        let shouldSubmit = false;
+    async (id: string): Promise<void> => {
+      if (!services) {
+        logger.error('Services not initialized');
+        return;
+      }
 
+      // Check if arrangement exists
+      const arrangement = baseState.arrangements.find((arr) => arr.id === id);
+      if (!arrangement) {
+        logger.warn(`Cannot delete arrangement ${id} - not found`);
+        return;
+      }
+
+      try {
+        // Delegate to ArrangementService (handles operation submission)
+        await services.arrangement.deleteArrangement(id);
+
+        const operationId = generateOperationId("delete", "arrangement", arrangement);
+
+        // Apply optimistic update
+        addOptimisticUpdate("delete", "arrangement", { id }, operationId);
+
+        // Update local state
         setBaseState((s) => {
-          const arrangement = s.arrangements.find((arr) => arr.id === id);
-          if (!arrangement) {
-            resolve();
-            return s;
-          }
-
-          const operationId = generateOperationId(
-            "delete",
-            "arrangement",
-            arrangement
-          );
-          addOptimisticUpdate("delete", "arrangement", { id }, operationId);
-
           const arrangements = s.arrangements.filter((arr) => arr.id !== id);
-
-          setTimeout(() => {
-            confirmOptimisticUpdate(operationId);
-            resolve();
-          }, 0);
-
-          shouldSubmit = true;
           return { ...s, arrangements };
         });
 
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if deletion occurred)
-        if (shouldSubmit && submitOperation) {
-          submitOperation({
-            type: 'ARRANGEMENT_DELETE',
-            payload: { id }
-          }).catch(err => {
-            logger.error('Failed to submit arrangement delete operation:', err);
-          });
-        }
-      });
+        // Confirm operation
+        setTimeout(() => confirmOptimisticUpdate(operationId), 0);
+
+      } catch (error) {
+        logger.error('Failed to delete arrangement:', error);
+        showError(`Failed to delete arrangement: ${(error as Error).message}`);
+      }
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
+    [services, baseState, addOptimisticUpdate, confirmOptimisticUpdate]
   );
 
   // ---- subscription management ----
 
-  const setSubscription = React.useCallback((subscription: UserSubscription | null) => {
-    setBaseState((s) => ({ ...s, subscription }));
-
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately
-    if (submitOperation) {
-      submitOperation({
-        type: 'SETTINGS_UPDATE_SUBSCRIPTION',
-        payload: { subscription }
-      }).catch(err => {
-        logger.error('Failed to submit subscription update operation:', err);
-      });
+  const setSubscription = React.useCallback(async (subscription: UserSubscription | null) => {
+    if (!services) {
+      logger.error('Services not initialized');
+      return;
     }
-  }, [submitOperation]);
+
+    try {
+      // Delegate to SettingsService (handles validation and operation submission)
+      await services.settings.updateSubscription(subscription);
+
+      // Update local state
+      setBaseState((s) => ({ ...s, subscription }));
+
+    } catch (error) {
+      logger.error('Failed to update subscription:', error);
+      showError(`Failed to update subscription: ${(error as Error).message}`);
+    }
+  }, [services]);
 
   // ---- reminder system management ----
 
-  const updateReminderSettings = React.useCallback((settings: ReminderSettings) => {
-    setBaseState((s) => ({ ...s, reminderSettings: settings }));
-
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately
-    if (submitOperation) {
-      submitOperation({
-        type: 'SETTINGS_UPDATE_REMINDER',
-        payload: { settings }
-      }).catch(err => {
-        logger.error('Failed to submit reminder settings update operation:', err);
-      });
+  const updateReminderSettings = React.useCallback(async (settings: ReminderSettings) => {
+    if (!services) {
+      logger.error('Services not initialized');
+      return;
     }
-  }, [submitOperation]);
+
+    try {
+      // Delegate to SettingsService (handles validation and operation submission)
+      await services.settings.updateReminderSettings(settings);
+
+      // Update local state
+      setBaseState((s) => ({ ...s, reminderSettings: settings }));
+
+    } catch (error) {
+      logger.error('Failed to update reminder settings:', error);
+      showError(`Failed to update reminder settings: ${(error as Error).message}`);
+    }
+  }, [services]);
 
   // ---- bonus settings management ----
 
-  const updateBonusSettings = React.useCallback((settings: BonusSettings) => {
-    setBaseState((s) => ({ ...s, bonusSettings: settings }));
-
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately
-    if (submitOperation) {
-      submitOperation({
-        type: 'SETTINGS_UPDATE_BONUS',
-        payload: { settings }
-      }).catch(err => {
-        logger.error('Failed to submit bonus settings update operation:', err);
-      });
+  const updateBonusSettings = React.useCallback(async (settings: BonusSettings) => {
+    if (!services) {
+      logger.error('Services not initialized');
+      return;
     }
-  }, [submitOperation]);
+
+    try {
+      // Delegate to SettingsService (handles validation and operation submission)
+      await services.settings.updateBonusSettings(settings);
+
+      // Update local state
+      setBaseState((s) => ({ ...s, bonusSettings: settings }));
+
+    } catch (error) {
+      logger.error('Failed to update bonus settings:', error);
+      showError(`Failed to update bonus settings: ${(error as Error).message}`);
+    }
+  }, [services]);
 
   const updateReminderNotification = React.useCallback(
     (notificationId: string, status: ReminderNotification['status'], message?: string) => {
@@ -1625,146 +1611,67 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   }
 
   const backupState = React.useCallback((): AppState => {
-    // Use base state for backups (no optimistic updates)
-    const snap: AppState = {
-      addresses: baseState.addresses,
-      completions: baseState.completions,
-      activeIndex: baseState.activeIndex,
-      daySessions: baseState.daySessions,
-      arrangements: baseState.arrangements,
-      currentListVersion: baseState.currentListVersion,
-    };
-    return snap;
-  }, [baseState]);
+    if (!services) {
+      logger.error('Services not initialized');
+      return baseState;
+    }
+
+    // Delegate to BackupService (creates clean snapshot)
+    return services.backup.createBackup(baseState);
+  }, [services, baseState]);
 
   const restoreState = React.useCallback(
     async (obj: unknown, mergeStrategy: "replace" | "merge" = "replace") => {
-      if (!isValidState(obj)) {
-        logger.error('🚨 RESTORE VALIDATION FAILED:', {
-          hasObj: !!obj,
-          type: typeof obj,
-          hasAddresses: obj && Array.isArray((obj as any).addresses),
-          hasCompletions: obj && Array.isArray((obj as any).completions),
-          hasActiveIndex: obj && "activeIndex" in (obj as any),
-          hasDaySessions: obj && Array.isArray((obj as any).daySessions),
-          objKeys: obj ? Object.keys(obj as any) : null
-        });
+      if (!services) {
+        logger.error('Services not initialized');
+        throw new Error('Services not initialized');
+      }
+
+      // Validate backup using service
+      const validation = services.backup.validateBackup(obj);
+      if (!validation.valid) {
+        logger.error('🚨 RESTORE VALIDATION FAILED:', validation.errors);
+        showError('Invalid backup file format');
         throw new Error("Invalid backup file format");
       }
 
-      const version =
-        typeof (obj as any).currentListVersion === "number"
-          ? (obj as any).currentListVersion
-          : 1;
-
-      // Mobile browser detection
-      const isMobile = /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const backup = obj as AppState;
+      const version = backup.currentListVersion || 1;
 
       logger.info('📁 RESTORE DATA ANALYSIS:', {
-        addressCount: obj.addresses.length,
-        completionCount: obj.completions.length,
-        arrangementCount: obj.arrangements?.length || 0,
-        daySessionCount: obj.daySessions?.length || 0,
-        activeIndex: obj.activeIndex,
+        addressCount: backup.addresses.length,
+        completionCount: backup.completions.length,
+        arrangementCount: backup.arrangements?.length || 0,
+        daySessionCount: backup.daySessions?.length || 0,
         listVersion: version,
         mergeStrategy,
-        isMobile,
-        isTouch,
-        userAgent: navigator.userAgent.substring(0, 50)
       });
 
+      // Stamp completions with version
       const restoredState: AppState = {
-        addresses: obj.addresses,
-        completions: stampCompletionsWithVersion(obj.completions, version),
-        activeIndex: obj.activeIndex ?? null,
-        daySessions: obj.daySessions ?? [],
-        arrangements: obj.arrangements ?? [],
+        addresses: backup.addresses,
+        completions: stampCompletionsWithVersion(backup.completions, version),
+        activeIndex: backup.activeIndex ?? null,
+        daySessions: backup.daySessions ?? [],
+        arrangements: backup.arrangements ?? [],
         currentListVersion: version,
+        subscription: backup.subscription,
+        reminderSettings: backup.reminderSettings,
+        bonusSettings: backup.bonusSettings,
       };
 
+      // Delegate merge logic to BackupService
+      const finalState = services.backup.prepareRestore(restoredState, baseState, mergeStrategy);
+
       logger.info('📁 RESTORED STATE PREPARED:', {
-        addressCount: restoredState.addresses.length,
-        completionCount: restoredState.completions.length,
-        arrangementCount: restoredState.arrangements.length,
-        daySessionCount: restoredState.daySessions.length,
-        activeIndex: restoredState.activeIndex,
-        listVersion: restoredState.currentListVersion
+        addressCount: finalState.addresses.length,
+        completionCount: finalState.completions.length,
+        arrangementCount: finalState.arrangements.length,
+        daySessionCount: finalState.daySessions.length,
       });
 
-      if (mergeStrategy === "merge") {
-        // Merge with existing state
-        setBaseState((currentState) => {
-          const merged: AppState = {
-            addresses:
-              restoredState.currentListVersion >=
-              currentState.currentListVersion
-                ? restoredState.addresses
-                : currentState.addresses,
-            currentListVersion: Math.max(
-              restoredState.currentListVersion,
-              currentState.currentListVersion
-            ),
-
-            // Merge completions, avoiding duplicates
-            completions: [
-              ...currentState.completions,
-              ...restoredState.completions.filter(
-                (restored) =>
-                  !currentState.completions.some(
-                    (existing) =>
-                      existing.timestamp === restored.timestamp &&
-                      existing.index === restored.index &&
-                      existing.outcome === restored.outcome
-                  )
-              ),
-            ].sort(
-              (a, b) =>
-                new Date(b.timestamp).getTime() -
-                new Date(a.timestamp).getTime()
-            ),
-
-            // Merge arrangements, preferring newer versions
-            arrangements: Array.from(
-              new Map(
-                [
-                  ...currentState.arrangements.map(
-                    (arr) => [arr.id, arr] as [string, Arrangement]
-                  ),
-                  ...restoredState.arrangements.map(
-                    (arr) => [arr.id, arr] as [string, Arrangement]
-                  ),
-                ].sort(
-                  ([, a], [, b]) =>
-                    new Date(b.updatedAt).getTime() -
-                    new Date(a.updatedAt).getTime()
-                )
-              ).values()
-            ),
-
-            // Merge day sessions, keeping unique dates
-            daySessions: Array.from(
-              new Map(
-                [
-                  ...currentState.daySessions.map(
-                    (session) => [session.date, session] as [string, DaySession]
-                  ),
-                  ...restoredState.daySessions.map(
-                    (session) => [session.date, session] as [string, DaySession]
-                  ),
-                ]
-              ).values()
-            ),
-
-            activeIndex: restoredState.activeIndex ?? currentState.activeIndex,
-          };
-
-          return merged;
-        });
-      } else {
-        // Complete replacement
-        setBaseState(restoredState);
-      }
+      // Apply restored state
+      setBaseState(finalState);
 
       // Clear optimistic updates after restore
       clearOptimisticUpdates();
