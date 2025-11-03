@@ -229,6 +229,65 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     return applyOptimisticUpdates(patchedBaseState, optimisticUpdates);
   }, [baseState, optimisticUpdates, setBaseState]);
 
+  // ---- Initialize domain services and repositories ----
+  // Clean Architecture: Repositories (data access) + Services (business logic)
+  const servicesAndRepos = React.useMemo(() => {
+    if (!submitOperation) return null;
+
+    // Import repositories
+    const { AddressRepository } = require('./repositories/AddressRepository');
+    const { CompletionRepository } = require('./repositories/CompletionRepository');
+    const { SessionRepository } = require('./repositories/SessionRepository');
+    const { ArrangementRepository } = require('./repositories/ArrangementRepository');
+    const { SettingsRepository } = require('./repositories/SettingsRepository');
+
+    // Import services
+    const { AddressService } = require('./services/AddressService');
+    const { CompletionService } = require('./services/CompletionService');
+    const { SessionService } = require('./services/SessionService');
+    const { ArrangementService } = require('./services/ArrangementService');
+    const { SettingsService } = require('./services/SettingsService');
+    const { BackupService } = require('./services/BackupService');
+    const { SyncService } = require('./services/SyncService');
+
+    // Initialize repositories (data access layer)
+    const addressRepo = new AddressRepository(submitOperation, deviceId);
+    const completionRepo = new CompletionRepository(submitOperation, deviceId);
+    const sessionRepo = new SessionRepository(submitOperation, deviceId);
+    const arrangementRepo = new ArrangementRepository(submitOperation, deviceId);
+    const settingsRepo = new SettingsRepository(submitOperation, deviceId);
+
+    // Initialize services (business logic layer - pure, no data access)
+    const addressService = new AddressService();
+    const completionService = new CompletionService();
+    const sessionService = new SessionService();
+    const arrangementService = new ArrangementService();
+    const settingsService = new SettingsService();
+    const backupService = new BackupService();
+    const syncService = new SyncService(submitOperation);
+
+    return {
+      // Repositories (data access)
+      repositories: {
+        address: addressRepo,
+        completion: completionRepo,
+        session: sessionRepo,
+        arrangement: arrangementRepo,
+        settings: settingsRepo,
+      },
+      // Services (business logic)
+      services: {
+        address: addressService,
+        completion: completionService,
+        session: sessionService,
+        arrangement: arrangementService,
+        settings: settingsService,
+        backup: backupService,
+        sync: syncService,
+      },
+    };
+  }, [submitOperation, deviceId]);
+
   // ---- Call extracted hooks ----
 
   // 3. Completion state (create, update, delete completions)
@@ -392,6 +451,61 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         }
       }).catch(err => {
         logger.error('Failed to submit session end operation:', err);
+      });
+    }
+  }, [submitOperation]);
+
+  const updateSession = React.useCallback((date: string, updates: Partial<DaySession>, createIfMissing: boolean = false) => {
+    setBaseState((s: AppState) => {
+      const sessionIndex = s.daySessions.findIndex((session: DaySession) => session.date === date);
+
+      if (sessionIndex >= 0) {
+        // Update existing session
+        const updatedSessions = s.daySessions.map((session: DaySession, idx: number) => {
+          if (idx === sessionIndex) {
+            const updatedSession = { ...session, ...updates };
+
+            // Recalculate duration if both start and end are present
+            if (updatedSession.start && updatedSession.end) {
+              try {
+                const startTime = new Date(updatedSession.start).getTime();
+                const endTime = new Date(updatedSession.end).getTime();
+                if (endTime >= startTime) {
+                  updatedSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
+                } else {
+                  delete updatedSession.end;
+                  delete updatedSession.durationSeconds;
+                }
+              } catch (error) {
+                logger.error('Duration calculation failed:', error);
+              }
+            }
+
+            return updatedSession;
+          }
+          return session;
+        });
+
+        logger.info('Updated session for date:', date, 'with updates:', updates);
+        return { ...s, daySessions: updatedSessions };
+      } else if (createIfMissing) {
+        // Create new session if it doesn't exist
+        const newSession: DaySession = { date, ...updates };
+        logger.info('Created new session for date:', date, 'with data:', updates);
+        return { ...s, daySessions: [...s.daySessions, newSession] };
+      } else {
+        logger.warn('Session not found for date:', date, 'and createIfMissing is false');
+        return s;
+      }
+    });
+
+    // Submit operation to cloud
+    if (submitOperation) {
+      submitOperation({
+        type: 'SESSION_UPDATE',
+        payload: { date, updates }
+      }).catch(err => {
+        logger.error('Failed to submit session update operation:', err);
       });
     }
   }, [submitOperation]);
@@ -837,6 +951,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     // Day tracking
     startDay,
     endDay,
+    updateSession,
 
     // Backup/restore
     backupState,

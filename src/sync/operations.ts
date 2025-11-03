@@ -80,6 +80,13 @@ export type SessionOperation = BaseOperation & (
         endTime: string;
       };
     }
+  | {
+      type: 'SESSION_UPDATE';
+      payload: {
+        date: string;
+        updates: Partial<DaySession>;
+      };
+    }
 );
 
 // Arrangement operations

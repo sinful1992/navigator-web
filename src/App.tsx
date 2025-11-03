@@ -250,6 +250,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
     loading,
     startDay,
     endDay,
+    updateSession,
     backupState,
     restoreState,
     setState,
@@ -730,57 +731,25 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       }
       const newISO = parsed.toISOString();
       const dayKey = newISO.slice(0, 10);
-      
-      setBaseState((s) => {
-        const arr = s.daySessions.slice();
-        let sessionIndex = arr.findIndex((d: DaySession) => d.date === dayKey);
-        let targetSession: DaySession;
 
-        if (sessionIndex >= 0) {
-          targetSession = { ...arr[sessionIndex], start: newISO };
-        } else {
-          targetSession = { date: dayKey, start: newISO };
+      // Find existing session to check if end time conflicts
+      const existingSession = state.daySessions.find((d: DaySession) => d.date === dayKey);
+      const updates: Partial<DaySession> = { start: newISO };
+
+      // If session has an end time that's before the new start, remove the end time
+      if (existingSession?.end) {
+        const start = new Date(newISO).getTime();
+        const end = new Date(existingSession.end).getTime();
+        if (end < start) {
+          updates.end = undefined;
+          updates.durationSeconds = undefined;
         }
+      }
 
-        if (targetSession.end) {
-          try {
-            const start = new Date(newISO).getTime();
-            const end = new Date(targetSession.end).getTime();
-            if (end >= start) {
-              targetSession.durationSeconds = Math.floor((end - start) / 1000);
-            } else {
-              delete targetSession.end;
-              delete targetSession.durationSeconds;
-            }
-          } catch (error) {
-            logger.error('Error calculating duration:', error);
-          }
-        }
-
-        const now = new Date().toISOString();
-        (targetSession as any).updatedAt = now;
-        (targetSession as any).updatedBy = deviceId;
-
-        const operationId = `edit_start_${dayKey}_${Date.now()}`;
-        const forServer = {
-          ...targetSession,
-          id: dayKey,
-          updatedAt: now,
-          updatedBy: deviceId,
-        };
-
-        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
-
-        if (sessionIndex >= 0) {
-          arr[sessionIndex] = targetSession;
-        } else {
-          arr.push(targetSession);
-        }
-
-        return { ...s, daySessions: arr };
-      });
+      // Use updateSession which handles state update + cloud sync
+      updateSession(dayKey, updates, true); // createIfMissing=true
     },
-    [setBaseState, deviceId, enqueueOp]
+    [state.daySessions, updateSession]
   );
 
   const handleEditEnd = React.useCallback(
@@ -794,60 +763,25 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       const endISO = parsed.toISOString();
       const dayKey = endISO.slice(0, 10);
 
-      setBaseState((s) => {
-        const arr = s.daySessions.slice();
-        let sessionIndex = arr.findIndex((d: DaySession) => d.date === dayKey);
-        let targetSession: DaySession;
+      // Find existing session to check if start time conflicts
+      const existingSession = state.daySessions.find((d: DaySession) => d.date === dayKey);
+      const updates: Partial<DaySession> = { end: endISO };
 
-        if (sessionIndex >= 0) {
-          targetSession = { ...arr[sessionIndex] };
-        } else {
-          targetSession = { date: dayKey, start: endISO };
+      // If session doesn't have a start, or start is after end, set start to end time
+      if (!existingSession?.start) {
+        updates.start = endISO;
+      } else {
+        const startTime = new Date(existingSession.start).getTime();
+        const endTime = new Date(endISO).getTime();
+        if (startTime > endTime) {
+          updates.start = endISO;
         }
+      }
 
-        targetSession.end = endISO;
-
-        if (targetSession.start) {
-          try {
-            const startTime = new Date(targetSession.start).getTime();
-            const endTime = new Date(endISO).getTime();
-            
-            if (endTime >= startTime) {
-              targetSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
-            } else {
-              targetSession.start = endISO;
-              targetSession.durationSeconds = 0;
-            }
-          } catch (error) {
-            logger.error('Error calculating duration:', error);
-            targetSession.durationSeconds = 0;
-          }
-        }
-
-        const now = new Date().toISOString();
-        (targetSession as any).updatedAt = now;
-        (targetSession as any).updatedBy = deviceId;
-
-        const operationId = `edit_end_${dayKey}_${Date.now()}`;
-        const forServer = {
-          ...targetSession,
-          id: dayKey,
-          updatedAt: now,
-          updatedBy: deviceId,
-        };
-
-        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
-
-        if (sessionIndex >= 0) {
-          arr[sessionIndex] = targetSession;
-        } else {
-          arr.push(targetSession);
-        }
-
-        return { ...s, daySessions: arr };
-      });
+      // Use updateSession which handles state update + cloud sync
+      updateSession(dayKey, updates, true); // createIfMissing=true
     },
-    [setBaseState, deviceId, enqueueOp]
+    [state.daySessions, updateSession]
   );
 
 
