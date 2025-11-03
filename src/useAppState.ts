@@ -749,10 +749,15 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   /** Import a new Excel list: bump list version with option to preserve completions. */
   const setAddresses = React.useCallback(
-    (rows: AddressRow[], preserveCompletions = true) => {
+    async (rows: AddressRow[], preserveCompletions = true) => {
+      if (!services) {
+        logger.error('Services not initialized');
+        return;
+      }
+
       logger.info(`🔄 IMPORT START: Importing ${rows.length} addresses, preserveCompletions=${preserveCompletions}`);
 
-      // 🔧 CRITICAL FIX: Prevent import while address is active
+      // Prevent import while address is active
       if (baseState.activeIndex !== null) {
         const activeAddress = baseState.addresses[baseState.activeIndex];
         logger.error(`❌ IMPORT BLOCKED: Cannot import while address is active: "${activeAddress?.address}"`);
@@ -760,195 +765,161 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         return;
       }
 
-      // 🔧 CRITICAL FIX: Set import protection flag to prevent cloud sync override
-      const importTime = setProtectionFlag('navigator_import_in_progress');
-      logger.info('🛡️ IMPORT PROTECTION ACTIVATED:', new Date(importTime).toISOString());
+      try {
+        // Delegate to AddressService (handles validation, protection, operation submission)
+        const result = await services.address.importAddresses(
+          rows,
+          preserveCompletions,
+          baseState.currentListVersion
+        );
 
-      const operationId = generateOperationId("update", "address", {
-        type: "bulk_import",
-        count: rows.length,
-        preserve: preserveCompletions,
-      });
-
-      // 🔧 FIX: Validate rows before applying
-      const validRows = Array.isArray(rows) ? rows.filter(validateAddressRow) : [];
-
-      logger.info(`🔄 IMPORT VALIDATION: ${validRows.length} valid out of ${rows.length} total`);
-
-      if (validRows.length === 0) {
-        logger.warn('No valid addresses to import');
-        return;
-      }
-
-      // Apply optimistically
-      addOptimisticUpdate(
-        "update",
-        "address",
-        { addresses: validRows, bumpVersion: true, preserveCompletions },
-        operationId
-      );
-
-      // Apply to base state
-      setBaseState((s) => {
-        const newListVersion = (typeof s.currentListVersion === "number" ? s.currentListVersion : 1) + 1;
-        logger.info(`🔄 IMPORT BASE STATE UPDATE: addresses=${validRows.length}, preserveCompletions=${preserveCompletions}, oldCompletions=${s.completions.length}, newListVersion=${newListVersion}`);
-
-        // Active protection should prevent this from happening while address is active
-        if (s.activeIndex !== null) {
-          logger.error(`❌ IMPORT WHILE ACTIVE: This should never happen! activeIndex=${s.activeIndex}, protection should be blocking this`);
-        }
-
-        const newState = {
-          ...s,
-          addresses: validRows,
-          activeIndex: null,
-          activeStartTime: null, // 🔧 CRITICAL FIX: Clear activeStartTime when clearing activeIndex
-          currentListVersion: newListVersion,
-          completions: preserveCompletions ? s.completions : [],
-        };
-
-        logger.info(`🔄 IMPORT RESULT STATE: addresses=${newState.addresses.length}, completions=${newState.completions.length}, listVersion=${newState.currentListVersion}`);
-        return newState;
-      });
-
-      // Confirm immediately for local operations
-      confirmOptimisticUpdate(operationId);
-
-      // 🔥 DELTA SYNC: Submit operation to cloud immediately
-      if (submitOperation) {
-        submitOperation({
-          type: 'ADDRESS_BULK_IMPORT',
-          payload: {
-            addresses: validRows,
-            newListVersion: (typeof baseState.currentListVersion === "number" ? baseState.currentListVersion : 1) + 1,
-            preserveCompletions
-          }
-        }).catch(err => {
-          logger.error('Failed to submit bulk import operation:', err);
+        const operationId = generateOperationId("update", "address", {
+          type: "bulk_import",
+          count: result.addresses.length,
+          preserve: preserveCompletions,
         });
-      }
 
-      // 🔧 CRITICAL FIX: Clear import protection flag after a delay to allow state to settle
-      setTimeout(() => {
-        clearProtectionFlag('navigator_import_in_progress');
-        logger.info('🛡️ IMPORT PROTECTION CLEARED after import completion');
-      }, 2000); // 2 second protection window
+        // Apply optimistically
+        addOptimisticUpdate(
+          "update",
+          "address",
+          { addresses: result.addresses, bumpVersion: true, preserveCompletions },
+          operationId
+        );
+
+        // Update local state
+        setBaseState((s) => {
+          const newState = {
+            ...s,
+            addresses: result.addresses,
+            activeIndex: null,
+            activeStartTime: null,
+            currentListVersion: result.newListVersion,
+            completions: preserveCompletions ? s.completions : [],
+          };
+
+          logger.info(`🔄 IMPORT RESULT: addresses=${newState.addresses.length}, completions=${newState.completions.length}, listVersion=${newState.currentListVersion}`);
+          return newState;
+        });
+
+        // Confirm operation
+        confirmOptimisticUpdate(operationId);
+
+      } catch (error) {
+        logger.error('Address import failed:', error);
+        showError(`Failed to import addresses: ${(error as Error).message}`);
+      }
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, baseState.activeIndex, baseState.addresses]
+    [services, baseState.activeIndex, baseState.addresses, baseState.currentListVersion, addOptimisticUpdate, confirmOptimisticUpdate]
   );
 
   /** Add a single address (used by Arrangements "manual address"). Returns new index. */
   const addAddress = React.useCallback(
-    (addressRow: AddressRow): Promise<number> => {
-      return new Promise<number>((resolve) => {
-        // 🔧 FIX: Validate address before adding
-        if (!validateAddressRow(addressRow)) {
-          resolve(-1);
-          return;
-        }
+    async (addressRow: AddressRow): Promise<number> => {
+      if (!services) {
+        logger.error('Services not initialized');
+        return -1;
+      }
 
-        const operationId = generateOperationId("create", "address", addressRow);
+      try {
+        // Delegate to AddressService (handles validation and operation submission)
+        const newAddress = await services.address.addAddress(addressRow);
+
+        const operationId = generateOperationId("create", "address", newAddress);
 
         // Apply optimistically
-        addOptimisticUpdate("create", "address", addressRow, operationId);
+        addOptimisticUpdate("create", "address", newAddress, operationId);
 
-        // Apply to base state
+        let newIndex = -1;
+
+        // Update local state
         setBaseState((s) => {
-          const newAddresses = [...s.addresses, addressRow];
-          const newIndex = newAddresses.length - 1;
-
-          // Resolve immediately with the new index
-          confirmOptimisticUpdate(operationId);
-          resolve(newIndex);
-
+          const newAddresses = [...s.addresses, newAddress];
+          newIndex = newAddresses.length - 1;
           return { ...s, addresses: newAddresses };
         });
 
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
-          submitOperation({
-            type: 'ADDRESS_ADD',
-            payload: { address: addressRow }
-          }).catch(err => {
-            logger.error('Failed to submit address add operation:', err);
-            // Don't throw - operation is saved locally and will retry
-          });
-        }
-      });
+        // Confirm operation
+        confirmOptimisticUpdate(operationId);
+
+        return newIndex;
+
+      } catch (error) {
+        logger.error('Failed to add address:', error);
+        return -1;
+      }
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
+    [services, addOptimisticUpdate, confirmOptimisticUpdate]
   );
 
-  const setActive = React.useCallback((idx: number) => {
-    // 🔧 CRITICAL FIX: Set protection flag (no timeout - cleared on Complete/Cancel)
-    setProtectionFlag('navigator_active_protection');
+  const setActive = React.useCallback(async (idx: number) => {
+    if (!services) {
+      logger.error('Services not initialized');
+      return;
+    }
 
     const now = new Date().toISOString();
-    let shouldSubmit = false;
 
-    setBaseState((s) => {
-      const address = s.addresses[idx];
-
-      // Check if there's already an active address
-      if (s.activeIndex !== null && s.activeIndex !== idx) {
-        const currentActiveAddress = s.addresses[s.activeIndex];
-        logger.warn(`Cannot start address #${idx} - address #${s.activeIndex} "${currentActiveAddress?.address}" is already active`);
-        showWarning(`Please complete or cancel the current active address first`);
-        localStorage.removeItem('navigator_active_protection');
-        return s; // Don't change state
-      }
-
-      // Check if this address is already completed (cross-device protection)
-      if (address) {
-        const isCompleted = s.completions.some(c =>
-          c.index === idx &&
-          (c.listVersion || s.currentListVersion) === s.currentListVersion
-        );
-
-        if (isCompleted) {
-          logger.warn(`Cannot set active - address at index ${idx} is already completed`);
-          showWarning(`This address is already completed`);
-          localStorage.removeItem('navigator_active_protection');
-          return s; // Don't change state
-        }
-      }
-
-      logger.info(`📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - SYNC BLOCKED until Complete/Cancel`);
-      shouldSubmit = true;
-
-      return { ...s, activeIndex: idx, activeStartTime: now };
-    });
-
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-    if (shouldSubmit && submitOperation) {
-      submitOperation({
-        type: 'ACTIVE_INDEX_SET',
-        payload: { index: idx, startTime: now }
-      }).catch(err => {
-        logger.error('Failed to submit active index operation:', err);
-      });
+    // Check if there's already an active address
+    if (baseState.activeIndex !== null && baseState.activeIndex !== idx) {
+      const currentActiveAddress = baseState.addresses[baseState.activeIndex];
+      logger.warn(`Cannot start address #${idx} - address #${baseState.activeIndex} "${currentActiveAddress?.address}" is already active`);
+      showWarning(`Please complete or cancel the current active address first`);
+      return;
     }
-  }, [submitOperation]);
 
-  const cancelActive = React.useCallback(() => {
-    // 🔧 FIX: Clear protection to resume cloud sync
-    clearProtectionFlag('navigator_active_protection');
+    // Check if this address is already completed
+    const address = baseState.addresses[idx];
+    if (address) {
+      const isCompleted = baseState.completions.some(c =>
+        c.index === idx &&
+        (c.listVersion || baseState.currentListVersion) === baseState.currentListVersion
+      );
 
-    setBaseState((s) => {
-      logger.info(`📍 CANCELING ACTIVE: Clearing active state - SYNC RESUMED`);
-      return { ...s, activeIndex: null, activeStartTime: null };
-    });
-
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-    if (submitOperation) {
-      submitOperation({
-        type: 'ACTIVE_INDEX_SET',
-        payload: { index: null, startTime: null }
-      }).catch(err => {
-        logger.error('Failed to submit cancel active operation:', err);
-      });
+      if (isCompleted) {
+        logger.warn(`Cannot set active - address at index ${idx} is already completed`);
+        showWarning(`This address is already completed`);
+        return;
+      }
     }
-  }, [submitOperation]);
+
+    try {
+      // Delegate to AddressService (handles protection flag and operation submission)
+      await services.address.setActiveAddress(idx, now);
+
+      // Update local state
+      setBaseState((s) => {
+        logger.info(`📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - SYNC BLOCKED until Complete/Cancel`);
+        return { ...s, activeIndex: idx, activeStartTime: now };
+      });
+
+    } catch (error) {
+      logger.error('Failed to set active address:', error);
+      showError(`Failed to start timer: ${(error as Error).message}`);
+    }
+  }, [services, baseState]);
+
+  const cancelActive = React.useCallback(async () => {
+    if (!services) {
+      logger.error('Services not initialized');
+      return;
+    }
+
+    try {
+      // Delegate to AddressService (handles protection flag clearing and operation submission)
+      await services.address.cancelActiveAddress();
+
+      // Update local state
+      setBaseState((s) => {
+        logger.info(`📍 CANCELING ACTIVE: Clearing active state - SYNC RESUMED`);
+        return { ...s, activeIndex: null, activeStartTime: null };
+      });
+
+    } catch (error) {
+      logger.error('Failed to cancel active address:', error);
+      showError(`Failed to cancel timer: ${(error as Error).message}`);
+    }
+  }, [services]);
 
   // Track pending completions to prevent double submissions
   const [, setPendingCompletions] = React.useState<Set<number>>(new Set());
@@ -981,114 +952,76 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   const complete = React.useCallback(
     async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, enforcementFees?: number[]): Promise<string> => {
-      // Validate index is a valid number
-      if (!Number.isInteger(index) || index < 0) {
-        const error = `Invalid index: ${index}. Index must be a non-negative integer.`;
-        logger.error(error);
+      if (!services) {
+        logger.error('Services not initialized');
+        throw new Error('Services not initialized');
+      }
+
+      // Validate index
+      if (!Number.isInteger(index) || index < 0 || index >= baseState.addresses.length) {
         showError('Invalid address index. Please refresh and try again.');
-        throw new Error(error);
+        throw new Error(`Invalid index: ${index}`);
       }
 
-      // Check array bounds
-      const currentState = baseState;
-      if (index >= currentState.addresses.length) {
-        const error = `Index ${index} out of bounds. Total addresses: ${currentState.addresses.length}`;
-        logger.error(error);
-        showError('Address not found. The list may have changed. Please refresh.');
-        throw new Error(error);
-      }
-
-      // Check if completion is already pending for this index
+      // Check if completion is already pending
       if (pendingCompletionsRef.current.has(index)) {
         throw new Error(`Completion already pending for index ${index}`);
       }
 
-      // Check if address exists and has valid data
-      const address = currentState.addresses[index];
+      // Check if address exists
+      const address = baseState.addresses[index];
       if (!address || !address.address) {
-        const error = `Address at index ${index} is invalid or empty`;
-        logger.error(error);
         showError('Invalid address data. Please refresh and try again.');
-        throw new Error(error);
+        throw new Error(`Address at index ${index} is invalid`);
       }
 
-      // Check if already completed (timestamp-based check)
-      const existingCompletion = currentState.completions.find(
-        (c) => c.address === address.address && c.listVersion === currentState.currentListVersion
+      // Check for recent duplicate completion
+      const existingCompletion = baseState.completions.find(
+        (c) => c.address === address.address && c.listVersion === baseState.currentListVersion
       );
 
       if (existingCompletion) {
-        // If there's an existing completion, check if it's recent (within last 30 seconds)
-        // This prevents rapid duplicate submissions but allows legitimate re-completion
-        const existingTime = new Date(existingCompletion.timestamp).getTime();
-        const now = Date.now();
-        const timeDiff = now - existingTime;
-
-        if (timeDiff < 30000) { // 30 seconds
+        const timeDiff = Date.now() - new Date(existingCompletion.timestamp).getTime();
+        if (timeDiff < 30000) {
           showWarning(`Address "${address.address}" was already completed ${Math.round(timeDiff/1000)} seconds ago`);
-          return Promise.reject(); // Exit early but maintain function signature
+          return Promise.reject();
         }
-
-        logger.info(`🔄 RE-COMPLETING: Address "${address.address}" was previously completed ${new Date(existingCompletion.timestamp).toLocaleString()}, allowing new completion`);
       }
-
-      const nowISO = new Date().toISOString();
-
-      // Calculate time spent on this case if it was the active one
-      let timeSpentSeconds: number | undefined;
-      if (currentState.activeIndex === index && currentState.activeStartTime) {
-        const startTime = new Date(currentState.activeStartTime).getTime();
-        const endTime = new Date(nowISO).getTime();
-        timeSpentSeconds = Math.floor((endTime - startTime) / 1000);
-        logger.info(`⏱️ CASE TIME TRACKED: ${Math.floor(timeSpentSeconds / 60)}m ${timeSpentSeconds % 60}s on "${address.address}"`);
-      }
-
-      const completion: Completion = {
-        index,
-        address: address.address,
-        lat: address.lat ?? null,
-        lng: address.lng ?? null,
-        outcome,
-        amount,
-        timestamp: nowISO,
-        listVersion: currentState.currentListVersion,
-        arrangementId,
-        caseReference,
-        timeSpentSeconds,
-        numberOfCases,
-        enforcementFees,
-      };
-
-      const operationId = generateOperationId(
-        "create",
-        "completion",
-        completion
-      );
 
       try {
         // Mark as pending
         pendingCompletionsRef.current.add(index);
         setPendingCompletions(new Set(pendingCompletionsRef.current));
 
-        // Apply all changes synchronously to avoid race conditions
-        const completionKey = `${index}_${outcome}_${currentState.currentListVersion}`;
+        // Delegate to CompletionService (handles validation, time tracking, operation submission)
+        const completion = await services.completion.createCompletion({
+          index,
+          address: address.address,
+          lat: address.lat ?? null,
+          lng: address.lng ?? null,
+          outcome,
+          amount,
+          listVersion: baseState.currentListVersion,
+          arrangementId,
+          caseReference,
+          numberOfCases,
+          enforcementFees,
+        }, baseState.activeStartTime);
 
-        // Track recent completion (cleanup happens in setState handler)
+        const operationId = generateOperationId("create", "completion", completion);
+        const completionKey = `${index}_${outcome}_${baseState.currentListVersion}`;
+
+        // Track recent completion
         recentCompletionsRef.current.set(completionKey, {
           timestamp: Date.now(),
           completion
         });
 
-        // Apply both optimistic and base state updates in single transaction
+        // Apply optimistic update
         addOptimisticUpdate("create", "completion", completion, operationId);
 
+        // Update local state
         setBaseState((s) => {
-          if (s.activeIndex === index) {
-            // 🔧 FIX: Clear protection when completing active address
-            clearProtectionFlag('navigator_active_protection');
-            logger.info(`📍 COMPLETED ACTIVE ADDRESS: Clearing active state - SYNC RESUMED`);
-          }
-
           return {
             ...s,
             completions: [completion, ...s.completions],
@@ -1097,112 +1030,109 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
           };
         });
 
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
-          submitOperation({
-            type: 'COMPLETION_CREATE',
-            payload: { completion }
-          }).catch(err => {
-            logger.error('Failed to submit completion operation:', err);
-            // Don't throw - operation is saved locally and will retry
-          });
-        }
-
         return operationId;
+
+      } catch (error) {
+        logger.error('Failed to create completion:', error);
+        showError(`Failed to complete address: ${(error as Error).message}`);
+        throw error;
       } finally {
-        // Always clear pending state, even if above operations fail
+        // Always clear pending state
         pendingCompletionsRef.current.delete(index);
         setPendingCompletions(new Set(pendingCompletionsRef.current));
       }
     },
-    [baseState, addOptimisticUpdate, submitOperation]
+    [services, baseState, addOptimisticUpdate]
   );
 
   /** Enhanced undo with optimistic updates */
   const undo = React.useCallback(
-    (index: number) => {
+    async (index: number) => {
+      if (!services) {
+        logger.error('Services not initialized');
+        return;
+      }
+
+      // Find the most recent completion for this index
       let completionToDelete: Completion | undefined;
+      let mostRecentPos = -1;
+      let mostRecentTime = 0;
 
-      setBaseState((s) => {
-        const arr = s.completions.slice();
-
-        // Find the most recent completion for this index and list version
-        let mostRecentPos = -1;
-        let mostRecentTime = 0;
-
-        for (let i = 0; i < arr.length; i++) {
-          const c = arr[i];
-          if (Number(c.index) === Number(index) &&
-              c.listVersion === s.currentListVersion) {
-            const completionTime = new Date(c.timestamp).getTime();
-            if (completionTime > mostRecentTime) {
-              mostRecentTime = completionTime;
-              mostRecentPos = i;
-            }
+      for (let i = 0; i < baseState.completions.length; i++) {
+        const c = baseState.completions[i];
+        if (Number(c.index) === Number(index) &&
+            c.listVersion === baseState.currentListVersion) {
+          const completionTime = new Date(c.timestamp).getTime();
+          if (completionTime > mostRecentTime) {
+            mostRecentTime = completionTime;
+            mostRecentPos = i;
+            completionToDelete = c;
           }
         }
+      }
 
-        if (mostRecentPos >= 0) {
-          const completion = arr[mostRecentPos];
-          completionToDelete = completion;
+      if (!completionToDelete) {
+        logger.warn('No completion found to undo');
+        return;
+      }
 
-          const operationId = generateOperationId(
-            "delete",
-            "completion",
-            completion
-          );
+      try {
+        // Delegate to CompletionService (handles operation submission)
+        await services.completion.deleteCompletion(
+          completionToDelete.timestamp,
+          completionToDelete.index,
+          completionToDelete.listVersion
+        );
 
-          // Add optimistic update for deletion
-          addOptimisticUpdate("delete", "completion", completion, operationId);
+        const operationId = generateOperationId("delete", "completion", completionToDelete);
 
+        // Add optimistic update
+        addOptimisticUpdate("delete", "completion", completionToDelete, operationId);
+
+        // Update local state
+        setBaseState((s) => {
+          const arr = s.completions.slice();
           arr.splice(mostRecentPos, 1);
-
-          // Confirm immediately for local operations
-          setTimeout(() => confirmOptimisticUpdate(operationId), 0);
-        }
-
-        return { ...s, completions: arr };
-      });
-
-      // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-      if (completionToDelete && submitOperation) {
-        submitOperation({
-          type: 'COMPLETION_DELETE',
-          payload: {
-            timestamp: completionToDelete.timestamp,
-            index: completionToDelete.index,
-            listVersion: completionToDelete.listVersion,
-          }
-        }).catch(err => {
-          logger.error('Failed to submit completion delete operation:', err);
+          return { ...s, completions: arr };
         });
+
+        // Confirm operation
+        setTimeout(() => confirmOptimisticUpdate(operationId), 0);
+
+      } catch (error) {
+        logger.error('Failed to undo completion:', error);
+        showError(`Failed to undo: ${(error as Error).message}`);
       }
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
+    [services, baseState, addOptimisticUpdate, confirmOptimisticUpdate]
   );
 
   /** Update an existing completion (e.g., change outcome or amount) */
   const updateCompletion = React.useCallback(
-    (completionArrayIndex: number, updates: Partial<Completion>) => {
-      let originalTimestamp: string | undefined;
-      let shouldSubmit = false;
+    async (completionArrayIndex: number, updates: Partial<Completion>) => {
+      if (!services) {
+        logger.error('Services not initialized');
+        return;
+      }
 
-      setBaseState((s) => {
-        if (
-          !Number.isInteger(completionArrayIndex) ||
-          completionArrayIndex < 0 ||
-          completionArrayIndex >= s.completions.length
-        ) {
-          logger.error('Invalid completion index:', completionArrayIndex);
-          return s;
-        }
+      // Validate index
+      if (
+        !Number.isInteger(completionArrayIndex) ||
+        completionArrayIndex < 0 ||
+        completionArrayIndex >= baseState.completions.length
+      ) {
+        logger.error('Invalid completion index:', completionArrayIndex);
+        showError('Invalid completion index');
+        return;
+      }
 
-        const originalCompletion = s.completions[completionArrayIndex];
-        originalTimestamp = originalCompletion.timestamp;
-        shouldSubmit = true;
+      const originalCompletion = baseState.completions[completionArrayIndex];
+
+      try {
+        // Delegate to CompletionService (handles validation and operation submission)
+        await services.completion.updateCompletion(originalCompletion.timestamp, updates);
 
         const updatedCompletion = { ...originalCompletion, ...updates };
-
         const operationId = generateOperationId(
           "update",
           "completion",
@@ -1212,29 +1142,22 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         // Add optimistic update
         addOptimisticUpdate("update", "completion", updatedCompletion, operationId);
 
-        const newCompletions = s.completions.slice();
-        newCompletions[completionArrayIndex] = updatedCompletion;
+        // Update local state
+        setBaseState((s) => {
+          const newCompletions = s.completions.slice();
+          newCompletions[completionArrayIndex] = updatedCompletion;
+          return { ...s, completions: newCompletions };
+        });
 
-        // Confirm immediately for local operations
+        // Confirm operation
         setTimeout(() => confirmOptimisticUpdate(operationId), 0);
 
-        return { ...s, completions: newCompletions };
-      });
-
-      // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-      if (shouldSubmit && originalTimestamp && submitOperation) {
-        submitOperation({
-          type: 'COMPLETION_UPDATE',
-          payload: {
-            originalTimestamp,
-            updates,
-          }
-        }).catch(err => {
-          logger.error('Failed to submit completion update operation:', err);
-        });
+      } catch (error) {
+        logger.error('Failed to update completion:', error);
+        showError(`Failed to update completion: ${(error as Error).message}`);
       }
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
+    [services, baseState, addOptimisticUpdate, confirmOptimisticUpdate]
   );
 
   // ---- 🔧 FIXED: Enhanced day tracking with better validation ----
