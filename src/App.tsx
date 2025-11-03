@@ -928,26 +928,15 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       // This prevents sequence gaps that cause sync to get stuck
       await cloudSync.clearOperationLogForRestore?.();
 
-      // 🔧 ENHANCEMENT: Submit generated SESSION_START operations to sync
-      // This ensures historical completions are visible across devices
+      // 🔧 NOTE: Do NOT submit SESSION_START operations during restore
+      // The backup data already contains completions with timestamps
+      // The daySessions are merged locally (line 912)
+      // Submitting these would cause sequence number conflicts with existing operations
+      // Historical completions are already visible via timestamps in the completions array
       if (generatedSessions.length > 0) {
-        logger.info(`📅 RESTORE: Generated ${generatedSessions.length} SESSION_START operations for historical dates`, {
+        logger.info(`📅 RESTORE: Generated ${generatedSessions.length} local daySessions for historical dates (not syncing to avoid conflicts)`, {
           dates: generatedSessions.map(s => s.date).join(', ')
         });
-
-        // Submit operations after a short delay
-        setTimeout(async () => {
-          for (const session of generatedSessions) {
-            try {
-              await cloudSync.submitOperation({
-                type: 'SESSION_START',
-                payload: { session }
-              });
-            } catch (err) {
-              logger.warn(`📅 RESTORE: Failed to submit SESSION_START for ${session.date}`, err);
-            }
-          }
-        }, 100);
       }
 
       // 🔧 CRITICAL FIX: Wait for restore protection window before syncing
