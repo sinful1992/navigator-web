@@ -161,6 +161,30 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
         };
       }
 
+      case 'SESSION_UPDATE': {
+        const { date, updates } = operation.payload;
+
+        return {
+          ...state,
+          daySessions: state.daySessions.map(session => {
+            if (session.date === date) {
+              const updatedSession = { ...session, ...updates };
+
+              // Recalculate duration if both start and end are present
+              if (updatedSession.start && updatedSession.end) {
+                const startTime = new Date(updatedSession.start).getTime();
+                const endTime = new Date(updatedSession.end).getTime();
+                const durationSeconds = Math.floor((endTime - startTime) / 1000);
+                updatedSession.durationSeconds = durationSeconds > 0 ? durationSeconds : undefined;
+              }
+
+              return updatedSession;
+            }
+            return session;
+          }),
+        };
+      }
+
       case 'ARRANGEMENT_CREATE': {
         const { arrangement } = operation.payload;
 

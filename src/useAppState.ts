@@ -1316,6 +1316,111 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     }
   }, [submitOperation]);
 
+  const updateSession = React.useCallback((date: string, updates: Partial<DaySession>, createIfMissing: boolean = false) => {
+    let sessionCreated = false;
+
+    setBaseState((s) => {
+      const sessions = s.daySessions.slice();
+      const sessionIndex = sessions.findIndex((session) => session.date === date);
+
+      if (sessionIndex < 0) {
+        if (!createIfMissing) {
+          logger.warn('Session not found for date:', date);
+          return s;
+        }
+
+        // Create new session with provided updates
+        const now = new Date().toISOString();
+        const newSession: DaySession = {
+          date,
+          start: updates.start || now,
+          end: updates.end,
+          durationSeconds: updates.durationSeconds,
+          createdAt: now,
+          updatedAt: now,
+          updatedBy: deviceId,
+        };
+
+        // Calculate duration if both start and end present
+        if (newSession.start && newSession.end) {
+          try {
+            const startTime = new Date(newSession.start).getTime();
+            const endTime = new Date(newSession.end).getTime();
+            newSession.durationSeconds = Math.max(0, Math.floor((endTime - startTime) / 1000));
+          } catch (error) {
+            logger.error('Error calculating duration:', error);
+          }
+        }
+
+        sessions.push(newSession);
+        sessionCreated = true;
+        logger.info('Creating new session:', newSession);
+
+        return { ...s, daySessions: sessions };
+      }
+
+      const updatedSession = { ...sessions[sessionIndex], ...updates };
+
+      // Recalculate duration if both start and end are present
+      if (updatedSession.start && updatedSession.end) {
+        try {
+          const startTime = new Date(updatedSession.start).getTime();
+          const endTime = new Date(updatedSession.end).getTime();
+
+          if (endTime >= startTime) {
+            updatedSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
+          } else {
+            logger.warn('End time is before start time, setting duration to 0');
+            updatedSession.durationSeconds = 0;
+          }
+        } catch (error) {
+          logger.error('Error calculating duration:', error);
+          updatedSession.durationSeconds = 0;
+        }
+      }
+
+      const now = new Date().toISOString();
+      updatedSession.updatedAt = now;
+      updatedSession.updatedBy = deviceId;
+
+      sessions[sessionIndex] = updatedSession;
+      logger.info('Updating session:', updatedSession);
+
+      return { ...s, daySessions: sessions };
+    });
+
+    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
+    if (submitOperation) {
+      const operationType = sessionCreated ? 'SESSION_START' : 'SESSION_UPDATE';
+      const payload = sessionCreated
+        ? {
+            session: {
+              date,
+              start: updates.start || new Date().toISOString(),
+              end: updates.end,
+              durationSeconds: updates.durationSeconds,
+              updatedAt: new Date().toISOString(),
+              updatedBy: deviceId,
+            }
+          }
+        : {
+            date,
+            updates: {
+              ...updates,
+              updatedAt: new Date().toISOString(),
+              updatedBy: deviceId,
+            }
+          };
+
+      submitOperation({
+        type: operationType as any,
+        payload
+      }).catch(err => {
+        logger.error(`Failed to submit ${operationType} operation:`, err);
+      });
+    }
+  }, [submitOperation, deviceId, setBaseState]);
+
   // ---- enhanced arrangements ----
 
   const addArrangement = React.useCallback(
@@ -2012,6 +2117,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     updateCompletion,
     startDay,
     endDay,
+    updateSession,
     addArrangement,
     updateArrangement,
     deleteArrangement,

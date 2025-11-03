@@ -12,7 +12,7 @@ import Completed from "./Completed";
 import { DayPanel } from "./DayPanel";
 import { Arrangements } from "./Arrangements";
 import { readJsonFile } from "./backup";
-import type { AddressRow, Outcome, Completion } from "./types";
+import type { AddressRow, Outcome, Completion, DaySession } from "./types";
 import { supabase } from "./lib/supabaseClient";
 import ManualAddressFAB from "./ManualAddressFAB";
 import { SubscriptionManager } from "./SubscriptionManager";
@@ -201,6 +201,7 @@ function AuthedApp() {
     updateCompletion,
     startDay,
     endDay,
+    updateSession,
     backupState,
     restoreState,
     addArrangement,
@@ -654,57 +655,26 @@ function AuthedApp() {
       }
       const newISO = parsed.toISOString();
       const dayKey = newISO.slice(0, 10);
-      
-      setBaseState((s) => {
-        const arr = s.daySessions.slice();
-        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
-        let targetSession: any;
 
-        if (sessionIndex >= 0) {
-          targetSession = { ...arr[sessionIndex], start: newISO };
-        } else {
-          targetSession = { date: dayKey, start: newISO };
+      // Find existing session to preserve end time if it exists
+      const existingSession = state.daySessions.find((d) => d.date === dayKey);
+
+      const updates: Partial<DaySession> = { start: newISO };
+
+      // If end time would be before new start time, clear it
+      if (existingSession?.end) {
+        const start = new Date(newISO).getTime();
+        const end = new Date(existingSession.end).getTime();
+        if (end < start) {
+          updates.end = undefined;
+          updates.durationSeconds = undefined;
         }
+      }
 
-        if (targetSession.end) {
-          try {
-            const start = new Date(newISO).getTime();
-            const end = new Date(targetSession.end).getTime();
-            if (end >= start) {
-              targetSession.durationSeconds = Math.floor((end - start) / 1000);
-            } else {
-              delete targetSession.end;
-              delete targetSession.durationSeconds;
-            }
-          } catch (error) {
-            logger.error('Error calculating duration:', error);
-          }
-        }
-
-        const now = new Date().toISOString();
-        targetSession.updatedAt = now;
-        targetSession.updatedBy = deviceId;
-
-        const operationId = `edit_start_${dayKey}_${Date.now()}`;
-        const forServer = {
-          ...targetSession,
-          id: dayKey,
-          updatedAt: now,
-          updatedBy: deviceId,
-        };
-
-        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
-
-        if (sessionIndex >= 0) {
-          arr[sessionIndex] = targetSession;
-        } else {
-          arr.push(targetSession);
-        }
-
-        return { ...s, daySessions: arr };
-      });
+      // updateSession will create the session if it doesn't exist (createIfMissing=true)
+      updateSession(dayKey, updates, true);
     },
-    [setBaseState, deviceId, enqueueOp]
+    [state.daySessions, updateSession]
   );
 
   const handleEditEnd = React.useCallback(
@@ -718,60 +688,31 @@ function AuthedApp() {
       const endISO = parsed.toISOString();
       const dayKey = endISO.slice(0, 10);
 
-      setBaseState((s) => {
-        const arr = s.daySessions.slice();
-        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
-        let targetSession: any;
+      // Find existing session to determine if we need start time
+      const existingSession = state.daySessions.find((d) => d.date === dayKey);
 
-        if (sessionIndex >= 0) {
-          targetSession = { ...arr[sessionIndex] };
-        } else {
-          targetSession = { date: dayKey, start: endISO };
+      const updates: Partial<DaySession> = { end: endISO };
+
+      // If no start time exists and end is before it, adjust start time
+      if (existingSession?.start) {
+        const startTime = new Date(existingSession.start).getTime();
+        const endTime = new Date(endISO).getTime();
+
+        if (endTime < startTime) {
+          // Set start time to same as end time
+          updates.start = endISO;
+          updates.durationSeconds = 0;
         }
+      } else if (!existingSession) {
+        // If creating new session, set start = end
+        updates.start = endISO;
+        updates.durationSeconds = 0;
+      }
 
-        targetSession.end = endISO;
-
-        if (targetSession.start) {
-          try {
-            const startTime = new Date(targetSession.start).getTime();
-            const endTime = new Date(endISO).getTime();
-            
-            if (endTime >= startTime) {
-              targetSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
-            } else {
-              targetSession.start = endISO;
-              targetSession.durationSeconds = 0;
-            }
-          } catch (error) {
-            logger.error('Error calculating duration:', error);
-            targetSession.durationSeconds = 0;
-          }
-        }
-
-        const now = new Date().toISOString();
-        targetSession.updatedAt = now;
-        targetSession.updatedBy = deviceId;
-
-        const operationId = `edit_end_${dayKey}_${Date.now()}`;
-        const forServer = {
-          ...targetSession,
-          id: dayKey,
-          updatedAt: now,
-          updatedBy: deviceId,
-        };
-
-        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
-
-        if (sessionIndex >= 0) {
-          arr[sessionIndex] = targetSession;
-        } else {
-          arr.push(targetSession);
-        }
-
-        return { ...s, daySessions: arr };
-      });
+      // updateSession will create the session if it doesn't exist (createIfMissing=true)
+      updateSession(dayKey, updates, true);
     },
-    [setBaseState, deviceId, enqueueOp]
+    [state.daySessions, updateSession]
   );
 
 
