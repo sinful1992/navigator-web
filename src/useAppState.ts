@@ -448,6 +448,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   const restoreState = React.useCallback(
     async (obj: unknown, mergeStrategy: "replace" | "merge" = "replace") => {
+      console.log('✅ restoreState called with:', typeof obj, obj && typeof obj === 'object' ? Object.keys(obj as any).join(', ') : '');
+      console.log('✅ restoreState - completions count:', (obj as any)?.completions?.length || 0, 'daySessions count:', (obj as any)?.daySessions?.length || 0);
+
       if (!isValidState(obj)) {
         logger.error('🚨 RESTORE VALIDATION FAILED:', {
           hasObj: !!obj,
