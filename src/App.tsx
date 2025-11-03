@@ -855,10 +855,15 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
     const file = e.target.files?.[0];
     if (!file) return;
     try {
+      console.log('📥 RESTORE FILE: Starting restore, file size:', file.size, 'bytes');
       const raw = await readJsonFile(file);
+      console.log('📥 RESTORE FILE: readJsonFile returned:', typeof raw, Array.isArray(raw) ? 'array' : 'object', 'keys:', Object.keys(raw || {}).join(', '));
+      console.log('📥 RESTORE FILE: raw.completions type:', typeof (raw as any)?.completions, 'length:', (raw as any)?.completions?.length || 0);
+
       // ARCHITECTURAL FIX: File restore also preserves current session state
       const backupData = normalizeBackupData(raw);
       console.log('📥 RESTORE: normalizeBackupData returned', backupData.completions.length, 'completions');
+      console.log('📥 RESTORE: Detailed check - completions is array:', Array.isArray(backupData.completions), 'first item:', backupData.completions[0] ? { index: (backupData.completions[0] as any).index, outcome: (backupData.completions[0] as any).outcome } : 'none');
 
       const currentSessions = safeState.daySessions; // Preserve current session state
 
