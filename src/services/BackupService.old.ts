@@ -1,8 +1,12 @@
-// src/services/BackupService.ts (REFACTORED - Pure Business Logic)
-// Backup business logic ONLY
+// src/services/BackupService.ts
+// Backup and restore operations
 
 import { logger } from '../utils/logger';
 import type { AppState, Completion, Arrangement, DaySession } from '../types';
+
+export interface BackupServiceDeps {
+  userId?: string;
+}
 
 export interface BackupValidation {
   valid: boolean;
@@ -10,16 +14,22 @@ export interface BackupValidation {
 }
 
 /**
- * BackupService - Pure business logic for backups
+ * BackupService - Backup creation, validation, and restore
  *
- * Responsibility: Backup creation, validation, merge strategies ONLY
- * - NO data access (no submitOperation)
- * - Just pure functions for backup operations
- *
- * Note: BackupService doesn't need a repository because it doesn't
- * persist operations - it just transforms and validates data.
+ * Features:
+ * - Create backups with data validation
+ * - Restore with merge strategies (replace/merge)
+ * - Cloud upload/download via Supabase
+ * - Backup validation and sanitization
+ * - Deduplication logic
  */
 export class BackupService {
+  private userId?: string;
+
+  constructor(deps: BackupServiceDeps) {
+    this.userId = deps.userId;
+  }
+
   /**
    * Create backup (clean snapshot of current state)
    */
@@ -149,7 +159,10 @@ export class BackupService {
   /**
    * Merge completions (deduplicate by timestamp + index)
    */
-  mergeCompletions(current: Completion[], backup: Completion[]): Completion[] {
+  private mergeCompletions(
+    current: Completion[],
+    backup: Completion[]
+  ): Completion[] {
     const merged = [...current];
 
     for (const backupCompletion of backup) {
@@ -171,7 +184,10 @@ export class BackupService {
   /**
    * Merge day sessions (deduplicate by date, prefer latest)
    */
-  mergeSessions(current: DaySession[], backup: DaySession[]): DaySession[] {
+  private mergeSessions(
+    current: DaySession[],
+    backup: DaySession[]
+  ): DaySession[] {
     const sessionMap = new Map<string, DaySession>();
 
     // Add current sessions
@@ -209,7 +225,10 @@ export class BackupService {
   /**
    * Merge arrangements (deduplicate by id, prefer latest updated)
    */
-  mergeArrangements(current: Arrangement[], backup: Arrangement[]): Arrangement[] {
+  private mergeArrangements(
+    current: Arrangement[],
+    backup: Arrangement[]
+  ): Arrangement[] {
     const arrangementMap = new Map<string, Arrangement>();
 
     // Add current arrangements
@@ -268,7 +287,7 @@ export class BackupService {
   }
 
   /**
-   * Calculate backup size in bytes
+   * Calculate backup size
    */
   calculateBackupSize(state: AppState): number {
     const json = this.serializeBackup(state);
@@ -304,41 +323,5 @@ export class BackupService {
     // Currently no sensitive data to remove
     // In future, could remove device IDs, personal info, etc.
     return this.createBackup(state);
-  }
-
-  /**
-   * Check if backup is empty
-   */
-  isBackupEmpty(state: AppState): boolean {
-    return (
-      state.addresses.length === 0 &&
-      state.completions.length === 0 &&
-      state.arrangements.length === 0 &&
-      state.daySessions.length === 0
-    );
-  }
-
-  /**
-   * Compare two backups for equality
-   */
-  areBackupsEqual(backup1: AppState, backup2: AppState): boolean {
-    return JSON.stringify(backup1) === JSON.stringify(backup2);
-  }
-
-  /**
-   * Get backup age in days
-   */
-  getBackupAge(backupDate: string): number {
-    const now = new Date();
-    const backup = new Date(backupDate);
-    const diffMs = now.getTime() - backup.getTime();
-    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  }
-
-  /**
-   * Check if backup is stale (older than 30 days)
-   */
-  isBackupStale(backupDate: string): boolean {
-    return this.getBackupAge(backupDate) > 30;
   }
 }

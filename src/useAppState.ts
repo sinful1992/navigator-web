@@ -229,20 +229,64 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     return applyOptimisticUpdates(patchedBaseState, optimisticUpdates);
   }, [baseState, optimisticUpdates, setBaseState]);
 
-  // ---- Initialize domain services ----
-  const services = React.useMemo(() => {
+  // ---- Initialize domain services and repositories ----
+  // Clean Architecture: Repositories (data access) + Services (business logic)
+  const servicesAndRepos = React.useMemo(() => {
     if (!submitOperation) return null;
 
+    // Import repositories
+    const { AddressRepository } = require('./repositories/AddressRepository');
+    const { CompletionRepository } = require('./repositories/CompletionRepository');
+    const { SessionRepository } = require('./repositories/SessionRepository');
+    const { ArrangementRepository } = require('./repositories/ArrangementRepository');
+    const { SettingsRepository } = require('./repositories/SettingsRepository');
+
+    // Import services
+    const { AddressService } = require('./services/AddressService');
+    const { CompletionService } = require('./services/CompletionService');
+    const { SessionService } = require('./services/SessionService');
+    const { ArrangementService } = require('./services/ArrangementService');
+    const { SettingsService } = require('./services/SettingsService');
+    const { BackupService } = require('./services/BackupService');
+    const { SyncService } = require('./services/SyncService');
+
+    // Initialize repositories (data access layer)
+    const addressRepo = new AddressRepository(submitOperation, deviceId);
+    const completionRepo = new CompletionRepository(submitOperation, deviceId);
+    const sessionRepo = new SessionRepository(submitOperation, deviceId);
+    const arrangementRepo = new ArrangementRepository(submitOperation, deviceId);
+    const settingsRepo = new SettingsRepository(submitOperation, deviceId);
+
+    // Initialize services (business logic layer - pure, no data access)
+    const addressService = new AddressService();
+    const completionService = new CompletionService();
+    const sessionService = new SessionService();
+    const arrangementService = new ArrangementService();
+    const settingsService = new SettingsService();
+    const backupService = new BackupService();
+    const syncService = new SyncService(submitOperation);
+
     return {
-      sync: new (require('./services/SyncService').SyncService)(submitOperation),
-      session: new (require('./services/SessionService').SessionService)({ submitOperation, deviceId }),
-      address: new (require('./services/AddressService').AddressService)({ submitOperation, deviceId }),
-      completion: new (require('./services/CompletionService').CompletionService)({ submitOperation, deviceId }),
-      arrangement: new (require('./services/ArrangementService').ArrangementService)({ submitOperation, deviceId }),
-      settings: new (require('./services/SettingsService').SettingsService)({ submitOperation }),
-      backup: new (require('./services/BackupService').BackupService)({ userId }),
+      // Repositories (data access)
+      repositories: {
+        address: addressRepo,
+        completion: completionRepo,
+        session: sessionRepo,
+        arrangement: arrangementRepo,
+        settings: settingsRepo,
+      },
+      // Services (business logic)
+      services: {
+        address: addressService,
+        completion: completionService,
+        session: sessionService,
+        arrangement: arrangementService,
+        settings: settingsService,
+        backup: backupService,
+        sync: syncService,
+      },
     };
-  }, [submitOperation, deviceId, userId]);
+  }, [submitOperation, deviceId]);
 
   // ---- Call extracted hooks ----
 

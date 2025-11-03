@@ -1,159 +1,29 @@
-// src/services/SessionService.ts
-// Session business logic and management
+// src/services/SessionService.ts (REFACTORED - Pure Business Logic)
+// Session business logic ONLY
 
 import { logger } from '../utils/logger';
-import { setProtectionFlag, clearProtectionFlag } from '../utils/protectionFlags';
 import type { DaySession } from '../types';
-import type { SubmitOperationFn } from './SyncService';
-
-export interface SessionServiceDeps {
-  submitOperation: SubmitOperationFn;
-  deviceId: string;
-}
 
 /**
- * SessionService - Session management business logic
+ * SessionService - Pure business logic for sessions
  *
- * Features:
- * - Start/end/update sessions
- * - Auto-close stale sessions
- * - Protection flag management
- * - Duration calculations
- * - Validation
+ * Responsibility: Business rules, validations, calculations ONLY
+ * - NO data access
+ * - Just pure functions
  */
 export class SessionService {
-  private submitOperation: SubmitOperationFn;
-  private deviceId: string;
-
-  constructor(deps: SessionServiceDeps) {
-    this.submitOperation = deps.submitOperation;
-    this.deviceId = deps.deviceId;
-  }
-
   /**
-   * Start a new day session
-   * - Auto-closes stale sessions from previous days
-   * - Sets protection flag during operation
+   * Create new session object
    */
-  async startSession(existingSessions: DaySession[]): Promise<DaySession> {
-    const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-
-    // Check if already active today
-    const activeTodaySession = existingSessions.find(
-      session => session.date === today && !session.end
-    );
-
-    if (activeTodaySession) {
-      logger.info('Day already active for today');
-      throw new Error('Day already active for today');
-    }
-
-    // Auto-close stale sessions from previous days
-    const staleSessions = existingSessions.filter(
-      session => session.date < today && !session.end
-    );
-
-    for (const staleSession of staleSessions) {
-      const endOfDay = new Date(staleSession.date + 'T23:59:59.999Z');
-      const startTime = new Date(staleSession.start).getTime();
-      const endTime = endOfDay.getTime();
-      const durationSeconds = Math.floor((endTime - startTime) / 1000);
-
-      logger.info('Auto-closing stale session:', staleSession.date);
-
-      await this.submitOperation({
-        type: 'SESSION_END',
-        payload: {
-          date: staleSession.date,
-          endTime: endOfDay.toISOString(),
-        },
-      });
-    }
-
-    // Create new session
-    const newSession: DaySession = {
-      date: today,
-      start: now.toISOString(),
-    };
-
-    // Set protection flag
-    setProtectionFlag('navigator_day_session_protection');
-
-    try {
-      await this.submitOperation({
-        type: 'SESSION_START',
-        payload: { session: newSession },
-      });
-
-      logger.info('Started new day session:', today);
-      return newSession;
-
-    } catch (error) {
-      clearProtectionFlag('navigator_day_session_protection');
-      throw error;
-    }
-  }
-
-  /**
-   * End the current day session
-   */
-  async endSession(existingSessions: DaySession[]): Promise<DaySession | null> {
-    const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-
-    // Find active session for today
-    const activeSession = existingSessions.find(
-      session => session.date === today && !session.end
-    );
-
-    if (!activeSession) {
-      logger.info('No active session to end for today');
-      return null;
-    }
-
-    const endTime = now.toISOString();
-    const startTime = new Date(activeSession.start).getTime();
-    const endTimeMs = now.getTime();
-    const durationSeconds = Math.floor((endTimeMs - startTime) / 1000);
-
-    await this.submitOperation({
-      type: 'SESSION_END',
-      payload: {
-        date: today,
-        endTime,
-      },
-    });
-
-    clearProtectionFlag('navigator_day_session_protection');
-
-    logger.info('Ended day session:', today);
-
+  createSessionObject(date: string, startTime: string): DaySession {
     return {
-      ...activeSession,
-      end: endTime,
-      durationSeconds,
+      date,
+      start: startTime,
     };
   }
 
   /**
-   * Update session (used for manual time edits)
-   */
-  async updateSession(
-    date: string,
-    updates: Partial<DaySession>,
-    createIfMissing: boolean = false
-  ): Promise<void> {
-    await this.submitOperation({
-      type: 'SESSION_UPDATE',
-      payload: { date, updates },
-    });
-
-    logger.info('Updated session:', date, updates);
-  }
-
-  /**
-   * Calculate duration for a session
+   * Calculate duration for a session in seconds
    */
   calculateDuration(session: DaySession): number | undefined {
     if (!session.start || !session.end) {
@@ -179,26 +49,22 @@ export class SessionService {
   /**
    * Validate session data
    */
-  validateSession(session: Partial<DaySession>): boolean {
+  validateSession(session: Partial<DaySession>): { valid: boolean; error?: string } {
     if (!session.date) {
-      logger.error('Session missing date');
-      return false;
+      return { valid: false, error: 'Session missing date' };
     }
 
     if (!session.start) {
-      logger.error('Session missing start time');
-      return false;
+      return { valid: false, error: 'Session missing start time' };
     }
 
     // Validate ISO format
     if (isNaN(new Date(session.start).getTime())) {
-      logger.error('Invalid start time format:', session.start);
-      return false;
+      return { valid: false, error: `Invalid start time format: ${session.start}` };
     }
 
     if (session.end && isNaN(new Date(session.end).getTime())) {
-      logger.error('Invalid end time format:', session.end);
-      return false;
+      return { valid: false, error: `Invalid end time format: ${session.end}` };
     }
 
     // Validate end is after start
@@ -207,19 +73,39 @@ export class SessionService {
       const endTime = new Date(session.end).getTime();
 
       if (endTime < startTime) {
-        logger.error('End time before start time');
-        return false;
+        return { valid: false, error: 'End time before start time' };
       }
     }
 
-    return true;
+    return { valid: true };
+  }
+
+  /**
+   * Find active session for a specific date
+   */
+  findActiveSession(sessions: DaySession[], date: string): DaySession | undefined {
+    return sessions.find(session => session.date === date && !session.end);
+  }
+
+  /**
+   * Find stale sessions (sessions from previous days that are still open)
+   */
+  findStaleSessions(sessions: DaySession[], currentDate: string): DaySession[] {
+    return sessions.filter(session => session.date < currentDate && !session.end);
+  }
+
+  /**
+   * Calculate end of day time for auto-close
+   */
+  calculateEndOfDay(date: string): Date {
+    return new Date(date + 'T23:59:59.999Z');
   }
 
   /**
    * Auto-close a stale session (end of day)
    */
   autoCloseSession(session: DaySession, now: Date): DaySession {
-    const endOfDay = new Date(session.date + 'T23:59:59.999Z');
+    const endOfDay = this.calculateEndOfDay(session.date);
     const endTime = endOfDay.getTime() > now.getTime() ? now : endOfDay;
 
     const duration = this.calculateDuration({
@@ -232,5 +118,100 @@ export class SessionService {
       end: endTime.toISOString(),
       durationSeconds: duration,
     };
+  }
+
+  /**
+   * Check if session is active (no end time)
+   */
+  isActive(session: DaySession): boolean {
+    return !session.end;
+  }
+
+  /**
+   * Check if session is stale (from previous day and still active)
+   */
+  isStale(session: DaySession, currentDate: string): boolean {
+    return session.date < currentDate && this.isActive(session);
+  }
+
+  /**
+   * Get today's date in YYYY-MM-DD format
+   */
+  getTodayDate(): string {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  /**
+   * Get all active sessions
+   */
+  filterActive(sessions: DaySession[]): DaySession[] {
+    return sessions.filter(s => this.isActive(s));
+  }
+
+  /**
+   * Get all completed sessions
+   */
+  filterCompleted(sessions: DaySession[]): DaySession[] {
+    return sessions.filter(s => !this.isActive(s));
+  }
+
+  /**
+   * Get sessions for a specific date
+   */
+  filterByDate(sessions: DaySession[], date: string): DaySession[] {
+    return sessions.filter(s => s.date === date);
+  }
+
+  /**
+   * Sort sessions by date (descending)
+   */
+  sortByDate(sessions: DaySession[]): DaySession[] {
+    return [...sessions].sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  /**
+   * Calculate total working time across all sessions
+   */
+  calculateTotalWorkingTime(sessions: DaySession[]): number {
+    return sessions.reduce((total, session) => {
+      const duration = this.calculateDuration(session);
+      return total + (duration || 0);
+    }, 0);
+  }
+
+  /**
+   * Get session statistics
+   */
+  getSessionStats(sessions: DaySession[]): {
+    total: number;
+    active: number;
+    completed: number;
+    totalHours: number;
+  } {
+    const active = this.filterActive(sessions);
+    const completed = this.filterCompleted(sessions);
+    const totalSeconds = this.calculateTotalWorkingTime(completed);
+    const totalHours = Math.round((totalSeconds / 3600) * 10) / 10;
+
+    return {
+      total: sessions.length,
+      active: active.length,
+      completed: completed.length,
+      totalHours,
+    };
+  }
+
+  /**
+   * Format duration for display
+   */
+  formatDuration(durationSeconds: number): string {
+    const hours = Math.floor(durationSeconds / 3600);
+    const minutes = Math.floor((durationSeconds % 3600) / 60);
+
+    if (hours === 0) {
+      return `${minutes}min`;
+    }
+
+    return `${hours}h ${minutes}min`;
   }
 }

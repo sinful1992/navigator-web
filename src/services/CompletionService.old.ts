@@ -1,51 +1,112 @@
-// src/services/CompletionService.ts (REFACTORED - Pure Business Logic)
-// Completion business logic ONLY
+// src/services/CompletionService.ts
+// Completion operations and business logic
 
 import { logger } from '../utils/logger';
+import { clearProtectionFlag } from '../utils/protectionFlags';
 import type { Completion, Outcome } from '../types';
+import type { SubmitOperationFn } from './SyncService';
+
+export interface CompletionServiceDeps {
+  submitOperation: SubmitOperationFn;
+  deviceId: string;
+}
 
 /**
- * CompletionService - Pure business logic for completions
+ * CompletionService - Completion management business logic
  *
- * Responsibility: Business rules, validations, calculations ONLY
- * - NO data access
- * - Just pure functions
+ * Features:
+ * - Create/update/delete completions
+ * - TCG Regulations 2014 enforcement fee calculations
+ * - Time tracking integration
+ * - Earnings calculations
+ * - Group by date
+ * - Filter PIFs and arrangements
  */
 export class CompletionService {
+  private submitOperation: SubmitOperationFn;
+  private deviceId: string;
+
+  constructor(deps: CompletionServiceDeps) {
+    this.submitOperation = deps.submitOperation;
+    this.deviceId = deps.deviceId;
+  }
+
   /**
-   * Create completion object with calculated fields
+   * Create completion
+   * - Calculates time spent if active
+   * - Clears active protection flag
    */
-  createCompletionObject(
-    data: Omit<Completion, 'timestamp' | 'device' | 'timeSpentSeconds'>,
-    deviceId: string,
+  async createCompletion(
+    completion: Omit<Completion, 'timestamp' | 'device' | 'timeSpentSeconds'>,
     activeStartTime?: string | null
-  ): Completion {
+  ): Promise<Completion> {
     const now = new Date().toISOString();
     let timeSpentSeconds: number | undefined;
 
     // Calculate time spent if address was active
     if (activeStartTime) {
-      timeSpentSeconds = this.calculateTimeSpent(activeStartTime);
-      logger.info(
-        `Time tracked: ${timeSpentSeconds}s (${Math.floor(timeSpentSeconds / 60)}min)`
-      );
+      const startTime = new Date(activeStartTime).getTime();
+      const endTime = Date.now();
+      timeSpentSeconds = Math.floor((endTime - startTime) / 1000);
+      logger.info(`Time tracked: ${timeSpentSeconds}s (${Math.floor(timeSpentSeconds / 60)}min)`);
     }
 
-    return {
-      ...data,
+    const newCompletion: Completion = {
+      ...completion,
       timestamp: now,
-      device: deviceId,
+      device: this.deviceId,
       timeSpentSeconds,
     };
+
+    // Clear active protection flag
+    clearProtectionFlag('navigator_active_protection');
+
+    await this.submitOperation({
+      type: 'COMPLETION_CREATE',
+      payload: { completion: newCompletion },
+    });
+
+    logger.info('Created completion:', newCompletion.outcome, newCompletion.address);
+
+    return newCompletion;
   }
 
   /**
-   * Calculate time spent in seconds
+   * Update completion
    */
-  calculateTimeSpent(startTime: string): number {
-    const startMs = new Date(startTime).getTime();
-    const endMs = Date.now();
-    return Math.floor((endMs - startMs) / 1000);
+  async updateCompletion(
+    originalTimestamp: string,
+    updates: Partial<Completion>
+  ): Promise<void> {
+    await this.submitOperation({
+      type: 'COMPLETION_UPDATE',
+      payload: {
+        originalTimestamp,
+        updates,
+      },
+    });
+
+    logger.info('Updated completion:', originalTimestamp);
+  }
+
+  /**
+   * Delete completion (undo)
+   */
+  async deleteCompletion(
+    timestamp: string,
+    index: number,
+    listVersion: number
+  ): Promise<void> {
+    await this.submitOperation({
+      type: 'COMPLETION_DELETE',
+      payload: {
+        timestamp,
+        index,
+        listVersion,
+      },
+    });
+
+    logger.info('Deleted completion:', timestamp);
   }
 
   /**
@@ -107,14 +168,14 @@ export class CompletionService {
    * Filter PIF completions
    */
   filterPIFs(completions: Completion[]): Completion[] {
-    return completions.filter((c) => c.outcome === 'PIF');
+    return completions.filter(c => c.outcome === 'PIF');
   }
 
   /**
    * Filter arrangement-related completions
    */
   filterArrangements(completions: Completion[]): Completion[] {
-    return completions.filter((c) => c.arrangementId !== undefined);
+    return completions.filter(c => c.arrangementId !== undefined);
   }
 
   /**
@@ -139,20 +200,23 @@ export class CompletionService {
    * Get completions for a specific date
    */
   getCompletionsForDate(completions: Completion[], date: string): Completion[] {
-    return completions.filter((c) => c.timestamp.startsWith(date));
+    return completions.filter(c => c.timestamp.startsWith(date));
   }
 
   /**
    * Calculate average time spent per completion
    */
   calculateAverageTimeSpent(completions: Completion[]): number | null {
-    const withTime = completions.filter((c) => c.timeSpentSeconds !== undefined);
+    const withTime = completions.filter(c => c.timeSpentSeconds !== undefined);
 
     if (withTime.length === 0) {
       return null;
     }
 
-    const totalSeconds = withTime.reduce((sum, c) => sum + (c.timeSpentSeconds || 0), 0);
+    const totalSeconds = withTime.reduce(
+      (sum, c) => sum + (c.timeSpentSeconds || 0),
+      0
+    );
 
     return totalSeconds / withTime.length;
   }
@@ -160,22 +224,26 @@ export class CompletionService {
   /**
    * Validate completion data
    */
-  validateCompletion(completion: Partial<Completion>): { valid: boolean; error?: string } {
-    if (completion.index === undefined && completion.index !== 0) {
-      return { valid: false, error: 'Completion missing index' };
+  validateCompletion(completion: Partial<Completion>): boolean {
+    if (!completion.index && completion.index !== 0) {
+      logger.error('Completion missing index');
+      return false;
     }
 
     if (!completion.address || typeof completion.address !== 'string') {
-      return { valid: false, error: 'Completion missing or invalid address' };
+      logger.error('Completion missing or invalid address');
+      return false;
     }
 
     if (!completion.outcome) {
-      return { valid: false, error: 'Completion missing outcome' };
+      logger.error('Completion missing outcome');
+      return false;
     }
 
     const validOutcomes: Outcome[] = ['PIF', 'DA', 'Done', 'ARR'];
     if (!validOutcomes.includes(completion.outcome)) {
-      return { valid: false, error: `Invalid outcome: ${completion.outcome}` };
+      logger.error('Invalid outcome:', completion.outcome);
+      return false;
     }
 
     // PIF completions should have amount
@@ -183,44 +251,6 @@ export class CompletionService {
       logger.warn('PIF completion missing amount');
     }
 
-    return { valid: true };
-  }
-
-  /**
-   * Calculate earnings for date range
-   */
-  calculateEarningsForRange(
-    completions: Completion[],
-    startDate: string,
-    endDate: string
-  ): number {
-    const filtered = completions.filter((c) => {
-      const date = c.timestamp.slice(0, 10);
-      return date >= startDate && date <= endDate;
-    });
-
-    return this.calculateTotalEarnings(filtered);
-  }
-
-  /**
-   * Get top earning days
-   */
-  getTopEarningDays(completions: Completion[], limit: number = 5): Array<{
-    date: string;
-    earnings: number;
-    count: number;
-  }> {
-    const byDate = this.groupByDate(completions);
-    const earnings: Array<{ date: string; earnings: number; count: number }> = [];
-
-    for (const [date, comps] of byDate) {
-      earnings.push({
-        date,
-        earnings: this.calculateTotalEarnings(comps),
-        count: comps.length,
-      });
-    }
-
-    return earnings.sort((a, b) => b.earnings - a.earnings).slice(0, limit);
+    return true;
   }
 }

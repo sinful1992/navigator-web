@@ -1,32 +1,92 @@
-// src/services/ArrangementService.ts (REFACTORED - Pure Business Logic)
-// Payment arrangement business logic ONLY
+// src/services/ArrangementService.ts
+// Payment arrangement operations and management
 
 import { logger } from '../utils/logger';
 import type { Arrangement, Outcome } from '../types';
+import type { SubmitOperationFn } from './SyncService';
+
+export interface ArrangementServiceDeps {
+  submitOperation: SubmitOperationFn;
+  deviceId: string;
+}
 
 /**
- * ArrangementService - Pure business logic for arrangements
+ * ArrangementService - Payment arrangement management
  *
- * Responsibility: Business rules, validations, calculations ONLY
- * - NO data access
- * - Just pure functions
+ * Features:
+ * - Create/update/delete arrangements
+ * - Payment outcome determination (ARR vs PIF)
+ * - Next payment date calculation
+ * - Overdue tracking
+ * - Payment recording with installment logic
  */
 export class ArrangementService {
+  private submitOperation: SubmitOperationFn;
+  private deviceId: string;
+
+  constructor(deps: ArrangementServiceDeps) {
+    this.submitOperation = deps.submitOperation;
+    this.deviceId = deps.deviceId;
+  }
+
   /**
-   * Create arrangement object with generated ID
+   * Create new arrangement
    */
-  createArrangementObject(
+  async createArrangement(
     arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>
-  ): Arrangement {
+  ): Promise<Arrangement> {
     const now = new Date().toISOString();
     const id = `arr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    return {
+    const newArrangement: Arrangement = {
       ...arrangementData,
       id,
       createdAt: now,
       updatedAt: now,
     };
+
+    // Validate arrangement
+    if (!this.validateArrangement(newArrangement)) {
+      throw new Error('Invalid arrangement data');
+    }
+
+    await this.submitOperation({
+      type: 'ARRANGEMENT_CREATE',
+      payload: { arrangement: newArrangement },
+    });
+
+    logger.info('Created arrangement:', id);
+
+    return newArrangement;
+  }
+
+  /**
+   * Update existing arrangement
+   */
+  async updateArrangement(id: string, updates: Partial<Arrangement>): Promise<void> {
+    const updatedData = {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await this.submitOperation({
+      type: 'ARRANGEMENT_UPDATE',
+      payload: { id, updates: updatedData },
+    });
+
+    logger.info('Updated arrangement:', id);
+  }
+
+  /**
+   * Delete arrangement
+   */
+  async deleteArrangement(id: string): Promise<void> {
+    await this.submitOperation({
+      type: 'ARRANGEMENT_DELETE',
+      payload: { id },
+    });
+
+    logger.info('Deleted arrangement:', id);
   }
 
   /**
@@ -139,34 +199,41 @@ export class ArrangementService {
   /**
    * Validate arrangement data
    */
-  validateArrangement(arrangement: Partial<Arrangement>): { valid: boolean; error?: string } {
+  validateArrangement(arrangement: Partial<Arrangement>): boolean {
     if (!arrangement.address || typeof arrangement.address !== 'string') {
-      return { valid: false, error: 'Arrangement missing or invalid address' };
+      logger.error('Arrangement missing or invalid address');
+      return false;
     }
 
     if (!arrangement.customerName || typeof arrangement.customerName !== 'string') {
-      return { valid: false, error: 'Arrangement missing or invalid customer name' };
+      logger.error('Arrangement missing or invalid customer name');
+      return false;
     }
 
     if (!arrangement.totalAmount || arrangement.totalAmount <= 0) {
-      return { valid: false, error: 'Arrangement missing or invalid total amount' };
+      logger.error('Arrangement missing or invalid total amount');
+      return false;
     }
 
     if (!arrangement.paymentAmount || arrangement.paymentAmount <= 0) {
-      return { valid: false, error: 'Arrangement missing or invalid payment amount' };
+      logger.error('Arrangement missing or invalid payment amount');
+      return false;
     }
 
     if (!arrangement.numberOfPayments || arrangement.numberOfPayments <= 0) {
-      return { valid: false, error: 'Arrangement missing or invalid number of payments' };
+      logger.error('Arrangement missing or invalid number of payments');
+      return false;
     }
 
     if (!arrangement.paymentSchedule) {
-      return { valid: false, error: 'Arrangement missing payment schedule' };
+      logger.error('Arrangement missing payment schedule');
+      return false;
     }
 
     const validSchedules = ['Single', 'Weekly', 'Bi-weekly', 'Monthly'];
     if (!validSchedules.includes(arrangement.paymentSchedule)) {
-      return { valid: false, error: `Invalid payment schedule: ${arrangement.paymentSchedule}` };
+      logger.error('Invalid payment schedule:', arrangement.paymentSchedule);
+      return false;
     }
 
     // Validate payment amount doesn't exceed total
@@ -176,7 +243,7 @@ export class ArrangementService {
       logger.warn('Payment amount times number of payments exceeds total amount');
     }
 
-    return { valid: true };
+    return true;
   }
 
   /**
@@ -210,117 +277,5 @@ export class ArrangementService {
 
       return new Date(a.nextPaymentDate).getTime() - new Date(b.nextPaymentDate).getTime();
     });
-  }
-
-  /**
-   * Sort arrangements by creation date (newest first)
-   */
-  sortByCreatedDate(arrangements: Arrangement[]): Arrangement[] {
-    return [...arrangements].sort((a, b) => {
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-  }
-
-  /**
-   * Sort arrangements by customer name
-   */
-  sortByCustomerName(arrangements: Arrangement[]): Arrangement[] {
-    return [...arrangements].sort((a, b) => {
-      return a.customerName.localeCompare(b.customerName);
-    });
-  }
-
-  /**
-   * Check if arrangement is complete
-   */
-  isComplete(arrangement: Arrangement): boolean {
-    return arrangement.paidPayments >= arrangement.numberOfPayments;
-  }
-
-  /**
-   * Check if arrangement is overdue
-   */
-  isOverdue(arrangement: Arrangement): boolean {
-    return this.isPaymentOverdue(arrangement.nextPaymentDate);
-  }
-
-  /**
-   * Get arrangement statistics
-   */
-  getArrangementStats(arrangements: Arrangement[]): {
-    total: number;
-    active: number;
-    completed: number;
-    overdue: number;
-    totalAmount: number;
-    remainingAmount: number;
-  } {
-    const active = this.filterActive(arrangements);
-    const completed = this.filterCompleted(arrangements);
-    const overdue = this.filterOverdue(arrangements);
-
-    const totalAmount = arrangements.reduce((sum, arr) => sum + arr.totalAmount, 0);
-    const remainingAmount = active.reduce((sum, arr) => {
-      return sum + this.calculateRemainingAmount(arr, arr.paidPayments);
-    }, 0);
-
-    return {
-      total: arrangements.length,
-      active: active.length,
-      completed: completed.length,
-      overdue: overdue.length,
-      totalAmount,
-      remainingAmount,
-    };
-  }
-
-  /**
-   * Find arrangements by address
-   */
-  findByAddress(arrangements: Arrangement[], address: string): Arrangement[] {
-    return arrangements.filter(arr =>
-      arr.address.toLowerCase().includes(address.toLowerCase())
-    );
-  }
-
-  /**
-   * Find arrangements by customer name
-   */
-  findByCustomerName(arrangements: Arrangement[], customerName: string): Arrangement[] {
-    return arrangements.filter(arr =>
-      arr.customerName.toLowerCase().includes(customerName.toLowerCase())
-    );
-  }
-
-  /**
-   * Calculate estimated completion date
-   */
-  calculateEstimatedCompletion(arrangement: Arrangement): Date | null {
-    if (this.isComplete(arrangement)) {
-      return null;
-    }
-
-    const remainingPayments = arrangement.numberOfPayments - arrangement.paidPayments;
-
-    if (arrangement.paymentSchedule === 'Single') {
-      return arrangement.nextPaymentDate ? new Date(arrangement.nextPaymentDate) : null;
-    }
-
-    if (!arrangement.nextPaymentDate) {
-      return null;
-    }
-
-    const nextPaymentDate = new Date(arrangement.nextPaymentDate);
-    let estimatedDate = new Date(nextPaymentDate);
-
-    // Calculate date after remaining payments
-    for (let i = 0; i < remainingPayments - 1; i++) {
-      const nextDate = this.calculateNextPaymentDate(estimatedDate, arrangement.paymentSchedule);
-      if (nextDate) {
-        estimatedDate = nextDate;
-      }
-    }
-
-    return estimatedDate;
   }
 }

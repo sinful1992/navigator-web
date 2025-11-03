@@ -1,74 +1,17 @@
-// src/services/SettingsService.ts
-// Settings management and validation
+// src/services/SettingsService.ts (REFACTORED - Pure Business Logic)
+// Settings business logic ONLY
 
 import { logger } from '../utils/logger';
 import type { UserSubscription, ReminderSettings, BonusSettings } from '../types';
-import type { SubmitOperationFn } from './SyncService';
-
-export interface SettingsServiceDeps {
-  submitOperation: SubmitOperationFn;
-}
 
 /**
- * SettingsService - Settings management
+ * SettingsService - Pure business logic for settings
  *
- * Features:
- * - Subscription management with feature checking
- * - Reminder settings with validation
- * - Bonus settings with validation
- * - Tier-based feature gates
+ * Responsibility: Business rules, validations, feature checking ONLY
+ * - NO data access
+ * - Just pure functions
  */
 export class SettingsService {
-  private submitOperation: SubmitOperationFn;
-
-  constructor(deps: SettingsServiceDeps) {
-    this.submitOperation = deps.submitOperation;
-  }
-
-  /**
-   * Update subscription settings
-   */
-  async updateSubscription(subscription: UserSubscription | null): Promise<void> {
-    await this.submitOperation({
-      type: 'SETTINGS_UPDATE_SUBSCRIPTION',
-      payload: { subscription },
-    });
-
-    logger.info('Updated subscription:', subscription?.tier || 'none');
-  }
-
-  /**
-   * Update reminder settings
-   */
-  async updateReminderSettings(settings: ReminderSettings): Promise<void> {
-    if (!this.validateReminderSettings(settings)) {
-      throw new Error('Invalid reminder settings');
-    }
-
-    await this.submitOperation({
-      type: 'SETTINGS_UPDATE_REMINDER',
-      payload: { settings },
-    });
-
-    logger.info('Updated reminder settings');
-  }
-
-  /**
-   * Update bonus settings
-   */
-  async updateBonusSettings(settings: BonusSettings): Promise<void> {
-    if (!this.validateBonusSettings(settings)) {
-      throw new Error('Invalid bonus settings');
-    }
-
-    await this.submitOperation({
-      type: 'SETTINGS_UPDATE_BONUS',
-      payload: { settings },
-    });
-
-    logger.info('Updated bonus settings');
-  }
-
   /**
    * Get subscription features based on tier
    */
@@ -122,52 +65,73 @@ export class SettingsService {
   }
 
   /**
+   * Check if address limit is reached
+   */
+  isAddressLimitReached(
+    currentAddressCount: number,
+    subscription: UserSubscription | null
+  ): boolean {
+    const features = this.getSubscriptionFeatures(subscription?.tier);
+    return currentAddressCount >= features.maxAddresses;
+  }
+
+  /**
+   * Get remaining address slots
+   */
+  getRemainingAddressSlots(
+    currentAddressCount: number,
+    subscription: UserSubscription | null
+  ): number {
+    const features = this.getSubscriptionFeatures(subscription?.tier);
+
+    if (features.maxAddresses === Infinity) {
+      return Infinity;
+    }
+
+    return Math.max(0, features.maxAddresses - currentAddressCount);
+  }
+
+  /**
    * Validate reminder settings
    */
-  validateReminderSettings(settings: Partial<ReminderSettings>): boolean {
+  validateReminderSettings(settings: Partial<ReminderSettings>): { valid: boolean; error?: string } {
     if (settings.enabled === undefined) {
-      logger.error('Reminder settings missing enabled flag');
-      return false;
+      return { valid: false, error: 'Reminder settings missing enabled flag' };
     }
 
     if (settings.daysBeforeReminder !== undefined) {
       if (typeof settings.daysBeforeReminder !== 'number' || settings.daysBeforeReminder < 0) {
-        logger.error('Invalid daysBeforeReminder:', settings.daysBeforeReminder);
-        return false;
+        return { valid: false, error: `Invalid daysBeforeReminder: ${settings.daysBeforeReminder}` };
       }
     }
 
     if (settings.smsEnabled !== undefined) {
       if (typeof settings.smsEnabled !== 'boolean') {
-        logger.error('Invalid smsEnabled:', settings.smsEnabled);
-        return false;
+        return { valid: false, error: `Invalid smsEnabled: ${settings.smsEnabled}` };
       }
     }
 
     if (settings.emailEnabled !== undefined) {
       if (typeof settings.emailEnabled !== 'boolean') {
-        logger.error('Invalid emailEnabled:', settings.emailEnabled);
-        return false;
+        return { valid: false, error: `Invalid emailEnabled: ${settings.emailEnabled}` };
       }
     }
 
-    return true;
+    return { valid: true };
   }
 
   /**
    * Validate bonus settings
    */
-  validateBonusSettings(settings: Partial<BonusSettings>): boolean {
+  validateBonusSettings(settings: Partial<BonusSettings>): { valid: boolean; error?: string } {
     if (settings.enabled === undefined) {
-      logger.error('Bonus settings missing enabled flag');
-      return false;
+      return { valid: false, error: 'Bonus settings missing enabled flag' };
     }
 
     if (settings.type !== undefined) {
       const validTypes = ['simple', 'complex'];
       if (!validTypes.includes(settings.type)) {
-        logger.error('Invalid bonus type:', settings.type);
-        return false;
+        return { valid: false, error: `Invalid bonus type: ${settings.type}` };
       }
     }
 
@@ -175,17 +139,17 @@ export class SettingsService {
     if (settings.type === 'simple') {
       if (settings.simpleThreshold !== undefined) {
         if (typeof settings.simpleThreshold !== 'number' || settings.simpleThreshold < 0) {
-          logger.error('Invalid simpleThreshold:', settings.simpleThreshold);
-          return false;
+          return { valid: false, error: `Invalid simpleThreshold: ${settings.simpleThreshold}` };
         }
       }
 
       if (settings.simplePercentage !== undefined) {
-        if (typeof settings.simplePercentage !== 'number' ||
-            settings.simplePercentage < 0 ||
-            settings.simplePercentage > 1) {
-          logger.error('Invalid simplePercentage:', settings.simplePercentage);
-          return false;
+        if (
+          typeof settings.simplePercentage !== 'number' ||
+          settings.simplePercentage < 0 ||
+          settings.simplePercentage > 1
+        ) {
+          return { valid: false, error: `Invalid simplePercentage: ${settings.simplePercentage}` };
         }
       }
     }
@@ -194,56 +158,58 @@ export class SettingsService {
     if (settings.type === 'complex') {
       if (settings.dailyThreshold !== undefined) {
         if (typeof settings.dailyThreshold !== 'number' || settings.dailyThreshold < 0) {
-          logger.error('Invalid dailyThreshold:', settings.dailyThreshold);
-          return false;
+          return { valid: false, error: `Invalid dailyThreshold: ${settings.dailyThreshold}` };
         }
       }
 
       if (settings.largePifThreshold !== undefined) {
         if (typeof settings.largePifThreshold !== 'number' || settings.largePifThreshold < 0) {
-          logger.error('Invalid largePifThreshold:', settings.largePifThreshold);
-          return false;
+          return { valid: false, error: `Invalid largePifThreshold: ${settings.largePifThreshold}` };
         }
       }
 
       if (settings.largePifPercentage !== undefined) {
-        if (typeof settings.largePifPercentage !== 'number' ||
-            settings.largePifPercentage < 0 ||
-            settings.largePifPercentage > 1) {
-          logger.error('Invalid largePifPercentage:', settings.largePifPercentage);
-          return false;
+        if (
+          typeof settings.largePifPercentage !== 'number' ||
+          settings.largePifPercentage < 0 ||
+          settings.largePifPercentage > 1
+        ) {
+          return { valid: false, error: `Invalid largePifPercentage: ${settings.largePifPercentage}` };
         }
       }
 
       if (settings.regularPifPercentage !== undefined) {
-        if (typeof settings.regularPifPercentage !== 'number' ||
-            settings.regularPifPercentage < 0 ||
-            settings.regularPifPercentage > 1) {
-          logger.error('Invalid regularPifPercentage:', settings.regularPifPercentage);
-          return false;
+        if (
+          typeof settings.regularPifPercentage !== 'number' ||
+          settings.regularPifPercentage < 0 ||
+          settings.regularPifPercentage > 1
+        ) {
+          return { valid: false, error: `Invalid regularPifPercentage: ${settings.regularPifPercentage}` };
         }
       }
 
       if (settings.daPercentage !== undefined) {
-        if (typeof settings.daPercentage !== 'number' ||
-            settings.daPercentage < 0 ||
-            settings.daPercentage > 1) {
-          logger.error('Invalid daPercentage:', settings.daPercentage);
-          return false;
+        if (
+          typeof settings.daPercentage !== 'number' ||
+          settings.daPercentage < 0 ||
+          settings.daPercentage > 1
+        ) {
+          return { valid: false, error: `Invalid daPercentage: ${settings.daPercentage}` };
         }
       }
 
       if (settings.donePercentage !== undefined) {
-        if (typeof settings.donePercentage !== 'number' ||
-            settings.donePercentage < 0 ||
-            settings.donePercentage > 1) {
-          logger.error('Invalid donePercentage:', settings.donePercentage);
-          return false;
+        if (
+          typeof settings.donePercentage !== 'number' ||
+          settings.donePercentage < 0 ||
+          settings.donePercentage > 1
+        ) {
+          return { valid: false, error: `Invalid donePercentage: ${settings.donePercentage}` };
         }
       }
     }
 
-    return true;
+    return { valid: true };
   }
 
   /**
@@ -274,5 +240,87 @@ export class SettingsService {
       daPercentage: 0.005,
       donePercentage: 0.002,
     };
+  }
+
+  /**
+   * Calculate bonus potential based on settings
+   */
+  calculateBonusPotential(
+    totalEarnings: number,
+    bonusSettings: BonusSettings
+  ): number {
+    if (!bonusSettings.enabled) {
+      return 0;
+    }
+
+    if (bonusSettings.type === 'simple') {
+      if (totalEarnings < bonusSettings.simpleThreshold) {
+        return 0;
+      }
+
+      return totalEarnings * bonusSettings.simplePercentage;
+    }
+
+    // Complex bonus calculation would require more context (completions breakdown)
+    // This is a simplified version
+    return 0;
+  }
+
+  /**
+   * Check if subscription is active
+   */
+  isSubscriptionActive(subscription: UserSubscription | null): boolean {
+    if (!subscription) {
+      return false;
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(subscription.expiresAt);
+
+    return expiresAt > now;
+  }
+
+  /**
+   * Get days until subscription expires
+   */
+  getDaysUntilExpiration(subscription: UserSubscription | null): number | null {
+    if (!subscription) {
+      return null;
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(subscription.expiresAt);
+    const diffMs = expiresAt.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    return Math.max(0, diffDays);
+  }
+
+  /**
+   * Check if subscription is expiring soon (within 7 days)
+   */
+  isSubscriptionExpiringSoon(subscription: UserSubscription | null): boolean {
+    const daysUntilExpiration = this.getDaysUntilExpiration(subscription);
+
+    if (daysUntilExpiration === null) {
+      return false;
+    }
+
+    return daysUntilExpiration <= 7 && daysUntilExpiration > 0;
+  }
+
+  /**
+   * Get subscription tier display name
+   */
+  getSubscriptionTierDisplayName(tier: string | undefined): string {
+    switch (tier) {
+      case 'enterprise':
+        return 'Enterprise';
+      case 'pro':
+        return 'Professional';
+      case 'free':
+      default:
+        return 'Free';
+    }
   }
 }
