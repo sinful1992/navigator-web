@@ -24,6 +24,14 @@ import {
 import { DEFAULT_BONUS_SETTINGS } from "./utils/bonusCalculator";
 import { setProtectionFlag, clearProtectionFlag } from "./utils/protectionFlags";
 
+// Domain Services
+import { AddressService } from "./services/AddressService";
+import { CompletionService } from "./services/CompletionService";
+import { ArrangementService } from "./services/ArrangementService";
+import { SettingsService } from "./services/SettingsService";
+import { BackupService } from "./services/BackupService";
+import { SessionService } from "./services/SessionService";
+
 const STORAGE_KEY = "navigator_state_v5";
 const CURRENT_SCHEMA_VERSION = 5;
 
@@ -458,6 +466,22 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   // stable device id
   const deviceId = React.useMemo(() => getOrCreateDeviceId(), []);
+
+  // Initialize domain services
+  const services = React.useMemo(() => {
+    if (!submitOperation) {
+      return null;
+    }
+
+    return {
+      address: new AddressService({ submitOperation, deviceId }),
+      completion: new CompletionService({ submitOperation, deviceId }),
+      arrangement: new ArrangementService({ submitOperation, deviceId }),
+      settings: new SettingsService({ submitOperation, deviceId }),
+      backup: new BackupService({ userId }),
+      session: new SessionService({ submitOperation, deviceId }),
+    };
+  }, [submitOperation, deviceId, userId]);
 
   // Store current user ID for ownership tracking
   const ownerUserIdRef = React.useRef<string | undefined>(userId);
