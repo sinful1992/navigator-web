@@ -229,6 +229,21 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     return applyOptimisticUpdates(patchedBaseState, optimisticUpdates);
   }, [baseState, optimisticUpdates, setBaseState]);
 
+  // ---- Initialize domain services ----
+  const services = React.useMemo(() => {
+    if (!submitOperation) return null;
+
+    return {
+      sync: new (require('./services/SyncService').SyncService)(submitOperation),
+      session: new (require('./services/SessionService').SessionService)({ submitOperation, deviceId }),
+      address: new (require('./services/AddressService').AddressService)({ submitOperation, deviceId }),
+      completion: new (require('./services/CompletionService').CompletionService)({ submitOperation, deviceId }),
+      arrangement: new (require('./services/ArrangementService').ArrangementService)({ submitOperation, deviceId }),
+      settings: new (require('./services/SettingsService').SettingsService)({ submitOperation }),
+      backup: new (require('./services/BackupService').BackupService)({ userId }),
+    };
+  }, [submitOperation, deviceId, userId]);
+
   // ---- Call extracted hooks ----
 
   // 3. Completion state (create, update, delete completions)
