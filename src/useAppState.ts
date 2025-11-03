@@ -396,6 +396,61 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     }
   }, [submitOperation]);
 
+  const updateSession = React.useCallback((date: string, updates: Partial<DaySession>, createIfMissing: boolean = false) => {
+    setBaseState((s: AppState) => {
+      const sessionIndex = s.daySessions.findIndex((session: DaySession) => session.date === date);
+
+      if (sessionIndex >= 0) {
+        // Update existing session
+        const updatedSessions = s.daySessions.map((session: DaySession, idx: number) => {
+          if (idx === sessionIndex) {
+            const updatedSession = { ...session, ...updates };
+
+            // Recalculate duration if both start and end are present
+            if (updatedSession.start && updatedSession.end) {
+              try {
+                const startTime = new Date(updatedSession.start).getTime();
+                const endTime = new Date(updatedSession.end).getTime();
+                if (endTime >= startTime) {
+                  updatedSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
+                } else {
+                  delete updatedSession.end;
+                  delete updatedSession.durationSeconds;
+                }
+              } catch (error) {
+                logger.error('Duration calculation failed:', error);
+              }
+            }
+
+            return updatedSession;
+          }
+          return session;
+        });
+
+        logger.info('Updated session for date:', date, 'with updates:', updates);
+        return { ...s, daySessions: updatedSessions };
+      } else if (createIfMissing) {
+        // Create new session if it doesn't exist
+        const newSession: DaySession = { date, ...updates };
+        logger.info('Created new session for date:', date, 'with data:', updates);
+        return { ...s, daySessions: [...s.daySessions, newSession] };
+      } else {
+        logger.warn('Session not found for date:', date, 'and createIfMissing is false');
+        return s;
+      }
+    });
+
+    // Submit operation to cloud
+    if (submitOperation) {
+      submitOperation({
+        type: 'SESSION_UPDATE',
+        payload: { date, updates }
+      }).catch(err => {
+        logger.error('Failed to submit session update operation:', err);
+      });
+    }
+  }, [submitOperation]);
+
   const processReminders = React.useCallback(() => {
     setBaseState((s: AppState) => {
       const newNotifications = processArrangementReminders(s);
@@ -837,6 +892,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     // Day tracking
     startDay,
     endDay,
+    updateSession,
 
     // Backup/restore
     backupState,
