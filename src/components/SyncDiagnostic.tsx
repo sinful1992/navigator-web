@@ -3,6 +3,7 @@ import * as React from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { getOperationLog } from '../sync/operationLog';
 import { logger } from '../utils/logger';
+import { ConflictMetricsPanel } from './ConflictMetricsPanel';
 import './SyncDiagnostic.css';
 
 type DiagnosticData = {
@@ -32,6 +33,7 @@ export function SyncDiagnostic({ userId, currentState }: {
   const [loading, setLoading] = React.useState(false);
   const [data, setData] = React.useState<DiagnosticData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [showMetrics, setShowMetrics] = React.useState(false);
 
   const runDiagnostic = async () => {
     setLoading(true);
@@ -256,6 +258,10 @@ export function SyncDiagnostic({ userId, currentState }: {
                     🔄 Refresh
                   </button>
 
+                  <button onClick={() => setShowMetrics(true)} disabled={loading}>
+                    📊 Conflict Metrics
+                  </button>
+
                   {data.unsyncedOperations > 0 && (
                     <button onClick={forceUpload} disabled={loading} className="danger">
                       📤 Force Upload
@@ -264,6 +270,28 @@ export function SyncDiagnostic({ userId, currentState }: {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Conflict Metrics Panel (PHASE 3) */}
+      {showMetrics && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 999999,
+          padding: '1rem',
+          overflowY: 'auto',
+        }} onClick={() => setShowMetrics(false)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <ConflictMetricsPanel onClose={() => setShowMetrics(false)} />
           </div>
         </div>
       )}

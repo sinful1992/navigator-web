@@ -2,9 +2,10 @@
 // PHASE 3: Conflict Resolution Hook (Application Layer)
 // Clean Architecture: Application layer orchestrates conflict resolution
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useEffect, useRef } from 'react';
 import type { AppState, VersionConflict, Completion, Arrangement } from '../types';
 import { ConflictResolutionService, type ResolutionStrategy } from '../services/ConflictResolutionService';
+import { ConflictMetricsService } from '../services/ConflictMetricsService';
 import { logger } from '../utils/logger';
 
 export interface UseConflictResolutionProps {
@@ -52,6 +53,9 @@ export function useConflictResolution({
   updateArrangement,
 }: UseConflictResolutionProps): UseConflictResolutionReturn {
 
+  // Track conflicts we've already recorded in metrics
+  const recordedConflictsRef = useRef<Set<string>>(new Set());
+
   // Filter conflicts by status
   const pendingConflicts = useMemo(
     () => conflicts.filter(c => c.status === 'pending'),
@@ -62,6 +66,23 @@ export function useConflictResolution({
     () => conflicts.filter(c => c.status === 'resolved' || c.status === 'dismissed'),
     [conflicts]
   );
+
+  // PHASE 3: Track conflict detection in metrics
+  useEffect(() => {
+    const trackNewConflicts = async () => {
+      for (const conflict of pendingConflicts) {
+        // Only track if we haven't recorded this conflict yet
+        if (!recordedConflictsRef.current.has(conflict.id)) {
+          await ConflictMetricsService.trackConflictDetected(conflict);
+          recordedConflictsRef.current.add(conflict.id);
+        }
+      }
+    };
+
+    trackNewConflicts().catch(err => {
+      logger.error('Failed to track conflict detection:', err);
+    });
+  }, [pendingConflicts]);
 
   /**
    * Resolve conflict by keeping local version
@@ -98,6 +119,11 @@ export function useConflictResolution({
             : c
         ),
       }));
+
+      // PHASE 3: Track resolution in metrics
+      ConflictMetricsService.trackConflictResolved(conflict, 'keep-local').catch(err => {
+        logger.error('Failed to track conflict resolution:', err);
+      });
 
       logger.info('✅ Conflict resolved: Kept local changes', { conflictId });
     },
@@ -160,6 +186,11 @@ export function useConflictResolution({
         ),
       }));
 
+      // PHASE 3: Track resolution in metrics
+      ConflictMetricsService.trackConflictResolved(conflict, 'use-remote').catch(err => {
+        logger.error('Failed to track conflict resolution:', err);
+      });
+
       logger.info('✅ Conflict resolved: Used remote changes (synced)', { conflictId });
     },
     [conflicts, completions, updateCompletion, updateArrangement, onStateUpdate]
@@ -221,6 +252,11 @@ export function useConflictResolution({
         ),
       }));
 
+      // PHASE 3: Track resolution in metrics
+      ConflictMetricsService.trackConflictResolved(conflict, 'manual').catch(err => {
+        logger.error('Failed to track conflict resolution:', err);
+      });
+
       logger.info('✅ Conflict resolved: Manual merge (synced)', { conflictId });
     },
     [conflicts, completions, updateCompletion, updateArrangement, onStateUpdate]
@@ -254,6 +290,11 @@ export function useConflictResolution({
             : c
         ),
       }));
+
+      // PHASE 3: Track dismissal in metrics
+      ConflictMetricsService.trackConflictDismissed(conflict).catch(err => {
+        logger.error('Failed to track conflict dismissal:', err);
+      });
 
       logger.info('✅ Conflict dismissed', { conflictId });
     },
