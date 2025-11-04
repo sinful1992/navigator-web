@@ -8,6 +8,7 @@ import {
   validateAddressRow as validateAddressRowImpl,
   validateAppState as validateAppStateImpl,
 } from '../services/validationService';
+import { logger } from './logger';
 
 // ============================================================================
 // TYPE GUARDS - Re-export from validationService with backward-compatible signatures
