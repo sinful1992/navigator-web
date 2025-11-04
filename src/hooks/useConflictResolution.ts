@@ -4,7 +4,7 @@
 
 import { useCallback, useMemo, useEffect, useRef } from 'react';
 import type { AppState, VersionConflict, Completion, Arrangement } from '../types';
-import { ConflictResolutionService, type ResolutionStrategy } from '../services/ConflictResolutionService';
+import { ConflictResolutionService } from '../services/ConflictResolutionService';
 import { ConflictMetricsService } from '../services/ConflictMetricsService';
 import { logger } from '../utils/logger';
 
@@ -47,7 +47,7 @@ export interface UseConflictResolutionReturn {
 export function useConflictResolution({
   conflicts,
   completions,
-  arrangements,
+  arrangements: _arrangements, // Prefix with _ to indicate intentionally unused (may be needed in future)
   onStateUpdate,
   updateCompletion,
   updateArrangement,
@@ -183,14 +183,16 @@ export function useConflictResolution({
         return;
       }
 
-      // Domain Layer: Get resolution strategy
+      // Domain Layer: Validate conflict can be resolved
       const validation = ConflictResolutionService.canResolve(conflict);
       if (!validation.valid) {
         logger.error('Cannot resolve conflict:', validation.reason);
         return;
       }
 
-      const resolution = ConflictResolutionService.resolveKeepLocal(conflict);
+      // For keep-local strategy, no data changes needed (local version stays)
+      // Just need to mark conflict as resolved
+      ConflictResolutionService.resolveKeepLocal(conflict); // Logs the resolution
 
       // Application Layer: Apply resolution to state
       onStateUpdate((state) => ({

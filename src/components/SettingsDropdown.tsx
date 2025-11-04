@@ -304,7 +304,7 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
 
                   {/* 🔄 PHASE 1: Retry Queue Status Panel */}
                   <SyncStatusPanel
-                    onForceRetry={onManualSync}
+                    onForceRetry={onManualSync ? async () => { onManualSync(); } : undefined}
                     isSyncing={isSyncing}
                   />
                 </div>

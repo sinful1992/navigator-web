@@ -79,7 +79,8 @@ export interface ConflictEvent {
 export class ConflictMetricsService {
   private static readonly METRICS_KEY = 'conflict_metrics_v1';
   private static readonly EVENTS_KEY_PREFIX = 'conflict_event_';
-  private static readonly MAX_EVENTS_TO_KEEP = 1000; // Keep last 1000 events
+  // Future enhancement: Limit event storage to prevent bloat
+  // private static readonly MAX_EVENTS_TO_KEEP = 1000;
 
   /**
    * Get current conflict metrics
