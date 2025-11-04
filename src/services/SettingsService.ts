@@ -216,10 +216,26 @@ export class SettingsService {
    */
   getDefaultReminderSettings(): ReminderSettings {
     return {
+      defaultSchedule: 'OneDayBefore',
+      globalEnabled: true,
       enabled: true,
-      daysBeforeReminder: 1,
       smsEnabled: false,
       emailEnabled: false,
+      daysBeforeReminder: 1,
+      agentProfile: {
+        name: '',
+        companyName: '',
+        phoneNumber: '',
+        email: '',
+      },
+      messageTemplates: [],
+      activeTemplateId: '',
+      customizableSchedule: {
+        threeDayReminder: false,
+        oneDayReminder: true,
+        dayOfReminder: false,
+        customDays: [],
+      },
     };
   }
 
@@ -229,7 +245,24 @@ export class SettingsService {
   getDefaultBonusSettings(): BonusSettings {
     return {
       enabled: false,
+      calculationType: 'simple',
       type: 'simple',
+      simpleSettings: {
+        pifBonus: 100,
+        dailyThreshold: 100,
+      },
+      complexSettings: {
+        largePifThreshold: 1500,
+        largePifPercentage: 0.025,
+        regularPifPercentage: 0.015,
+        daPercentage: 0.005,
+        donePercentage: 0.002,
+        largePifCap: 500,
+        smallPifBonus: 30,
+        linkedCaseBonus: 10,
+        complianceFeePerCase: 75,
+        dailyThreshold: 100,
+      },
       simpleThreshold: 1000,
       simplePercentage: 0.1,
       dailyThreshold: 100,
@@ -238,6 +271,7 @@ export class SettingsService {
       regularPifPercentage: 0.015,
       daPercentage: 0.005,
       donePercentage: 0.002,
+      adjustForWorkingDays: false,
     };
   }
 
@@ -253,11 +287,11 @@ export class SettingsService {
     }
 
     if (bonusSettings.type === 'simple') {
-      if (totalEarnings < bonusSettings.simpleThreshold) {
+      if (totalEarnings < (bonusSettings.simpleThreshold ?? 0)) {
         return 0;
       }
 
-      return totalEarnings * bonusSettings.simplePercentage;
+      return totalEarnings * (bonusSettings.simplePercentage ?? 0);
     }
 
     // Complex bonus calculation would require more context (completions breakdown)

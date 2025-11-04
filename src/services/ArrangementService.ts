@@ -40,7 +40,7 @@ export class ArrangementService {
     paymentNumber: number
   ): { outcome: Outcome; isLastPayment: boolean } {
     const isRecurring = arrangement.paymentSchedule !== 'Single';
-    const isLastPayment = paymentNumber >= arrangement.numberOfPayments;
+    const isLastPayment = paymentNumber >= (arrangement.numberOfPayments ?? 1);
 
     // For recurring arrangements, only the last payment is PIF
     // All other payments are ARR
@@ -119,8 +119,8 @@ export class ArrangementService {
     arrangement: Arrangement,
     paidPayments: number
   ): number {
-    const totalPaid = paidPayments * arrangement.paymentAmount;
-    const remaining = arrangement.totalAmount - totalPaid;
+    const totalPaid = paidPayments * (arrangement.paymentAmount ?? 0);
+    const remaining = (arrangement.totalAmount ?? 0) - totalPaid;
 
     return Math.max(0, remaining);
   }
@@ -183,14 +183,14 @@ export class ArrangementService {
    * Filter active arrangements
    */
   filterActive(arrangements: Arrangement[]): Arrangement[] {
-    return arrangements.filter(arr => arr.paidPayments < arr.numberOfPayments);
+    return arrangements.filter(arr => (arr.paidPayments ?? 0) < (arr.numberOfPayments ?? 1));
   }
 
   /**
    * Filter completed arrangements
    */
   filterCompleted(arrangements: Arrangement[]): Arrangement[] {
-    return arrangements.filter(arr => arr.paidPayments >= arr.numberOfPayments);
+    return arrangements.filter(arr => (arr.paidPayments ?? 0) >= (arr.numberOfPayments ?? 1));
   }
 
   /**
@@ -226,7 +226,7 @@ export class ArrangementService {
    */
   sortByCustomerName(arrangements: Arrangement[]): Arrangement[] {
     return [...arrangements].sort((a, b) => {
-      return a.customerName.localeCompare(b.customerName);
+      return (a.customerName ?? '').localeCompare(b.customerName ?? '');
     });
   }
 
@@ -234,7 +234,7 @@ export class ArrangementService {
    * Check if arrangement is complete
    */
   isComplete(arrangement: Arrangement): boolean {
-    return arrangement.paidPayments >= arrangement.numberOfPayments;
+    return (arrangement.paidPayments ?? 0) >= (arrangement.numberOfPayments ?? 1);
   }
 
   /**
@@ -259,9 +259,9 @@ export class ArrangementService {
     const completed = this.filterCompleted(arrangements);
     const overdue = this.filterOverdue(arrangements);
 
-    const totalAmount = arrangements.reduce((sum, arr) => sum + arr.totalAmount, 0);
+    const totalAmount = arrangements.reduce((sum, arr) => sum + (arr.totalAmount ?? 0), 0);
     const remainingAmount = active.reduce((sum, arr) => {
-      return sum + this.calculateRemainingAmount(arr, arr.paidPayments);
+      return sum + this.calculateRemainingAmount(arr, arr.paidPayments ?? 0);
     }, 0);
 
     return {
@@ -288,7 +288,7 @@ export class ArrangementService {
    */
   findByCustomerName(arrangements: Arrangement[], customerName: string): Arrangement[] {
     return arrangements.filter(arr =>
-      arr.customerName.toLowerCase().includes(customerName.toLowerCase())
+      (arr.customerName ?? '').toLowerCase().includes(customerName.toLowerCase())
     );
   }
 
@@ -300,7 +300,7 @@ export class ArrangementService {
       return null;
     }
 
-    const remainingPayments = arrangement.numberOfPayments - arrangement.paidPayments;
+    const remainingPayments = (arrangement.numberOfPayments ?? 1) - (arrangement.paidPayments ?? 0);
 
     if (arrangement.paymentSchedule === 'Single') {
       return arrangement.nextPaymentDate ? new Date(arrangement.nextPaymentDate) : null;
@@ -315,7 +315,7 @@ export class ArrangementService {
 
     // Calculate date after remaining payments
     for (let i = 0; i < remainingPayments - 1; i++) {
-      const nextDate = this.calculateNextPaymentDate(estimatedDate, arrangement.paymentSchedule);
+      const nextDate = this.calculateNextPaymentDate(estimatedDate, arrangement.paymentSchedule ?? 'Single');
       if (nextDate) {
         estimatedDate = nextDate;
       }

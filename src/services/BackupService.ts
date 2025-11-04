@@ -187,8 +187,8 @@ export class BackupService {
         sessionMap.set(session.date, session);
       } else {
         // Prefer the session with end time, or the one with later start
-        const backupStart = new Date(session.start).getTime();
-        const existingStart = new Date(existing.start).getTime();
+        const backupStart = new Date(session.start || new Date()).getTime();
+        const existingStart = new Date(existing.start || new Date()).getTime();
 
         if (session.end && !existing.end) {
           sessionMap.set(session.date, session);

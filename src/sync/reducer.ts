@@ -144,7 +144,7 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
               ...s,
               end: new Date(s.date + 'T23:59:59.999Z').toISOString(),
               durationSeconds: Math.floor(
-                (new Date(s.date + 'T23:59:59.999Z').getTime() - new Date(s.start).getTime()) / 1000
+                (new Date(s.date + 'T23:59:59.999Z').getTime() - new Date(s.start || new Date()).getTime()) / 1000
               )
             };
           }
@@ -164,7 +164,7 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           ...state,
           daySessions: state.daySessions.map(session => {
             if (session.date === date && !session.end) {
-              const startTime = new Date(session.start).getTime();
+              const startTime = new Date(session.start || new Date()).getTime();
               const endTimeMs = new Date(endTime).getTime();
               const durationSeconds = Math.floor((endTimeMs - startTime) / 1000);
 

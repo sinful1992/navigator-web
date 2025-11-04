@@ -232,6 +232,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   // ---- Initialize domain services and repositories ----
   // Clean Architecture: Repositories (data access) + Services (business logic)
   // TODO: Integrate services and repositories into hooks (currently prepared but not used)
+  // @ts-expect-error - Prepared for future use, intentionally unused
   const _servicesAndRepos = React.useMemo(() => {
     if (!submitOperation) return null;
 
@@ -384,7 +385,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
           return {
             ...session,
             end: new Date(session.date + 'T23:59:59.999Z').toISOString(),
-            durationSeconds: Math.floor((new Date(session.date + 'T23:59:59.999Z').getTime() - new Date(session.start).getTime()) / 1000)
+            durationSeconds: Math.floor((new Date(session.date + 'T23:59:59.999Z').getTime() - new Date(session.start || new Date()).getTime()) / 1000)
           };
         }
         return session;
