@@ -87,8 +87,10 @@ export type Arrangement = {
   recurrenceType?: RecurrenceType;
   recurrenceInterval?: number;  // e.g., 1 for weekly, 2 for bi-weekly
   paymentSchedule?: 'Single' | 'Weekly' | 'Bi-weekly' | 'Monthly';  // Payment frequency
-  numberOfPayments?: number;    // total number of payments expected (renamed from totalPayments)
-  paidPayments?: number;        // payments completed so far (renamed from paymentsMade)
+  totalPayments?: number;       // total number of payments expected (legacy name)
+  paymentsMade?: number;        // payments completed so far (legacy name)
+  numberOfPayments?: number;    // total number of payments expected (new name for services)
+  paidPayments?: number;        // payments completed so far (new name for services)
   paymentAmount?: number;       // amount per payment
   totalAmount?: number;         // total amount across all payments
   nextPaymentDate?: string;     // ISO date string for next payment
@@ -116,6 +118,7 @@ export type UserSubscription = {
   id: string;
   userId: string;
   planId: string;
+  tier?: string;              // subscription tier (basic, premium, etc.) - optional for legacy code
   status: SubscriptionStatus;
   currentPeriodStart: string; // ISO date
   currentPeriodEnd: string;   // ISO date
@@ -179,10 +182,11 @@ export type ReminderNotification = {
 
 export type ReminderSettings = {
   defaultSchedule: ReminderSchedule;
-  enabled: boolean;  // renamed from globalEnabled
+  globalEnabled: boolean;        // legacy name for enabled toggle
+  enabled?: boolean;             // new name (optional for backward compatibility)
   smsEnabled: boolean;
-  emailEnabled?: boolean;  // email reminder toggle
-  daysBeforeReminder?: number;  // days before arrangement to send reminder
+  emailEnabled?: boolean;        // email reminder toggle
+  daysBeforeReminder?: number;   // days before arrangement to send reminder
   agentProfile: AgentProfile;
   messageTemplates: MessageTemplate[];
   activeTemplateId: string;
@@ -198,13 +202,31 @@ export type BonusCalculationType = 'simple' | 'complex' | 'custom';
 
 export type BonusSettings = {
   enabled: boolean;
-  type: 'simple' | 'complex' | 'custom';  // renamed from calculationType for service compatibility
+  calculationType: BonusCalculationType;  // legacy name
+  type?: 'simple' | 'complex' | 'custom'; // new name for services (optional for backward compatibility)
 
-  // Simple calculation fields (flattened structure)
+  // Simple calculation (nested structure - legacy)
+  simpleSettings?: {
+    pifBonus: number;              // £ per PIF (e.g., 100)
+    dailyThreshold: number;        // £ daily threshold (e.g., 100)
+  };
+
+  // Complex calculation (nested structure - legacy)
+  complexSettings?: {
+    baseEnforcementFee: number;    // £235 enforcement fee
+    basePifBonus: number;          // £100 for standard PIF
+    largePifThreshold: number;     // £1500 debt threshold
+    largePifPercentage: number;    // 2.5% of 7.5% = 0.025 * 0.075 = 0.001875
+    largePifCap: number;           // £500 max bonus
+    smallPifBonus: number;         // £30 for balance < £100
+    linkedCaseBonus: number;       // £10 for linked cases with 0 fee
+    complianceFeePerCase: number;  // £75 per case (no fixed fee)
+    dailyThreshold: number;        // £100 per working day
+  };
+
+  // Flattened properties for new services (optional)
   simpleThreshold?: number;        // £ daily threshold (e.g., 100)
   simplePercentage?: number;       // Percentage for simple calculation
-
-  // Complex calculation fields (flattened structure)
   dailyThreshold?: number;         // £100 per working day
   largePifThreshold?: number;      // £1500 debt threshold
   largePifPercentage?: number;     // Percentage for large PIFs
