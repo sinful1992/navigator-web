@@ -12,6 +12,7 @@ import { DEFAULT_BONUS_SETTINGS } from "../utils/bonusCalculator";
 import { SEQUENCE_CORRUPTION_THRESHOLD } from "./syncConfig";
 import { validateSyncOperation } from "../services/operationValidators";
 import { retryWithCustom, retryWithBackoff, isRetryableError, DEFAULT_RETRY_CONFIG } from "../utils/retryUtils";
+import { retryQueueManager } from "./retryQueue";
 
 /**
  * SECURITY: Track used operation nonces to prevent replay attacks
@@ -841,23 +842,37 @@ export function useOperationSync(): UseOperationSync {
 
     setIsSyncing(true);
     try {
-      const unsyncedOps = operationLog.current.getUnsyncedOperations();
-      logger.debug('📋 Unsynced operations:', unsyncedOps.length);
+      // 🔄 PHASE 1: Check retry queue for operations ready to retry
+      const retryItems = await retryQueueManager.getReadyForRetry();
+      logger.debug('🔄 RETRY QUEUE: Operations ready for retry:', retryItems.length);
 
-      if (unsyncedOps.length === 0) {
-        logger.debug('✅ No unsynced operations');
+      // Get unsynced operations from log
+      const unsyncedOps = operationLog.current.getUnsyncedOperations();
+      logger.debug('📋 Unsynced operations from log:', unsyncedOps.length);
+
+      // Merge retry queue operations with unsynced operations
+      // Retry queue operations take priority (they've already failed once)
+      const allOpsToSync = [
+        ...retryItems.map(item => item.operation),
+        ...unsyncedOps.filter(op =>
+          // Don't duplicate operations already in retry queue
+          !retryItems.some(item => item.operation.sequence === op.sequence)
+        )
+      ];
+
+      if (allOpsToSync.length === 0) {
+        logger.debug('✅ No operations to sync (log + retry queue both empty)');
         return; // Nothing to sync
       }
 
-      const uploadMsg = `📤 UPLOADING ${unsyncedOps.length} operations to cloud...`;
+      const uploadMsg = `📤 UPLOADING ${allOpsToSync.length} operations to cloud (${retryItems.length} from retry queue, ${unsyncedOps.length} new)...`;
       logger.debug(uploadMsg);
 
       // 🔧 CRITICAL FIX: Track successful uploads instead of assuming all succeed
       const successfulSequences: number[] = [];
-      const failedOps: Array<{seq: number; type: string; error: string}> = [];
 
       // Upload operations to cloud with retry logic
-      for (const operation of unsyncedOps) {
+      for (const operation of allOpsToSync) {
         logger.debug('Uploading operation:', operation.type, operation.id, 'seq:', operation.sequence);
 
         // Derive entity from operation type
@@ -936,6 +951,12 @@ export function useOperationSync(): UseOperationSync {
 
           // ✅ Track this as successfully uploaded
           successfulSequences.push(operation.sequence);
+
+          // 🔄 PHASE 1: Remove from retry queue if this was a retry
+          const wasRetry = retryItems.some(item => item.operation.sequence === operation.sequence);
+          if (wasRetry) {
+            await retryQueueManager.removeFromQueue(operation.sequence);
+          }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
 
@@ -945,12 +966,10 @@ export function useOperationSync(): UseOperationSync {
             error: errorMsg,
           });
 
-          // Track failure for retry on next sync cycle
-          failedOps.push({
-            seq: operation.sequence,
-            type: operation.type,
-            error: errorMsg
-          });
+          // 🔄 PHASE 1: Add to persistent retry queue instead of in-memory array
+          const existingRetryItem = retryItems.find(item => item.operation.sequence === operation.sequence);
+          await retryQueueManager.addToQueue(operation, errorMsg, existingRetryItem);
+
           // Continue to next operation instead of stopping
         }
       }
@@ -980,18 +999,28 @@ export function useOperationSync(): UseOperationSync {
           await operationLog.current.markSyncedUpTo(maxContinuousSeq);
           setLastSyncTime(new Date());
 
+          // 🔄 PHASE 1: Get retry queue stats for summary
+          const queueStats = await retryQueueManager.getQueueStats();
+
           const syncSummary = {
-            total: unsyncedOps.length,
+            total: allOpsToSync.length,
             succeeded: successfulSequences.length,
-            failed: failedOps.length,
+            failed: queueStats.total,
+            inRetryQueue: queueStats.total,
+            readyForRetry: queueStats.ready,
             previousLastSynced: currentLastSynced,
             newLastSynced: maxContinuousSeq,
             advanced: maxContinuousSeq - currentLastSynced,
           };
           logger.debug('✅ SYNC COMPLETE:', syncSummary);
 
-          if (failedOps.length > 0) {
-            logger.error('⚠️ FAILED OPERATIONS (will retry):', failedOps);
+          if (queueStats.total > 0) {
+            logger.error('⚠️ RETRY QUEUE STATUS:', {
+              totalInQueue: queueStats.total,
+              readyForRetry: queueStats.ready,
+              waitingForBackoff: queueStats.waiting,
+              nextRetry: queueStats.oldestRetry,
+            });
           }
         } else {
           // 🔧 FIX: Only log "NO PROGRESS" once every 30 seconds to prevent spam

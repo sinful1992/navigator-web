@@ -6,6 +6,7 @@ import { useSettingsDropdown } from '../hooks/useSettingsDropdown';
 import { ReminderSettings } from './ReminderSettings';
 import { BonusSettingsModal } from './BonusSettingsModal';
 import { SyncDebugModal } from './SyncDebugModal';
+import { SyncStatusPanel } from './SyncStatusPanel';
 import type { ReminderSettings as ReminderSettingsType, BonusSettings } from '../types';
 import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
 import type { AppState } from '../types';
@@ -299,6 +300,12 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                       actions.showSyncDebugModal();
                     }}
                     style={{ marginTop: '0.5rem' }}
+                  />
+
+                  {/* 🔄 PHASE 1: Retry Queue Status Panel */}
+                  <SyncStatusPanel
+                    onForceRetry={onManualSync}
+                    isSyncing={isSyncing}
                   />
                 </div>
               )}
