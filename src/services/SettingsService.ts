@@ -216,7 +216,11 @@ export class SettingsService {
    */
   getDefaultReminderSettings(): ReminderSettings {
     return {
-      defaultSchedule: 'OneDayBefore',
+      defaultSchedule: {
+        daysBeforePayment: [1],
+        enabled: true,
+        autoSend: false,
+      },
       globalEnabled: true,
       enabled: true,
       smsEnabled: false,
@@ -224,9 +228,9 @@ export class SettingsService {
       daysBeforeReminder: 1,
       agentProfile: {
         name: '',
-        companyName: '',
-        phoneNumber: '',
-        email: '',
+        title: 'Enforcement Agent',
+        signature: '',
+        contactInfo: '',
       },
       messageTemplates: [],
       activeTemplateId: '',
@@ -252,11 +256,10 @@ export class SettingsService {
         dailyThreshold: 100,
       },
       complexSettings: {
+        baseEnforcementFee: 235,
+        basePifBonus: 100,
         largePifThreshold: 1500,
         largePifPercentage: 0.025,
-        regularPifPercentage: 0.015,
-        daPercentage: 0.005,
-        donePercentage: 0.002,
         largePifCap: 500,
         smallPifBonus: 30,
         linkedCaseBonus: 10,

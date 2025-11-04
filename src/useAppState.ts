@@ -40,7 +40,7 @@ function closeSession(session: DaySession, endTime: Date): DaySession {
     end: endTime.toISOString(),
   };
 
-  const startMs = Date.parse(session.start);
+  const startMs = Date.parse(session.start || '');
   const endMs = endTime.getTime();
 
   if (!Number.isNaN(startMs) && !Number.isNaN(endMs)) {
@@ -55,7 +55,7 @@ function closeSession(session: DaySession, endTime: Date): DaySession {
 
 function autoCloseStaleSession(session: DaySession, now: Date): DaySession {
   const nowMs = now.getTime();
-  const startMs = Date.parse(session.start);
+  const startMs = Date.parse(session.start || '');
   let endMs = Date.parse(`${session.date}T23:59:59.999Z`);
 
   if (Number.isNaN(endMs)) {
