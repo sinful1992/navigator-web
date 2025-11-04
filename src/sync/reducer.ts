@@ -41,8 +41,8 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           return state; // Skip this duplicate
         }
 
-        // 🔍 DEBUG: Log completion being added
-        console.log('📥 COMPLETION_CREATE applied:', {
+        // 🔍 DEBUG: Log completion being added (only in verbose mode)
+        logger.debug('📥 COMPLETION_CREATE applied:', {
           seq: operation.sequence,
           timestamp: completion.timestamp,
           address: completion.address,
@@ -335,8 +335,7 @@ export function reconstructStateWithConflictResolution(
     hasVectorClocks: operations.some(op => !!op.vectorClock),
     completionOps: operations.filter(op => op.type === 'COMPLETION_CREATE').length,
   };
-  logger.info('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION START:', reconstructionInfo);
-  console.log('🔄 RECONSTRUCTION START:', reconstructionInfo);
+  logger.debug('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION START:', reconstructionInfo);
 
   // Apply conflict resolution
   const { validOperations, conflictsResolved, operationsRejected } =
@@ -350,14 +349,13 @@ export function reconstructStateWithConflictResolution(
   };
 
   if (conflictsResolved > 0 || operationsRejected > 0) {
-    logger.info('Conflict resolution applied:', conflictInfo);
-    console.log('Conflict resolution applied:', conflictInfo);
+    logger.debug('Conflict resolution applied:', conflictInfo);
   }
 
   // Sort resolved operations by sequence
   const sortedOps = [...validOperations].sort((a, b) => a.sequence - b.sequence);
 
-  console.log('🔄 About to apply', sortedOps.length, 'operations (', sortedOps.filter(op => op.type === 'COMPLETION_CREATE').length, 'completions)');
+  logger.debug('🔄 About to apply', sortedOps.length, 'operations (', sortedOps.filter(op => op.type === 'COMPLETION_CREATE').length, 'completions)');
 
   // Apply resolved operations to state
   const finalState = sortedOps.reduce(applyOperation, initialState);
@@ -371,8 +369,7 @@ export function reconstructStateWithConflictResolution(
     conflictsResolved,
     operationsRejected,
   };
-  logger.info('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION COMPLETE:', finalInfo);
-  console.log('🔄 RECONSTRUCTION COMPLETE:', finalInfo);
+  logger.debug('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION COMPLETE:', finalInfo);
 
   return finalState;
 }

@@ -443,8 +443,7 @@ export class OperationLogManager {
       localSessionStarts: this.log.operations.filter(op => op.type === 'SESSION_START').length,
       localTotalOps: this.log.operations.length,
     };
-    logger.info('🔍 DEDUP SUMMARY', dedupSummary);
-    console.log('🔍 DEDUP SUMMARY (console):', dedupSummary);
+    logger.debug('🔍 DEDUP SUMMARY', dedupSummary);
 
     if (operationsToMerge.length === 0) {
       // No new operations to merge

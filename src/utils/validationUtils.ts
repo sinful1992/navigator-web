@@ -53,17 +53,17 @@ export function stampCompletionsWithVersion(
   version: number
 ): Completion[] {
   const src = Array.isArray(completions) ? completions : [];
-  console.log('🔍 stampCompletionsWithVersion: Input count =', src.length);
+  logger.debug('🔍 stampCompletionsWithVersion: Input count =', src.length);
 
   const filtered = src.filter((c, idx) => {
     const isValid = validateCompletion(c);
     if (!isValid && idx < 5) {
-      console.warn(`⚠️ Validation failed for completion ${idx}:`, c);
+      logger.warn(`⚠️ Validation failed for completion ${idx}:`, c);
     }
     return isValid;
   });
 
-  console.log('✅ stampCompletionsWithVersion: After filter =', filtered.length);
+  logger.debug('✅ stampCompletionsWithVersion: After filter =', filtered.length);
 
   return filtered.map((c: Completion) => ({
     ...c,

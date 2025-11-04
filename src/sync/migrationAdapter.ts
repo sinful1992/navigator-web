@@ -45,7 +45,7 @@ export function useUnifiedSync() {
       // even though setCurrentState() was called. By reconstructing from _operations,
       // we get the guaranteed correct state without depending on async state updates.
       const state = reconstructState(INITIAL_STATE, _operations);
-      console.log('📤 subscribeToData: Notifying App.tsx with state:', {
+      logger.debug('📤 subscribeToData: Notifying App.tsx with state:', {
         addresses: state.addresses?.length,
         completions: state.completions?.length,
         arrangements: state.arrangements?.length,

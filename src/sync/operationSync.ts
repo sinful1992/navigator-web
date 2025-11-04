@@ -402,8 +402,7 @@ export function useOperationSync(): UseOperationSync {
               sessionStartCount: remoteByType['SESSION_START'] || 0,
               completionCount: remoteByType['COMPLETION_CREATE'] || 0,
             };
-            logger.info('📊 BOOTSTRAP: Remote operations by type:', validationSummary);
-            console.log('📊 BOOTSTRAP VALIDATION RESULT:', validationSummary);
+            logger.debug('📊 BOOTSTRAP: Remote operations by type:', validationSummary);
 
             // 🔍 DEBUG: Get local operation counts BEFORE merge
             const localOpsBefore = operationLog.current.getAllOperations();
@@ -529,8 +528,8 @@ export function useOperationSync(): UseOperationSync {
               return; // Skip the normal merge path
             }
 
-            // 🔍 DEBUG: Log what we're passing to merge
-            console.log('🔍 BEFORE MERGE:', {
+            // 🔍 DEBUG: Log what we're passing to merge (only in verbose mode)
+            logger.debug('🔍 BEFORE MERGE:', {
               remoteOpsCount: remoteOperations.length,
               remoteOpIds: remoteOperations.slice(0, 5).map(op => ({id: op.id.substring(0, 8), type: op.type, seq: op.sequence, clientId: op.clientId.substring(0, 8)})),
               totalRemote: remoteOperations.length,
@@ -538,8 +537,8 @@ export function useOperationSync(): UseOperationSync {
 
             const newOps = await operationLog.current.mergeRemoteOperations(remoteOperations);
 
-            // 🔍 DEBUG: Log what came back from merge
-            console.log('🔍 AFTER MERGE:', {
+            // 🔍 DEBUG: Log what came back from merge (only in verbose mode)
+            logger.debug('🔍 AFTER MERGE:', {
               newOpsCount: newOps.length,
               newOpIds: newOps.slice(0, 5).map(op => ({id: op.id.substring(0, 8), type: op.type})),
             });
@@ -709,7 +708,7 @@ export function useOperationSync(): UseOperationSync {
     }
 
     batchTimerRef.current = setTimeout(async () => {
-      console.log('🔄 BATCH SYNC CHECK:', {
+      logger.debug('🔄 BATCH SYNC CHECK:', {
         isOnline,
         hasUser: !!user,
         hasOperationLog: !!operationLog.current,
@@ -717,7 +716,7 @@ export function useOperationSync(): UseOperationSync {
       });
 
       if (!isOnline || !user || !operationLog.current) {
-        console.log('⏭️ BATCH SYNC SKIPPED - preconditions not met:', {
+        logger.debug('⏭️ BATCH SYNC SKIPPED - preconditions not met:', {
           isOnline,
           user: user ? 'authenticated' : 'NOT AUTHENTICATED',
           operationLog: operationLog.current ? 'loaded' : 'NOT LOADED',
@@ -726,11 +725,11 @@ export function useOperationSync(): UseOperationSync {
       }
 
       const unsyncedCount = operationLog.current.getUnsyncedOperations().length;
-      console.log('📋 UNSYNCED OPERATIONS:', unsyncedCount);
+      logger.debug('📋 UNSYNCED OPERATIONS:', unsyncedCount);
 
       // Only sync if we have operations to sync
       if (unsyncedCount > 0) {
-        console.log('📤 STARTING BATCH SYNC for', unsyncedCount, 'operations');
+        logger.debug('📤 STARTING BATCH SYNC for', unsyncedCount, 'operations');
         try {
           pendingBatchRef.current = true;
           await syncOperationsToCloud();
@@ -741,7 +740,7 @@ export function useOperationSync(): UseOperationSync {
           pendingBatchRef.current = false;
         }
       } else {
-        console.log('⏭️ NO UNSYNCED OPERATIONS - skipping sync');
+        logger.debug('⏭️ NO UNSYNCED OPERATIONS - skipping sync');
       }
     }, 2000); // 2 second debounce
   }, [isOnline, user]);
@@ -830,17 +829,12 @@ export function useOperationSync(): UseOperationSync {
 
   // Sync operations to cloud
   const syncOperationsToCloud = useCallback(async () => {
-    console.log('🔄 syncOperationsToCloud called');
+    logger.debug('🔄 syncOperationsToCloud called');
     if (!operationLog.current || !user || !supabase) {
-      console.log('⏭️ SYNC SKIPPED - missing prerequisites:', {
+      logger.debug('⏭️ SYNC SKIPPED - missing prerequisites:', {
         operationLog: !!operationLog.current,
         user: !!user,
         supabase: !!supabase,
-      });
-      logger.warn('⚠️ SYNC SKIPPED:', {
-        hasOperationLog: !!operationLog.current,
-        hasUser: !!user,
-        hasSupabase: !!supabase,
       });
       return;
     }
@@ -848,17 +842,15 @@ export function useOperationSync(): UseOperationSync {
     setIsSyncing(true);
     try {
       const unsyncedOps = operationLog.current.getUnsyncedOperations();
-      console.log('📋 Unsynced operations:', unsyncedOps.length);
+      logger.debug('📋 Unsynced operations:', unsyncedOps.length);
 
       if (unsyncedOps.length === 0) {
-        console.log('✅ No unsynced operations');
         logger.debug('✅ No unsynced operations');
         return; // Nothing to sync
       }
 
       const uploadMsg = `📤 UPLOADING ${unsyncedOps.length} operations to cloud...`;
-      logger.info(uploadMsg);
-      console.log(uploadMsg);
+      logger.debug(uploadMsg);
 
       // 🔧 CRITICAL FIX: Track successful uploads instead of assuming all succeed
       const successfulSequences: number[] = [];
@@ -996,12 +988,10 @@ export function useOperationSync(): UseOperationSync {
             newLastSynced: maxContinuousSeq,
             advanced: maxContinuousSeq - currentLastSynced,
           };
-          logger.info('✅ SYNC COMPLETE:', syncSummary);
-          console.log('✅ SYNC COMPLETE:', syncSummary);
+          logger.debug('✅ SYNC COMPLETE:', syncSummary);
 
           if (failedOps.length > 0) {
             logger.error('⚠️ FAILED OPERATIONS (will retry):', failedOps);
-            console.error('⚠️ FAILED OPERATIONS:', failedOps);
           }
         } else {
           // 🔧 FIX: Only log "NO PROGRESS" once every 30 seconds to prevent spam
