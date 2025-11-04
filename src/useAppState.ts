@@ -231,7 +231,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   // ---- Initialize domain services and repositories ----
   // Clean Architecture: Repositories (data access) + Services (business logic)
-  const servicesAndRepos = React.useMemo(() => {
+  // TODO: Integrate services and repositories into hooks (currently prepared but not used)
+  const _servicesAndRepos = React.useMemo(() => {
     if (!submitOperation) return null;
 
     // Import repositories

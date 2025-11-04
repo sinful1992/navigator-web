@@ -1,7 +1,6 @@
 // src/services/SettingsService.ts (REFACTORED - Pure Business Logic)
 // Settings business logic ONLY
 
-import { logger } from '../utils/logger';
 import type { UserSubscription, ReminderSettings, BonusSettings } from '../types';
 
 /**

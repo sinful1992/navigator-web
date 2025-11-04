@@ -42,7 +42,7 @@ export class AddressRepository extends BaseRepository {
   /**
    * Persist single address add
    */
-  async saveAddress(address: AddressRow, listVersion: number): Promise<void> {
+  async saveAddress(address: AddressRow, _listVersion: number): Promise<void> {
     await this.submit({
       type: 'ADDRESS_ADD',
       payload: {

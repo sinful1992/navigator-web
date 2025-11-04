@@ -1,7 +1,6 @@
 // src/services/AddressService.ts (REFACTORED - Pure Business Logic)
 // Address business logic ONLY
 
-import { logger } from '../utils/logger';
 import type { AddressRow } from '../types';
 
 /**
