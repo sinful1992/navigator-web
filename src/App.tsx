@@ -291,12 +291,14 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
   const [showDeleteAccount, setShowDeleteAccount] = React.useState(false);
   const [showOwnershipPrompt, setShowOwnershipPrompt] = React.useState(false);
 
-  // PHASE 3: Conflict resolution
+  // PHASE 3: Conflict resolution (FIXED: Now submits UPDATE operations for sync)
   const conflictResolution = useConflictResolution({
     conflicts: state.conflicts || [],
     completions: state.completions,
     arrangements: state.arrangements,
     onStateUpdate: setState,
+    updateCompletion,
+    updateArrangement,
   });
 
   // Tab navigation with URL hash sync and browser history support
