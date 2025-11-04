@@ -232,7 +232,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   // ---- Initialize domain services and repositories ----
   // Clean Architecture: Repositories (data access) + Services (business logic)
   // TODO: Integrate services and repositories into hooks (currently prepared but not used)
-  // @ts-expect-error - Prepared for future use, intentionally unused
+  // NOTE: Commented out to prevent "require is not defined" error in browser
+  // When ready to integrate, convert require() to ES6 import statements
+  /*
   const _servicesAndRepos = React.useMemo(() => {
     if (!submitOperation) return null;
 
@@ -289,6 +291,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       },
     };
   }, [submitOperation, deviceId]);
+  */
 
   // ---- Call extracted hooks ----
 
