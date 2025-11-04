@@ -55,7 +55,7 @@ export function useAddressState({
   confirmOptimisticUpdate,
   submitOperation,
   setBaseState,
-  services,
+  services: _services,
   repositories
 }: UseAddressStateProps): UseAddressStateReturn {
   /**

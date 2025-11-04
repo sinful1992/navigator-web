@@ -45,7 +45,7 @@ export interface UseSettingsStateReturn {
 export function useSettingsState({
   submitOperation,
   setBaseState,
-  services,
+  services: _services,
   repositories
 }: UseSettingsStateProps): UseSettingsStateReturn {
   /**

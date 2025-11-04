@@ -248,12 +248,16 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   const servicesAndRepos = React.useMemo(() => {
     if (!submitOperation) return null;
 
+    // Cast submitOperation to SubmitOperationFn for BaseRepository compatibility
+    // SubmitOperationCallback (SubmitOperation) is compatible with SubmitOperationFn (Partial<Operation>)
+    const submitOpFn = submitOperation as any;
+
     // Initialize repositories (data access layer)
-    const addressRepo = new AddressRepository(submitOperation, deviceId);
-    const completionRepo = new CompletionRepository(submitOperation, deviceId);
-    const sessionRepo = new SessionRepository(submitOperation, deviceId);
-    const arrangementRepo = new ArrangementRepository(submitOperation, deviceId);
-    const settingsRepo = new SettingsRepository(submitOperation, deviceId);
+    const addressRepo = new AddressRepository(submitOpFn, deviceId);
+    const completionRepo = new CompletionRepository(submitOpFn, deviceId);
+    const sessionRepo = new SessionRepository(submitOpFn, deviceId);
+    const arrangementRepo = new ArrangementRepository(submitOpFn, deviceId);
+    const settingsRepo = new SettingsRepository(submitOpFn, deviceId);
 
     // Initialize services (business logic layer - pure, no data access)
     const addressService = new AddressService();
@@ -262,7 +266,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     const arrangementService = new ArrangementService();
     const settingsService = new SettingsService();
     const backupService = new BackupService();
-    const syncService = new SyncService(submitOperation);
+    const syncService = new SyncService(submitOpFn);
 
     return {
       // Repositories (data access)
