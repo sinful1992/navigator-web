@@ -85,8 +85,25 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
               operation: operation.id,
             });
 
-            // Return state unchanged - operation is rejected
-            return state;
+            // PHASE 3: Create conflict object for UI resolution
+            const conflict: import('../types').VersionConflict = {
+              id: `conflict_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+              timestamp: new Date().toISOString(),
+              entityType: 'completion',
+              entityId: originalTimestamp,
+              operationId: operation.id,
+              expectedVersion,
+              currentVersion,
+              remoteData: updates,
+              localData: targetCompletion,
+              status: 'pending',
+            };
+
+            // Add conflict to state
+            return {
+              ...state,
+              conflicts: [...(state.conflicts || []), conflict],
+            };
           }
         }
 
@@ -275,8 +292,25 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
               operation: operation.id,
             });
 
-            // Return state unchanged - operation is rejected
-            return state;
+            // PHASE 3: Create conflict object for UI resolution
+            const conflict: import('../types').VersionConflict = {
+              id: `conflict_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+              timestamp: new Date().toISOString(),
+              entityType: 'arrangement',
+              entityId: id,
+              operationId: operation.id,
+              expectedVersion,
+              currentVersion,
+              remoteData: updates,
+              localData: targetArrangement,
+              status: 'pending',
+            };
+
+            // Add conflict to state
+            return {
+              ...state,
+              conflicts: [...(state.conflicts || []), conflict],
+            };
           }
         }
 

@@ -60,6 +60,8 @@ import { useStats } from "./hooks/useStats";
 import { OwnershipPrompt } from "./components/OwnershipPrompt";
 import { Sidebar } from "./components/Sidebar";
 import { SyncDiagnostic } from "./components/SyncDiagnostic";
+import { useConflictResolution } from "./hooks/useConflictResolution";
+import { ConflictResolutionModal } from "./components/ConflictResolutionModal";
 // PHASE 5: Add timing constants for loading and initialization
 import {
   LOADING_SCREEN_DELAY_MS,
@@ -288,6 +290,14 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
   const [showChangeEmail, setShowChangeEmail] = React.useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = React.useState(false);
   const [showOwnershipPrompt, setShowOwnershipPrompt] = React.useState(false);
+
+  // PHASE 3: Conflict resolution
+  const conflictResolution = useConflictResolution({
+    conflicts: state.conflicts || [],
+    completions: state.completions,
+    arrangements: state.arrangements,
+    onStateUpdate: setState,
+  });
 
   // Tab navigation with URL hash sync and browser history support
   const { tab, navigateToTab, search, setSearch } = useTabNavigation();
@@ -1628,6 +1638,17 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           }));
         }}
       />
+
+      {/* PHASE 3: Conflict Resolution Modal */}
+      {conflictResolution.pendingConflicts.length > 0 && (
+        <ConflictResolutionModal
+          conflict={conflictResolution.pendingConflicts[0]}
+          onResolveKeepLocal={() => conflictResolution.resolveKeepLocal(conflictResolution.pendingConflicts[0].id)}
+          onResolveUseRemote={() => conflictResolution.resolveUseRemote(conflictResolution.pendingConflicts[0].id)}
+          onDismiss={() => conflictResolution.dismissConflict(conflictResolution.pendingConflicts[0].id)}
+          onClose={() => conflictResolution.dismissConflict(conflictResolution.pendingConflicts[0].id)}
+        />
+      )}
 
       {/* PWA Install Prompt */}
       <PWAInstallPrompt />

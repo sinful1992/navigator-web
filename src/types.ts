@@ -212,6 +212,27 @@ export type ReminderSettings = {
 
 export type BonusCalculationType = 'simple' | 'complex' | 'custom';
 
+/**
+ * PHASE 3: Version Conflict
+ * Represents a detected version conflict that needs user resolution
+ */
+export type VersionConflict = {
+  id: string;                    // Unique conflict identifier
+  timestamp: string;             // When conflict was detected (ISO)
+  entityType: 'completion' | 'arrangement';
+  entityId: string;              // Completion timestamp or Arrangement ID
+  operationId: string;           // Operation that was rejected
+  expectedVersion: number;       // Version the operation expected
+  currentVersion: number;        // Actual version in state
+  // The conflicting data
+  remoteData: Partial<Completion> | Partial<Arrangement>;  // What the remote update wanted
+  localData: Completion | Arrangement;  // What we currently have
+  // Status
+  status: 'pending' | 'resolved' | 'dismissed';
+  resolvedAt?: string;           // When resolved (ISO)
+  resolution?: 'keep-local' | 'use-remote' | 'manual';  // How it was resolved
+};
+
 export type BonusSettings = {
   enabled: boolean;
   calculationType: BonusCalculationType;  // legacy name
@@ -285,4 +306,9 @@ export type AppState = {
   _ownerUserId?: string;
   /** Internal: Owner checksum for tamper detection */
   _ownerChecksum?: string;
+  /**
+   * PHASE 3: Version conflicts detected during sync
+   * Conflicts are detected when remote UPDATE operations have version mismatches
+   */
+  conflicts?: VersionConflict[];
 };
