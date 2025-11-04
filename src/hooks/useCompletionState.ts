@@ -8,6 +8,8 @@ import { showWarning, showError } from '../utils/toast';
 import type { AppState, Completion, Outcome } from '../types';
 import type { SubmitOperationCallback } from '../types/operations';
 import { generateOperationId } from '../utils/validationUtils';
+import type { CompletionService } from '../services/CompletionService';
+import type { CompletionRepository } from '../repositories/CompletionRepository';
 
 // PHASE 2 Task 3: Updated to use proper SubmitOperationCallback type
 export type { SubmitOperationCallback } from '../types/operations';
@@ -18,6 +20,14 @@ export interface UseCompletionStateProps {
   confirmOptimisticUpdate: (operationId: string, confirmedData?: unknown) => void;
   submitOperation?: SubmitOperationCallback;
   setBaseState: React.Dispatch<React.SetStateAction<AppState>>;
+  services?: {
+    completion: CompletionService;
+    [key: string]: any;
+  } | null;
+  repositories?: {
+    completion: CompletionRepository;
+    [key: string]: any;
+  } | null;
 }
 
 export interface UseCompletionStateReturn {
@@ -54,7 +64,9 @@ export function useCompletionState({
   addOptimisticUpdate,
   confirmOptimisticUpdate,
   submitOperation,
-  setBaseState
+  setBaseState,
+  services,
+  repositories
 }: UseCompletionStateProps): UseCompletionStateReturn {
   // Track pending completions (prevent double-submission)
   const pendingCompletionsRef = React.useRef<Set<number>>(new Set());
@@ -151,34 +163,54 @@ export function useCompletionState({
         );
       }
 
-      const nowISO = new Date().toISOString();
+      // Create completion object using service (with automatic time tracking)
+      const completion = services?.completion
+        ? services.completion.createCompletionObject(
+            {
+              index,
+              address: address.address,
+              lat: address.lat ?? null,
+              lng: address.lng ?? null,
+              outcome,
+              amount,
+              listVersion: currentState.currentListVersion,
+              arrangementId,
+              caseReference,
+              numberOfCases,
+              enforcementFees,
+            },
+            currentState.activeIndex === index ? currentState.activeStartTime : null
+          )
+        : (() => {
+            // Fallback when services not available
+            const nowISO = new Date().toISOString();
+            let timeSpentSeconds: number | undefined;
 
-      // Calculate time spent on this case if it was the active one
-      let timeSpentSeconds: number | undefined;
-      if (currentState.activeIndex === index && currentState.activeStartTime) {
-        const startTime = new Date(currentState.activeStartTime).getTime();
-        const endTime = new Date(nowISO).getTime();
-        timeSpentSeconds = Math.floor((endTime - startTime) / 1000);
-        logger.info(
-          `⏱️ CASE TIME TRACKED: ${Math.floor(timeSpentSeconds / 60)}m ${timeSpentSeconds % 60}s on "${address.address}"`
-        );
-      }
+            if (currentState.activeIndex === index && currentState.activeStartTime) {
+              const startTime = new Date(currentState.activeStartTime).getTime();
+              const endTime = new Date(nowISO).getTime();
+              timeSpentSeconds = Math.floor((endTime - startTime) / 1000);
+              logger.info(
+                `⏱️ CASE TIME TRACKED: ${Math.floor(timeSpentSeconds / 60)}m ${timeSpentSeconds % 60}s on "${address.address}"`
+              );
+            }
 
-      const completion: Completion = {
-        index,
-        address: address.address,
-        lat: address.lat ?? null,
-        lng: address.lng ?? null,
-        outcome,
-        amount,
-        timestamp: nowISO,
-        listVersion: currentState.currentListVersion,
-        arrangementId,
-        caseReference,
-        timeSpentSeconds,
-        numberOfCases,
-        enforcementFees,
-      };
+            return {
+              index,
+              address: address.address,
+              lat: address.lat ?? null,
+              lng: address.lng ?? null,
+              outcome,
+              amount,
+              timestamp: nowISO,
+              listVersion: currentState.currentListVersion,
+              arrangementId,
+              caseReference,
+              timeSpentSeconds,
+              numberOfCases,
+              enforcementFees,
+            };
+          })();
 
       const operationId = generateOperationId('create', 'completion', completion);
 
@@ -214,7 +246,13 @@ export function useCompletionState({
         });
 
         // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
+        if (repositories?.completion) {
+          repositories.completion.saveCompletion(completion).catch(err => {
+            logger.error('Failed to save completion:', err);
+            // Don't throw - operation is saved locally and will retry
+          });
+        } else if (submitOperation) {
+          // Fallback to direct submission
           submitOperation({
             type: 'COMPLETION_CREATE',
             payload: { completion }
@@ -231,7 +269,7 @@ export function useCompletionState({
         setPendingCompletions(new Set(pendingCompletionsRef.current));
       }
     },
-    [baseState, addOptimisticUpdate, submitOperation, setBaseState]
+    [baseState, addOptimisticUpdate, submitOperation, setBaseState, services, repositories]
   );
 
   /**
@@ -276,19 +314,26 @@ export function useCompletionState({
       });
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-      if (shouldSubmit && originalTimestamp && submitOperation) {
-        submitOperation({
-          type: 'COMPLETION_UPDATE',
-          payload: {
-            originalTimestamp,
-            updates,
-          }
-        }).catch(err => {
-          logger.error('Failed to submit completion update operation:', err);
-        });
+      if (shouldSubmit && originalTimestamp) {
+        if (repositories?.completion) {
+          repositories.completion.updateCompletion(originalTimestamp, updates).catch(err => {
+            logger.error('Failed to update completion:', err);
+          });
+        } else if (submitOperation) {
+          // Fallback to direct submission
+          submitOperation({
+            type: 'COMPLETION_UPDATE',
+            payload: {
+              originalTimestamp,
+              updates,
+            }
+          }).catch(err => {
+            logger.error('Failed to submit completion update operation:', err);
+          });
+        }
       }
     },
-    [setBaseState, addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
+    [setBaseState, addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, repositories]
   );
 
   /**
@@ -339,20 +384,31 @@ export function useCompletionState({
       });
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-      if (completionToDelete && submitOperation) {
-        submitOperation({
-          type: 'COMPLETION_DELETE',
-          payload: {
-            timestamp: completionToDelete.timestamp,
-            index: completionToDelete.index,
-            listVersion: completionToDelete.listVersion ?? 1,
-          }
-        }).catch(err => {
-          logger.error('Failed to submit completion delete operation:', err);
-        });
+      if (completionToDelete) {
+        if (repositories?.completion) {
+          repositories.completion.deleteCompletion(
+            completionToDelete.timestamp,
+            completionToDelete.index,
+            completionToDelete.listVersion ?? 1
+          ).catch(err => {
+            logger.error('Failed to delete completion:', err);
+          });
+        } else if (submitOperation) {
+          // Fallback to direct submission
+          submitOperation({
+            type: 'COMPLETION_DELETE',
+            payload: {
+              timestamp: completionToDelete.timestamp,
+              index: completionToDelete.index,
+              listVersion: completionToDelete.listVersion ?? 1,
+            }
+          }).catch(err => {
+            logger.error('Failed to submit completion delete operation:', err);
+          });
+        }
       }
     },
-    [setBaseState, addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
+    [setBaseState, addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, repositories]
   );
 
   return {

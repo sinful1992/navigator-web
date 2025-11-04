@@ -6,11 +6,21 @@ import type { SubmitOperationCallback } from '../types/operations';
 import React from 'react';
 import { logger } from '../utils/logger';
 import type { AppState, UserSubscription, ReminderSettings, BonusSettings } from '../types';
+import type { SettingsService } from '../services/SettingsService';
+import type { SettingsRepository } from '../repositories/SettingsRepository';
 
 
 export interface UseSettingsStateProps {
   submitOperation?: SubmitOperationCallback;
   setBaseState: React.Dispatch<React.SetStateAction<AppState>>;
+  services?: {
+    settings: SettingsService;
+    [key: string]: any;
+  } | null;
+  repositories?: {
+    settings: SettingsRepository;
+    [key: string]: any;
+  } | null;
 }
 
 export interface UseSettingsStateReturn {
@@ -34,7 +44,9 @@ export interface UseSettingsStateReturn {
  */
 export function useSettingsState({
   submitOperation,
-  setBaseState
+  setBaseState,
+  services,
+  repositories
 }: UseSettingsStateProps): UseSettingsStateReturn {
   /**
    * Update user subscription status
@@ -49,7 +61,12 @@ export function useSettingsState({
       setBaseState((s) => ({ ...s, subscription }));
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately
-      if (submitOperation) {
+      if (repositories?.settings) {
+        repositories.settings.saveSubscription(subscription).catch((err) => {
+          logger.error('Failed to save subscription:', err);
+        });
+      } else if (submitOperation) {
+        // Fallback to direct submission
         submitOperation({
           type: 'SETTINGS_UPDATE_SUBSCRIPTION',
           payload: { subscription }
@@ -58,7 +75,7 @@ export function useSettingsState({
         });
       }
     },
-    [submitOperation, setBaseState]
+    [submitOperation, setBaseState, repositories]
   );
 
   /**
@@ -74,7 +91,12 @@ export function useSettingsState({
       setBaseState((s) => ({ ...s, reminderSettings: settings }));
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately
-      if (submitOperation) {
+      if (repositories?.settings) {
+        repositories.settings.saveReminderSettings(settings).catch((err) => {
+          logger.error('Failed to save reminder settings:', err);
+        });
+      } else if (submitOperation) {
+        // Fallback to direct submission
         submitOperation({
           type: 'SETTINGS_UPDATE_REMINDER',
           payload: { settings }
@@ -83,7 +105,7 @@ export function useSettingsState({
         });
       }
     },
-    [submitOperation, setBaseState]
+    [submitOperation, setBaseState, repositories]
   );
 
   /**
@@ -99,7 +121,12 @@ export function useSettingsState({
       setBaseState((s) => ({ ...s, bonusSettings: settings }));
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately
-      if (submitOperation) {
+      if (repositories?.settings) {
+        repositories.settings.saveBonusSettings(settings).catch((err) => {
+          logger.error('Failed to save bonus settings:', err);
+        });
+      } else if (submitOperation) {
+        // Fallback to direct submission
         submitOperation({
           type: 'SETTINGS_UPDATE_BONUS',
           payload: { settings }
@@ -108,7 +135,7 @@ export function useSettingsState({
         });
       }
     },
-    [submitOperation, setBaseState]
+    [submitOperation, setBaseState, repositories]
   );
 
   return {

@@ -8,6 +8,8 @@ import type { AppState, AddressRow } from '../types';
 import type { SubmitOperationCallback } from '../types/operations';
 import { validateAddressRow, generateOperationId } from '../utils/validationUtils';
 import { setProtectionFlag, clearProtectionFlag } from '../utils/protectionFlags';
+import type { AddressService } from '../services/AddressService';
+import type { AddressRepository } from '../repositories/AddressRepository';
 
 // PHASE 2 Task 3: Updated to use proper SubmitOperationCallback type
 export type { SubmitOperationCallback } from '../types/operations';
@@ -18,6 +20,14 @@ export interface UseAddressStateProps {
   confirmOptimisticUpdate: (operationId: string, confirmedData?: unknown) => void;
   submitOperation?: SubmitOperationCallback;
   setBaseState: React.Dispatch<React.SetStateAction<AppState>>;
+  services?: {
+    address: AddressService;
+    [key: string]: any;
+  } | null;
+  repositories?: {
+    address: AddressRepository;
+    [key: string]: any;
+  } | null;
 }
 
 export interface UseAddressStateReturn {
@@ -44,7 +54,9 @@ export function useAddressState({
   addOptimisticUpdate,
   confirmOptimisticUpdate,
   submitOperation,
-  setBaseState
+  setBaseState,
+  services,
+  repositories
 }: UseAddressStateProps): UseAddressStateReturn {
   /**
    * Bulk import addresses with optional completion preservation
@@ -127,29 +139,36 @@ export function useAddressState({
       confirmOptimisticUpdate(operationId);
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately
-      if (submitOperation) {
+      const newListVersion = (typeof baseState.currentListVersion === 'number'
+        ? baseState.currentListVersion
+        : 1) + 1;
+
+      if (repositories?.address) {
+        repositories.address.saveBulkImport(validRows, newListVersion, preserveCompletions)
+          .catch((err) => {
+            logger.error('Failed to save bulk import:', err);
+          });
+      } else if (submitOperation) {
+        // Fallback to direct submission
         submitOperation({
           type: 'ADDRESS_BULK_IMPORT',
           payload: {
             addresses: validRows,
-            newListVersion:
-              (typeof baseState.currentListVersion === 'number'
-                ? baseState.currentListVersion
-                : 1) + 1,
+            newListVersion,
             preserveCompletions
           }
         }).catch((err) => {
           logger.error('Failed to submit bulk import operation:', err);
         });
-      }
 
-      // 🔧 CRITICAL FIX: Clear import protection flag after a delay to allow state to settle
-      setTimeout(() => {
-        clearProtectionFlag('navigator_import_in_progress');
-        logger.info('🛡️ IMPORT PROTECTION CLEARED after import completion');
-      }, 2000); // 2 second protection window
+        // 🔧 CRITICAL FIX: Clear import protection flag after a delay (only for fallback)
+        setTimeout(() => {
+          clearProtectionFlag('navigator_import_in_progress');
+          logger.info('🛡️ IMPORT PROTECTION CLEARED after import completion');
+        }, 2000); // 2 second protection window
+      }
     },
-    [baseState, addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, setBaseState]
+    [baseState, addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, setBaseState, repositories]
   );
 
   /**
@@ -189,7 +208,15 @@ export function useAddressState({
         });
 
         // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
+        const currentListVersion = baseState.currentListVersion || 1;
+
+        if (repositories?.address) {
+          repositories.address.saveAddress(addressRow, currentListVersion).catch((err) => {
+            logger.error('Failed to save address:', err);
+            // Don't throw - operation is saved locally and will retry
+          });
+        } else if (submitOperation) {
+          // Fallback to direct submission
           submitOperation({
             type: 'ADDRESS_ADD',
             payload: { address: addressRow }
@@ -200,7 +227,7 @@ export function useAddressState({
         }
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, setBaseState]
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, setBaseState, repositories, baseState.currentListVersion]
   );
 
   return {

@@ -29,6 +29,20 @@ import { useTimeTracking } from "./hooks/useTimeTracking";
 import { stampCompletionsWithVersion } from "./utils/validationUtils";
 import { applyOptimisticUpdates } from "./utils/optimisticUpdatesUtils";
 
+// Clean Architecture - Services and Repositories
+import { AddressRepository } from './repositories/AddressRepository';
+import { CompletionRepository } from './repositories/CompletionRepository';
+import { SessionRepository } from './repositories/SessionRepository';
+import { ArrangementRepository } from './repositories/ArrangementRepository';
+import { SettingsRepository } from './repositories/SettingsRepository';
+import { AddressService } from './services/AddressService';
+import { CompletionService } from './services/CompletionService';
+import { SessionService } from './services/SessionService';
+import { ArrangementService } from './services/ArrangementService';
+import { SettingsService } from './services/SettingsService';
+import { BackupService } from './services/BackupService';
+import { SyncService } from './services/SyncService';
+
 const STORAGE_KEY = "navigator_state_v5";
 const CURRENT_SCHEMA_VERSION = 5;
 const DUPLICATE_COMPLETION_TOLERANCE_MS = 5000;
@@ -231,28 +245,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   // ---- Initialize domain services and repositories ----
   // Clean Architecture: Repositories (data access) + Services (business logic)
-  // TODO: Integrate services and repositories into hooks (currently prepared but not used)
-  // NOTE: Commented out to prevent "require is not defined" error in browser
-  // When ready to integrate, convert require() to ES6 import statements
-  /*
-  const _servicesAndRepos = React.useMemo(() => {
+  const servicesAndRepos = React.useMemo(() => {
     if (!submitOperation) return null;
-
-    // Import repositories
-    const { AddressRepository } = require('./repositories/AddressRepository');
-    const { CompletionRepository } = require('./repositories/CompletionRepository');
-    const { SessionRepository } = require('./repositories/SessionRepository');
-    const { ArrangementRepository } = require('./repositories/ArrangementRepository');
-    const { SettingsRepository } = require('./repositories/SettingsRepository');
-
-    // Import services
-    const { AddressService } = require('./services/AddressService');
-    const { CompletionService } = require('./services/CompletionService');
-    const { SessionService } = require('./services/SessionService');
-    const { ArrangementService } = require('./services/ArrangementService');
-    const { SettingsService } = require('./services/SettingsService');
-    const { BackupService } = require('./services/BackupService');
-    const { SyncService } = require('./services/SyncService');
 
     // Initialize repositories (data access layer)
     const addressRepo = new AddressRepository(submitOperation, deviceId);
@@ -291,7 +285,6 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       },
     };
   }, [submitOperation, deviceId]);
-  */
 
   // ---- Call extracted hooks ----
 
@@ -302,6 +295,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     confirmOptimisticUpdate,
     submitOperation,
     setBaseState,
+    services: servicesAndRepos?.services,
+    repositories: servicesAndRepos?.repositories,
   });
 
   // 4. Address state (bulk import, add addresses)
@@ -311,6 +306,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     confirmOptimisticUpdate,
     submitOperation,
     setBaseState,
+    services: servicesAndRepos?.services,
+    repositories: servicesAndRepos?.repositories,
   });
 
   // 5. Arrangement state (create, update, delete arrangements)
@@ -320,12 +317,16 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     confirmOptimisticUpdate,
     submitOperation,
     setBaseState,
+    services: servicesAndRepos?.services,
+    repositories: servicesAndRepos?.repositories,
   });
 
   // 6. Settings state (subscription, reminder, bonus settings)
   const settingsState = useSettingsState({
     submitOperation,
     setBaseState,
+    services: servicesAndRepos?.services,
+    repositories: servicesAndRepos?.repositories,
   });
 
   // 7. Time tracking (active address, start/cancel time tracking)
@@ -333,6 +334,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     baseState,
     setBaseState,
     submitOperation,
+    services: servicesAndRepos?.services,
+    repositories: servicesAndRepos?.repositories,
   });
 
   // Track recent completions to protect against cloud sync rollbacks

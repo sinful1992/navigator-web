@@ -7,6 +7,8 @@ import { logger } from '../utils/logger';
 import type { AppState, Arrangement } from '../types';
 import type { SubmitOperationCallback } from '../types/operations';
 import { generateOperationId } from '../utils/validationUtils';
+import type { ArrangementService } from '../services/ArrangementService';
+import type { ArrangementRepository } from '../repositories/ArrangementRepository';
 
 // PHASE 2 Task 3: Updated to use proper SubmitOperationCallback type
 export type { SubmitOperationCallback } from '../types/operations';
@@ -17,6 +19,14 @@ export interface UseArrangementStateProps {
   confirmOptimisticUpdate: (operationId: string, confirmedData?: unknown) => void;
   submitOperation?: SubmitOperationCallback;
   setBaseState: React.Dispatch<React.SetStateAction<AppState>>;
+  services?: {
+    arrangement: ArrangementService;
+    [key: string]: any;
+  } | null;
+  repositories?: {
+    arrangement: ArrangementRepository;
+    [key: string]: any;
+  } | null;
 }
 
 export interface UseArrangementStateReturn {
@@ -48,7 +58,9 @@ export function useArrangementState({
   addOptimisticUpdate,
   confirmOptimisticUpdate,
   submitOperation,
-  setBaseState
+  setBaseState,
+  services,
+  repositories
 }: UseArrangementStateProps): UseArrangementStateReturn {
   /**
    * Create a new arrangement
@@ -63,16 +75,22 @@ export function useArrangementState({
   const addArrangement = React.useCallback(
     (arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
       return new Promise((resolve) => {
-        const now = new Date().toISOString();
-        const id = `arr_${Date.now()}_${Math.random()
-          .toString(36)
-          .slice(2, 11)}`;
-        const newArrangement: Arrangement = {
-          ...arrangementData,
-          id,
-          createdAt: now,
-          updatedAt: now
-        };
+        // Create arrangement object using service (with auto-generated ID and timestamps)
+        const newArrangement = services?.arrangement
+          ? services.arrangement.createArrangementObject(arrangementData)
+          : (() => {
+              // Fallback when services not available
+              const now = new Date().toISOString();
+              const id = `arr_${Date.now()}_${Math.random()
+                .toString(36)
+                .slice(2, 11)}`;
+              return {
+                ...arrangementData,
+                id,
+                createdAt: now,
+                updatedAt: now
+              };
+            })();
 
         const operationId = generateOperationId('create', 'arrangement', newArrangement);
         addOptimisticUpdate('create', 'arrangement', newArrangement, operationId);
@@ -80,13 +98,18 @@ export function useArrangementState({
         setBaseState((s) => {
           setTimeout(() => {
             confirmOptimisticUpdate(operationId);
-            resolve(id);
+            resolve(newArrangement.id);
           }, 0);
           return { ...s, arrangements: [...s.arrangements, newArrangement] };
         });
 
         // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
+        if (repositories?.arrangement) {
+          repositories.arrangement.saveArrangement(newArrangement).catch((err) => {
+            logger.error('Failed to save arrangement:', err);
+          });
+        } else if (submitOperation) {
+          // Fallback to direct submission
           submitOperation({
             type: 'ARRANGEMENT_CREATE',
             payload: { arrangement: newArrangement }
@@ -96,7 +119,7 @@ export function useArrangementState({
         }
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, setBaseState]
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, setBaseState, services, repositories]
   );
 
   /**
@@ -152,17 +175,24 @@ export function useArrangementState({
         });
 
         // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if update occurred)
-        if (shouldSubmit && submitOperation) {
-          submitOperation({
-            type: 'ARRANGEMENT_UPDATE',
-            payload: { id, updates }
-          }).catch((err) => {
-            logger.error('Failed to submit arrangement update operation:', err);
-          });
+        if (shouldSubmit) {
+          if (repositories?.arrangement) {
+            repositories.arrangement.updateArrangement(id, updates).catch((err) => {
+              logger.error('Failed to update arrangement:', err);
+            });
+          } else if (submitOperation) {
+            // Fallback to direct submission
+            submitOperation({
+              type: 'ARRANGEMENT_UPDATE',
+              payload: { id, updates }
+            }).catch((err) => {
+              logger.error('Failed to submit arrangement update operation:', err);
+            });
+          }
         }
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, setBaseState]
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, setBaseState, repositories]
   );
 
   /**
@@ -201,17 +231,24 @@ export function useArrangementState({
         });
 
         // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if deletion occurred)
-        if (shouldSubmit && submitOperation) {
-          submitOperation({
-            type: 'ARRANGEMENT_DELETE',
-            payload: { id }
-          }).catch((err) => {
-            logger.error('Failed to submit arrangement delete operation:', err);
-          });
+        if (shouldSubmit) {
+          if (repositories?.arrangement) {
+            repositories.arrangement.deleteArrangement(id).catch((err) => {
+              logger.error('Failed to delete arrangement:', err);
+            });
+          } else if (submitOperation) {
+            // Fallback to direct submission
+            submitOperation({
+              type: 'ARRANGEMENT_DELETE',
+              payload: { id }
+            }).catch((err) => {
+              logger.error('Failed to submit arrangement delete operation:', err);
+            });
+          }
         }
       });
     },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, setBaseState]
+    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, setBaseState, repositories]
   );
 
   return {

@@ -8,12 +8,22 @@ import { logger } from '../utils/logger';
 import { showWarning } from '../utils/toast';
 import type { AppState } from '../types';
 import { setProtectionFlag, clearProtectionFlag } from '../utils/protectionFlags';
+import type { CompletionService } from '../services/CompletionService';
+import type { AddressRepository } from '../repositories/AddressRepository';
 
 
 export interface UseTimeTrackingProps {
   baseState: AppState;
   setBaseState: React.Dispatch<React.SetStateAction<AppState>>;
   submitOperation?: SubmitOperationCallback;
+  services?: {
+    completion: CompletionService;
+    [key: string]: any;
+  } | null;
+  repositories?: {
+    address: AddressRepository;
+    [key: string]: any;
+  } | null;
 }
 
 export interface UseTimeTrackingReturn {
@@ -40,7 +50,9 @@ export interface UseTimeTrackingReturn {
 export function useTimeTracking({
   baseState,
   setBaseState,
-  submitOperation
+  submitOperation,
+  services,
+  repositories
 }: UseTimeTrackingProps): UseTimeTrackingReturn {
   /**
    * Set an address as active and start time tracking
@@ -96,16 +108,23 @@ export function useTimeTracking({
       });
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-      if (shouldSubmit && submitOperation) {
-        submitOperation({
-          type: 'ACTIVE_INDEX_SET',
-          payload: { index: idx, startTime: now }
-        }).catch((err) => {
-          logger.error('Failed to submit active index operation:', err);
-        });
+      if (shouldSubmit) {
+        if (repositories?.address) {
+          repositories.address.saveActiveAddress(idx, now).catch((err) => {
+            logger.error('Failed to save active address:', err);
+          });
+        } else if (submitOperation) {
+          // Fallback to direct submission
+          submitOperation({
+            type: 'ACTIVE_INDEX_SET',
+            payload: { index: idx, startTime: now }
+          }).catch((err) => {
+            logger.error('Failed to submit active index operation:', err);
+          });
+        }
       }
     },
-    [setBaseState, submitOperation]
+    [setBaseState, submitOperation, repositories]
   );
 
   /**
@@ -124,7 +143,12 @@ export function useTimeTracking({
     });
 
     // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-    if (submitOperation) {
+    if (repositories?.address) {
+      repositories.address.clearActiveAddress().catch((err) => {
+        logger.error('Failed to clear active address:', err);
+      });
+    } else if (submitOperation) {
+      // Fallback to direct submission
       submitOperation({
         type: 'ACTIVE_INDEX_SET',
         payload: { index: null, startTime: null }
@@ -132,7 +156,7 @@ export function useTimeTracking({
         logger.error('Failed to submit cancel active operation:', err);
       });
     }
-  }, [setBaseState, submitOperation]);
+  }, [setBaseState, submitOperation, repositories]);
 
   /**
    * Calculate time spent on an address
