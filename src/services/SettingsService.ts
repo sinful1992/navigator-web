@@ -275,7 +275,7 @@ export class SettingsService {
     }
 
     const now = new Date();
-    const expiresAt = new Date(subscription.expiresAt);
+    const expiresAt = new Date(subscription.currentPeriodEnd);
 
     return expiresAt > now;
   }
@@ -289,7 +289,7 @@ export class SettingsService {
     }
 
     const now = new Date();
-    const expiresAt = new Date(subscription.expiresAt);
+    const expiresAt = new Date(subscription.currentPeriodEnd);
     const diffMs = expiresAt.getTime() - now.getTime();
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 

@@ -16,8 +16,7 @@ export class CompletionService {
    * Create completion object with calculated fields
    */
   createCompletionObject(
-    data: Omit<Completion, 'timestamp' | 'device' | 'timeSpentSeconds'>,
-    deviceId: string,
+    data: Omit<Completion, 'timestamp' | 'timeSpentSeconds'>,
     activeStartTime?: string | null
   ): Completion {
     const now = new Date().toISOString();
@@ -34,7 +33,6 @@ export class CompletionService {
     return {
       ...data,
       timestamp: now,
-      device: deviceId,
       timeSpentSeconds,
     };
   }
@@ -82,7 +80,7 @@ export class CompletionService {
   calculateTotalEarnings(completions: Completion[]): number {
     return completions.reduce((total, completion) => {
       if (completion.outcome === 'PIF' && completion.amount) {
-        return total + completion.amount;
+        return total + parseFloat(completion.amount);
       }
       return total;
     }, 0);

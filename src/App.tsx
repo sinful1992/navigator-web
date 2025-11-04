@@ -254,9 +254,6 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
     backupState,
     restoreState,
     setState,
-    setBaseState,
-    deviceId,
-    enqueueOp,
     ownerMetadata,
     // Completion management (from useCompletionState)
     complete,

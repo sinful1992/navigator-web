@@ -32,7 +32,7 @@ export type Completion = {
 
 export type DaySession = {
   date: string;             // "YYYY-MM-DD"
-  start: string;            // ISO string
+  start?: string;           // ISO string (optional - session may be created before starting)
   end?: string;             // ISO string (undefined while active)
   durationSeconds?: number; // computed on end
 };
@@ -86,8 +86,12 @@ export type Arrangement = {
   // Recurring payment fields
   recurrenceType?: RecurrenceType;
   recurrenceInterval?: number;  // e.g., 1 for weekly, 2 for bi-weekly
-  totalPayments?: number;       // total number of payments expected
-  paymentsMade?: number;        // payments completed so far
+  paymentSchedule?: 'Single' | 'Weekly' | 'Bi-weekly' | 'Monthly';  // Payment frequency
+  numberOfPayments?: number;    // total number of payments expected (renamed from totalPayments)
+  paidPayments?: number;        // payments completed so far (renamed from paymentsMade)
+  paymentAmount?: number;       // amount per payment
+  totalAmount?: number;         // total amount across all payments
+  nextPaymentDate?: string;     // ISO date string for next payment
   parentArrangementId?: string; // links recurring payments to original
   // Reminder tracking
   lastReminderSent?: string;    // ISO timestamp of last reminder
@@ -175,8 +179,10 @@ export type ReminderNotification = {
 
 export type ReminderSettings = {
   defaultSchedule: ReminderSchedule;
-  globalEnabled: boolean;
+  enabled: boolean;  // renamed from globalEnabled
   smsEnabled: boolean;
+  emailEnabled?: boolean;  // email reminder toggle
+  daysBeforeReminder?: number;  // days before arrangement to send reminder
   agentProfile: AgentProfile;
   messageTemplates: MessageTemplate[];
   activeTemplateId: string;
@@ -192,26 +198,19 @@ export type BonusCalculationType = 'simple' | 'complex' | 'custom';
 
 export type BonusSettings = {
   enabled: boolean;
-  calculationType: BonusCalculationType;
+  type: 'simple' | 'complex' | 'custom';  // renamed from calculationType for service compatibility
 
-  // Simple calculation (£X per PIF - £Y per day threshold)
-  simpleSettings?: {
-    pifBonus: number;              // £ per PIF (e.g., 100)
-    dailyThreshold: number;        // £ daily threshold (e.g., 100)
-  };
+  // Simple calculation fields (flattened structure)
+  simpleThreshold?: number;        // £ daily threshold (e.g., 100)
+  simplePercentage?: number;       // Percentage for simple calculation
 
-  // Complex calculation (based on PDF formula)
-  complexSettings?: {
-    baseEnforcementFee: number;    // £235 enforcement fee
-    basePifBonus: number;          // £100 for standard PIF
-    largePifThreshold: number;     // £1500 debt threshold
-    largePifPercentage: number;    // 2.5% of 7.5% = 0.025 * 0.075 = 0.001875
-    largePifCap: number;           // £500 max bonus
-    smallPifBonus: number;         // £30 for balance < £100
-    linkedCaseBonus: number;       // £10 for linked cases with 0 fee
-    complianceFeePerCase: number;  // £75 per case (no fixed fee)
-    dailyThreshold: number;        // £100 per working day
-  };
+  // Complex calculation fields (flattened structure)
+  dailyThreshold?: number;         // £100 per working day
+  largePifThreshold?: number;      // £1500 debt threshold
+  largePifPercentage?: number;     // Percentage for large PIFs
+  regularPifPercentage?: number;   // Percentage for regular PIFs
+  daPercentage?: number;           // Percentage for DA outcomes
+  donePercentage?: number;         // Percentage for Done outcomes
 
   // Custom JavaScript formula
   customFormula?: string;          // JavaScript expression: (T, N, D) => bonus

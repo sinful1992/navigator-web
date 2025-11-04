@@ -3,7 +3,7 @@
 
 import { BaseRepository } from './BaseRepository';
 import type { DaySession } from '../types';
-import { setProtectionFlag, clearProtectionFlag } from '../sync/protectionFlags';
+import { setProtectionFlag, clearProtectionFlag } from '../utils/protectionFlags';
 
 /**
  * SessionRepository - Session data access

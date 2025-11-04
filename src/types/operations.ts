@@ -88,6 +88,7 @@ export type SettingsUpdateBonusPayload = {
  */
 export type SessionCreatePayload = DaySession;
 export type SessionUpdatePayload = {
+  date: string;
   updates: Partial<DaySession>;
 };
 export type SessionStartPayload = {

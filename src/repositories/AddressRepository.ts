@@ -47,7 +47,6 @@ export class AddressRepository extends BaseRepository {
       type: 'ADDRESS_ADD',
       payload: {
         address,
-        listVersion,
       },
     });
   }
@@ -71,8 +70,8 @@ export class AddressRepository extends BaseRepository {
     clearProtectionFlag('navigator_active_protection');
 
     await this.submit({
-      type: 'ACTIVE_INDEX_CLEAR',
-      payload: {},
+      type: 'ACTIVE_INDEX_SET',
+      payload: { index: null, startTime: null },
     });
   }
 }
