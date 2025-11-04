@@ -86,6 +86,21 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
             });
 
             // PHASE 3: Create conflict object for UI resolution
+            // Prevent duplicate conflicts for the same entity
+            const existingConflict = state.conflicts?.find(
+              c => c.entityType === 'completion' &&
+                   c.entityId === originalTimestamp &&
+                   c.status === 'pending'
+            );
+
+            if (existingConflict) {
+              logger.warn('🚨 DUPLICATE CONFLICT: Skipping duplicate conflict for completion', {
+                timestamp: originalTimestamp,
+                existingConflictId: existingConflict.id,
+              });
+              return state; // Skip creating duplicate conflict
+            }
+
             const conflict: import('../types').VersionConflict = {
               id: `conflict_${Date.now()}_${Math.random().toString(36).slice(2)}`,
               timestamp: new Date().toISOString(),
@@ -126,6 +141,26 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'COMPLETION_DELETE': {
         const { timestamp, index, listVersion } = operation.payload;
 
+        // PHASE 3: Auto-dismiss conflicts for deleted entity
+        const updatedConflicts = state.conflicts?.map(c =>
+          c.entityType === 'completion' &&
+          c.entityId === timestamp &&
+          c.status === 'pending'
+            ? {
+                ...c,
+                status: 'dismissed' as const,
+                resolvedAt: new Date().toISOString(),
+              }
+            : c
+        );
+
+        if (updatedConflicts && updatedConflicts !== state.conflicts) {
+          logger.info('🗑️ CONFLICT AUTO-DISMISS: Entity deleted, dismissing conflicts', {
+            entityType: 'completion',
+            timestamp,
+          });
+        }
+
         return {
           ...state,
           completions: state.completions.filter(c => !(
@@ -133,6 +168,7 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
             c.index === index &&
             c.listVersion === listVersion
           )),
+          conflicts: updatedConflicts,
         };
       }
 
@@ -293,6 +329,21 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
             });
 
             // PHASE 3: Create conflict object for UI resolution
+            // Prevent duplicate conflicts for the same entity
+            const existingConflict = state.conflicts?.find(
+              c => c.entityType === 'arrangement' &&
+                   c.entityId === id &&
+                   c.status === 'pending'
+            );
+
+            if (existingConflict) {
+              logger.warn('🚨 DUPLICATE CONFLICT: Skipping duplicate conflict for arrangement', {
+                id,
+                existingConflictId: existingConflict.id,
+              });
+              return state; // Skip creating duplicate conflict
+            }
+
             const conflict: import('../types').VersionConflict = {
               id: `conflict_${Date.now()}_${Math.random().toString(36).slice(2)}`,
               timestamp: new Date().toISOString(),
@@ -334,9 +385,30 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'ARRANGEMENT_DELETE': {
         const { id } = operation.payload;
 
+        // PHASE 3: Auto-dismiss conflicts for deleted entity
+        const updatedConflicts = state.conflicts?.map(c =>
+          c.entityType === 'arrangement' &&
+          c.entityId === id &&
+          c.status === 'pending'
+            ? {
+                ...c,
+                status: 'dismissed' as const,
+                resolvedAt: new Date().toISOString(),
+              }
+            : c
+        );
+
+        if (updatedConflicts && updatedConflicts !== state.conflicts) {
+          logger.info('🗑️ CONFLICT AUTO-DISMISS: Entity deleted, dismissing conflicts', {
+            entityType: 'arrangement',
+            id,
+          });
+        }
+
         return {
           ...state,
           arrangements: state.arrangements.filter(arr => arr.id !== id),
+          conflicts: updatedConflicts,
         };
       }
 

@@ -84,6 +84,93 @@ export function useConflictResolution({
     });
   }, [pendingConflicts]);
 
+  // PHASE 3: Auto-cleanup resolved/dismissed conflicts after 24 hours
+  useEffect(() => {
+    const cleanupOldConflicts = () => {
+      const now = new Date().getTime();
+      const CLEANUP_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+      const conflictsToRemove = resolvedConflicts.filter(c => {
+        if (!c.resolvedAt) return false;
+        const resolvedTime = new Date(c.resolvedAt).getTime();
+        return (now - resolvedTime) > CLEANUP_AGE_MS;
+      });
+
+      if (conflictsToRemove.length > 0) {
+        onStateUpdate((state) => ({
+          ...state,
+          conflicts: state.conflicts?.filter(c =>
+            !conflictsToRemove.some(removed => removed.id === c.id)
+          ),
+        }));
+
+        logger.info('🗑️ Auto-cleanup: Removed old resolved conflicts', {
+          count: conflictsToRemove.length,
+        });
+      }
+    };
+
+    // Run cleanup every hour
+    const interval = setInterval(cleanupOldConflicts, 60 * 60 * 1000);
+
+    // Run once on mount
+    cleanupOldConflicts();
+
+    return () => clearInterval(interval);
+  }, [resolvedConflicts, onStateUpdate]);
+
+  // PHASE 3: Auto-dismiss stale pending conflicts after 7 days
+  useEffect(() => {
+    const dismissStaleConflicts = () => {
+      const now = new Date().getTime();
+      const STALE_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+      const staleConflicts = pendingConflicts.filter(c => {
+        const detectedTime = new Date(c.timestamp).getTime();
+        return (now - detectedTime) > STALE_AGE_MS;
+      });
+
+      if (staleConflicts.length > 0) {
+        // Dismiss all stale conflicts
+        onStateUpdate((state) => ({
+          ...state,
+          conflicts: state.conflicts?.map(c =>
+            staleConflicts.some(stale => stale.id === c.id)
+              ? {
+                  ...c,
+                  status: 'dismissed' as const,
+                  resolvedAt: new Date().toISOString(),
+                }
+              : c
+          ),
+        }));
+
+        // Track dismissals in metrics
+        staleConflicts.forEach(conflict => {
+          ConflictMetricsService.trackConflictDismissed(conflict).catch(err => {
+            logger.error('Failed to track auto-dismissal:', err);
+          });
+        });
+
+        logger.warn('⏰ Auto-dismiss: Stale conflicts auto-dismissed', {
+          count: staleConflicts.length,
+          ages: staleConflicts.map(c => {
+            const days = (now - new Date(c.timestamp).getTime()) / (24 * 60 * 60 * 1000);
+            return `${days.toFixed(1)} days`;
+          }),
+        });
+      }
+    };
+
+    // Run stale check every 6 hours
+    const interval = setInterval(dismissStaleConflicts, 6 * 60 * 60 * 1000);
+
+    // Run once on mount
+    dismissStaleConflicts();
+
+    return () => clearInterval(interval);
+  }, [pendingConflicts, onStateUpdate]);
+
   /**
    * Resolve conflict by keeping local version
    * Application Layer: Coordinates resolution action
