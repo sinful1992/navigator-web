@@ -46,16 +46,23 @@ export class CompletionRepository extends BaseRepository {
 
   /**
    * Persist completion update
+   *
+   * PHASE 2: Optimistic Concurrency Control
+   * @param originalTimestamp - Timestamp identifying the completion
+   * @param updates - Partial updates to apply
+   * @param expectedVersion - Expected current version (for conflict detection)
    */
   async updateCompletion(
     originalTimestamp: string,
-    updates: Partial<Completion>
+    updates: Partial<Completion>,
+    expectedVersion?: number
   ): Promise<void> {
     await this.submit({
       type: 'COMPLETION_UPDATE',
       payload: {
         originalTimestamp,
         updates,
+        expectedVersion,
       },
     });
   }

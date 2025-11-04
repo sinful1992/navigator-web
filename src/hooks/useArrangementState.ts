@@ -137,6 +137,7 @@ export function useArrangementState({
     (id: string, updates: Partial<Arrangement>): Promise<void> => {
       return new Promise((resolve) => {
         let shouldSubmit = false;
+        let currentVersion: number | undefined;
 
         const operationId = generateOperationId('update', 'arrangement', {
           id,
@@ -151,6 +152,9 @@ export function useArrangementState({
             resolve();
             return s;
           }
+
+          // PHASE 2: Capture current version for optimistic concurrency
+          currentVersion = arrangement.version;
 
           const updatedArrangement = {
             ...updates,
@@ -177,14 +181,15 @@ export function useArrangementState({
         // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if update occurred)
         if (shouldSubmit) {
           if (repositories?.arrangement) {
-            repositories.arrangement.updateArrangement(id, updates).catch((err) => {
+            // PHASE 2: Pass current version for conflict detection
+            repositories.arrangement.updateArrangement(id, updates, currentVersion).catch((err) => {
               logger.error('Failed to update arrangement:', err);
             });
           } else if (submitOperation) {
             // Fallback to direct submission
             submitOperation({
               type: 'ARRANGEMENT_UPDATE',
-              payload: { id, updates }
+              payload: { id, updates, expectedVersion: currentVersion }
             }).catch((err) => {
               logger.error('Failed to submit arrangement update operation:', err);
             });

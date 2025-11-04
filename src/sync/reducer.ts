@@ -50,24 +50,57 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           currentTotal: state.completions.length + 1
         });
 
+        // PHASE 2: Set initial version on create
+        const versionedCompletion = {
+          ...completion,
+          version: completion.version || 1, // Default to 1 if not provided
+        };
+
         return {
           ...state,
-          completions: [completion, ...state.completions].sort(
+          completions: [versionedCompletion, ...state.completions].sort(
             (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           ),
           // Clear active index if this completion was for the active address
-          activeIndex: state.activeIndex === completion.index ? null : state.activeIndex,
+          activeIndex: state.activeIndex === versionedCompletion.index ? null : state.activeIndex,
         };
       }
 
       case 'COMPLETION_UPDATE': {
-        const { originalTimestamp, updates } = operation.payload;
+        const { originalTimestamp, updates, expectedVersion } = operation.payload;
 
+        // PHASE 2: Optimistic concurrency control
+        // Check version if expectedVersion provided
+        const targetCompletion = state.completions.find(c => c.timestamp === originalTimestamp);
+
+        if (expectedVersion !== undefined && targetCompletion) {
+          const currentVersion = targetCompletion.version || 1;
+
+          if (currentVersion !== expectedVersion) {
+            // Version mismatch - conflict detected
+            logger.warn('🚨 VERSION CONFLICT: Completion update rejected', {
+              timestamp: originalTimestamp,
+              expectedVersion,
+              currentVersion,
+              operation: operation.id,
+            });
+
+            // Return state unchanged - operation is rejected
+            return state;
+          }
+        }
+
+        // Apply update with incremented version
         return {
           ...state,
           completions: state.completions.map(c =>
             c.timestamp === originalTimestamp
-              ? { ...c, ...updates }
+              ? {
+                  ...c,
+                  ...updates,
+                  // Increment version on update (default to 1 if not set)
+                  version: (c.version || 1) + 1,
+                }
               : c
           ),
         };
@@ -211,20 +244,54 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
         // - Operation-level deduplication (by operation ID) prevents actual duplicates
         // - Duplicate check was blocking legitimate operations during state reconstruction
 
+        // PHASE 2: Set initial version on create
+        const versionedArrangement = {
+          ...arrangement,
+          version: arrangement.version || 1, // Default to 1 if not provided
+        };
+
         return {
           ...state,
-          arrangements: [...state.arrangements, arrangement],
+          arrangements: [...state.arrangements, versionedArrangement],
         };
       }
 
       case 'ARRANGEMENT_UPDATE': {
-        const { id, updates } = operation.payload;
+        const { id, updates, expectedVersion } = operation.payload;
 
+        // PHASE 2: Optimistic concurrency control
+        // Check version if expectedVersion provided
+        const targetArrangement = state.arrangements.find(arr => arr.id === id);
+
+        if (expectedVersion !== undefined && targetArrangement) {
+          const currentVersion = targetArrangement.version || 1;
+
+          if (currentVersion !== expectedVersion) {
+            // Version mismatch - conflict detected
+            logger.warn('🚨 VERSION CONFLICT: Arrangement update rejected', {
+              id,
+              expectedVersion,
+              currentVersion,
+              operation: operation.id,
+            });
+
+            // Return state unchanged - operation is rejected
+            return state;
+          }
+        }
+
+        // Apply update with incremented version
         return {
           ...state,
           arrangements: state.arrangements.map(arr =>
             arr.id === id
-              ? { ...arr, ...updates, updatedAt: operation.timestamp }
+              ? {
+                  ...arr,
+                  ...updates,
+                  updatedAt: operation.timestamp,
+                  // Increment version on update (default to 1 if not set)
+                  version: (arr.version || 1) + 1,
+                }
               : arr
           ),
         };

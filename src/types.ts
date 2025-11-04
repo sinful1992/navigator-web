@@ -28,6 +28,12 @@ export type Completion = {
   enforcementFees?: number[];
   /** @deprecated Legacy field - use enforcementFees array instead. Total enforcement fees charged across all cases. */
   totalEnforcementFees?: number;
+  /**
+   * PHASE 2: Optimistic concurrency version.
+   * Incremented on each UPDATE operation to detect conflicts.
+   * Starts at 1 on creation, undefined for legacy completions.
+   */
+  version?: number;
 };
 
 export type DaySession = {
@@ -101,6 +107,12 @@ export type Arrangement = {
   reminderSchedule?: ReminderSchedule; // customizable reminder schedule
   nextReminderDue?: string;     // ISO timestamp for next scheduled reminder
   scheduledReminders?: string[]; // Array of ISO timestamps for all scheduled reminders
+  /**
+   * PHASE 2: Optimistic concurrency version.
+   * Incremented on each UPDATE operation to detect conflicts.
+   * Starts at 1 on creation, undefined for legacy arrangements.
+   */
+  version?: number;
 };
 
 export type SubscriptionStatus = "active" | "trial" | "expired" | "cancelled";

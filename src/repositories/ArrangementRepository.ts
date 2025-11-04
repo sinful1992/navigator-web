@@ -43,11 +43,20 @@ export class ArrangementRepository extends BaseRepository {
 
   /**
    * Persist arrangement update
+   *
+   * PHASE 2: Optimistic Concurrency Control
+   * @param id - Arrangement identifier
+   * @param updates - Partial updates to apply
+   * @param expectedVersion - Expected current version (for conflict detection)
    */
-  async updateArrangement(id: string, updates: Partial<Arrangement>): Promise<void> {
+  async updateArrangement(
+    id: string,
+    updates: Partial<Arrangement>,
+    expectedVersion?: number
+  ): Promise<void> {
     await this.submit({
       type: 'ARRANGEMENT_UPDATE',
-      payload: { id, updates },
+      payload: { id, updates, expectedVersion },
     });
   }
 

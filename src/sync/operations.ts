@@ -35,6 +35,11 @@ export type CompletionOperation = BaseOperation & (
       payload: {
         originalTimestamp: string;
         updates: Partial<Completion>;
+        /**
+         * PHASE 2: Expected version for optimistic concurrency.
+         * If provided, update will fail if current version doesn't match.
+         */
+        expectedVersion?: number;
       };
     }
   | {
@@ -102,6 +107,11 @@ export type ArrangementOperation = BaseOperation & (
       payload: {
         id: string;
         updates: Partial<Arrangement>;
+        /**
+         * PHASE 2: Expected version for optimistic concurrency.
+         * If provided, update will fail if current version doesn't match.
+         */
+        expectedVersion?: number;
       };
     }
   | {

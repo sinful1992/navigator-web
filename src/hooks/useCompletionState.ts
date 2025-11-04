@@ -278,6 +278,7 @@ export function useCompletionState({
   const updateCompletion = React.useCallback(
     (completionArrayIndex: number, updates: Partial<Completion>) => {
       let originalTimestamp: string | undefined;
+      let currentVersion: number | undefined;
       let shouldSubmit = false;
 
       setBaseState((s) => {
@@ -292,6 +293,8 @@ export function useCompletionState({
 
         const originalCompletion = s.completions[completionArrayIndex];
         originalTimestamp = originalCompletion.timestamp;
+        // PHASE 2: Capture current version for optimistic concurrency
+        currentVersion = originalCompletion.version;
         shouldSubmit = true;
 
         const updatedCompletion = { ...originalCompletion, ...updates };
@@ -316,7 +319,8 @@ export function useCompletionState({
       // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
       if (shouldSubmit && originalTimestamp) {
         if (repositories?.completion) {
-          repositories.completion.updateCompletion(originalTimestamp, updates).catch(err => {
+          // PHASE 2: Pass current version for conflict detection
+          repositories.completion.updateCompletion(originalTimestamp, updates, currentVersion).catch(err => {
             logger.error('Failed to update completion:', err);
           });
         } else if (submitOperation) {
@@ -326,6 +330,7 @@ export function useCompletionState({
             payload: {
               originalTimestamp,
               updates,
+              expectedVersion: currentVersion,
             }
           }).catch(err => {
             logger.error('Failed to submit completion update operation:', err);
