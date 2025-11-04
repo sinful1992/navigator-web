@@ -191,15 +191,6 @@ export function useAddressState({
           return;
         }
 
-        // 🔧 CRITICAL FIX: Set import protection flag to prevent cloud sync override
-        // This prevents the race condition where cloud sync overwrites the new address
-        // before the ADDRESS_ADD operation syncs to cloud
-        const protectionTime = setProtectionFlag('navigator_import_in_progress');
-        logger.info('🛡️ ADD ADDRESS PROTECTION ACTIVATED:', {
-          address: addressRow.address,
-          protectionTime: new Date(protectionTime).toISOString()
-        });
-
         const operationId = generateOperationId('create', 'address', addressRow);
 
         // Apply optimistically
@@ -221,12 +212,14 @@ export function useAddressState({
         const currentListVersion = baseState.currentListVersion || 1;
 
         if (repositories?.address) {
+          // 🏛️ CLEAN ARCHITECTURE: Repository handles protection flag internally
           repositories.address.saveAddress(addressRow, currentListVersion).catch((err) => {
             logger.error('Failed to save address:', err);
             // Don't throw - operation is saved locally and will retry
           });
         } else if (submitOperation) {
-          // Fallback to direct submission
+          // Fallback path: No repository available, hook must handle infrastructure
+          setProtectionFlag('navigator_import_in_progress');
           submitOperation({
             type: 'ADDRESS_ADD',
             payload: { address: addressRow }
@@ -234,14 +227,7 @@ export function useAddressState({
             logger.error('Failed to submit address add operation:', err);
             // Don't throw - operation is saved locally and will retry
           });
-
-          // 🔧 CRITICAL FIX: Clear import protection flag after a delay (only for fallback path)
-          // Protection window: 6 seconds (defined in protectionFlags.ts)
-          // This gives the operation time to sync to cloud before allowing cloud updates
-          setTimeout(() => {
-            clearProtectionFlag('navigator_import_in_progress');
-            logger.info('🛡️ ADD ADDRESS PROTECTION CLEARED after operation completion');
-          }, 6000); // Match the FLAG_CONFIGS timeout
+          // Protection flag will auto-expire after 6s (defined in protectionFlags.ts)
         }
       });
     },

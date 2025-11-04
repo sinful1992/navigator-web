@@ -2,6 +2,7 @@
 // Arrangement data access layer - CRUD operations only
 
 import { BaseRepository } from './BaseRepository';
+import { setProtectionFlag } from '../utils/protectionFlags';
 import type { Arrangement } from '../types';
 
 /**
@@ -16,12 +17,28 @@ import type { Arrangement } from '../types';
 export class ArrangementRepository extends BaseRepository {
   /**
    * Persist new arrangement
+   *
+   * 🔧 CRITICAL FIX - Race Condition Protection:
+   * - Sets 6-second protection window to prevent cloud sync from overwriting
+   * - Protection flag auto-expires after 6s (defined in protectionFlags.ts)
+   *
+   * Why needed: Without protection, arrangement can disappear if:
+   * 1. User creates arrangement (local operation)
+   * 2. Cloud sync event arrives from another device
+   * 3. Operation hasn't synced yet → arrangement lost temporarily
+   * 4. Protection blocks cloud updates during critical sync window
    */
   async saveArrangement(arrangement: Arrangement): Promise<void> {
+    // Set 6-second protection window
+    setProtectionFlag('navigator_import_in_progress');
+
     await this.submit({
       type: 'ARRANGEMENT_CREATE',
       payload: { arrangement },
     });
+
+    // 🔧 FIX: DON'T clear protection here!
+    // Let the 6s timeout expire naturally to protect against race condition
   }
 
   /**

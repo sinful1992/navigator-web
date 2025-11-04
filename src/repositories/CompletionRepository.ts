@@ -2,7 +2,7 @@
 // Completion data access layer
 
 import { BaseRepository } from './BaseRepository';
-import { clearProtectionFlag } from '../utils/protectionFlags';
+import { setProtectionFlag, clearProtectionFlag } from '../utils/protectionFlags';
 import type { Completion } from '../types';
 
 /**
@@ -15,15 +15,33 @@ import type { Completion } from '../types';
 export class CompletionRepository extends BaseRepository {
   /**
    * Persist new completion
+   *
+   * 🔧 CRITICAL FIX - Race Condition Protection:
+   * - Sets 6-second protection window to prevent cloud sync from overwriting
+   * - Clears active address protection (time tracking complete)
+   * - Protection flag auto-expires after 6s (defined in protectionFlags.ts)
+   *
+   * Why needed: Without protection, completion can disappear if:
+   * 1. User creates completion (local operation)
+   * 2. Cloud sync event arrives from another device
+   * 3. Operation hasn't synced yet → completion lost temporarily
+   * 4. Protection blocks cloud updates during critical sync window
    */
   async saveCompletion(completion: Completion): Promise<void> {
-    // Clear active protection flag
+    // Set 6-second protection window BEFORE clearing active protection
+    // This ensures completion data is protected even after active tracking ends
+    setProtectionFlag('navigator_import_in_progress');
+
+    // Clear active address protection (address time tracking complete)
     clearProtectionFlag('navigator_active_protection');
 
     await this.submit({
       type: 'COMPLETION_CREATE',
       payload: { completion },
     });
+
+    // 🔧 FIX: DON'T clear import protection here!
+    // Let the 6s timeout expire naturally to protect against race condition
   }
 
   /**

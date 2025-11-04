@@ -17,38 +17,57 @@ import type { AddressRow } from '../types';
 export class AddressRepository extends BaseRepository {
   /**
    * Persist bulk address import
+   *
+   * 🔧 CLEAN ARCHITECTURE FIX:
+   * - Protection flag set at repository layer (infrastructure concern)
+   * - Flag NOT cleared immediately - let 6s timeout expire naturally
+   * - This gives operation time to sync to cloud before allowing state overwrites
    */
   async saveBulkImport(
     addresses: AddressRow[],
     newListVersion: number,
     preserveCompletions: boolean
   ): Promise<void> {
+    // Set 6-second protection window
     setProtectionFlag('navigator_import_in_progress');
 
-    try {
-      await this.submit({
-        type: 'ADDRESS_BULK_IMPORT',
-        payload: {
-          addresses,
-          newListVersion,
-          preserveCompletions,
-        },
-      });
-    } finally {
-      clearProtectionFlag('navigator_import_in_progress');
-    }
+    // Submit operation to local log (returns immediately, cloud sync happens async)
+    await this.submit({
+      type: 'ADDRESS_BULK_IMPORT',
+      payload: {
+        addresses,
+        newListVersion,
+        preserveCompletions,
+      },
+    });
+
+    // 🔧 FIX: DON'T clear protection flag here!
+    // Let the 6s timeout expire naturally to protect against race condition
+    // The flag will auto-clear when isProtectionActive() checks it after 6s
   }
 
   /**
    * Persist single address add
+   *
+   * 🔧 CLEAN ARCHITECTURE FIX:
+   * - Protection flag set at repository layer (not in hook)
+   * - Prevents race condition where cloud sync overwrites new address
+   * - Protection expires after 6s naturally (defined in protectionFlags.ts)
    */
   async saveAddress(address: AddressRow, _listVersion: number): Promise<void> {
+    // Set 6-second protection window
+    setProtectionFlag('navigator_import_in_progress');
+
+    // Submit operation to local log
     await this.submit({
       type: 'ADDRESS_ADD',
       payload: {
         address,
       },
     });
+
+    // 🔧 FIX: DON'T clear protection flag here!
+    // Let the 6s timeout expire naturally to protect against race condition
   }
 
   /**
