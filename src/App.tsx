@@ -412,6 +412,34 @@ function AuthedApp() {
     }
   }, [cloudSync.user?.id]);
 
+  // 🔧 FIX: Load initial state from operations on mount (bypass protection flags)
+  // This ensures day sessions and other data are visible after page refresh
+  React.useEffect(() => {
+    if (!cloudSync.user || loading) return;
+
+    logger.info('🔄 BOOTSTRAP: Loading initial state from operations');
+
+    try {
+      const initialState = cloudSync.getStateFromOperations();
+      logger.info('📊 BOOTSTRAP: Initial state loaded:', {
+        addresses: initialState.addresses?.length || 0,
+        completions: initialState.completions?.length || 0,
+        arrangements: initialState.arrangements?.length || 0,
+        daySessions: initialState.daySessions?.length || 0,
+      });
+
+      // Apply initial state directly, bypassing protection flags
+      if (initialState.daySessions?.length > 0 || initialState.completions?.length > 0 || initialState.addresses?.length > 0) {
+        const normalized = normalizeState(initialState);
+        setState(normalized);
+        lastFromCloudRef.current = JSON.stringify(normalized);
+        logger.info('✅ BOOTSTRAP: Initial state applied successfully');
+      }
+    } catch (error) {
+      logger.error('❌ BOOTSTRAP: Failed to load initial state:', error);
+    }
+  }, [cloudSync.user, loading]);
+
   // Delta sync subscription - Bootstrap handled by operationSync.ts
   React.useEffect(() => {
     const user = cloudSync.user;
