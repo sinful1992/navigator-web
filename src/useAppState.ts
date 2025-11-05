@@ -984,6 +984,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
     // Completion management
     complete: completionState.complete,
+    completeHistorical: completionState.completeHistorical,
     updateCompletion: completionState.updateCompletion,
     undo: completionState.undo,
     pendingCompletions: completionState.pendingCompletions,

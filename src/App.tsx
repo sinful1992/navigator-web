@@ -45,6 +45,7 @@ import { BackupManager } from "./components/BackupManager";
 import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
+import { showSuccess, showError } from "./utils/toast";
 import { initializeProtectionFlags, setProtectionFlag, isProtectionActive } from "./utils/protectionFlags";
 import { StateProtectionService } from "./services/StateProtectionService";
 import { PrivacyConsent } from "./components/PrivacyConsent";
@@ -63,6 +64,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SyncDiagnostic } from "./components/SyncDiagnostic";
 import { useConflictResolution } from "./hooks/useConflictResolution";
 import { ConflictResolutionModal } from "./components/ConflictResolutionModal";
+import { HistoricalPifModal } from "./components/HistoricalPifModal";
 // PHASE 5: Add timing constants for loading and initialization
 import {
   LOADING_SCREEN_DELAY_MS,
@@ -265,6 +267,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
     ownerMetadata,
     // Completion management (from useCompletionState)
     complete,
+    completeHistorical,
     updateCompletion,
     undo,
     // Address management (from useAddressState)
@@ -296,6 +299,8 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
   const [showChangeEmail, setShowChangeEmail] = React.useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = React.useState(false);
   const [showOwnershipPrompt, setShowOwnershipPrompt] = React.useState(false);
+  const [showHistoricalPif, setShowHistoricalPif] = React.useState(false);
+  const [historicalPifLoading, setHistoricalPifLoading] = React.useState(false);
 
   // PHASE 3: Conflict resolution (FIXED: Now submits UPDATE operations for sync)
   const conflictResolution = useConflictResolution({
@@ -725,6 +730,49 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       }
     },
     [complete, backupState]
+  );
+
+  // Handler for historical PIF recording
+  const handleHistoricalPif = React.useCallback(
+    async (data: {
+      date: string;
+      address: string;
+      amount: string;
+      caseReference: string;
+      numberOfCases: number;
+      enforcementFees?: number[];
+    }) => {
+      setHistoricalPifLoading(true);
+      try {
+        await completeHistorical(
+          data.date,
+          data.address,
+          data.amount,
+          data.caseReference,
+          data.numberOfCases,
+          data.enforcementFees
+        );
+
+        showSuccess(`Historical PIF recorded: £${data.amount} on ${data.date}`);
+        setShowHistoricalPif(false);
+
+        // Local backup after recording
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const snap = backupState();
+          LocalBackupManager.storeLocalBackup(snap);
+          logger.info("Local storage backup after historical PIF successful");
+        } catch (backupError) {
+          logger.error("Local backup failed after historical PIF:", backupError);
+        }
+      } catch (error) {
+        logger.error("Failed to record historical PIF:", error);
+        showError(`Failed to record PIF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setHistoricalPifLoading(false);
+      }
+    },
+    [completeHistorical, backupState]
   );
 
   // REMOVED: Auto day start functionality to prevent random day starts
@@ -1434,6 +1482,42 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
 
         {/* Floating Action Button */}
         <ManualAddressFAB onAdd={addAddress} />
+
+        {/* Historical PIF FAB */}
+        <button
+          className="historical-pif-fab"
+          onClick={() => setShowHistoricalPif(true)}
+          title="Record Historical PIF"
+          style={{
+            position: 'fixed',
+            bottom: '5.5rem',
+            right: '1.5rem',
+            width: '3.5rem',
+            height: '3.5rem',
+            borderRadius: '50%',
+            border: 'none',
+            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+            color: 'white',
+            fontSize: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+            zIndex: 1000,
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.1)';
+            e.currentTarget.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+          }}
+        >
+          📅
+        </button>
       </main>
 
       {/* Right Sidebar */}
@@ -1615,6 +1699,15 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           await cloudSync.signOut();
         }}
       />
+
+      {/* Historical PIF Recording Modal */}
+      {showHistoricalPif && (
+        <HistoricalPifModal
+          onConfirm={handleHistoricalPif}
+          onCancel={() => setShowHistoricalPif(false)}
+          isLoading={historicalPifLoading}
+        />
+      )}
 
 
       {/* Toast Notifications */}
