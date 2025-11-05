@@ -126,6 +126,12 @@ export function useTimeTracking({
             // 🔧 FIX: Clear protection flag on error to prevent deadlock
             clearProtectionFlag('navigator_active_protection');
           });
+        } else {
+          // 🔧 CRITICAL FIX: No repository or submitOperation available (offline/tests)
+          // Clear protection flag immediately to prevent permanent deadlock
+          // Without this, the Infinity-timeout flag would block sync forever
+          logger.warn('⚠️ SET ACTIVE: No persistence available - clearing protection flag immediately');
+          clearProtectionFlag('navigator_active_protection');
         }
       }
     },
@@ -172,6 +178,12 @@ export function useTimeTracking({
           // Clear protection flag even on error
           clearProtectionFlag('navigator_active_protection');
         });
+    } else {
+      // 🔧 CRITICAL FIX: No repository or submitOperation available (offline/tests)
+      // Clear protection flag immediately to prevent permanent deadlock
+      // Without this, the Infinity-timeout flag would block sync forever
+      logger.warn('⚠️ CANCEL ACTIVE: No persistence available - clearing protection flag immediately');
+      clearProtectionFlag('navigator_active_protection');
     }
   }, [setBaseState, submitOperation, repositories]);
 
