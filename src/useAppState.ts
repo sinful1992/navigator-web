@@ -1157,6 +1157,87 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
   );
 
+  /**
+   * Complete a historical PIF with custom date
+   * Used for recording payments received while off work
+   * Creates a completion with index -1 (not tied to current address list)
+   */
+  const completeHistorical = React.useCallback(
+    async (
+      date: string, // YYYY-MM-DD
+      address: string,
+      amount: string,
+      caseReference: string,
+      numberOfCases: number,
+      enforcementFees?: number[]
+    ): Promise<string> => {
+      // Validate inputs
+      if (!date || !address || !amount || !caseReference) {
+        throw new Error('All fields are required for historical PIF recording');
+      }
+
+      // Parse and validate date
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        throw new Error('Invalid date format');
+      }
+
+      // Create timestamp at end of day (23:59:59) in local timezone to avoid timezone issues
+      const timestampISO = new Date(`${date}T23:59:59`).toISOString();
+
+      const completion: Completion = {
+        index: -1, // Special index for historical completions (not tied to current list)
+        address: address.trim(),
+        lat: null,
+        lng: null,
+        outcome: "PIF",
+        amount,
+        timestamp: timestampISO,
+        listVersion: baseState.currentListVersion,
+        arrangementId: undefined,
+        caseReference,
+        timeSpentSeconds: undefined, // No time tracking for historical entries
+        numberOfCases,
+        enforcementFees,
+      };
+
+      const operationId = generateOperationId(
+        "create",
+        "completion",
+        completion
+      );
+
+      try {
+        // Apply optimistic and base state updates
+        addOptimisticUpdate("create", "completion", completion, operationId);
+
+        setBaseState((s) => ({
+          ...s,
+          completions: [completion, ...s.completions],
+        }));
+
+        // 🔥 DELTA SYNC: Submit operation to cloud immediately
+        if (submitOperation) {
+          submitOperation({
+            type: 'COMPLETION_CREATE',
+            payload: { completion }
+          }).catch(err => {
+            logger.error('Failed to submit historical completion operation:', err);
+            // Don't throw - operation is saved locally and will retry
+          });
+        }
+
+        logger.info(`📅 HISTORICAL PIF RECORDED: ${address} on ${date} - £${amount}`);
+
+        return operationId;
+      } catch (error) {
+        logger.error('Failed to create historical completion:', error);
+        throw error;
+      }
+    },
+    [baseState, addOptimisticUpdate, submitOperation]
+  );
+
   /** Update an existing completion (e.g., change outcome or amount) */
   const updateCompletion = React.useCallback(
     (completionArrayIndex: number, updates: Partial<Completion>) => {
@@ -2008,6 +2089,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     setActive,
     cancelActive,
     complete,
+    completeHistorical,
     undo,
     updateCompletion,
     startDay,
