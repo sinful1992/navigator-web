@@ -8,6 +8,38 @@ import { LoadingSpinner } from "./components/LoadingButton";
 
 import { logger } from './utils/logger';
 
+// ElapsedTimer component - shows live elapsed time
+function ElapsedTimer({ startISO }: { startISO: string }) {
+  const [elapsed, setElapsed] = React.useState(0);
+
+  React.useEffect(() => {
+    const updateElapsed = () => {
+      const start = new Date(startISO).getTime();
+      const now = Date.now();
+      const seconds = Math.floor((now - start) / 1000);
+      setElapsed(seconds);
+    };
+
+    // Update immediately
+    updateElapsed();
+
+    // Update every second
+    const interval = setInterval(updateElapsed, 1000);
+
+    return () => clearInterval(interval);
+  }, [startISO]);
+
+  const hours = Math.floor(elapsed / 3600);
+  const minutes = Math.floor((elapsed % 3600) / 60);
+  const seconds = elapsed % 60;
+
+  return (
+    <span className="elapsed-timer">
+      ⏱️ {hours}h {minutes.toString().padStart(2, '0')}m {seconds.toString().padStart(2, '0')}s
+    </span>
+  );
+}
+
 type Props = {
   sessions: DaySession[];
   completions: Completion[];
@@ -205,8 +237,8 @@ const DayPanelComponent = function DayPanel({
                   {latestToday?.end && (
                     <> → {fmtTime(latestToday.end)}</>
                   )}
-                  {isActive && !latestToday?.end && (
-                    <> • <span style={{ color: 'var(--success)' }}>Active</span></>
+                  {isActive && !latestToday?.end && latestToday.start && (
+                    <> • <ElapsedTimer startISO={latestToday.start} /></>
                   )}
                 </>
               ) : (
