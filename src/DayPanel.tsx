@@ -21,6 +21,37 @@ type Props = {
   onBackup?: () => Promise<void>;
 };
 
+// 🔧 Real-time elapsed timer for active day sessions
+function ElapsedTimer({ startTime }: { startTime: string }) {
+  const [elapsed, setElapsed] = React.useState(0);
+
+  React.useEffect(() => {
+    const updateElapsed = () => {
+      const start = new Date(startTime).getTime();
+      const now = Date.now();
+      setElapsed(Math.floor((now - start) / 1000));
+    };
+
+    // Initial calculation
+    updateElapsed();
+
+    // Update every second
+    const interval = setInterval(updateElapsed, 1000);
+
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  const hours = Math.floor(elapsed / 3600);
+  const minutes = Math.floor((elapsed % 3600) / 60);
+  const seconds = elapsed % 60;
+
+  return (
+    <span className="day-elapsed-timer">
+      ⏱️ {hours > 0 && `${hours}h `}{minutes}m {seconds.toString().padStart(2, '0')}s
+    </span>
+  );
+}
+
 // 🔧 FIXED: Create local time instead of UTC
 function toISO(dateStr: string, timeStr: string) {
   // dateStr "YYYY-MM-DD"; timeStr "HH:MM"
@@ -206,7 +237,10 @@ const DayPanelComponent = function DayPanel({
                     <> → {fmtTime(latestToday.end)}</>
                   )}
                   {isActive && !latestToday?.end && (
-                    <> • <span style={{ color: 'var(--success)' }}>Active</span></>
+                    <>
+                      {' • '}
+                      <ElapsedTimer startTime={latestToday.start} />
+                    </>
                   )}
                 </>
               ) : (
