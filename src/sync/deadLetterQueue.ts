@@ -3,7 +3,7 @@
 // Clean Architecture - Infrastructure Layer
 
 import { openDB, type IDBPDatabase } from 'idb';
-import { get as idbGet, del as idbDel } from 'idb-keyval';
+import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { logger } from '../utils/logger';
 import type { Operation } from './operations';
 
@@ -90,10 +90,13 @@ export class DeadLetterQueue {
 
       await tx.done;
 
-      // Clear legacy storage after successful migration
-      await idbDel(LEGACY_KEY);
+      // DON'T delete legacy storage immediately!
+      // Risk: Other tabs still running old code might write new items there
+      // Instead: Mark migration as completed with timestamp
+      await idbSet('navigator_dlq_migrated_at', new Date().toISOString());
 
       logger.info(`✅ DEAD LETTER QUEUE: Successfully migrated ${migrated}/${legacyData.length} items`);
+      logger.warn('⚠️ DEAD LETTER QUEUE: Legacy storage preserved for 7-day grace period');
     } catch (err) {
       logger.error('Failed to migrate legacy dead letter queue data:', err);
       // Don't throw - allow app to continue with empty DLQ

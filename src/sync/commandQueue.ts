@@ -3,7 +3,7 @@
 // Clean Architecture - Infrastructure Layer
 
 import { openDB, type IDBPDatabase } from 'idb';
-import { get as idbGet, del as idbDel } from 'idb-keyval';
+import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { logger } from '../utils/logger';
 import type { Operation } from './operations';
 
@@ -91,10 +91,13 @@ export class CommandQueue {
 
       await tx.done;
 
-      // Clear legacy storage after successful migration
-      await idbDel(LEGACY_KEY);
+      // DON'T delete legacy storage immediately!
+      // Risk: Other tabs still running old code might write new commands there
+      // Instead: Mark migration as completed with timestamp
+      await idbSet('navigator_command_queue_migrated_at', new Date().toISOString());
 
       logger.info(`✅ COMMAND QUEUE: Successfully migrated ${migrated}/${legacyData.length} commands`);
+      logger.warn('⚠️ COMMAND QUEUE: Legacy storage preserved for 7-day grace period');
     } catch (err) {
       logger.error('Failed to migrate legacy command queue data:', err);
       // Don't throw - allow app to continue with empty queue
