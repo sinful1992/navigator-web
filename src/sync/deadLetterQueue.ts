@@ -2,7 +2,7 @@
 // Dead Letter Queue for permanently failed operations
 // Clean Architecture - Infrastructure Layer
 
-import { get, set } from 'idb-keyval';
+import { openDB, type IDBPDatabase } from 'idb';
 import { logger } from '../utils/logger';
 import type { Operation } from './operations';
 
@@ -19,7 +19,9 @@ export interface DeadLetterItem {
   addedToDLQ: string; // ISO timestamp
 }
 
-const DLQ_KEY = 'navigator-dead-letter-queue';
+const DB_NAME = 'navigator-dead-letter-queue';
+const DB_VERSION = 1;
+const STORE_NAME = 'deadLetters';
 
 /**
  * DeadLetterQueue - Stores permanently failed operations
@@ -36,61 +38,45 @@ const DLQ_KEY = 'navigator-dead-letter-queue';
  * - DLQ items can be permanently discarded
  * - Old DLQ items auto-expire after 30 days
  *
- * ⚠️ CRITICAL: Write Serialization
- * - idb-keyval only provides get/set (no transactions)
- * - Must serialize all writes to prevent read-modify-write races
- * - Without this, concurrent add() calls will clobber each other
+ * ✅ DATABASE TRANSACTIONS:
+ * - Uses IndexedDB native transactions (ACID guarantees)
+ * - Multi-tab safe (browser serializes conflicting transactions)
+ * - Each operation written in its own transaction (no read-modify-write races)
  */
 export class DeadLetterQueue {
-  private writeLock: Promise<void> = Promise.resolve();
+  private dbPromise: Promise<IDBPDatabase> | null = null;
 
   /**
-   * Serialize write operations to prevent concurrent modification races
-   *
-   * Database Transactions: This implements serializable isolation for idb-keyval
+   * Initialize database connection
    */
-  private async withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
-    const previousLock = this.writeLock;
-    let releaseLock: () => void;
+  private async initDB(): Promise<IDBPDatabase> {
+    if (this.dbPromise) {
+      return this.dbPromise;
+    }
 
-    this.writeLock = new Promise<void>((resolve) => {
-      releaseLock = resolve;
+    this.dbPromise = openDB(DB_NAME, DB_VERSION, {
+      upgrade(db) {
+        // Create object store with keyPath
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+
+          // Indexes for efficient querying
+          store.createIndex('addedToDLQ', 'addedToDLQ');
+          store.createIndex('operationType', 'operation.type');
+
+          logger.debug('☠️ DEAD LETTER QUEUE: Created object store');
+        }
+      },
     });
 
-    try {
-      await previousLock;
-      return await fn();
-    } finally {
-      releaseLock!();
-    }
-  }
-
-  /**
-   * Get all DLQ items from storage
-   */
-  private async getQueue(): Promise<DeadLetterItem[]> {
-    try {
-      const queue = await get<DeadLetterItem[]>(DLQ_KEY);
-      return queue || [];
-    } catch (err) {
-      logger.error('Failed to get dead letter queue:', err);
-      return [];
-    }
-  }
-
-  /**
-   * Save DLQ items to storage
-   */
-  private async saveQueue(queue: DeadLetterItem[]): Promise<void> {
-    try {
-      await set(DLQ_KEY, queue);
-    } catch (err) {
-      logger.error('Failed to save dead letter queue:', err);
-    }
+    return this.dbPromise;
   }
 
   /**
    * Add failed operation to DLQ
+   *
+   * Database Transactions: Each add() uses its own transaction
+   * Multi-tab safe: IndexedDB serializes conflicting writes across tabs
    *
    * @param operation - Failed operation
    * @param error - Error message
@@ -103,41 +89,34 @@ export class DeadLetterQueue {
     failureCount: number,
     firstFailure: string
   ): Promise<void> {
-    return this.withWriteLock(async () => {
-      try {
-        const queue = await this.getQueue();
+    try {
+      const db = await this.initDB();
 
-        const item: DeadLetterItem = {
-          id: operation.id,
-          operation,
-          error,
-          failureCount,
-          firstFailure,
-          lastFailure: new Date().toISOString(),
-          addedToDLQ: new Date().toISOString(),
-        };
+      const item: DeadLetterItem = {
+        id: operation.id,
+        operation,
+        error,
+        failureCount,
+        firstFailure,
+        lastFailure: new Date().toISOString(),
+        addedToDLQ: new Date().toISOString(),
+      };
 
-        // Check if already exists (update instead of add)
-        const existingIndex = queue.findIndex(i => i.id === operation.id);
-        if (existingIndex >= 0) {
-          queue[existingIndex] = item;
-        } else {
-          queue.push(item);
-        }
+      // Atomic write - browser handles serialization across tabs
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      await tx.store.put(item);  // put() updates if exists, inserts if not
+      await tx.done;
 
-        await this.saveQueue(queue);
-
-        logger.warn('☠️ DEAD LETTER QUEUE: Added failed operation', {
-          operationId: operation.id,
-          operationType: operation.type,
-          error,
-          failureCount,
-        });
-      } catch (err) {
-        logger.error('Failed to add to dead letter queue:', err);
-        throw err;
-      }
-    });
+      logger.warn('☠️ DEAD LETTER QUEUE: Added failed operation', {
+        operationId: operation.id,
+        operationType: operation.type,
+        error,
+        failureCount,
+      });
+    } catch (err) {
+      logger.error('Failed to add to dead letter queue:', err);
+      throw err;
+    }
   }
 
   /**
@@ -145,7 +124,10 @@ export class DeadLetterQueue {
    */
   async getAll(): Promise<DeadLetterItem[]> {
     try {
-      return await this.getQueue();
+      const db = await this.initDB();
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const items = await tx.store.getAll();
+      return items;
     } catch (err) {
       logger.error('Failed to get all DLQ items:', err);
       return [];
@@ -157,8 +139,10 @@ export class DeadLetterQueue {
    */
   async get(id: string): Promise<DeadLetterItem | null> {
     try {
-      const queue = await this.getQueue();
-      return queue.find(item => item.id === id) || null;
+      const db = await this.initDB();
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const item = await tx.store.get(id);
+      return item || null;
     } catch (err) {
       logger.error('Failed to get DLQ item:', err);
       return null;
@@ -171,18 +155,17 @@ export class DeadLetterQueue {
    * @param id - Operation ID to remove
    */
   async remove(id: string): Promise<void> {
-    return this.withWriteLock(async () => {
-      try {
-        const queue = await this.getQueue();
-        const filteredQueue = queue.filter(item => item.id !== id);
-        await this.saveQueue(filteredQueue);
+    try {
+      const db = await this.initDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      await tx.store.delete(id);
+      await tx.done;
 
-        logger.info('☠️ DEAD LETTER QUEUE: Removed item', { id });
-      } catch (err) {
-        logger.error('Failed to remove from dead letter queue:', err);
-        throw err;
-      }
-    });
+      logger.info('☠️ DEAD LETTER QUEUE: Removed item', { id });
+    } catch (err) {
+      logger.error('Failed to remove from dead letter queue:', err);
+      throw err;
+    }
   }
 
   /**
@@ -192,31 +175,33 @@ export class DeadLetterQueue {
    * @returns Operation to retry, or null if not found
    */
   async retry(id: string): Promise<Operation | null> {
-    return this.withWriteLock(async () => {
-      try {
-        const queue = await this.getQueue();
-        const item = queue.find(i => i.id === id);
+    try {
+      const db = await this.initDB();
 
-        if (!item) {
-          logger.warn('☠️ DEAD LETTER QUEUE: Item not found for retry', { id });
-          return null;
-        }
+      // Read operation
+      const getTx = db.transaction(STORE_NAME, 'readonly');
+      const item = await getTx.store.get(id);
 
-        // Remove from DLQ (will be re-added if fails again)
-        const filteredQueue = queue.filter(i => i.id !== id);
-        await this.saveQueue(filteredQueue);
-
-        logger.info('☠️ DEAD LETTER QUEUE: Retrying item', {
-          id,
-          operationType: item.operation.type,
-        });
-
-        return item.operation;
-      } catch (err) {
-        logger.error('Failed to retry DLQ item:', err);
+      if (!item) {
+        logger.warn('☠️ DEAD LETTER QUEUE: Item not found for retry', { id });
         return null;
       }
-    });
+
+      // Remove from DLQ in separate transaction
+      const deleteTx = db.transaction(STORE_NAME, 'readwrite');
+      await deleteTx.store.delete(id);
+      await deleteTx.done;
+
+      logger.info('☠️ DEAD LETTER QUEUE: Retrying item', {
+        id,
+        operationType: item.operation.type,
+      });
+
+      return item.operation;
+    } catch (err) {
+      logger.error('Failed to retry DLQ item:', err);
+      return null;
+    }
   }
 
   /**
@@ -229,20 +214,22 @@ export class DeadLetterQueue {
     newest: string | null;
   }> {
     try {
-      const queue = await this.getQueue();
+      const db = await this.initDB();
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const items = await tx.store.getAll();
 
-      if (queue.length === 0) {
+      if (items.length === 0) {
         return { total: 0, byType: {}, oldest: null, newest: null };
       }
 
       const stats = {
-        total: queue.length,
+        total: items.length,
         byType: {} as Record<string, number>,
-        oldest: queue[0].addedToDLQ,
-        newest: queue[0].addedToDLQ,
+        oldest: items[0].addedToDLQ,
+        newest: items[0].addedToDLQ,
       };
 
-      for (const item of queue) {
+      for (const item of items) {
         // Count by type
         const type = item.operation.type;
         stats.byType[type] = (stats.byType[type] || 0) + 1;
@@ -269,44 +256,50 @@ export class DeadLetterQueue {
    * Business Rule: DLQ items expire after 30 days
    */
   async cleanupOld(): Promise<number> {
-    return this.withWriteLock(async () => {
-      try {
-        const queue = await this.getQueue();
-        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    try {
+      const db = await this.initDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
 
-        const before = queue.length;
-        const filteredQueue = queue.filter(item => {
-          const addedTime = new Date(item.addedToDLQ).getTime();
-          return addedTime >= thirtyDaysAgo;
-        });
-        const removed = before - filteredQueue.length;
+      const items = await tx.store.getAll();
+      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
 
-        if (removed > 0) {
-          await this.saveQueue(filteredQueue);
-          logger.info(`☠️ DEAD LETTER QUEUE: Cleaned up ${removed} old items (>30 days)`);
+      let removed = 0;
+      for (const item of items) {
+        const addedTime = new Date(item.addedToDLQ).getTime();
+        if (addedTime < thirtyDaysAgo) {
+          await tx.store.delete(item.id);
+          removed++;
         }
-
-        return removed;
-      } catch (err) {
-        logger.error('Failed to cleanup old DLQ items:', err);
-        return 0;
       }
-    });
+
+      await tx.done;
+
+      if (removed > 0) {
+        logger.info(`☠️ DEAD LETTER QUEUE: Cleaned up ${removed} old items (>30 days)`);
+      }
+
+      return removed;
+    } catch (err) {
+      logger.error('Failed to cleanup old DLQ items:', err);
+      return 0;
+    }
   }
 
   /**
    * Clear all items from DLQ
    */
   async clear(): Promise<void> {
-    return this.withWriteLock(async () => {
-      try {
-        await this.saveQueue([]);
-        logger.info('☠️ DEAD LETTER QUEUE: Cleared all items');
-      } catch (err) {
-        logger.error('Failed to clear dead letter queue:', err);
-        throw err;
-      }
-    });
+    try {
+      const db = await this.initDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      await tx.store.clear();
+      await tx.done;
+
+      logger.info('☠️ DEAD LETTER QUEUE: Cleared all items');
+    } catch (err) {
+      logger.error('Failed to clear dead letter queue:', err);
+      throw err;
+    }
   }
 }
 
