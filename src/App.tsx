@@ -519,19 +519,23 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         return;
       }
 
-      // 🔧 FIX #4: Allow initial bootstrap to bypass protection flag check
-      // This prevents the race condition where operation log loads before protection flags
-      if (isInitialLoadRef.current) {
-        logger.info('🚀 APP: Initial bootstrap load - bypassing protection flag check');
-        isInitialLoadRef.current = false; // Mark as no longer initial load
-      } else {
-        // Live updates after app loaded - respect protection flags
-        // 🔧 FIX #3: Block updates until protection flags are ready to prevent startup race
-        if (!protectionFlagsReadyRef.current) {
-          logger.info('⏳ APP: Protection flags not ready yet, deferring update');
-          return;
-        }
+      // 🔧 FIX #4 (CORRECTED): Handle initial bootstrap race condition securely
+      // Only bypass protection checks if it's the initial load AND flags aren't ready yet
+      // If flags ARE ready (fast device/cached), always check protections even on first load
+      const isInitialLoad = isInitialLoadRef.current;
+      if (isInitialLoad) {
+        isInitialLoadRef.current = false; // Mark as handled
+      }
 
+      // If not initial load, wait for protection flags to be ready
+      if (!isInitialLoad && !protectionFlagsReadyRef.current) {
+        logger.info('⏳ APP: Protection flags not ready yet, deferring update');
+        return;
+      }
+
+      // For initial load when flags not ready: bypass protection checks (fixes race condition)
+      // For all other cases: always check protection flags (prevents data corruption)
+      if (!isInitialLoad || protectionFlagsReadyRef.current) {
         // Protection flags
         if (isProtectionActive('navigator_restore_in_progress')) {
           logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
@@ -545,6 +549,8 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
           return;
         }
+      } else {
+        logger.info('🚀 APP: Initial bootstrap with flags not ready - bypassing protection check');
       }
 
       logger.info('✅ APP: No protection flags active, applying state update');
