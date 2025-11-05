@@ -35,8 +35,40 @@ const QUEUE_KEY = 'navigator-command-queue';
  * - Failed commands can be retried
  * - Commands processed in FIFO order
  * - Commands expire after 24 hours if not processed
+ *
+ * ⚠️ CRITICAL: Write Serialization
+ * - idb-keyval only provides get/set (no transactions)
+ * - Must serialize all writes to prevent read-modify-write races
+ * - Without this, concurrent add() calls will clobber each other
  */
 export class CommandQueue {
+  private writeLock: Promise<void> = Promise.resolve();
+
+  /**
+   * Serialize write operations to prevent concurrent modification races
+   *
+   * Database Transactions: This implements serializable isolation for idb-keyval
+   * Without this lock, two concurrent add() calls would:
+   * 1. Both read [item1, item2]
+   * 2. Both push their item
+   * 3. Whichever set() completes last wins, silently dropping the other
+   */
+  private async withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+    const previousLock = this.writeLock;
+    let releaseLock: () => void;
+
+    this.writeLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    try {
+      await previousLock;
+      return await fn();
+    } finally {
+      releaseLock!();
+    }
+  }
+
   /**
    * Get all queue items from storage
    */
@@ -70,33 +102,35 @@ export class CommandQueue {
   async add(
     operation: Omit<Operation, 'id' | 'timestamp' | 'clientId' | 'sequence'>
   ): Promise<string> {
-    try {
-      const queue = await this.getQueue();
+    return this.withWriteLock(async () => {
+      try {
+        const queue = await this.getQueue();
 
-      const commandId = `cmd_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      const item: CommandQueueItem = {
-        id: commandId,
-        operation,
-        addedAt: new Date().toISOString(),
-        status: 'pending',
-        attempts: 0,
-        lastAttempt: null,
-        error: null,
-      };
+        const commandId = `cmd_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const item: CommandQueueItem = {
+          id: commandId,
+          operation,
+          addedAt: new Date().toISOString(),
+          status: 'pending',
+          attempts: 0,
+          lastAttempt: null,
+          error: null,
+        };
 
-      queue.push(item);
-      await this.saveQueue(queue);
+        queue.push(item);
+        await this.saveQueue(queue);
 
-      logger.debug('📨 COMMAND QUEUE: Added command', {
-        commandId,
-        operationType: operation.type,
-      });
+        logger.debug('📨 COMMAND QUEUE: Added command', {
+          commandId,
+          operationType: operation.type,
+        });
 
-      return commandId;
-    } catch (err) {
-      logger.error('Failed to add command to queue:', err);
-      throw err;
-    }
+        return commandId;
+      } catch (err) {
+        logger.error('Failed to add command to queue:', err);
+        throw err;
+      }
+    });
   }
 
   /**
@@ -126,22 +160,24 @@ export class CommandQueue {
    * @param commandId - ID of command to mark
    */
   async markProcessing(commandId: string): Promise<void> {
-    try {
-      const queue = await this.getQueue();
-      const item = queue.find(i => i.id === commandId);
+    return this.withWriteLock(async () => {
+      try {
+        const queue = await this.getQueue();
+        const item = queue.find(i => i.id === commandId);
 
-      if (item) {
-        item.status = 'processing';
-        item.attempts += 1;
-        item.lastAttempt = new Date().toISOString();
-        await this.saveQueue(queue);
+        if (item) {
+          item.status = 'processing';
+          item.attempts += 1;
+          item.lastAttempt = new Date().toISOString();
+          await this.saveQueue(queue);
 
-        logger.debug('📨 COMMAND QUEUE: Marked as processing', { commandId });
+          logger.debug('📨 COMMAND QUEUE: Marked as processing', { commandId });
+        }
+      } catch (err) {
+        logger.error('Failed to mark command as processing:', err);
+        throw err;
       }
-    } catch (err) {
-      logger.error('Failed to mark command as processing:', err);
-      throw err;
-    }
+    });
   }
 
   /**
@@ -150,18 +186,20 @@ export class CommandQueue {
    * @param commandId - ID of command to mark
    */
   async markCompleted(commandId: string): Promise<void> {
-    try {
-      const queue = await this.getQueue();
-      const filteredQueue = queue.filter(i => i.id !== commandId);
-      await this.saveQueue(filteredQueue);
+    return this.withWriteLock(async () => {
+      try {
+        const queue = await this.getQueue();
+        const filteredQueue = queue.filter(i => i.id !== commandId);
+        await this.saveQueue(filteredQueue);
 
-      logger.debug('📨 COMMAND QUEUE: Marked as completed and removed', {
-        commandId,
-      });
-    } catch (err) {
-      logger.error('Failed to mark command as completed:', err);
-      throw err;
-    }
+        logger.debug('📨 COMMAND QUEUE: Marked as completed and removed', {
+          commandId,
+        });
+      } catch (err) {
+        logger.error('Failed to mark command as completed:', err);
+        throw err;
+      }
+    });
   }
 
   /**
@@ -171,21 +209,23 @@ export class CommandQueue {
    * @param error - Error message
    */
   async markFailed(commandId: string, error: string): Promise<void> {
-    try {
-      const queue = await this.getQueue();
-      const item = queue.find(i => i.id === commandId);
+    return this.withWriteLock(async () => {
+      try {
+        const queue = await this.getQueue();
+        const item = queue.find(i => i.id === commandId);
 
-      if (item) {
-        item.status = 'failed';
-        item.error = error;
-        await this.saveQueue(queue);
+        if (item) {
+          item.status = 'failed';
+          item.error = error;
+          await this.saveQueue(queue);
 
-        logger.warn('📨 COMMAND QUEUE: Marked as failed', { commandId, error });
+          logger.warn('📨 COMMAND QUEUE: Marked as failed', { commandId, error });
+        }
+      } catch (err) {
+        logger.error('Failed to mark command as failed:', err);
+        throw err;
       }
-    } catch (err) {
-      logger.error('Failed to mark command as failed:', err);
-      throw err;
-    }
+    });
   }
 
   /**
@@ -194,21 +234,23 @@ export class CommandQueue {
    * @param commandId - ID of command to reset
    */
   async resetToPending(commandId: string): Promise<void> {
-    try {
-      const queue = await this.getQueue();
-      const item = queue.find(i => i.id === commandId);
+    return this.withWriteLock(async () => {
+      try {
+        const queue = await this.getQueue();
+        const item = queue.find(i => i.id === commandId);
 
-      if (item) {
-        item.status = 'pending';
-        item.error = null;
-        await this.saveQueue(queue);
+        if (item) {
+          item.status = 'pending';
+          item.error = null;
+          await this.saveQueue(queue);
 
-        logger.debug('📨 COMMAND QUEUE: Reset to pending', { commandId });
+          logger.debug('📨 COMMAND QUEUE: Reset to pending', { commandId });
+        }
+      } catch (err) {
+        logger.error('Failed to reset command to pending:', err);
+        throw err;
       }
-    } catch (err) {
-      logger.error('Failed to reset command to pending:', err);
-      throw err;
-    }
+    });
   }
 
   /**
@@ -256,40 +298,44 @@ export class CommandQueue {
    * Business Rule: Commands expire after 24 hours
    */
   async cleanupOld(): Promise<number> {
-    try {
-      const queue = await this.getQueue();
-      const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+    return this.withWriteLock(async () => {
+      try {
+        const queue = await this.getQueue();
+        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
 
-      const before = queue.length;
-      const filteredQueue = queue.filter(item => {
-        const addedTime = new Date(item.addedAt).getTime();
-        return addedTime >= oneDayAgo;
-      });
-      const removed = before - filteredQueue.length;
+        const before = queue.length;
+        const filteredQueue = queue.filter(item => {
+          const addedTime = new Date(item.addedAt).getTime();
+          return addedTime >= oneDayAgo;
+        });
+        const removed = before - filteredQueue.length;
 
-      if (removed > 0) {
-        await this.saveQueue(filteredQueue);
-        logger.info(`📨 COMMAND QUEUE: Cleaned up ${removed} old commands (>24h)`);
+        if (removed > 0) {
+          await this.saveQueue(filteredQueue);
+          logger.info(`📨 COMMAND QUEUE: Cleaned up ${removed} old commands (>24h)`);
+        }
+
+        return removed;
+      } catch (err) {
+        logger.error('Failed to cleanup old commands:', err);
+        return 0;
       }
-
-      return removed;
-    } catch (err) {
-      logger.error('Failed to cleanup old commands:', err);
-      return 0;
-    }
+    });
   }
 
   /**
    * Clear all commands from queue
    */
   async clear(): Promise<void> {
-    try {
-      await this.saveQueue([]);
-      logger.info('📨 COMMAND QUEUE: Cleared all commands');
-    } catch (err) {
-      logger.error('Failed to clear command queue:', err);
-      throw err;
-    }
+    return this.withWriteLock(async () => {
+      try {
+        await this.saveQueue([]);
+        logger.info('📨 COMMAND QUEUE: Cleared all commands');
+      } catch (err) {
+        logger.error('Failed to clear command queue:', err);
+        throw err;
+      }
+    });
   }
 }
 

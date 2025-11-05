@@ -35,8 +35,36 @@ const DLQ_KEY = 'navigator-dead-letter-queue';
  * - DLQ items can be manually retried
  * - DLQ items can be permanently discarded
  * - Old DLQ items auto-expire after 30 days
+ *
+ * ⚠️ CRITICAL: Write Serialization
+ * - idb-keyval only provides get/set (no transactions)
+ * - Must serialize all writes to prevent read-modify-write races
+ * - Without this, concurrent add() calls will clobber each other
  */
 export class DeadLetterQueue {
+  private writeLock: Promise<void> = Promise.resolve();
+
+  /**
+   * Serialize write operations to prevent concurrent modification races
+   *
+   * Database Transactions: This implements serializable isolation for idb-keyval
+   */
+  private async withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+    const previousLock = this.writeLock;
+    let releaseLock: () => void;
+
+    this.writeLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    try {
+      await previousLock;
+      return await fn();
+    } finally {
+      releaseLock!();
+    }
+  }
+
   /**
    * Get all DLQ items from storage
    */
@@ -75,39 +103,41 @@ export class DeadLetterQueue {
     failureCount: number,
     firstFailure: string
   ): Promise<void> {
-    try {
-      const queue = await this.getQueue();
+    return this.withWriteLock(async () => {
+      try {
+        const queue = await this.getQueue();
 
-      const item: DeadLetterItem = {
-        id: operation.id,
-        operation,
-        error,
-        failureCount,
-        firstFailure,
-        lastFailure: new Date().toISOString(),
-        addedToDLQ: new Date().toISOString(),
-      };
+        const item: DeadLetterItem = {
+          id: operation.id,
+          operation,
+          error,
+          failureCount,
+          firstFailure,
+          lastFailure: new Date().toISOString(),
+          addedToDLQ: new Date().toISOString(),
+        };
 
-      // Check if already exists (update instead of add)
-      const existingIndex = queue.findIndex(i => i.id === operation.id);
-      if (existingIndex >= 0) {
-        queue[existingIndex] = item;
-      } else {
-        queue.push(item);
+        // Check if already exists (update instead of add)
+        const existingIndex = queue.findIndex(i => i.id === operation.id);
+        if (existingIndex >= 0) {
+          queue[existingIndex] = item;
+        } else {
+          queue.push(item);
+        }
+
+        await this.saveQueue(queue);
+
+        logger.warn('☠️ DEAD LETTER QUEUE: Added failed operation', {
+          operationId: operation.id,
+          operationType: operation.type,
+          error,
+          failureCount,
+        });
+      } catch (err) {
+        logger.error('Failed to add to dead letter queue:', err);
+        throw err;
       }
-
-      await this.saveQueue(queue);
-
-      logger.warn('☠️ DEAD LETTER QUEUE: Added failed operation', {
-        operationId: operation.id,
-        operationType: operation.type,
-        error,
-        failureCount,
-      });
-    } catch (err) {
-      logger.error('Failed to add to dead letter queue:', err);
-      throw err;
-    }
+    });
   }
 
   /**
@@ -141,16 +171,18 @@ export class DeadLetterQueue {
    * @param id - Operation ID to remove
    */
   async remove(id: string): Promise<void> {
-    try {
-      const queue = await this.getQueue();
-      const filteredQueue = queue.filter(item => item.id !== id);
-      await this.saveQueue(filteredQueue);
+    return this.withWriteLock(async () => {
+      try {
+        const queue = await this.getQueue();
+        const filteredQueue = queue.filter(item => item.id !== id);
+        await this.saveQueue(filteredQueue);
 
-      logger.info('☠️ DEAD LETTER QUEUE: Removed item', { id });
-    } catch (err) {
-      logger.error('Failed to remove from dead letter queue:', err);
-      throw err;
-    }
+        logger.info('☠️ DEAD LETTER QUEUE: Removed item', { id });
+      } catch (err) {
+        logger.error('Failed to remove from dead letter queue:', err);
+        throw err;
+      }
+    });
   }
 
   /**
@@ -160,28 +192,31 @@ export class DeadLetterQueue {
    * @returns Operation to retry, or null if not found
    */
   async retry(id: string): Promise<Operation | null> {
-    try {
-      const queue = await this.getQueue();
-      const item = queue.find(i => i.id === id);
+    return this.withWriteLock(async () => {
+      try {
+        const queue = await this.getQueue();
+        const item = queue.find(i => i.id === id);
 
-      if (!item) {
-        logger.warn('☠️ DEAD LETTER QUEUE: Item not found for retry', { id });
+        if (!item) {
+          logger.warn('☠️ DEAD LETTER QUEUE: Item not found for retry', { id });
+          return null;
+        }
+
+        // Remove from DLQ (will be re-added if fails again)
+        const filteredQueue = queue.filter(i => i.id !== id);
+        await this.saveQueue(filteredQueue);
+
+        logger.info('☠️ DEAD LETTER QUEUE: Retrying item', {
+          id,
+          operationType: item.operation.type,
+        });
+
+        return item.operation;
+      } catch (err) {
+        logger.error('Failed to retry DLQ item:', err);
         return null;
       }
-
-      // Remove from DLQ (will be re-added if fails again)
-      await this.remove(id);
-
-      logger.info('☠️ DEAD LETTER QUEUE: Retrying item', {
-        id,
-        operationType: item.operation.type,
-      });
-
-      return item.operation;
-    } catch (err) {
-      logger.error('Failed to retry DLQ item:', err);
-      return null;
-    }
+    });
   }
 
   /**
@@ -234,40 +269,44 @@ export class DeadLetterQueue {
    * Business Rule: DLQ items expire after 30 days
    */
   async cleanupOld(): Promise<number> {
-    try {
-      const queue = await this.getQueue();
-      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    return this.withWriteLock(async () => {
+      try {
+        const queue = await this.getQueue();
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
 
-      const before = queue.length;
-      const filteredQueue = queue.filter(item => {
-        const addedTime = new Date(item.addedToDLQ).getTime();
-        return addedTime >= thirtyDaysAgo;
-      });
-      const removed = before - filteredQueue.length;
+        const before = queue.length;
+        const filteredQueue = queue.filter(item => {
+          const addedTime = new Date(item.addedToDLQ).getTime();
+          return addedTime >= thirtyDaysAgo;
+        });
+        const removed = before - filteredQueue.length;
 
-      if (removed > 0) {
-        await this.saveQueue(filteredQueue);
-        logger.info(`☠️ DEAD LETTER QUEUE: Cleaned up ${removed} old items (>30 days)`);
+        if (removed > 0) {
+          await this.saveQueue(filteredQueue);
+          logger.info(`☠️ DEAD LETTER QUEUE: Cleaned up ${removed} old items (>30 days)`);
+        }
+
+        return removed;
+      } catch (err) {
+        logger.error('Failed to cleanup old DLQ items:', err);
+        return 0;
       }
-
-      return removed;
-    } catch (err) {
-      logger.error('Failed to cleanup old DLQ items:', err);
-      return 0;
-    }
+    });
   }
 
   /**
    * Clear all items from DLQ
    */
   async clear(): Promise<void> {
-    try {
-      await this.saveQueue([]);
-      logger.info('☠️ DEAD LETTER QUEUE: Cleared all items');
-    } catch (err) {
-      logger.error('Failed to clear dead letter queue:', err);
-      throw err;
-    }
+    return this.withWriteLock(async () => {
+      try {
+        await this.saveQueue([]);
+        logger.info('☠️ DEAD LETTER QUEUE: Cleared all items');
+      } catch (err) {
+        logger.error('Failed to clear dead letter queue:', err);
+        throw err;
+      }
+    });
   }
 }
 
