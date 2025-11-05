@@ -63,9 +63,6 @@ export function useTimeTracking({
    */
   const setActive = React.useCallback(
     (idx: number) => {
-      // 🔧 CRITICAL FIX: Set protection flag (no timeout - cleared on Complete/Cancel)
-      setProtectionFlag('navigator_active_protection');
-
       const now = new Date().toISOString();
       let shouldSubmit = false;
 
@@ -79,7 +76,7 @@ export function useTimeTracking({
             `Cannot start address #${idx} - address #${s.activeIndex} "${currentActiveAddress?.address}" is already active`
           );
           showWarning(`Please complete or cancel the current active address first`);
-          clearProtectionFlag('navigator_active_protection');
+          // 🔧 CRITICAL FIX: Don't set/clear protection flag on validation failure
           return s; // Don't change state
         }
 
@@ -94,10 +91,14 @@ export function useTimeTracking({
           if (isCompleted) {
             logger.warn(`Cannot set active - address at index ${idx} is already completed`);
             showWarning(`This address is already completed`);
-            clearProtectionFlag('navigator_active_protection');
+            // 🔧 CRITICAL FIX: Don't set/clear protection flag on validation failure
             return s; // Don't change state
           }
         }
+
+        // 🔧 CRITICAL FIX: Set protection flag AFTER validation passes, BEFORE state mutation
+        // This ensures flag is only set for successful operations
+        setProtectionFlag('navigator_active_protection');
 
         logger.info(
           `📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - SYNC BLOCKED until Complete/Cancel`
@@ -112,6 +113,8 @@ export function useTimeTracking({
         if (repositories?.address) {
           repositories.address.saveActiveAddress(idx, now).catch((err) => {
             logger.error('Failed to save active address:', err);
+            // 🔧 FIX: Clear protection flag on error to prevent deadlock
+            clearProtectionFlag('navigator_active_protection');
           });
         } else if (submitOperation) {
           // Fallback to direct submission
@@ -120,7 +123,15 @@ export function useTimeTracking({
             payload: { index: idx, startTime: now }
           }).catch((err) => {
             logger.error('Failed to submit active index operation:', err);
+            // 🔧 FIX: Clear protection flag on error to prevent deadlock
+            clearProtectionFlag('navigator_active_protection');
           });
+        } else {
+          // 🔧 CRITICAL FIX: No repository or submitOperation available (offline/tests)
+          // Clear protection flag immediately to prevent permanent deadlock
+          // Without this, the Infinity-timeout flag would block sync forever
+          logger.warn('⚠️ SET ACTIVE: No persistence available - clearing protection flag immediately');
+          clearProtectionFlag('navigator_active_protection');
         }
       }
     },
@@ -129,32 +140,50 @@ export function useTimeTracking({
 
   /**
    * Cancel the active address and resume cloud sync
-   * - Clears protection flag to allow cloud sync
+   * 🔧 CRITICAL FIX: Repository now handles protection flag clearing AFTER operation
    * - Clears activeIndex and activeStartTime from state
    * - Submits to cloud sync immediately
+   * - Protection flag cleared by repository after operation completes
    */
   const cancelActive = React.useCallback(() => {
-    // 🔧 FIX: Clear protection to resume cloud sync
-    clearProtectionFlag('navigator_active_protection');
+    // 🔧 CRITICAL FIX: Don't clear protection flag here!
+    // Repository.clearActiveAddress() will clear it AFTER operation completes
+    // This prevents state corruption during the operation
 
     setBaseState((s) => {
-      logger.info(`📍 CANCELING ACTIVE: Clearing active state - SYNC RESUMED`);
+      logger.info(`📍 CANCELING ACTIVE: Clearing active state`);
       return { ...s, activeIndex: null, activeStartTime: null };
     });
 
     // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
     if (repositories?.address) {
+      // Repository handles protection flag clearing AFTER operation completes
       repositories.address.clearActiveAddress().catch((err) => {
         logger.error('Failed to clear active address:', err);
+        // 🔧 FIX: Clear protection flag on error to prevent deadlock
+        clearProtectionFlag('navigator_active_protection');
       });
     } else if (submitOperation) {
-      // Fallback to direct submission
+      // Fallback to direct submission with proper protection flag management
       submitOperation({
         type: 'ACTIVE_INDEX_SET',
         payload: { index: null, startTime: null }
-      }).catch((err) => {
-        logger.error('Failed to submit cancel active operation:', err);
-      });
+      })
+        .then(() => {
+          // Clear protection flag after successful submission
+          clearProtectionFlag('navigator_active_protection');
+        })
+        .catch((err) => {
+          logger.error('Failed to submit cancel active operation:', err);
+          // Clear protection flag even on error
+          clearProtectionFlag('navigator_active_protection');
+        });
+    } else {
+      // 🔧 CRITICAL FIX: No repository or submitOperation available (offline/tests)
+      // Clear protection flag immediately to prevent permanent deadlock
+      // Without this, the Infinity-timeout flag would block sync forever
+      logger.warn('⚠️ CANCEL ACTIVE: No persistence available - clearing protection flag immediately');
+      clearProtectionFlag('navigator_active_protection');
     }
   }, [setBaseState, submitOperation, repositories]);
 
