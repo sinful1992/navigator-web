@@ -222,6 +222,8 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
   // FIX #3: Track readiness state to prevent race condition at startup
   // Hybrid architecture: in-memory cache for fast synchronous reads, IndexedDB for atomic updates
   const protectionFlagsReadyRef = React.useRef(false);
+  // 🔧 FIX #4: Track if this is initial bootstrap (allow through) vs live update (check protection)
+  const isInitialLoadRef = React.useRef(true);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -517,24 +519,32 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         return;
       }
 
-      // 🔧 FIX #3: Block updates until protection flags are ready to prevent startup race
-      if (!protectionFlagsReadyRef.current) {
-        logger.info('⏳ APP: Protection flags not ready yet, deferring update');
-        return;
-      }
+      // 🔧 FIX #4: Allow initial bootstrap to bypass protection flag check
+      // This prevents the race condition where operation log loads before protection flags
+      if (isInitialLoadRef.current) {
+        logger.info('🚀 APP: Initial bootstrap load - bypassing protection flag check');
+        isInitialLoadRef.current = false; // Mark as no longer initial load
+      } else {
+        // Live updates after app loaded - respect protection flags
+        // 🔧 FIX #3: Block updates until protection flags are ready to prevent startup race
+        if (!protectionFlagsReadyRef.current) {
+          logger.info('⏳ APP: Protection flags not ready yet, deferring update');
+          return;
+        }
 
-      // Protection flags
-      if (isProtectionActive('navigator_restore_in_progress')) {
-        logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_import_in_progress')) {
-        logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_active_protection')) {
-        logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
-        return;
+        // Protection flags
+        if (isProtectionActive('navigator_restore_in_progress')) {
+          logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
+          return;
+        }
+        if (isProtectionActive('navigator_import_in_progress')) {
+          logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping cloud state update');
+          return;
+        }
+        if (isProtectionActive('navigator_active_protection')) {
+          logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
+          return;
+        }
       }
 
       logger.info('✅ APP: No protection flags active, applying state update');
