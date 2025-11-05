@@ -434,52 +434,39 @@ function AuthedApp() {
         return;
       }
 
-      // 🔧 FIX: Skip protection flags on initial bootstrap load
-      // BUT respect protection flags if user made changes before initial load completes
-      // This prevents race condition where user actions are overwritten by stale cloud state
-      const isInitialLoad = isInitialLoadRef.current;
-      const hasActiveProtection =
-        isProtectionActive('navigator_restore_in_progress') ||
-        isProtectionActive('navigator_import_in_progress') ||
-        isProtectionActive('navigator_active_protection') ||
-        isProtectionActive('navigator_day_session_protection');
-
-      if (isInitialLoad && !hasActiveProtection) {
-        // Safe to bypass - no user actions yet, this is clean initial load
-        logger.info('🚀 APP: INITIAL LOAD - No active operations, loading state from operations');
-        isInitialLoadRef.current = false; // Mark initial load as complete
-      } else if (isInitialLoad && hasActiveProtection) {
-        // User made changes before initial sync completed (race condition)
-        // Block this update to preserve user's changes
-        logger.warn('⚠️ APP: INITIAL LOAD BLOCKED - User operation in progress, deferring update');
-        logger.warn('⚠️ Protection flags active:', {
-          restore: isProtectionActive('navigator_restore_in_progress'),
-          import: isProtectionActive('navigator_import_in_progress'),
-          active: isProtectionActive('navigator_active_protection'),
-          daySession: isProtectionActive('navigator_day_session_protection'),
-        });
-        return; // Don't apply this update, wait for protection to clear
-      } else {
-        // Normal operation after initial load - check protection flags
-        if (isProtectionActive('navigator_restore_in_progress')) {
-          logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
-          return;
-        }
-        if (isProtectionActive('navigator_import_in_progress')) {
-          logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping cloud state update');
-          return;
-        }
-        if (isProtectionActive('navigator_active_protection')) {
-          logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
-          return;
-        }
-        if (isProtectionActive('navigator_day_session_protection')) {
-          logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
-          return;
-        }
+      // 🔧 ARCHITECTURAL FIX: Trust the event sourcing architecture
+      // The system has built-in safeguards that make blocking unnecessary:
+      // 1. Event Sourcing: getStateFromOperations() ALWAYS pulls from local operation log (source of truth)
+      // 2. Idempotency: Reducer prevents duplicates (reducer.ts:111-117 for sessions, 17-25 for completions)
+      // 3. Sequence Ordering: Operations applied in timestamp/sequence order for deterministic state
+      // 4. Atomic Operations: Each state change is an immutable operation, not a state diff
+      //
+      // Protection flags were added to solve a symptom (state overwrites) rather than the root cause.
+      // The real issue was that operations weren't being applied correctly. Now that event sourcing
+      // is properly implemented, we should trust it and remove the blocking behavior.
+      //
+      // ONLY block for bulk operations that bypass the operation log:
+      if (isProtectionActive('navigator_restore_in_progress')) {
+        logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping update during bulk restore');
+        return;
+      }
+      if (isProtectionActive('navigator_import_in_progress')) {
+        logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping update during bulk import');
+        return;
       }
 
-      logger.info(isInitialLoad ? '✅ APP: Initial load - applying state from operations' : '✅ APP: No protection flags active, applying state update');
+      // Log if day session or address tracking is active (for debugging)
+      if (isProtectionActive('navigator_day_session_protection')) {
+        logger.info('📊 APP: Day session active - relying on event sourcing for correctness');
+      }
+      if (isProtectionActive('navigator_active_protection')) {
+        logger.info('📊 APP: Address tracking active - relying on event sourcing for correctness');
+      }
+
+      if (isInitialLoadRef.current) {
+        logger.info('✅ APP: Initial load - event sourcing architecture active');
+        isInitialLoadRef.current = false;
+      }
 
       // Apply state update from operations
       if (typeof updaterOrState === 'function') {
