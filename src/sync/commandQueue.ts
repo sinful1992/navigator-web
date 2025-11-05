@@ -3,6 +3,7 @@
 // Clean Architecture - Infrastructure Layer
 
 import { openDB, type IDBPDatabase } from 'idb';
+import { get as idbGet, del as idbDel } from 'idb-keyval';
 import { logger } from '../utils/logger';
 import type { Operation } from './operations';
 
@@ -22,6 +23,7 @@ export interface CommandQueueItem {
 const DB_NAME = 'navigator-command-queue';
 const DB_VERSION = 1;
 const STORE_NAME = 'commands';
+const LEGACY_KEY = 'navigator-command-queue';  // Old idb-keyval key
 
 /**
  * CommandQueue - Buffers operations before submission
@@ -46,6 +48,58 @@ const STORE_NAME = 'commands';
  */
 export class CommandQueue {
   private dbPromise: Promise<IDBPDatabase> | null = null;
+  private migrationAttempted: boolean = false;
+
+  /**
+   * Migrate legacy idb-keyval data to new IndexedDB database
+   *
+   * CRITICAL: Prevents data loss on upgrade
+   * - Old version stored commands in idb-keyval array
+   * - New version uses separate IndexedDB database
+   * - Without migration, queued commands would be silently lost
+   */
+  private async migrateLegacyData(db: IDBPDatabase): Promise<void> {
+    if (this.migrationAttempted) {
+      return;
+    }
+
+    this.migrationAttempted = true;
+
+    try {
+      // Check for legacy data in idb-keyval
+      const legacyData = await idbGet<CommandQueueItem[]>(LEGACY_KEY);
+
+      if (!legacyData || legacyData.length === 0) {
+        logger.debug('📨 COMMAND QUEUE: No legacy data to migrate');
+        return;
+      }
+
+      logger.info(`📨 COMMAND QUEUE: Migrating ${legacyData.length} commands from legacy storage`);
+
+      // Migrate each command to new storage
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      let migrated = 0;
+
+      for (const item of legacyData) {
+        try {
+          await tx.store.put(item);
+          migrated++;
+        } catch (err) {
+          logger.error('Failed to migrate command:', { id: item.id, error: err });
+        }
+      }
+
+      await tx.done;
+
+      // Clear legacy storage after successful migration
+      await idbDel(LEGACY_KEY);
+
+      logger.info(`✅ COMMAND QUEUE: Successfully migrated ${migrated}/${legacyData.length} commands`);
+    } catch (err) {
+      logger.error('Failed to migrate legacy command queue data:', err);
+      // Don't throw - allow app to continue with empty queue
+    }
+  }
 
   /**
    * Initialize database connection
@@ -71,7 +125,12 @@ export class CommandQueue {
       },
     });
 
-    return this.dbPromise;
+    const db = await this.dbPromise;
+
+    // Migrate legacy data after database is ready
+    await this.migrateLegacyData(db);
+
+    return db;
   }
 
   /**

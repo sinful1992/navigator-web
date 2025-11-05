@@ -3,6 +3,7 @@
 // Clean Architecture - Infrastructure Layer
 
 import { openDB, type IDBPDatabase } from 'idb';
+import { get as idbGet, del as idbDel } from 'idb-keyval';
 import { logger } from '../utils/logger';
 import type { Operation } from './operations';
 
@@ -22,6 +23,7 @@ export interface DeadLetterItem {
 const DB_NAME = 'navigator-dead-letter-queue';
 const DB_VERSION = 1;
 const STORE_NAME = 'deadLetters';
+const LEGACY_KEY = 'navigator-dead-letter-queue';  // Old idb-keyval key
 
 /**
  * DeadLetterQueue - Stores permanently failed operations
@@ -45,6 +47,58 @@ const STORE_NAME = 'deadLetters';
  */
 export class DeadLetterQueue {
   private dbPromise: Promise<IDBPDatabase> | null = null;
+  private migrationAttempted: boolean = false;
+
+  /**
+   * Migrate legacy idb-keyval data to new IndexedDB database
+   *
+   * CRITICAL: Prevents data loss on upgrade
+   * - Old version stored DLQ items in idb-keyval array
+   * - New version uses separate IndexedDB database
+   * - Without migration, failed operations would be silently lost
+   */
+  private async migrateLegacyData(db: IDBPDatabase): Promise<void> {
+    if (this.migrationAttempted) {
+      return;
+    }
+
+    this.migrationAttempted = true;
+
+    try {
+      // Check for legacy data in idb-keyval
+      const legacyData = await idbGet<DeadLetterItem[]>(LEGACY_KEY);
+
+      if (!legacyData || legacyData.length === 0) {
+        logger.debug('☠️ DEAD LETTER QUEUE: No legacy data to migrate');
+        return;
+      }
+
+      logger.info(`☠️ DEAD LETTER QUEUE: Migrating ${legacyData.length} items from legacy storage`);
+
+      // Migrate each item to new storage
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      let migrated = 0;
+
+      for (const item of legacyData) {
+        try {
+          await tx.store.put(item);
+          migrated++;
+        } catch (err) {
+          logger.error('Failed to migrate DLQ item:', { id: item.id, error: err });
+        }
+      }
+
+      await tx.done;
+
+      // Clear legacy storage after successful migration
+      await idbDel(LEGACY_KEY);
+
+      logger.info(`✅ DEAD LETTER QUEUE: Successfully migrated ${migrated}/${legacyData.length} items`);
+    } catch (err) {
+      logger.error('Failed to migrate legacy dead letter queue data:', err);
+      // Don't throw - allow app to continue with empty DLQ
+    }
+  }
 
   /**
    * Initialize database connection
@@ -69,7 +123,12 @@ export class DeadLetterQueue {
       },
     });
 
-    return this.dbPromise;
+    const db = await this.dbPromise;
+
+    // Migrate legacy data after database is ready
+    await this.migrateLegacyData(db);
+
+    return db;
   }
 
   /**
