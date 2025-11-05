@@ -435,13 +435,32 @@ function AuthedApp() {
       }
 
       // 🔧 FIX: Skip protection flags on initial bootstrap load
-      // Protection flags should only block LIVE updates, not the initial state reconstruction
+      // BUT respect protection flags if user made changes before initial load completes
+      // This prevents race condition where user actions are overwritten by stale cloud state
       const isInitialLoad = isInitialLoadRef.current;
-      if (isInitialLoad) {
-        logger.info('🚀 APP: INITIAL LOAD - Bypassing protection flags to load state from operations');
+      const hasActiveProtection =
+        isProtectionActive('navigator_restore_in_progress') ||
+        isProtectionActive('navigator_import_in_progress') ||
+        isProtectionActive('navigator_active_protection') ||
+        isProtectionActive('navigator_day_session_protection');
+
+      if (isInitialLoad && !hasActiveProtection) {
+        // Safe to bypass - no user actions yet, this is clean initial load
+        logger.info('🚀 APP: INITIAL LOAD - No active operations, loading state from operations');
         isInitialLoadRef.current = false; // Mark initial load as complete
+      } else if (isInitialLoad && hasActiveProtection) {
+        // User made changes before initial sync completed (race condition)
+        // Block this update to preserve user's changes
+        logger.warn('⚠️ APP: INITIAL LOAD BLOCKED - User operation in progress, deferring update');
+        logger.warn('⚠️ Protection flags active:', {
+          restore: isProtectionActive('navigator_restore_in_progress'),
+          import: isProtectionActive('navigator_import_in_progress'),
+          active: isProtectionActive('navigator_active_protection'),
+          daySession: isProtectionActive('navigator_day_session_protection'),
+        });
+        return; // Don't apply this update, wait for protection to clear
       } else {
-        // Protection flags - only for live updates after initial load
+        // Normal operation after initial load - check protection flags
         if (isProtectionActive('navigator_restore_in_progress')) {
           logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
           return;
