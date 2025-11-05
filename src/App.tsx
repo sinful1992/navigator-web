@@ -45,7 +45,8 @@ import { BackupManager } from "./components/BackupManager";
 import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
-import { isProtectionActive, initializeProtectionFlags, setProtectionFlag } from "./utils/protectionFlags";
+import { initializeProtectionFlags, setProtectionFlag } from "./utils/protectionFlags";
+import { StateProtectionService } from "./services/StateProtectionService";
 import { PrivacyConsent } from "./components/PrivacyConsent";
 import { EnhancedOfflineIndicator } from "./components/EnhancedOfflineIndicator";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
@@ -217,6 +218,9 @@ export default function App() {
 }
 
 function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync> }) {
+
+  // Clean Architecture: Use StateProtectionService for centralized protection logic
+  const protectionService = React.useRef(new StateProtectionService()).current;
 
   // 🔧 PHASE 1.2.2 (REVISED): Initialize hybrid protection flags cache on app startup
   // FIX #3: Track readiness state to prevent race condition at startup
@@ -519,45 +523,22 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         return;
       }
 
-      // 🔧 FIX #4 (CORRECTED): Handle initial bootstrap race condition securely
-      // Only bypass protection checks if it's the initial load AND flags aren't ready yet
-      // If flags ARE ready (fast device/cached), always check protections even on first load
+      // Clean Architecture: Use StateProtectionService for protection logic
       const isInitialLoad = isInitialLoadRef.current;
       if (isInitialLoad) {
         isInitialLoadRef.current = false; // Mark as handled
       }
 
-      // If not initial load, wait for protection flags to be ready
-      if (!isInitialLoad && !protectionFlagsReadyRef.current) {
-        logger.info('⏳ APP: Protection flags not ready yet, deferring update');
+      // Delegate to service layer
+      const protectionCheck = protectionService.shouldAllowStateUpdate(
+        isInitialLoad,
+        protectionFlagsReadyRef.current
+      );
+
+      if (!protectionCheck.allowed) {
+        logger.info(`⏳ APP: State update blocked - ${protectionCheck.reason}`);
         return;
       }
-
-      // For initial load when flags not ready: bypass protection checks (fixes race condition)
-      // For all other cases: always check protection flags (prevents data corruption)
-      if (!isInitialLoad || protectionFlagsReadyRef.current) {
-        // Protection flags
-        if (isProtectionActive('navigator_restore_in_progress')) {
-          logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
-          return;
-        }
-        if (isProtectionActive('navigator_import_in_progress')) {
-          logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping cloud state update');
-          return;
-        }
-        if (isProtectionActive('navigator_active_protection')) {
-          logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
-          return;
-        }
-        if (isProtectionActive('navigator_session_protection')) {
-          logger.sync('🛡️ APP: SESSION PROTECTION - Skipping cloud state update');
-          return;
-        }
-      } else {
-        logger.info('🚀 APP: Initial bootstrap with flags not ready - bypassing protection check');
-      }
-
-      logger.info('✅ APP: No protection flags active, applying state update');
 
       // Apply state update from operations
       if (typeof updaterOrState === 'function') {
