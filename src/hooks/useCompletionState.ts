@@ -317,7 +317,7 @@ export function useCompletionState({
       });
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-      if (shouldSubmit && originalTimestamp) {
+      if (shouldSubmit && originalTimestamp && currentVersion !== undefined) {
         if (repositories?.completion) {
           // PHASE 2: Pass current version for conflict detection
           repositories.completion.updateCompletion(originalTimestamp, updates, currentVersion).catch(err => {
@@ -333,7 +333,7 @@ export function useCompletionState({
               expectedVersion: currentVersion,
             }
           }).catch(err => {
-            logger.error('Failed to submit completion update operation:', err);
+            logger.error('Failed to update completion update operation:', err);
           });
         }
       }

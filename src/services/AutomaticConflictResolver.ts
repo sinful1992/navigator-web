@@ -3,7 +3,7 @@
 // Automatic conflict resolution based on business rules
 
 import { logger } from '../utils/logger';
-import type { Completion, Arrangement, Conflict } from '../types';
+import type { Completion, Arrangement } from '../types';
 
 /**
  * Resolution strategy result
@@ -31,24 +31,18 @@ export class AutomaticConflictResolver {
   /**
    * Attempt to automatically resolve a conflict
    *
-   * @param conflict - Conflict to resolve
    * @param existingEntity - Current entity in state
    * @param incomingEntity - Incoming entity from operation
    * @returns Resolution result with strategy and confidence
    */
   resolveConflict<T extends Completion | Arrangement>(
-    conflict: Conflict,
     existingEntity: T,
     incomingEntity: T
   ): ResolutionResult {
-    logger.info('🤖 AUTO-RESOLVE: Attempting automatic conflict resolution', {
-      conflictId: conflict.id,
-      entityType: conflict.entityType,
-    });
+    logger.info('🤖 AUTO-RESOLVE: Attempting automatic conflict resolution');
 
     // Strategy 1: Last-Write-Wins (timestamp-based)
     const timestampResolution = this.resolveByTimestamp(
-      conflict,
       existingEntity,
       incomingEntity
     );
@@ -60,7 +54,6 @@ export class AutomaticConflictResolver {
 
     // Strategy 2: Content-based (one is empty/default)
     const contentResolution = this.resolveByContent(
-      conflict,
       existingEntity,
       incomingEntity
     );
@@ -71,10 +64,7 @@ export class AutomaticConflictResolver {
     }
 
     // Strategy 3: Manual resolution required
-    logger.info('⚠️ AUTO-RESOLVE: Manual resolution required', {
-      conflictId: conflict.id,
-      reason: 'Both entities have significant data'
-    });
+    logger.info('⚠️ AUTO-RESOLVE: Manual resolution required - both entities have significant data');
 
     return {
       strategy: 'manual',
@@ -94,7 +84,6 @@ export class AutomaticConflictResolver {
    * - LOW: Timestamp difference < 10s (too close to call)
    */
   private resolveByTimestamp<T extends Completion | Arrangement>(
-    conflict: Conflict,
     existingEntity: T,
     incomingEntity: T
   ): ResolutionResult {
@@ -152,7 +141,6 @@ export class AutomaticConflictResolver {
    * - LOW: Both have significant data
    */
   private resolveByContent<T extends Completion | Arrangement>(
-    conflict: Conflict,
     existingEntity: T,
     incomingEntity: T
   ): ResolutionResult {
