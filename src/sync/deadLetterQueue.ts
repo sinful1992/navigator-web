@@ -2,7 +2,7 @@
 // Dead Letter Queue for permanently failed operations
 // Clean Architecture - Infrastructure Layer
 
-import { openDB, type IDBPDatabase } from 'idb-keyval';
+import { get, set } from 'idb-keyval';
 import { logger } from '../utils/logger';
 import type { Operation } from './operations';
 
@@ -19,9 +19,7 @@ export interface DeadLetterItem {
   addedToDLQ: string; // ISO timestamp
 }
 
-const DB_NAME = 'navigator-dead-letter-queue';
-const DB_VERSION = 1;
-const STORE_NAME = 'deadLetters';
+const DLQ_KEY = 'navigator-dead-letter-queue';
 
 /**
  * DeadLetterQueue - Stores permanently failed operations
@@ -39,54 +37,37 @@ const STORE_NAME = 'deadLetters';
  * - Old DLQ items auto-expire after 30 days
  */
 export class DeadLetterQueue {
-  private dbPromise: Promise<IDBPDatabase> | null = null;
-
   /**
-   * Initialize database connection
+   * Get all DLQ items from storage
    */
-  private async initDB(): Promise<IDBPDatabase> {
-    if (this.dbPromise) {
-      return this.dbPromise;
+  private async getQueue(): Promise<DeadLetterItem[]> {
+    try {
+      const queue = await get<DeadLetterItem[]>(DLQ_KEY);
+      return queue || [];
+    } catch (err) {
+      logger.error('Failed to get dead letter queue:', err);
+      return [];
     }
-
-    this.dbPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-      request.onerror = () => {
-        logger.error('Failed to open DLQ database:', request.error);
-        reject(request.error);
-      };
-
-      request.onsuccess = () => {
-        resolve(request.result as IDBPDatabase);
-      };
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-
-        // Create object store
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-
-          // Indexes for querying
-          store.createIndex('addedToDLQ', 'addedToDLQ');
-          store.createIndex('operationType', 'operation.type');
-
-          logger.debug('Created dead letter queue object store');
-        }
-      };
-    });
-
-    return this.dbPromise;
   }
 
   /**
-   * Add operation to dead letter queue
+   * Save DLQ items to storage
+   */
+  private async saveQueue(queue: DeadLetterItem[]): Promise<void> {
+    try {
+      await set(DLQ_KEY, queue);
+    } catch (err) {
+      logger.error('Failed to save dead letter queue:', err);
+    }
+  }
+
+  /**
+   * Add failed operation to DLQ
    *
-   * @param operation - Operation that failed permanently
+   * @param operation - Failed operation
    * @param error - Error message
-   * @param failureCount - Number of times operation failed
-   * @param firstFailure - When operation first failed
+   * @param failureCount - Number of failures
+   * @param firstFailure - ISO timestamp of first failure
    */
   async add(
     operation: Operation,
@@ -95,9 +76,7 @@ export class DeadLetterQueue {
     firstFailure: string
   ): Promise<void> {
     try {
-      const db = await this.initDB();
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
+      const queue = await this.getQueue();
 
       const item: DeadLetterItem = {
         id: operation.id,
@@ -109,51 +88,47 @@ export class DeadLetterQueue {
         addedToDLQ: new Date().toISOString(),
       };
 
-      await store.put(item);
-      await tx.done;
+      // Check if already exists (update instead of add)
+      const existingIndex = queue.findIndex(i => i.id === operation.id);
+      if (existingIndex >= 0) {
+        queue[existingIndex] = item;
+      } else {
+        queue.push(item);
+      }
 
-      logger.error('💀 DLQ: Added operation to dead letter queue', {
+      await this.saveQueue(queue);
+
+      logger.warn('☠️ DEAD LETTER QUEUE: Added failed operation', {
         operationId: operation.id,
         operationType: operation.type,
-        failureCount,
         error,
+        failureCount,
       });
     } catch (err) {
-      logger.error('Failed to add operation to DLQ:', err);
+      logger.error('Failed to add to dead letter queue:', err);
       throw err;
     }
   }
 
   /**
-   * Get all items in dead letter queue
+   * Get all items from DLQ
    */
   async getAll(): Promise<DeadLetterItem[]> {
     try {
-      const db = await this.initDB();
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const store = tx.objectStore(STORE_NAME);
-      const items = await store.getAll();
-      await tx.done;
-
-      return items;
+      return await this.getQueue();
     } catch (err) {
-      logger.error('Failed to get DLQ items:', err);
+      logger.error('Failed to get all DLQ items:', err);
       return [];
     }
   }
 
   /**
-   * Get item by operation ID
+   * Get single item from DLQ by ID
    */
-  async get(operationId: string): Promise<DeadLetterItem | null> {
+  async get(id: string): Promise<DeadLetterItem | null> {
     try {
-      const db = await this.initDB();
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const store = tx.objectStore(STORE_NAME);
-      const item = await store.get(operationId);
-      await tx.done;
-
-      return item || null;
+      const queue = await this.getQueue();
+      return queue.find(item => item.id === id) || null;
     } catch (err) {
       logger.error('Failed to get DLQ item:', err);
       return null;
@@ -161,66 +136,118 @@ export class DeadLetterQueue {
   }
 
   /**
-   * Remove item from dead letter queue
+   * Remove item from DLQ
    *
-   * @param operationId - ID of operation to remove
+   * @param id - Operation ID to remove
    */
-  async remove(operationId: string): Promise<void> {
+  async remove(id: string): Promise<void> {
     try {
-      const db = await this.initDB();
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
-      await store.delete(operationId);
-      await tx.done;
+      const queue = await this.getQueue();
+      const filteredQueue = queue.filter(item => item.id !== id);
+      await this.saveQueue(filteredQueue);
 
-      logger.info('💀 DLQ: Removed operation from dead letter queue', {
-        operationId,
+      logger.info('☠️ DEAD LETTER QUEUE: Removed item', { id });
+    } catch (err) {
+      logger.error('Failed to remove from dead letter queue:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Retry item (returns operation for resubmission)
+   *
+   * @param id - Operation ID to retry
+   * @returns Operation to retry, or null if not found
+   */
+  async retry(id: string): Promise<Operation | null> {
+    try {
+      const queue = await this.getQueue();
+      const item = queue.find(i => i.id === id);
+
+      if (!item) {
+        logger.warn('☠️ DEAD LETTER QUEUE: Item not found for retry', { id });
+        return null;
+      }
+
+      // Remove from DLQ (will be re-added if fails again)
+      await this.remove(id);
+
+      logger.info('☠️ DEAD LETTER QUEUE: Retrying item', {
+        id,
+        operationType: item.operation.type,
       });
+
+      return item.operation;
     } catch (err) {
-      logger.error('Failed to remove DLQ item:', err);
-      throw err;
+      logger.error('Failed to retry DLQ item:', err);
+      return null;
     }
   }
 
   /**
-   * Clear all items from dead letter queue
+   * Get DLQ statistics
    */
-  async clear(): Promise<void> {
+  async getStats(): Promise<{
+    total: number;
+    byType: Record<string, number>;
+    oldest: string | null;
+    newest: string | null;
+  }> {
     try {
-      const db = await this.initDB();
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
-      await store.clear();
-      await tx.done;
+      const queue = await this.getQueue();
 
-      logger.info('💀 DLQ: Cleared all items from dead letter queue');
+      if (queue.length === 0) {
+        return { total: 0, byType: {}, oldest: null, newest: null };
+      }
+
+      const stats = {
+        total: queue.length,
+        byType: {} as Record<string, number>,
+        oldest: queue[0].addedToDLQ,
+        newest: queue[0].addedToDLQ,
+      };
+
+      for (const item of queue) {
+        // Count by type
+        const type = item.operation.type;
+        stats.byType[type] = (stats.byType[type] || 0) + 1;
+
+        // Track oldest and newest
+        if (item.addedToDLQ < stats.oldest) {
+          stats.oldest = item.addedToDLQ;
+        }
+        if (item.addedToDLQ > stats.newest) {
+          stats.newest = item.addedToDLQ;
+        }
+      }
+
+      return stats;
     } catch (err) {
-      logger.error('Failed to clear DLQ:', err);
-      throw err;
+      logger.error('Failed to get DLQ stats:', err);
+      return { total: 0, byType: {}, oldest: null, newest: null };
     }
   }
 
   /**
-   * Clean up old items (> 30 days)
+   * Clean up old DLQ items (> 30 days)
    *
    * Business Rule: DLQ items expire after 30 days
    */
   async cleanupOld(): Promise<number> {
     try {
-      const items = await this.getAll();
+      const queue = await this.getQueue();
       const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
 
-      let removed = 0;
-      for (const item of items) {
+      const before = queue.length;
+      const filteredQueue = queue.filter(item => {
         const addedTime = new Date(item.addedToDLQ).getTime();
-        if (addedTime < thirtyDaysAgo) {
-          await this.remove(item.id);
-          removed++;
-        }
-      }
+        return addedTime >= thirtyDaysAgo;
+      });
+      const removed = before - filteredQueue.length;
 
       if (removed > 0) {
-        logger.info(`💀 DLQ: Cleaned up ${removed} old items (>30 days)`);
+        await this.saveQueue(filteredQueue);
+        logger.info(`☠️ DEAD LETTER QUEUE: Cleaned up ${removed} old items (>30 days)`);
       }
 
       return removed;
@@ -231,51 +258,28 @@ export class DeadLetterQueue {
   }
 
   /**
-   * Get statistics about dead letter queue
+   * Clear all items from DLQ
    */
-  async getStats(): Promise<{
-    total: number;
-    byType: Record<string, number>;
-    oldestItem: string | null;
-  }> {
+  async clear(): Promise<void> {
     try {
-      const items = await this.getAll();
-
-      const byType: Record<string, number> = {};
-      let oldest: string | null = null;
-
-      for (const item of items) {
-        // Count by type
-        const type = item.operation.type;
-        byType[type] = (byType[type] || 0) + 1;
-
-        // Track oldest
-        if (!oldest || item.addedToDLQ < oldest) {
-          oldest = item.addedToDLQ;
-        }
-      }
-
-      return {
-        total: items.length,
-        byType,
-        oldestItem: oldest,
-      };
+      await this.saveQueue([]);
+      logger.info('☠️ DEAD LETTER QUEUE: Cleared all items');
     } catch (err) {
-      logger.error('Failed to get DLQ stats:', err);
-      return { total: 0, byType: {}, oldestItem: null };
+      logger.error('Failed to clear dead letter queue:', err);
+      throw err;
     }
   }
 }
 
 // Singleton instance
-let deadLetterQueueInstance: DeadLetterQueue | null = null;
+let dlqInstance: DeadLetterQueue | null = null;
 
 /**
  * Get dead letter queue singleton
  */
 export function getDeadLetterQueue(): DeadLetterQueue {
-  if (!deadLetterQueueInstance) {
-    deadLetterQueueInstance = new DeadLetterQueue();
+  if (!dlqInstance) {
+    dlqInstance = new DeadLetterQueue();
   }
-  return deadLetterQueueInstance;
+  return dlqInstance;
 }

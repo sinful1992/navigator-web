@@ -45,7 +45,7 @@ import { BackupManager } from "./components/BackupManager";
 import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
-import { initializeProtectionFlags, setProtectionFlag } from "./utils/protectionFlags";
+import { initializeProtectionFlags, setProtectionFlag, isProtectionActive } from "./utils/protectionFlags";
 import { StateProtectionService } from "./services/StateProtectionService";
 import { PrivacyConsent } from "./components/PrivacyConsent";
 import { EnhancedOfflineIndicator } from "./components/EnhancedOfflineIndicator";

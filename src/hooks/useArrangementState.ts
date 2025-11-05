@@ -179,7 +179,7 @@ export function useArrangementState({
         });
 
         // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if update occurred)
-        if (shouldSubmit) {
+        if (shouldSubmit && currentVersion !== undefined) {
           if (repositories?.arrangement) {
             // PHASE 2: Pass current version for conflict detection
             repositories.arrangement.updateArrangement(id, updates, currentVersion).catch((err) => {
