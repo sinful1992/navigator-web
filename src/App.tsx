@@ -237,6 +237,7 @@ function AuthedApp() {
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
+  const isInitialLoadRef = React.useRef(true); // Track if this is initial page load
 
   // Check for ownership uncertainty flag
   React.useEffect(() => {
@@ -433,25 +434,33 @@ function AuthedApp() {
         return;
       }
 
-      // Protection flags
-      if (isProtectionActive('navigator_restore_in_progress')) {
-        logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_import_in_progress')) {
-        logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_active_protection')) {
-        logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_day_session_protection')) {
-        logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
-        return;
+      // 🔧 FIX: Skip protection flags on initial bootstrap load
+      // Protection flags should only block LIVE updates, not the initial state reconstruction
+      const isInitialLoad = isInitialLoadRef.current;
+      if (isInitialLoad) {
+        logger.info('🚀 APP: INITIAL LOAD - Bypassing protection flags to load state from operations');
+        isInitialLoadRef.current = false; // Mark initial load as complete
+      } else {
+        // Protection flags - only for live updates after initial load
+        if (isProtectionActive('navigator_restore_in_progress')) {
+          logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
+          return;
+        }
+        if (isProtectionActive('navigator_import_in_progress')) {
+          logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping cloud state update');
+          return;
+        }
+        if (isProtectionActive('navigator_active_protection')) {
+          logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
+          return;
+        }
+        if (isProtectionActive('navigator_day_session_protection')) {
+          logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
+          return;
+        }
       }
 
-      logger.info('✅ APP: No protection flags active, applying state update');
+      logger.info(isInitialLoad ? '✅ APP: Initial load - applying state from operations' : '✅ APP: No protection flags active, applying state update');
 
       // Apply state update from operations
       if (typeof updaterOrState === 'function') {
