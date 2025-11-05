@@ -84,13 +84,17 @@ export class AddressRepository extends BaseRepository {
 
   /**
    * Persist active address clear
+   * 🔧 CRITICAL FIX: Clear protection flag AFTER operation completes, not before
    */
   async clearActiveAddress(): Promise<void> {
-    clearProtectionFlag('navigator_active_protection');
-
-    await this.submit({
-      type: 'ACTIVE_INDEX_SET',
-      payload: { index: null, startTime: null },
-    });
+    try {
+      await this.submit({
+        type: 'ACTIVE_INDEX_SET',
+        payload: { index: null, startTime: null },
+      });
+    } finally {
+      // Clear protection flag after operation completes
+      clearProtectionFlag('navigator_active_protection');
+    }
   }
 }

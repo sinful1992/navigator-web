@@ -469,6 +469,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   }, [submitOperation]);
 
   const updateSession = React.useCallback((date: string, updates: Partial<DaySession>, createIfMissing: boolean = false) => {
+    // 🔧 CRITICAL FIX: Set protection flag BEFORE state mutation to prevent race condition
+    setProtectionFlag('navigator_session_protection');
+
     setBaseState((s: AppState) => {
       const sessionIndex = s.daySessions.findIndex((session: DaySession) => session.date === date);
 
@@ -512,11 +515,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       }
     });
 
-    // Submit operation to cloud with protection flag
+    // Submit operation to cloud
     if (submitOperation) {
-      // 🔧 CRITICAL FIX: Set protection flag to prevent state corruption during reconstruction
-      setProtectionFlag('navigator_session_protection');
-
       submitOperation({
         type: 'SESSION_UPDATE',
         payload: { date, updates }
