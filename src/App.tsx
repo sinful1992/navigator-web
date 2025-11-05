@@ -549,6 +549,10 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
           return;
         }
+        if (isProtectionActive('navigator_session_protection')) {
+          logger.sync('🛡️ APP: SESSION PROTECTION - Skipping cloud state update');
+          return;
+        }
       } else {
         logger.info('🚀 APP: Initial bootstrap with flags not ready - bypassing protection check');
       }

@@ -16,6 +16,7 @@ import {
 import { DEFAULT_BONUS_SETTINGS } from "./utils/bonusCalculator";
 import {
   setProtectionFlag,
+  clearProtectionFlag,
 } from "./utils/protectionFlags";
 // Extracted hooks
 import { usePersistedState } from "./hooks/usePersistedState";
@@ -511,14 +512,24 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       }
     });
 
-    // Submit operation to cloud
+    // Submit operation to cloud with protection flag
     if (submitOperation) {
+      // 🔧 CRITICAL FIX: Set protection flag to prevent state corruption during reconstruction
+      setProtectionFlag('navigator_session_protection');
+
       submitOperation({
         type: 'SESSION_UPDATE',
         payload: { date, updates }
-      }).catch(err => {
-        logger.error('Failed to submit session update operation:', err);
-      });
+      })
+        .then(() => {
+          // Clear protection flag after successful submission
+          clearProtectionFlag('navigator_session_protection');
+        })
+        .catch(err => {
+          logger.error('Failed to submit session update operation:', err);
+          // Clear protection flag even on error
+          clearProtectionFlag('navigator_session_protection');
+        });
     }
   }, [submitOperation]);
 
