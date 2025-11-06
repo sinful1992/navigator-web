@@ -12,14 +12,46 @@ export function useUnifiedSync() {
 
   // Wrap subscribeToOperations to match the expected interface
   const subscribeToData = (onChange: React.Dispatch<React.SetStateAction<AppState>>): (() => void) => {
-    return operationSync.subscribeToOperations((_operations) => {
-      // Reconstruct state from operations and notify
+    // 🔧 CRITICAL FIX: Track whether this is the first notification for this subscription
+    // The first notification happens immediately when subscription is set up,
+    // which might be BEFORE bootstrap completes on a new device.
+    let isFirstNotification = true;
+
+    return operationSync.subscribeToOperations((operations) => {
+      console.log('📥 subscribeToData callback fired:', {
+        isFirst: isFirstNotification,
+        operationCount: operations.length,
+      });
+
+      // 🔧 FIX: Handle first notification specially to avoid race condition
+      if (isFirstNotification) {
+        isFirstNotification = false;
+
+        // SCENARIO 1: Bootstrap completed before subscription (has operations)
+        // SCENARIO 2: Local data exists (has operations)
+        // → Notify with current state
+        if (operations.length > 0) {
+          const state = operationSync.getStateFromOperations();
+          console.log('📤 subscribeToData (first): Notifying with existing state:', {
+            addresses: state.addresses?.length,
+            completions: state.completions?.length,
+            arrangements: state.arrangements?.length,
+          });
+          onChange(state);
+        } else {
+          // SCENARIO 3: Subscription set up before bootstrap completes (no operations yet)
+          // → Don't notify yet, wait for bootstrap to complete and trigger callback
+          console.log('⏳ subscribeToData (first): No operations yet, waiting for bootstrap');
+        }
+        return;
+      }
+
+      // All subsequent notifications (bootstrap completion, real-time updates, etc.)
       const state = operationSync.getStateFromOperations();
-      console.log('📤 subscribeToData: Notifying App.tsx with state:', {
+      console.log('📤 subscribeToData (update): Notifying with updated state:', {
         addresses: state.addresses?.length,
         completions: state.completions?.length,
         arrangements: state.arrangements?.length,
-        daySessions: state.daySessions?.length,
       });
       onChange(state);
     });

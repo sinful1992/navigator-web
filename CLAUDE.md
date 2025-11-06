@@ -365,6 +365,47 @@ User unchecks 3 days they didn't work:
 
 **Background**: Migrated from state-based sync to operation-based delta sync for improved performance and reliability.
 
+**⚠️ CRITICAL FIX - Subscription Race Condition** (Latest):
+Second devices were showing empty state on initial load due to subscription being set up before bootstrap completed.
+
+**Root Cause**:
+- `subscribeToData` in `migrationAdapter.ts` immediately notifies with cached state via `getStateFromOperations()`
+- If subscription is set up BEFORE bootstrap fetches operations from cloud, cached state is empty
+- This causes UI to show no addresses even though data exists in cloud
+
+**Fix** (`migrationAdapter.ts:14-58`):
+```typescript
+// Track first notification per subscription
+let isFirstNotification = true;
+
+return operationSync.subscribeToOperations((operations) => {
+  if (isFirstNotification) {
+    isFirstNotification = false;
+    // Only notify if operations exist (bootstrap completed or local data exists)
+    if (operations.length > 0) {
+      onChange(operationSync.getStateFromOperations());
+    } else {
+      // Wait for bootstrap to complete
+      console.log('⏳ Waiting for bootstrap to complete');
+    }
+    return;
+  }
+  // All subsequent notifications
+  onChange(operationSync.getStateFromOperations());
+});
+```
+
+**Scenarios Handled**:
+- ✅ Subscription before bootstrap → waits for bootstrap to complete
+- ✅ Subscription after bootstrap → immediately shows data
+- ✅ Subscription re-runs → shows existing data
+- ✅ Local data exists → shows data immediately
+
+**DO NOT**:
+- Remove the first notification check → recreates race condition
+- Always skip empty notifications → breaks bootstrap completion handling
+- Remove subscription cleanup in App.tsx → causes duplicate subscriptions
+
 **Key Changes** (Commit: `9a20f56`):
 - **Breaking Change**: Switched from full state replication to operation-based sync
 - **Payload Reduction**: 99.7% smaller sync payloads (103KB → 0.3KB per operation)
