@@ -666,6 +666,22 @@ export function useOperationSync(): UseOperationSync {
 
           setLastSyncTime(new Date());
         }
+
+        // 🔧 CRITICAL FIX: Check for unsynced operations after bootstrap and sync immediately
+        // This fixes the race condition where operations are created, page refreshes before 2s timer,
+        // and operations never upload because AUTO-SYNC effect runs before operationLog is ready
+        if (operationLog.current) {
+          const unsyncedOps = operationLog.current.getUnsyncedOperations();
+          if (unsyncedOps.length > 0) {
+            logger.info(`🔄 BOOTSTRAP COMPLETE: Found ${unsyncedOps.length} unsynced operations, triggering immediate sync`);
+            // Trigger sync with slight delay to ensure everything is stable
+            setTimeout(() => {
+              if (scheduleBatchSyncRef.current) {
+                scheduleBatchSyncRef.current();
+              }
+            }, 100);
+          }
+        }
       } catch (err) {
         logger.error('Failed to initialize user operation log:', err);
       }
@@ -703,6 +719,9 @@ export function useOperationSync(): UseOperationSync {
 
   // 🔧 FIX: Track last time we logged "no progress" to prevent spam
   const lastNoProgressLogRef = useRef<number>(0);
+
+  // 🔧 CRITICAL FIX: Ref to scheduleBatchSync so it can be called from bootstrap effect
+  const scheduleBatchSyncRef = useRef<(() => void) | null>(null);
 
   // Trigger batch sync with debouncing
   const scheduleBatchSync = useCallback(() => {
@@ -757,6 +776,11 @@ export function useOperationSync(): UseOperationSync {
   useEffect(() => {
     currentUserIdRef.current = user?.id ?? null;
   }, [user?.id]);
+
+  // 🔧 CRITICAL FIX: Keep scheduleBatchSyncRef updated so bootstrap can trigger sync
+  useEffect(() => {
+    scheduleBatchSyncRef.current = scheduleBatchSync;
+  }, [scheduleBatchSync]);
 
   // Submit a new operation
   const submitOperation = useCallback(async (
