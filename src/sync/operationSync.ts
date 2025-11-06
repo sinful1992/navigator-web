@@ -156,6 +156,11 @@ export function useOperationSync(): UseOperationSync {
   // forceSync will be defined later but we need a ref to it for the online/offline effect
   const forceSyncRef = useRef<(() => Promise<void>) | null>(null);
 
+  // 🔧 CRITICAL FIX: Use refs for user and supabase to avoid stale closures
+  // Callbacks created early (when user=null) must check CURRENT values, not closure values
+  const userRef = useRef<User | null>(null);
+  const supabaseRef = useRef(supabase);
+
   // 🔧 PERFORMANCE: Cache state reconstruction to avoid rebuilding entire state on every operation
   // - Tracks lastOperationCount to only rebuild when operations actually change
   // - Reduces O(n) state reconstruction calls to O(1) when no new operations arrive
@@ -778,6 +783,11 @@ export function useOperationSync(): UseOperationSync {
     currentUserIdRef.current = user?.id ?? null;
   }, [user?.id]);
 
+  // 🔧 CRITICAL FIX: Keep userRef updated for closure-safe access
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   // 🔧 CRITICAL FIX: Keep scheduleBatchSyncRef updated so bootstrap can trigger sync
   useEffect(() => {
     scheduleBatchSyncRef.current = scheduleBatchSync;
@@ -863,12 +873,16 @@ export function useOperationSync(): UseOperationSync {
 
   // Sync operations to cloud
   const syncOperationsToCloud = useCallback(async () => {
+    // 🔧 CRITICAL FIX: Check refs to get current values, not stale closures
+    const currentUser = userRef.current;
+    const currentSupabase = supabaseRef.current;
+
     logger.debug('🔄 syncOperationsToCloud called');
-    if (!operationLog.current || !user || !supabase) {
+    if (!operationLog.current || !currentUser || !currentSupabase) {
       logger.debug('⏭️ SYNC SKIPPED - missing prerequisites:', {
         operationLog: !!operationLog.current,
-        user: !!user,
-        supabase: !!supabase,
+        user: !!currentUser,
+        supabase: !!currentSupabase,
       });
       return;
     }
@@ -932,11 +946,11 @@ export function useOperationSync(): UseOperationSync {
         try {
           await retryWithCustom(
             async () => {
-              const { error, status } = await supabase!
+              const { error, status } = await currentSupabase!
                 .from('navigator_operations')
                 .upsert({
                   // New columns
-                  user_id: user.id,
+                  user_id: currentUser.id,
                   operation_id: operation.id,
                   sequence_number: operation.sequence,
                   operation_type: operation.type,
@@ -1067,6 +1081,19 @@ export function useOperationSync(): UseOperationSync {
                 oldSequence: operation.sequence,
                 newSequence,
               });
+
+              // 🔧 CRITICAL FIX: Mark old sequence as synced to fill gap in continuous chain
+              // This prevents the marking logic from getting stuck waiting for the old sequence
+              // The operation with the new sequence will be tracked separately
+              const currentLastSynced = operationLog.current.getLogState().lastSyncSequence;
+              if (operation.sequence > currentLastSynced) {
+                // Add old sequence to successfulSequences so marking logic can advance
+                successfulSequences.push(operation.sequence);
+                logger.info('🔧 FILLED GAP: Marked old sequence as synced to maintain continuity:', {
+                  oldSequence: operation.sequence,
+                  newSequence,
+                });
+              }
 
               // Mark as needing immediate retry with new sequence
               await retryQueueManager.removeFromQueue(operation.sequence);
