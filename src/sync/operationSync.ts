@@ -1073,16 +1073,78 @@ export function useOperationSync(): UseOperationSync {
               });
 
               // 🔧 CRITICAL FIX: If cloud has sequences beyond our lastSyncSequence,
-              // advance lastSyncSequence to cloudMaxSeq since those are already in cloud
-              // This fills the gap and allows the reassigned sequence to advance properly
+              // we must FETCH those operations before advancing the pointer
+              // Otherwise we permanently skip/lose operations from other devices
               const currentLastSynced = operationLog.current.getLogState().lastSyncSequence;
               if (cloudMaxSeq > currentLastSynced) {
-                await operationLog.current.markSyncedUpTo(cloudMaxSeq);
-                logger.info('🔧 ADVANCED SYNC POINTER: Filled gap from other devices', {
-                  oldLastSynced: currentLastSynced,
-                  newLastSynced: cloudMaxSeq,
-                  gapSize: cloudMaxSeq - currentLastSynced,
+                logger.info('🔄 FETCHING MISSING OPERATIONS before advancing sync pointer', {
+                  currentLastSynced,
+                  cloudMaxSeq,
+                  missingRange: `${currentLastSynced + 1}-${cloudMaxSeq}`,
                 });
+
+                try {
+                  // Fetch operations we've never seen (between our pointer and cloud max)
+                  const { data: missingOpsData, error: fetchError } = await currentSupabase!
+                    .from('navigator_operations')
+                    .select('operation_data, sequence_number')
+                    .eq('user_id', currentUser.id)
+                    .gt('sequence_number', currentLastSynced)
+                    .lte('sequence_number', cloudMaxSeq)
+                    .order('sequence_number', { ascending: true });
+
+                  if (fetchError) {
+                    logger.error('❌ Failed to fetch missing operations:', fetchError);
+                    throw new Error(`Failed to fetch missing operations: ${fetchError.message}`);
+                  }
+
+                  if (missingOpsData && missingOpsData.length > 0) {
+                    logger.info(`📥 FETCHED ${missingOpsData.length} missing operations from cloud`);
+
+                    const missingOperations: Operation[] = missingOpsData
+                      .map(row => {
+                        const op = { ...row.operation_data };
+                        // Use database sequence_number (source of truth)
+                        if (row.sequence_number && typeof row.sequence_number === 'number') {
+                          op.sequence = row.sequence_number;
+                        }
+                        return op;
+                      })
+                      .filter(op => op.id && op.type); // Validate
+
+                    // Merge into local log
+                    const merged = await operationLog.current.mergeRemoteOperations(missingOperations);
+                    logger.info(`✅ MERGED ${merged.length} new operations into local log`);
+
+                    // Rebuild state to apply the operations
+                    const newState = rebuildStateIfNeeded(true);
+                    setCurrentState(newState);
+
+                    // Notify listeners
+                    const allOps = operationLog.current.getAllOperations();
+                    stateChangeListeners.current.forEach(listener => {
+                      try {
+                        listener(allOps);
+                      } catch (err) {
+                        logger.error('Error in state change listener:', err);
+                      }
+                    });
+                  } else {
+                    logger.info('📭 No missing operations found (gap may be from deleted operations)');
+                  }
+
+                  // NOW it's safe to advance the sync pointer
+                  await operationLog.current.markSyncedUpTo(cloudMaxSeq);
+                  logger.info('🔧 ADVANCED SYNC POINTER after fetching missing operations', {
+                    oldLastSynced: currentLastSynced,
+                    newLastSynced: cloudMaxSeq,
+                    gapSize: cloudMaxSeq - currentLastSynced,
+                  });
+                } catch (fetchErr) {
+                  logger.error('❌ CRITICAL: Failed to fetch missing operations before advancing pointer:', fetchErr);
+                  // Don't advance pointer if we couldn't fetch - better to retry than lose data
+                  throw fetchErr;
+                }
               }
 
               // Update sequence generator to avoid future collisions
