@@ -1081,27 +1081,52 @@ export function useOperationSync(): UseOperationSync {
                   currentLastSynced,
                   cloudMaxSeq,
                   missingRange: `${currentLastSynced + 1}-${cloudMaxSeq}`,
+                  estimatedCount: cloudMaxSeq - currentLastSynced,
                 });
 
                 try {
-                  // Fetch operations we've never seen (between our pointer and cloud max)
-                  const { data: missingOpsData, error: fetchError } = await currentSupabase!
-                    .from('navigator_operations')
-                    .select('operation_data, sequence_number')
-                    .eq('user_id', currentUser.id)
-                    .gt('sequence_number', currentLastSynced)
-                    .lte('sequence_number', cloudMaxSeq)
-                    .order('sequence_number', { ascending: true });
+                  // 🔧 CRITICAL FIX: Paginate to fetch ALL missing operations
+                  // Supabase returns max 1000 rows - if gap > 1000, we need pagination
+                  const BATCH_SIZE = 1000;
+                  let allMissingOps: any[] = [];
+                  let page = 0;
+                  let hasMore = true;
+                  let fetchError: any = null;
+
+                  while (hasMore && !fetchError) {
+                    const { data: missingOpsData, error } = await currentSupabase!
+                      .from('navigator_operations')
+                      .select('operation_data, sequence_number')
+                      .eq('user_id', currentUser.id)
+                      .gt('sequence_number', currentLastSynced)
+                      .lte('sequence_number', cloudMaxSeq)
+                      .order('sequence_number', { ascending: true })
+                      .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
+
+                    if (error) {
+                      fetchError = error;
+                      break;
+                    }
+
+                    if (missingOpsData && missingOpsData.length > 0) {
+                      allMissingOps = allMissingOps.concat(missingOpsData);
+                      logger.info(`📥 MISSING OPS: Fetched page ${page + 1} (${missingOpsData.length} operations)`);
+                      hasMore = missingOpsData.length === BATCH_SIZE; // Continue if full batch
+                      page++;
+                    } else {
+                      hasMore = false;
+                    }
+                  }
 
                   if (fetchError) {
                     logger.error('❌ Failed to fetch missing operations:', fetchError);
                     throw new Error(`Failed to fetch missing operations: ${fetchError.message}`);
                   }
 
-                  if (missingOpsData && missingOpsData.length > 0) {
-                    logger.info(`📥 FETCHED ${missingOpsData.length} missing operations from cloud`);
+                  if (allMissingOps.length > 0) {
+                    logger.info(`📥 FETCHED ${allMissingOps.length} missing operations from cloud (${page} pages)`);
 
-                    const missingOperations: Operation[] = missingOpsData
+                    const missingOperations: Operation[] = allMissingOps
                       .map(row => {
                         const op = { ...row.operation_data };
                         // Use database sequence_number (source of truth)
@@ -1139,6 +1164,7 @@ export function useOperationSync(): UseOperationSync {
                     oldLastSynced: currentLastSynced,
                     newLastSynced: cloudMaxSeq,
                     gapSize: cloudMaxSeq - currentLastSynced,
+                    fetchedCount: allMissingOps.length,
                   });
                 } catch (fetchErr) {
                   logger.error('❌ CRITICAL: Failed to fetch missing operations before advancing pointer:', fetchErr);
