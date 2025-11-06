@@ -4,6 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import type { AppState } from "../types";
 import type { Operation } from "./operations";
+import { nextSequence, setSequenceAsync } from "./operations";
 import { OperationLogManager, getOperationLog, clearOperationLogsForUser, getOperationLogStats } from "./operationLog";
 import { reconstructState, reconstructStateWithConflictResolution } from "./reducer";
 import { logger } from "../utils/logger";
@@ -976,6 +977,38 @@ export function useOperationSync(): UseOperationSync {
 
               // Return error for retry logic to evaluate
               if (error) {
+                // 🔧 CRITICAL FIX: Handle sequence collision (different from operation_id duplicate)
+                // Error 23505 can be either:
+                // 1. Duplicate operation_id (already uploaded) → safe to ignore
+                // 2. Duplicate sequence number (sequence collision) → must reassign sequence
+                if (error.code === '23505') {
+                  const errorMessage = error.message || '';
+                  const isSequenceCollision = errorMessage.includes('user_sequence_unique')
+                    || errorMessage.includes('sequence_number');
+
+                  if (isSequenceCollision) {
+                    logger.error('🚨 SEQUENCE COLLISION DETECTED:', {
+                      operation: operation.type,
+                      operationId: operation.id,
+                      sequence: operation.sequence,
+                      error: errorMessage,
+                    });
+
+                    // This is a sequence collision - different operation with same sequence already in cloud
+                    // We need to reassign this operation a new sequence
+                    const errorObj = new Error(`Sequence collision: ${errorMessage}`);
+                    (errorObj as any).status = status;
+                    (errorObj as any).code = 'SEQUENCE_COLLISION';
+                    (errorObj as any).details = error.details;
+                    (errorObj as any).originalSequence = operation.sequence;
+                    throw errorObj;
+                  } else {
+                    // Duplicate operation_id - already uploaded successfully
+                    logger.debug('Operation already uploaded (duplicate operation_id):', operation.id);
+                    return { success: true, alreadyExists: true };
+                  }
+                }
+
                 const errorObj = new Error(error.message);
                 (errorObj as any).status = status;
                 (errorObj as any).code = error.code;
@@ -1011,6 +1044,60 @@ export function useOperationSync(): UseOperationSync {
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
+          const errorCode = (error as any)?.code;
+
+          // 🔧 CRITICAL FIX: Handle sequence collision by reassigning sequence
+          if (errorCode === 'SEQUENCE_COLLISION') {
+            logger.error('🔧 REPAIRING SEQUENCE COLLISION:', {
+              operation: operation.type,
+              oldSequence: operation.sequence,
+            });
+
+            try {
+              // Fetch max sequence from cloud to sync with reality
+              const { data: maxSeqData } = await currentSupabase!
+                .from('navigator_operations')
+                .select('sequence_number')
+                .eq('user_id', currentUser.id)
+                .order('sequence_number', { ascending: false })
+                .limit(1);
+
+              const cloudMaxSeq = maxSeqData?.[0]?.sequence_number || 0;
+              const localMaxSeq = operationLog.current.getLogState().lastSequence;
+              const newMaxSeq = Math.max(cloudMaxSeq, localMaxSeq);
+
+              logger.info('🔄 SEQUENCE SYNC:', {
+                cloudMax: cloudMaxSeq,
+                localMax: localMaxSeq,
+                newMax: newMaxSeq,
+              });
+
+              // Update sequence generator to avoid future collisions
+              await setSequenceAsync(newMaxSeq);
+
+              // Reassign operation a new sequence
+              const newSequence = await nextSequence();
+              const updatedOperation = { ...operation, sequence: newSequence };
+
+              // Update operation in log
+              await operationLog.current.updateOperationSequence(operation.id, newSequence);
+
+              logger.info('✅ SEQUENCE REASSIGNED:', {
+                operation: operation.type,
+                oldSequence: operation.sequence,
+                newSequence,
+              });
+
+              // Mark as needing immediate retry with new sequence
+              await retryQueueManager.removeFromQueue(operation.sequence);
+              await retryQueueManager.addToQueue(updatedOperation, 'Sequence reassigned - ready for upload', undefined);
+
+              continue; // Skip to next operation
+            } catch (repairError) {
+              logger.error('❌ SEQUENCE REPAIR FAILED:', repairError);
+              // Fall through to normal retry queue handling
+            }
+          }
 
           logger.error('❌ UPLOAD FAILED (after retries):', {
             operation: operation.type,
