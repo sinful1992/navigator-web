@@ -510,7 +510,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
   // Delta sync subscription - Bootstrap handled by operationSync.ts
   React.useEffect(() => {
     const user = cloudSync.user;
-    if (!user || loading) return;
+    if (!user) return; // 🔧 FIX: Remove 'loading' check - causes race condition where subscription never activates
 
     logger.info('🔄 DELTA SYNC: Setting up operation subscription for user:', user.id);
 
@@ -600,7 +600,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
     return () => {
       if (cleanup) cleanup();
     };
-  }, [cloudSync.user, loading]);
+  }, [cloudSync.user]); // 🔧 FIX: Remove 'loading' dependency - subscription only needs user
 
   // REMOVED: Visibility change handler - was over-engineering after fixing React subscription bug
 
