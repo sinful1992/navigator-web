@@ -3,24 +3,6 @@ import type React from "react";
 import type { AppState } from "../types";
 import { useOperationSync } from "./operationSync";
 import { logger } from "../utils/logger";
-import { reconstructState } from "./reducer";
-import { DEFAULT_REMINDER_SETTINGS } from "../services/reminderScheduler";
-import { DEFAULT_BONUS_SETTINGS } from "../utils/bonusCalculator";
-
-// Fresh initial state for reconstruction
-const INITIAL_STATE: AppState = {
-  addresses: [],
-  activeIndex: null,
-  completions: [],
-  daySessions: [],
-  arrangements: [],
-  currentListVersion: 1,
-  subscription: null,
-  reminderSettings: DEFAULT_REMINDER_SETTINGS,
-  reminderNotifications: [],
-  lastReminderProcessed: undefined,
-  bonusSettings: DEFAULT_BONUS_SETTINGS,
-};
 
 /**
  * Unified sync hook - now only supports operation-based delta sync
@@ -40,11 +22,11 @@ export function useUnifiedSync() {
         return;
       }
 
-      // 🔧 CRITICAL FIX #2: Reconstruct state from operations directly, NOT from currentState
-      // This avoids React setState race condition where currentState hasn't updated yet
-      // even though setCurrentState() was called. By reconstructing from _operations,
-      // we get the guaranteed correct state without depending on async state updates.
-      const state = reconstructState(INITIAL_STATE, _operations);
+      // 🔧 CRITICAL FIX: Get state from ALL operations, not just the delta
+      // The _operations parameter contains only NEW operations (delta), but we need
+      // to reconstruct state from the COMPLETE operation history.
+      // Using getStateFromOperations() ensures we get state from ALL operations in the log.
+      const state = operationSync.getStateFromOperations();
       logger.debug('📤 subscribeToData: Notifying App.tsx with state:', {
         addresses: state.addresses?.length,
         completions: state.completions?.length,
