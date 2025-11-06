@@ -155,6 +155,11 @@ export function useOperationSync(): UseOperationSync {
   // forceSync will be defined later but we need a ref to it for the online/offline effect
   const forceSyncRef = useRef<(() => Promise<void>) | null>(null);
 
+  // 🔧 CRITICAL FIX: Use refs for user and supabase to avoid closure issues
+  // Callbacks created early (when user=null) must check CURRENT values, not closure values
+  const userRef = useRef<User | null>(null);
+  const supabaseRef = useRef(supabase);
+
   // 🔧 PERFORMANCE: Cache state reconstruction to avoid rebuilding entire state on every operation
   // - Tracks lastOperationCount to only rebuild when operations actually change
   // - Reduces O(n) state reconstruction calls to O(1) when no new operations arrive
@@ -734,18 +739,24 @@ export function useOperationSync(): UseOperationSync {
     }
 
     batchTimerRef.current = setTimeout(async () => {
+      // 🔧 CRITICAL FIX: Check refs to get current values, not stale closures
+      const currentUser = userRef.current;
+      const currentSupabase = supabaseRef.current;
+
       logger.debug('🔄 BATCH SYNC CHECK:', {
         isOnline,
-        hasUser: !!user,
+        hasUser: !!currentUser,
         hasOperationLog: !!operationLog.current,
-        willSync: isOnline && !!user && !!operationLog.current
+        hasSupabase: !!currentSupabase,
+        willSync: isOnline && !!currentUser && !!operationLog.current && !!currentSupabase
       });
 
-      if (!isOnline || !user || !operationLog.current) {
+      if (!isOnline || !currentUser || !operationLog.current || !currentSupabase) {
         logger.debug('⏭️ BATCH SYNC SKIPPED - preconditions not met:', {
           isOnline,
-          user: user ? 'authenticated' : 'NOT AUTHENTICATED',
+          user: currentUser ? 'authenticated' : 'NOT AUTHENTICATED',
           operationLog: operationLog.current ? 'loaded' : 'NOT LOADED',
+          supabase: currentSupabase ? 'configured' : 'NOT CONFIGURED',
         });
         return;
       }
@@ -776,6 +787,11 @@ export function useOperationSync(): UseOperationSync {
   useEffect(() => {
     currentUserIdRef.current = user?.id ?? null;
   }, [user?.id]);
+
+  // 🔧 CRITICAL FIX: Keep userRef updated for closure-safe access
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   // 🔧 CRITICAL FIX: Keep scheduleBatchSyncRef updated so bootstrap can trigger sync
   useEffect(() => {
@@ -862,12 +878,16 @@ export function useOperationSync(): UseOperationSync {
 
   // Sync operations to cloud
   const syncOperationsToCloud = useCallback(async () => {
+    // 🔧 CRITICAL FIX: Check refs to get current values, not stale closures
+    const currentUser = userRef.current;
+    const currentSupabase = supabaseRef.current;
+
     logger.debug('🔄 syncOperationsToCloud called');
-    if (!operationLog.current || !user || !supabase) {
+    if (!operationLog.current || !currentUser || !currentSupabase) {
       logger.debug('⏭️ SYNC SKIPPED - missing prerequisites:', {
         operationLog: !!operationLog.current,
-        user: !!user,
-        supabase: !!supabase,
+        user: !!currentUser,
+        supabase: !!currentSupabase,
       });
       return;
     }
@@ -931,11 +951,11 @@ export function useOperationSync(): UseOperationSync {
         try {
           await retryWithCustom(
             async () => {
-              const { error, status } = await supabase!
+              const { error, status } = await currentSupabase!
                 .from('navigator_operations')
                 .upsert({
                   // New columns
-                  user_id: user.id,
+                  user_id: currentUser.id,
                   operation_id: operation.id,
                   sequence_number: operation.sequence,
                   operation_type: operation.type,
@@ -1662,22 +1682,26 @@ export function useOperationSync(): UseOperationSync {
   // Auto-sync unsynced operations after initialization
   // This handles restored operations from backup that weren't uploaded
   useEffect(() => {
+    // 🔧 CRITICAL FIX: Check refs to get current values, not stale closures
+    const currentUser = userRef.current;
+    const currentSupabase = supabaseRef.current;
+
     logger.info('🔍 AUTO-SYNC EFFECT TRIGGERED:', {
-      hasUser: !!user,
-      userId: user?.id,
+      hasUser: !!currentUser,
+      userId: currentUser?.id,
       isOnline,
       isLoading,
       hasOperationLog: !!operationLog.current,
-      hasSupabase: !!supabase,
+      hasSupabase: !!currentSupabase,
     });
 
-    if (!user || !isOnline || !operationLog.current || isLoading || !supabase) {
+    if (!currentUser || !isOnline || !operationLog.current || isLoading || !currentSupabase) {
       logger.warn('⚠️ AUTO-SYNC SKIPPED - conditions not met:', {
-        hasUser: !!user,
+        hasUser: !!currentUser,
         isOnline,
         hasOperationLog: !!operationLog.current,
         isLoading,
-        hasSupabase: !!supabase,
+        hasSupabase: !!currentSupabase,
       });
       return;
     }
@@ -1702,7 +1726,7 @@ export function useOperationSync(): UseOperationSync {
           });
 
           // Inline sync to avoid dependency issues
-          if (operationLog.current && user && isOnline && supabase) {
+          if (operationLog.current && currentUser && isOnline && currentSupabase) {
             setIsSyncing(true);
             try {
               // BEST PRACTICE: Wrap auto-sync in retry logic
@@ -1736,11 +1760,11 @@ export function useOperationSync(): UseOperationSync {
                   || payload?.id
                   || operation.id;
 
-                const { error } = await supabase!
+                const { error } = await currentSupabase!
                   .from('navigator_operations')
                   .upsert({
                     // New columns
-                    user_id: user.id,
+                    user_id: currentUser.id,
                     operation_id: operation.id,
                     sequence_number: operation.sequence,
                     operation_type: operation.type,
