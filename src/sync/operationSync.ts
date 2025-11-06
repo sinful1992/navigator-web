@@ -1072,6 +1072,19 @@ export function useOperationSync(): UseOperationSync {
                 newMax: newMaxSeq,
               });
 
+              // 🔧 CRITICAL FIX: If cloud has sequences beyond our lastSyncSequence,
+              // advance lastSyncSequence to cloudMaxSeq since those are already in cloud
+              // This fills the gap and allows the reassigned sequence to advance properly
+              const currentLastSynced = operationLog.current.getLogState().lastSyncSequence;
+              if (cloudMaxSeq > currentLastSynced) {
+                await operationLog.current.markSyncedUpTo(cloudMaxSeq);
+                logger.info('🔧 ADVANCED SYNC POINTER: Filled gap from other devices', {
+                  oldLastSynced: currentLastSynced,
+                  newLastSynced: cloudMaxSeq,
+                  gapSize: cloudMaxSeq - currentLastSynced,
+                });
+              }
+
               // Update sequence generator to avoid future collisions
               await setSequenceAsync(newMaxSeq);
 
@@ -1087,19 +1100,6 @@ export function useOperationSync(): UseOperationSync {
                 oldSequence: operation.sequence,
                 newSequence,
               });
-
-              // 🔧 CRITICAL FIX: Mark old sequence as synced to fill gap in continuous chain
-              // This prevents the marking logic from getting stuck waiting for the old sequence
-              // The operation with the new sequence will be tracked separately
-              const currentLastSynced = operationLog.current.getLogState().lastSyncSequence;
-              if (operation.sequence > currentLastSynced) {
-                // Add old sequence to successfulSequences so marking logic can advance
-                successfulSequences.push(operation.sequence);
-                logger.info('🔧 FILLED GAP: Marked old sequence as synced to maintain continuity:', {
-                  oldSequence: operation.sequence,
-                  newSequence,
-                });
-              }
 
               // Mark as needing immediate retry with new sequence
               await retryQueueManager.removeFromQueue(operation.sequence);
