@@ -28,7 +28,7 @@ type UseOperationSync = {
 
   // New operation-based methods
   submitOperation: (operation: Omit<Operation, 'id' | 'timestamp' | 'clientId' | 'sequence'>) => Promise<void>;
-  subscribeToOperations: (onOperations: (operations: Operation[]) => void) => () => void;
+  subscribeToOperations: (onOperations: (operations: Operation[], newState: AppState) => void) => () => void;
   forceSync: () => Promise<void>;
   getStateFromOperations: () => AppState;
 };
@@ -66,7 +66,7 @@ export function useOperationSync(): UseOperationSync {
   const subscriptionCleanup = useRef<(() => void) | null>(null);
 
   // State change listeners (for notifying App.tsx of local operations)
-  const stateChangeListeners = useRef<Set<(operations: Operation[]) => void>>(new Set());
+  const stateChangeListeners = useRef<Set<(operations: Operation[], newState: AppState) => void>>(new Set());
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -162,7 +162,7 @@ export function useOperationSync(): UseOperationSync {
         if (operations.length > 0) {
           stateChangeListeners.current.forEach(listener => {
             try {
-              listener(operations);
+              listener(operations, reconstructedState);
             } catch (err) {
               logger.error('Error in state change listener during init:', err);
             }
@@ -237,7 +237,7 @@ export function useOperationSync(): UseOperationSync {
               logger.info(`📤 BOOTSTRAP: Notifying ${stateChangeListeners.current.size} listeners`);
               stateChangeListeners.current.forEach(listener => {
                 try {
-                  listener(newOps);
+                  listener(newOps, newState);
                 } catch (err) {
                   logger.error('Error in state change listener:', err);
                 }
@@ -354,9 +354,10 @@ export function useOperationSync(): UseOperationSync {
     setCurrentState(newState);
 
     // Notify all listeners of state change (critical for App.tsx to update!)
+    // 🔧 CRITICAL FIX: Pass the fresh newState to listeners to avoid React state race condition
     stateChangeListeners.current.forEach(listener => {
       try {
-        listener([persistedOperation]);
+        listener([persistedOperation], newState);
       } catch (err) {
         logger.error('Error in state change listener:', err);
       }
@@ -614,7 +615,7 @@ export function useOperationSync(): UseOperationSync {
 
   // Subscribe to operation changes
   const subscribeToOperations = useCallback(
-    (onOperations: (operations: Operation[]) => void) => {
+    (onOperations: (operations: Operation[], newState: AppState) => void) => {
       if (!user || !supabase) {
         logger.warn('⚠️ SUBSCRIPTION SKIPPED:', {
           hasUser: !!user,
@@ -639,17 +640,18 @@ export function useOperationSync(): UseOperationSync {
             return acc;
           }, {} as Record<string, number>));
 
-          // Log the current reconstructed state
-          const currentState = operationLog.current ? reconstructState(INITIAL_STATE, existingOps) : INITIAL_STATE;
+          // 🔧 CRITICAL FIX: Reconstruct state from existing operations and pass to listener
+          // This avoids React state race condition where currentState hasn't updated yet
+          const freshState = operationLog.current ? reconstructState(INITIAL_STATE, existingOps) : INITIAL_STATE;
           logger.info('📊 SUBSCRIPTION: Current state from operations:', {
-            addresses: currentState.addresses?.length || 0,
-            completions: currentState.completions?.length || 0,
-            arrangements: currentState.arrangements?.length || 0,
-            daySessions: currentState.daySessions?.length || 0,
+            addresses: freshState.addresses?.length || 0,
+            completions: freshState.completions?.length || 0,
+            arrangements: freshState.arrangements?.length || 0,
+            daySessions: freshState.daySessions?.length || 0,
           });
 
           try {
-            onOperations(existingOps);
+            onOperations(existingOps, freshState);
             logger.info('✅ SUBSCRIPTION: Successfully called onOperations callback');
           } catch (err) {
             logger.error('❌ SUBSCRIPTION: Error notifying subscriber with existing operations:', err);
@@ -709,10 +711,11 @@ export function useOperationSync(): UseOperationSync {
                 }
 
                 // Reconstruct state and notify
+                // 🔧 CRITICAL FIX: Pass the fresh newState to listener to avoid React state race condition
                 const allOperations = operationLog.current.getAllOperations();
                 const newState = reconstructState(INITIAL_STATE, allOperations);
                 setCurrentState(newState);
-                onOperations(newOps);
+                onOperations(newOps, newState);
 
                 logger.info('✅ REAL-TIME SYNC: State updated with remote operation');
               } else {

@@ -12,16 +12,19 @@ export function useUnifiedSync() {
 
   // Wrap subscribeToOperations to match the expected interface
   const subscribeToData = (onChange: React.Dispatch<React.SetStateAction<AppState>>): (() => void) => {
-    return operationSync.subscribeToOperations((_operations) => {
-      // Reconstruct state from operations and notify
-      const state = operationSync.getStateFromOperations();
+    return operationSync.subscribeToOperations((_operations, newState) => {
+      // 🔧 CRITICAL FIX: Use the passed newState instead of calling getStateFromOperations()
+      // The newState parameter is the freshly computed state from ALL operations,
+      // reconstructed immediately after merging new operations.
+      // This avoids the React state race condition where getStateFromOperations() would
+      // return stale state (before React's async setState completes).
       console.log('📤 subscribeToData: Notifying App.tsx with state:', {
-        addresses: state.addresses?.length,
-        completions: state.completions?.length,
-        arrangements: state.arrangements?.length,
-        daySessions: state.daySessions?.length,
+        addresses: newState.addresses?.length,
+        completions: newState.completions?.length,
+        arrangements: newState.arrangements?.length,
+        daySessions: newState.daySessions?.length,
       });
-      onChange(state);
+      onChange(newState);
     });
   };
 
