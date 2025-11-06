@@ -367,6 +367,43 @@ export class OperationLogManager {
   }
 
   /**
+   * 🔧 CRITICAL FIX: Update an operation's sequence number (for sequence collision repair)
+   * Used when an operation fails to upload due to sequence collision with cloud
+   */
+  async updateOperationSequence(operationId: string, newSequence: number): Promise<void> {
+    const opIndex = this.log.operations.findIndex(op => op.id === operationId);
+    if (opIndex === -1) {
+      logger.error('❌ Cannot update sequence - operation not found:', operationId);
+      return;
+    }
+
+    const operation = this.log.operations[opIndex];
+    const oldSequence = operation.sequence;
+
+    // Update the operation's sequence
+    this.log.operations[opIndex] = {
+      ...operation,
+      sequence: newSequence,
+    };
+
+    // Update lastSequence if this is now the highest
+    this.log.lastSequence = Math.max(this.log.lastSequence, newSequence);
+
+    // Update checksum
+    this.log.checksum = this.computeChecksum();
+
+    // Persist changes
+    await this.persist();
+
+    logger.info('✅ Operation sequence updated:', {
+      operationId,
+      type: operation.type,
+      oldSequence,
+      newSequence,
+    });
+  }
+
+  /**
    * 🔧 ATOMIC: Add operations received from cloud sync
    * Handles merging remote operations with local ones - guaranteed all-or-nothing
    *
