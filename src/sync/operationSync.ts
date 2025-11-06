@@ -1088,6 +1088,19 @@ export function useOperationSync(): UseOperationSync {
                 newSequence,
               });
 
+              // 🔧 CRITICAL FIX: Mark old sequence as synced to fill gap in continuous chain
+              // This prevents the marking logic from getting stuck waiting for the old sequence
+              // The operation with the new sequence will be tracked separately
+              const currentLastSynced = operationLog.current.getLogState().lastSyncSequence;
+              if (operation.sequence > currentLastSynced) {
+                // Add old sequence to successfulSequences so marking logic can advance
+                successfulSequences.push(operation.sequence);
+                logger.info('🔧 FILLED GAP: Marked old sequence as synced to maintain continuity:', {
+                  oldSequence: operation.sequence,
+                  newSequence,
+                });
+              }
+
               // Mark as needing immediate retry with new sequence
               await retryQueueManager.removeFromQueue(operation.sequence);
               await retryQueueManager.addToQueue(updatedOperation, 'Sequence reassigned - ready for upload', undefined);
