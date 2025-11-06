@@ -109,7 +109,7 @@ type UseOperationSync = {
 
   // New operation-based methods
   submitOperation: (operation: Omit<Operation, 'id' | 'timestamp' | 'clientId' | 'sequence'>) => Promise<void>;
-  subscribeToOperations: (onOperations: (operations: Operation[]) => void) => () => void;
+  subscribeToOperations: (onOperations: (allOperations: Operation[]) => void) => () => void;
   forceSync: () => Promise<void>;
   getStateFromOperations: () => AppState;
   getOperationLogState: () => ReturnType<OperationLogManager['getLogState']> | null; // 🔧 FIX: Expose operation log state for restore operations
@@ -149,7 +149,8 @@ export function useOperationSync(): UseOperationSync {
   const subscriptionCleanup = useRef<(() => void) | null>(null);
 
   // State change listeners (for notifying App.tsx of local operations)
-  const stateChangeListeners = useRef<Set<(operations: Operation[]) => void>>(new Set());
+  // 🔧 CRITICAL FIX: Listeners receive ALL operations from the log, not just deltas
+  const stateChangeListeners = useRef<Set<(allOperations: Operation[]) => void>>(new Set());
 
   // forceSync will be defined later but we need a ref to it for the online/offline effect
   const forceSyncRef = useRef<(() => Promise<void>) | null>(null);
@@ -283,6 +284,7 @@ export function useOperationSync(): UseOperationSync {
         if (operations.length > 0) {
           stateChangeListeners.current.forEach(listener => {
             try {
+              // 🔧 CRITICAL FIX: Pass ALL operations so subscriber can reconstruct complete state
               listener(operations);
             } catch (err) {
               logger.error('Error in state change listener during init:', err);
@@ -518,9 +520,11 @@ export function useOperationSync(): UseOperationSync {
               setCurrentState(newState);
 
               // CRITICAL: Notify listeners so App.tsx updates UI!
+              // 🔧 CRITICAL FIX: Pass ALL operations from merged log, not just the delta
+              const allOperationsAfterMerge = operationLog.current.getAllOperations();
               for (const listener of stateChangeListeners.current) {
                 try {
-                  listener(mergedOps);
+                  listener(allOperationsAfterMerge);
                 } catch (err) {
                   logger.error('Error in state change listener:', err);
                 }
@@ -641,10 +645,12 @@ export function useOperationSync(): UseOperationSync {
               setCurrentState(newState);
 
               // CRITICAL: Notify listeners so App.tsx updates UI!
+              // 🔧 CRITICAL FIX: Pass ALL operations from log, not just newOps delta
               logger.info(`📤 BOOTSTRAP: Notifying ${stateChangeListeners.current.size} listeners`);
+              const allOperationsAfterBootstrap = operationLog.current.getAllOperations();
               stateChangeListeners.current.forEach(listener => {
                 try {
-                  listener(newOps);
+                  listener(allOperationsAfterBootstrap);
                 } catch (err) {
                   logger.error('Error in state change listener:', err);
                 }
@@ -800,9 +806,11 @@ export function useOperationSync(): UseOperationSync {
     setCurrentState(newState);
 
     // Notify all listeners of state change (critical for App.tsx to update!)
+    // 🔧 CRITICAL FIX: Pass ALL operations from log, not just the single new operation
+    const allOperationsAfterSubmit = operationLog.current.getAllOperations();
     stateChangeListeners.current.forEach(listener => {
       try {
-        listener([persistedOperation]);
+        listener(allOperationsAfterSubmit);
       } catch (err) {
         logger.error('Error in state change listener:', err);
       }
@@ -1461,7 +1469,8 @@ export function useOperationSync(): UseOperationSync {
                       operationLog.current!
                     );
                     setCurrentState(newState);
-                    onOperations(newOps);
+                    // 🔧 CRITICAL FIX: Pass ALL operations, not just newOps delta
+                    onOperations(allOperations);
 
                     logger.info('✅ REAL-TIME SYNC: State updated with remote operation');
                   } else {
