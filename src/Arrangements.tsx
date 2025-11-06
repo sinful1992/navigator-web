@@ -253,6 +253,13 @@ const ArrangementsComponent = function Arrangements({
     const arrangement = state.arrangements.find(arr => arr.id === id);
     if (!arrangement) return;
 
+    // Find current address index by searching for the address string
+    const currentIndex = state.addresses.findIndex(addr => addr.address === arrangement.address);
+    if (currentIndex === -1) {
+      alert(`Address "${arrangement.address}" is no longer in your current list. Please refresh or remove this arrangement.`);
+      return;
+    }
+
     // Update arrangement status to completed (defaulted)
     onUpdateArrangement(id, {
       status: "Completed",
@@ -260,7 +267,7 @@ const ArrangementsComponent = function Arrangements({
     });
 
     // Create completion record with Done outcome for defaulted arrangement
-    onComplete(arrangement.addressIndex, "Done", undefined, arrangement.id);
+    onComplete(currentIndex, "Done", undefined, arrangement.id);
   };
 
   // Mark arrangement as paid/completed
@@ -268,6 +275,13 @@ const ArrangementsComponent = function Arrangements({
     // Find the arrangement to get the address index
     const arrangement = state.arrangements.find(arr => arr.id === id);
     if (!arrangement) return;
+
+    // Find current address index by searching for the address string
+    const currentIndex = state.addresses.findIndex(addr => addr.address === arrangement.address);
+    if (currentIndex === -1) {
+      alert(`Address "${arrangement.address}" is no longer in your current list. Please refresh or remove this arrangement.`);
+      return;
+    }
 
     // Update payment count
     const paymentsMade = (arrangement.paymentsMade || 0) + 1;
@@ -286,7 +300,7 @@ const ArrangementsComponent = function Arrangements({
     const outcome: Outcome = (isRecurring && !isLastPayment) ? "ARR" : "PIF";
 
     // Create completion record with appropriate outcome and arrangement reference
-    onComplete(arrangement.addressIndex, outcome, amount, arrangement.id);
+    onComplete(currentIndex, outcome, amount, arrangement.id);
 
     // Create next payment arrangement if this is recurring and not the last payment
     if (isRecurring && !isLastPayment) {
@@ -298,7 +312,7 @@ const ArrangementsComponent = function Arrangements({
 
       const nextPaymentNumber = paymentsMade + 1;
       const nextArrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'> = {
-        addressIndex: arrangement.addressIndex,
+        addressIndex: currentIndex, // Use current index instead of stale one
         address: arrangement.address,
         customerName: arrangement.customerName,
         phoneNumber: arrangement.phoneNumber,
