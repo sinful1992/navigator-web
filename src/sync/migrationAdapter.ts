@@ -31,25 +31,19 @@ export function useUnifiedSync() {
 
   // Wrap subscribeToOperations to match the expected interface
   const subscribeToData = (onChange: React.Dispatch<React.SetStateAction<AppState>>): (() => void) => {
-    return operationSync.subscribeToOperations((_operations) => {
-      // 🔧 CRITICAL FIX: Only notify subscriber if we have actual operations
-      // This prevents race condition where currentState is still INITIAL_STATE during initialization
-      // Operations come from the operation log - if empty, wait for next update
-      if (!_operations || _operations.length === 0) {
-        logger.debug('📤 subscribeToData: Skipping notification - no operations yet (operation log still loading)');
-        return;
-      }
-
-      // 🔧 CRITICAL FIX #2: Reconstruct state from operations directly, NOT from currentState
-      // This avoids React setState race condition where currentState hasn't updated yet
-      // even though setCurrentState() was called. By reconstructing from _operations,
-      // we get the guaranteed correct state without depending on async state updates.
-      const state = reconstructState(INITIAL_STATE, _operations);
+    return operationSync.subscribeToOperations((allOperations) => {
+      // 🔧 CRITICAL FIX: Reconstruct state from ALL operations, not from React currentState
+      // The allOperations parameter now contains the COMPLETE operation history from the log,
+      // not just the delta/new operations. This avoids the race condition where React's
+      // async setState hasn't completed yet, causing stale state to be returned.
+      // By reconstructing from allOperations, we get the guaranteed correct state.
+      const state = reconstructState(INITIAL_STATE, allOperations);
       logger.debug('📤 subscribeToData: Notifying App.tsx with state:', {
         addresses: state.addresses?.length,
         completions: state.completions?.length,
         arrangements: state.arrangements?.length,
         daySessions: state.daySessions?.length,
+        operationCount: allOperations.length,
       });
       onChange(state);
     });
