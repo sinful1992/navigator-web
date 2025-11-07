@@ -67,14 +67,33 @@ function detectConflictBetween(
         const comp1 = op1.payload.completion;
         const comp2 = op2.payload.completion;
 
-        // Same address, same list version = conflict
+        // Same address, same list version - check if truly concurrent
         if (comp1.index === comp2.index && comp1.listVersion === comp2.listVersion) {
-          return {
-            operation1: op1,
-            operation2: op2,
-            conflictType: 'duplicate',
-            description: `Concurrent completion of address ${comp1.index}`,
-          };
+          const time1 = new Date(op1.timestamp).getTime();
+          const time2 = new Date(op2.timestamp).getTime();
+          const timeDiffMs = Math.abs(time1 - time2);
+
+          // Only treat as conflict if:
+          // 1. Completions happened very close in time (< 5 seconds)
+          // 2. AND they're from different devices
+          // This prevents false conflicts when user completes same address multiple times
+          // for different people at that address (common workflow)
+          if (timeDiffMs < 5000 && op1.clientId !== op2.clientId) {
+            return {
+              operation1: op1,
+              operation2: op2,
+              conflictType: 'duplicate',
+              description: `Concurrent completion of address ${comp1.index} (${timeDiffMs}ms apart)`,
+            };
+          }
+
+          // Sequential completions (> 5 seconds apart) or same device = not a conflict
+          // User visiting multiple people at the same address is normal workflow
+          logger.debug('Completions are sequential, not concurrent', {
+            index: comp1.index,
+            timeDiffMs,
+            sameDevice: op1.clientId === op2.clientId,
+          });
         }
       }
       break;
