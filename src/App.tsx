@@ -235,27 +235,9 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
   const isInitialLoadRef = React.useRef(true);
 
   React.useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        await initializeProtectionFlags();
-        if (!cancelled) {
-          logger.debug('✅ Protection flags cache initialized (hybrid cache + IndexedDB)');
-          protectionFlagsReadyRef.current = true;
-        }
-      } catch (err) {
-        if (!cancelled) {
-          logger.warn('⚠️ Failed to initialize protection flags cache:', err);
-          // Continue anyway - fallback to empty cache, operations will still work
-          protectionFlagsReadyRef.current = true;
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    // Protection flags use localStorage and are ready immediately (no initialization needed)
+    protectionFlagsReadyRef.current = true;
+    logger.debug('✅ Protection flags ready (localStorage-based)');
   }, []); // Run once on mount
 
   const {
