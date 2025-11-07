@@ -103,14 +103,33 @@ function detectConflictBetween(
         const arr1 = op1.payload;
         const arr2 = op2.payload;
 
-        // Same arrangement = concurrent edit
+        // Same arrangement - check if truly concurrent
         if (arr1.id === arr2.id) {
-          return {
-            operation1: op1,
-            operation2: op2,
-            conflictType: 'concurrent_edit',
-            description: `Concurrent edits to arrangement ${arr1.id}`,
-          };
+          const time1 = new Date(op1.timestamp).getTime();
+          const time2 = new Date(op2.timestamp).getTime();
+          const timeDiffMs = Math.abs(time1 - time2);
+
+          // Only treat as conflict if:
+          // 1. Updates happened very close in time (< 5 seconds)
+          // 2. AND they're from different devices
+          // This prevents false conflicts when one device completes an arrangement
+          // and it syncs to another device
+          if (timeDiffMs < 5000 && op1.clientId !== op2.clientId) {
+            return {
+              operation1: op1,
+              operation2: op2,
+              conflictType: 'concurrent_edit',
+              description: `Concurrent edits to arrangement ${arr1.id} (${timeDiffMs}ms apart)`,
+            };
+          }
+
+          // Sequential edits (> 5 seconds apart) or same device = not a conflict
+          // The later operation is just an update that should be applied
+          logger.debug('Arrangement updates are sequential, not concurrent', {
+            arr1Id: arr1.id,
+            timeDiffMs,
+            sameDevice: op1.clientId === op2.clientId,
+          });
         }
       }
       break;
