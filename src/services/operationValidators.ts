@@ -126,6 +126,7 @@ function validateOperationTypePayload(type: string, payload: Record<string, unkn
 
     case 'SESSION_START':
     case 'SESSION_END':
+    case 'SESSION_UPDATE':
       return ValidationSuccess(undefined);
 
     case 'ARRANGEMENT_CREATE':
