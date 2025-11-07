@@ -40,6 +40,14 @@ export interface UseCompletionStateReturn {
     numberOfCases?: number,
     enforcementFees?: number[]
   ) => Promise<string>;
+  completeHistorical: (
+    date: string,
+    address: string,
+    amount: string,
+    caseReference: string,
+    numberOfCases: number,
+    enforcementFees?: number[]
+  ) => Promise<string>;
   updateCompletion: (completionArrayIndex: number, updates: Partial<Completion>) => void;
   undo: (index: number) => void;
   pendingCompletions: Set<number>;
@@ -317,7 +325,7 @@ export function useCompletionState({
       });
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-      if (shouldSubmit && originalTimestamp) {
+      if (shouldSubmit && originalTimestamp && currentVersion !== undefined) {
         if (repositories?.completion) {
           // PHASE 2: Pass current version for conflict detection
           repositories.completion.updateCompletion(originalTimestamp, updates, currentVersion).catch(err => {
@@ -333,7 +341,7 @@ export function useCompletionState({
               expectedVersion: currentVersion,
             }
           }).catch(err => {
-            logger.error('Failed to submit completion update operation:', err);
+            logger.error('Failed to update completion update operation:', err);
           });
         }
       }
@@ -416,8 +424,111 @@ export function useCompletionState({
     [setBaseState, addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, repositories]
   );
 
+  /**
+   * Create a historical completion with custom date
+   * Used for recording payments received while off work
+   * - Creates completion with custom timestamp (end of selected day)
+   * - Uses index -1 to indicate historical entry (not tied to address list)
+   * - No time tracking for historical entries
+   * - Submits to cloud sync with COMPLETION_CREATE operation
+   */
+  const completeHistorical = React.useCallback(
+    async (
+      date: string,
+      address: string,
+      amount: string,
+      caseReference: string,
+      numberOfCases: number,
+      enforcementFees?: number[]
+    ): Promise<string> => {
+      // Validate inputs
+      if (!date || !address || !amount || !caseReference) {
+        throw new Error('All fields are required for historical PIF recording');
+      }
+
+      // Validate date format
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        throw new Error('Invalid date format');
+      }
+
+      const currentState = baseState;
+
+      // Create completion object using service
+      const completion = services?.completion
+        ? services.completion.createHistoricalCompletionObject(
+            {
+              address: address.trim(),
+              outcome: 'PIF',
+              amount,
+              listVersion: currentState.currentListVersion,
+              arrangementId: undefined,
+              caseReference,
+              numberOfCases,
+              enforcementFees,
+            },
+            date
+          )
+        : {
+            // Fallback when services not available
+            index: -1,
+            address: address.trim(),
+            lat: null,
+            lng: null,
+            outcome: 'PIF' as Outcome,
+            amount,
+            timestamp: new Date(`${date}T23:59:59`).toISOString(),
+            listVersion: currentState.currentListVersion,
+            arrangementId: undefined,
+            caseReference,
+            timeSpentSeconds: undefined,
+            numberOfCases,
+            enforcementFees,
+            version: 1,
+          };
+
+      const operationId = generateOperationId('create', 'completion', completion);
+
+      try {
+        // Apply optimistic and base state updates
+        addOptimisticUpdate('create', 'completion', completion, operationId);
+
+        setBaseState((s) => ({
+          ...s,
+          completions: [completion, ...s.completions],
+        }));
+
+        // 🔥 DELTA SYNC: Submit operation to cloud immediately
+        if (repositories?.completion) {
+          repositories.completion.saveCompletion(completion).catch(err => {
+            logger.error('Failed to save historical completion:', err);
+            // Don't throw - operation is saved locally and will retry
+          });
+        } else if (submitOperation) {
+          // Fallback to direct submission
+          submitOperation({
+            type: 'COMPLETION_CREATE',
+            payload: { completion }
+          }).catch(err => {
+            logger.error('Failed to submit historical completion operation:', err);
+            // Don't throw - operation is saved locally and will retry
+          });
+        }
+
+        logger.info(`📅 HISTORICAL PIF RECORDED: ${address} on ${date} - £${amount}`);
+
+        return operationId;
+      } catch (error) {
+        logger.error('Failed to create historical completion:', error);
+        throw error;
+      }
+    },
+    [baseState, addOptimisticUpdate, submitOperation, setBaseState, services, repositories]
+  );
+
   return {
     complete,
+    completeHistorical,
     updateCompletion,
     undo,
     pendingCompletions

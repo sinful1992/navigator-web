@@ -1,12 +1,11 @@
+// src/components/HistoricalPifModal.tsx
 import React from 'react';
 import { calculateEnforcementFee } from '../utils/bonusCalculator';
 
 type Props = {
-  initialAmount?: string;
-  initialCaseReference?: string;
-  initialNumberOfCases?: number;
-  initialEnforcementFees?: number[];
   onConfirm: (data: {
+    date: string; // ISO date string (YYYY-MM-DD)
+    address: string;
     amount: string;
     caseReference: string;
     numberOfCases: number;
@@ -16,21 +15,16 @@ type Props = {
   isLoading?: boolean;
 };
 
-export function PifDetailsModal({
-  initialAmount = '',
-  initialCaseReference = '',
-  initialNumberOfCases = 1,
-  initialEnforcementFees = [],
-  onConfirm,
-  onCancel,
-  isLoading = false
-}: Props) {
-  const [amount, setAmount] = React.useState(initialAmount);
-  const [caseReference, setCaseReference] = React.useState(initialCaseReference);
-  const [numberOfCases, setNumberOfCases] = React.useState(String(initialNumberOfCases));
-  const [enforcementFees, setEnforcementFees] = React.useState<string[]>(
-    initialEnforcementFees.length > 0 ? initialEnforcementFees.map(f => String(f)) : ['']
-  );
+export function HistoricalPifModal({ onConfirm, onCancel, isLoading = false }: Props) {
+  // Initialize with today's date
+  const today = new Date().toISOString().split('T')[0];
+
+  const [date, setDate] = React.useState(today);
+  const [address, setAddress] = React.useState('');
+  const [amount, setAmount] = React.useState('');
+  const [caseReference, setCaseReference] = React.useState('');
+  const [numberOfCases, setNumberOfCases] = React.useState('1');
+  const [enforcementFees, setEnforcementFees] = React.useState<string[]>(['']);
 
   // Auto-calculate enforcement fee for single case
   const calculatedSingleCaseFee = React.useMemo(() => {
@@ -63,6 +57,16 @@ export function PifDetailsModal({
     const caseRefNum = Number(caseReference);
 
     // Validation
+    if (!date) {
+      alert("Please select a date");
+      return;
+    }
+
+    if (!address || !address.trim()) {
+      alert("Please enter an address or case identifier");
+      return;
+    }
+
     if (!amount || !Number.isFinite(pifAmount) || pifAmount <= 0) {
       alert("Please enter a valid PIF amount");
       return;
@@ -103,16 +107,12 @@ export function PifDetailsModal({
         return;
       }
 
-      // Validate that number of cases is at least the number of enforcement fees
-      if (parsedFees.length > 0 && parsedFees.length > numCases) {
-        alert(`Number of cases (${numCases}) must be at least the number of enforcement fees (${parsedFees.length}). If you have ${parsedFees.length} cases with enforcement fees and additional linked cases, please increase the number of cases.`);
-        return;
-      }
-
       finalEnforcementFees = parsedFees.length > 0 ? parsedFees : undefined;
     }
 
     onConfirm({
+      date,
+      address: address.trim(),
       amount: pifAmount.toFixed(2),
       caseReference: caseReference.trim(),
       numberOfCases: numCases,
@@ -127,43 +127,76 @@ export function PifDetailsModal({
   };
 
   return (
-    <div className="pif-modal-overlay" onClick={handleOverlayClick}>
-      <div className="pif-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="pif-modal-header">
-          <h3>💷 Enter PIF Details</h3>
-          <button className="pif-close-btn" onClick={onCancel}>✕</button>
+    <div className="historical-pif-modal-overlay" onClick={handleOverlayClick}>
+      <div className="historical-pif-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="historical-pif-modal-header">
+          <h3>📅 Record Historical PIF</h3>
+          <button className="historical-pif-close-btn" onClick={onCancel}>✕</button>
         </div>
 
-        <div className="pif-modal-body">
+        <div className="historical-pif-modal-body">
+          {/* Date Picker */}
+          <div className="historical-pif-form-group">
+            <label htmlFor="historical-date">Payment Date *</label>
+            <input
+              id="historical-date"
+              type="date"
+              className="historical-pif-input"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              max={today}
+              autoFocus
+            />
+            <small className="historical-pif-hint">
+              Select the date when the payment was received
+            </small>
+          </div>
+
+          {/* Address/Case Identifier */}
+          <div className="historical-pif-form-group">
+            <label htmlFor="historical-address">Address/Case Identifier *</label>
+            <input
+              id="historical-address"
+              type="text"
+              className="historical-pif-input"
+              placeholder="e.g. 123 Main St or Case #12345"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              autoComplete="off"
+            />
+            <small className="historical-pif-hint">
+              Enter an address or identifier for this payment
+            </small>
+          </div>
+
           {/* PIF Amount */}
-          <div className="pif-form-group">
-            <label htmlFor="pif-amount">PIF Amount *</label>
-            <div className="pif-amount-wrapper">
-              <span className="pif-currency-symbol">£</span>
+          <div className="historical-pif-form-group">
+            <label htmlFor="historical-amount">PIF Amount *</label>
+            <div className="historical-pif-amount-wrapper">
+              <span className="historical-pif-currency-symbol">£</span>
               <input
-                id="pif-amount"
+                id="historical-amount"
                 type="number"
                 step="0.01"
                 min="0"
                 inputMode="decimal"
-                className="pif-input pif-amount-input"
+                className="historical-pif-input historical-pif-amount-input"
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 autoComplete="off"
-                autoFocus
               />
             </div>
           </div>
 
           {/* Case Reference */}
-          <div className="pif-form-group">
-            <label htmlFor="case-ref">Case Reference Number *</label>
+          <div className="historical-pif-form-group">
+            <label htmlFor="historical-case-ref">Case Reference Number *</label>
             <input
-              id="case-ref"
+              id="historical-case-ref"
               type="number"
               inputMode="numeric"
-              className="pif-input"
+              className="historical-pif-input"
               placeholder="e.g. 123456"
               value={caseReference}
               onChange={(e) => setCaseReference(e.target.value)}
@@ -172,29 +205,29 @@ export function PifDetailsModal({
           </div>
 
           {/* Number of Cases */}
-          <div className="pif-form-group">
-            <label htmlFor="num-cases">Number of Cases *</label>
+          <div className="historical-pif-form-group">
+            <label htmlFor="historical-num-cases">Number of Cases *</label>
             <input
-              id="num-cases"
+              id="historical-num-cases"
               type="number"
               inputMode="numeric"
-              className="pif-input"
+              className="historical-pif-input"
               placeholder="e.g. 1"
               min="1"
               value={numberOfCases}
               onChange={(e) => setNumberOfCases(e.target.value)}
               autoComplete="off"
             />
-            <small className="pif-hint">
+            <small className="historical-pif-hint">
               If 1 debtor has 3 linked cases, enter 3
             </small>
           </div>
 
           {/* Auto-calculated Enforcement Fee (Single Case) */}
           {Number(numberOfCases) === 1 && calculatedSingleCaseFee !== null && (
-            <div className="pif-info-box">
-              <div className="pif-info-title">✅ Enforcement Fee (Auto-calculated)</div>
-              <div className="pif-info-content">
+            <div className="historical-pif-info-box">
+              <div className="historical-pif-info-title">✅ Enforcement Fee (Auto-calculated)</div>
+              <div className="historical-pif-info-content">
                 <strong>£{calculatedSingleCaseFee.toFixed(2)}</strong>
                 <small style={{ display: 'block', marginTop: '0.25rem' }}>
                   Calculated automatically for single case based on debt amount
@@ -205,20 +238,20 @@ export function PifDetailsModal({
 
           {/* Enforcement Fees (Multiple Cases) */}
           {Number(numberOfCases) > 1 && (
-            <div className="pif-form-group">
+            <div className="historical-pif-form-group">
               <label>Enforcement Fees (Optional)</label>
-              <small className="pif-hint" style={{ marginBottom: '0.5rem', display: 'block' }}>
+              <small className="historical-pif-hint" style={{ marginBottom: '0.5rem', display: 'block' }}>
                 Add enforcement fees for cases that have them. Linked cases without fees receive £10 bonus each.
               </small>
 
               {enforcementFees.map((fee, index) => (
-                <div key={index} className="pif-fee-row">
+                <div key={index} className="historical-pif-fee-row">
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     inputMode="decimal"
-                    className="pif-input"
+                    className="historical-pif-input"
                     placeholder="e.g. 272.50"
                     value={fee}
                     onChange={(e) => {
@@ -231,7 +264,7 @@ export function PifDetailsModal({
                   {enforcementFees.length > 1 && (
                     <button
                       type="button"
-                      className="pif-btn pif-btn-danger-sm"
+                      className="historical-pif-btn historical-pif-btn-danger-sm"
                       onClick={() => {
                         const newFees = enforcementFees.filter((_, i) => i !== index);
                         setEnforcementFees(newFees);
@@ -246,15 +279,15 @@ export function PifDetailsModal({
 
               <button
                 type="button"
-                className="pif-btn pif-btn-secondary"
+                className="historical-pif-btn historical-pif-btn-secondary"
                 onClick={() => setEnforcementFees([...enforcementFees, ""])}
               >
                 ➕ Add Another Enf Fee
               </button>
 
               {numberOfCases && Number(numberOfCases) > 0 && (
-                <div className="pif-info-box" style={{ marginTop: '0.75rem' }}>
-                  <small className="pif-info-highlight">
+                <div className="historical-pif-info-box" style={{ marginTop: '0.75rem' }}>
+                  <small className="historical-pif-info-highlight">
                     ℹ️ {Math.max(0, Number(numberOfCases) - enforcementFees.filter(f => f && f.trim()).length)} linked case(s) (£10 bonus each)
                   </small>
                 </div>
@@ -263,10 +296,10 @@ export function PifDetailsModal({
           )}
         </div>
 
-        <div className="pif-modal-footer">
+        <div className="historical-pif-modal-footer">
           <button
             type="button"
-            className="pif-btn pif-btn-ghost"
+            className="historical-pif-btn historical-pif-btn-ghost"
             onClick={onCancel}
             disabled={isLoading}
           >
@@ -274,7 +307,7 @@ export function PifDetailsModal({
           </button>
           <button
             type="button"
-            className="pif-btn pif-btn-success"
+            className="historical-pif-btn historical-pif-btn-success"
             onClick={handleSubmit}
             disabled={isLoading}
           >
@@ -284,7 +317,7 @@ export function PifDetailsModal({
       </div>
 
       <style>{`
-        .pif-modal-overlay {
+        .historical-pif-modal-overlay {
           position: fixed;
           top: 0;
           left: 0;
@@ -297,15 +330,15 @@ export function PifDetailsModal({
           justify-content: center;
           padding: 1rem;
           z-index: 5000;
-          animation: pifFadeIn 0.2s ease;
+          animation: historicalPifFadeIn 0.2s ease;
         }
 
-        @keyframes pifFadeIn {
+        @keyframes historicalPifFadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
         }
 
-        .pif-modal {
+        .historical-pif-modal {
           background: var(--card-bg, white);
           border-radius: 16px;
           box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
@@ -313,10 +346,10 @@ export function PifDetailsModal({
           max-width: 550px;
           max-height: 90vh;
           overflow-y: auto;
-          animation: pifSlideUp 0.3s ease;
+          animation: historicalPifSlideUp 0.3s ease;
         }
 
-        @keyframes pifSlideUp {
+        @keyframes historicalPifSlideUp {
           from {
             opacity: 0;
             transform: translateY(20px);
@@ -327,24 +360,24 @@ export function PifDetailsModal({
           }
         }
 
-        .pif-modal-header {
+        .historical-pif-modal-header {
           padding: 1.5rem;
           border-bottom: 1px solid var(--border, #e5e7eb);
-          background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+          background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
           border-radius: 16px 16px 0 0;
           display: flex;
           align-items: center;
           justify-content: space-between;
         }
 
-        .pif-modal-header h3 {
+        .historical-pif-modal-header h3 {
           margin: 0;
           font-size: 1.25rem;
           font-weight: 600;
-          color: #065f46;
+          color: #1e40af;
         }
 
-        .pif-close-btn {
+        .historical-pif-close-btn {
           background: none;
           border: none;
           font-size: 1.5rem;
@@ -355,23 +388,23 @@ export function PifDetailsModal({
           line-height: 1;
         }
 
-        .pif-close-btn:hover {
+        .historical-pif-close-btn:hover {
           background: rgba(0,0,0,0.1);
         }
 
-        .pif-modal-body {
+        .historical-pif-modal-body {
           padding: 1.5rem;
         }
 
-        .pif-form-group {
+        .historical-pif-form-group {
           margin-bottom: 1.25rem;
         }
 
-        .pif-form-group:last-child {
+        .historical-pif-form-group:last-child {
           margin-bottom: 0;
         }
 
-        .pif-form-group label {
+        .historical-pif-form-group label {
           display: block;
           font-size: 0.875rem;
           font-weight: 600;
@@ -379,7 +412,7 @@ export function PifDetailsModal({
           margin-bottom: 0.5rem;
         }
 
-        .pif-input {
+        .historical-pif-input {
           width: 100%;
           padding: 0.75rem;
           border: 2px solid var(--border, #e5e7eb);
@@ -390,19 +423,23 @@ export function PifDetailsModal({
           transition: border-color 0.2s ease;
         }
 
-        .pif-input:focus {
+        .historical-pif-input:focus {
           outline: none;
-          border-color: #10b981;
-          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
-        .pif-amount-wrapper {
+        .historical-pif-input[type="date"] {
+          font-family: inherit;
+        }
+
+        .historical-pif-amount-wrapper {
           position: relative;
           display: flex;
           align-items: center;
         }
 
-        .pif-currency-symbol {
+        .historical-pif-currency-symbol {
           position: absolute;
           left: 1rem;
           font-size: 1.5rem;
@@ -411,7 +448,7 @@ export function PifDetailsModal({
           pointer-events: none;
         }
 
-        .pif-amount-input {
+        .historical-pif-amount-input {
           padding-left: 2.5rem !important;
           font-size: 1.5rem;
           font-weight: 700;
@@ -420,54 +457,54 @@ export function PifDetailsModal({
           border-color: #86efac;
         }
 
-        .pif-amount-input:focus {
+        .historical-pif-amount-input:focus {
           background: var(--input-bg, white);
           border-color: #10b981;
         }
 
-        .pif-hint {
+        .historical-pif-hint {
           font-size: 0.75rem;
           color: var(--gray-500, #6b7280);
           margin-top: 0.25rem;
           display: block;
         }
 
-        .pif-info-box {
+        .historical-pif-info-box {
           background: #eff6ff;
           border: 1px solid #bfdbfe;
           border-radius: 8px;
           padding: 1rem;
         }
 
-        .pif-info-title {
+        .historical-pif-info-title {
           font-weight: 600;
           color: #1e40af;
           margin-bottom: 0.5rem;
           font-size: 0.875rem;
         }
 
-        .pif-info-content {
+        .historical-pif-info-content {
           font-size: 0.938rem;
           color: #1e40af;
         }
 
-        .pif-info-highlight {
+        .historical-pif-info-highlight {
           font-size: 0.75rem;
           color: var(--primary, #4f46e5);
           font-weight: 600;
         }
 
-        .pif-fee-row {
+        .historical-pif-fee-row {
           display: flex;
           gap: 0.5rem;
           margin-bottom: 0.5rem;
         }
 
-        .pif-fee-row .pif-input {
+        .historical-pif-fee-row .historical-pif-input {
           flex: 1;
         }
 
-        .pif-modal-footer {
+        .historical-pif-modal-footer {
           display: flex;
           gap: 0.75rem;
           padding: 1.5rem;
@@ -476,7 +513,7 @@ export function PifDetailsModal({
           border-radius: 0 0 16px 16px;
         }
 
-        .pif-btn {
+        .historical-pif-btn {
           flex: 1;
           padding: 0.75rem 1.5rem;
           border-radius: 8px;
@@ -491,31 +528,31 @@ export function PifDetailsModal({
           gap: 0.5rem;
         }
 
-        .pif-btn:disabled {
+        .historical-pif-btn:disabled {
           opacity: 0.6;
           cursor: not-allowed;
         }
 
-        .pif-btn-ghost {
+        .historical-pif-btn-ghost {
           background: white;
           border: 2px solid var(--border, #e5e7eb);
           color: var(--text-primary, #1f2937);
         }
 
-        .pif-btn-ghost:hover:not(:disabled) {
+        .historical-pif-btn-ghost:hover:not(:disabled) {
           background: var(--gray-100, #f3f4f6);
         }
 
-        .pif-btn-success {
+        .historical-pif-btn-success {
           background: #10b981;
           color: white;
         }
 
-        .pif-btn-success:hover:not(:disabled) {
+        .historical-pif-btn-success:hover:not(:disabled) {
           background: #059669;
         }
 
-        .pif-btn-secondary {
+        .historical-pif-btn-secondary {
           width: 100%;
           margin-top: 0.5rem;
           background: var(--gray-100, #f3f4f6);
@@ -524,87 +561,87 @@ export function PifDetailsModal({
           padding: 0.625rem 1rem;
         }
 
-        .pif-btn-secondary:hover:not(:disabled) {
+        .historical-pif-btn-secondary:hover:not(:disabled) {
           background: var(--gray-200, #e5e7eb);
         }
 
-        .pif-btn-danger-sm {
+        .historical-pif-btn-danger-sm {
           flex: 0 0 auto;
           padding: 0.5rem 0.75rem;
           background: var(--danger, #ef4444);
           color: white;
         }
 
-        .pif-btn-danger-sm:hover:not(:disabled) {
+        .historical-pif-btn-danger-sm:hover:not(:disabled) {
           background: var(--danger-dark, #dc2626);
         }
 
         /* Dark mode */
-        .dark-mode .pif-modal {
+        .dark-mode .historical-pif-modal {
           background: var(--gray-100);
         }
 
-        .dark-mode .pif-modal-header {
-          background: linear-gradient(135deg, #065f46 0%, #047857 100%);
+        .dark-mode .historical-pif-modal-header {
+          background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
           border-color: var(--gray-300);
         }
 
-        .dark-mode .pif-modal-header h3 {
+        .dark-mode .historical-pif-modal-header h3 {
           color: white;
         }
 
-        .dark-mode .pif-close-btn {
+        .dark-mode .historical-pif-close-btn {
           color: white;
         }
 
-        .dark-mode .pif-close-btn:hover {
+        .dark-mode .historical-pif-close-btn:hover {
           background: rgba(255,255,255,0.1);
         }
 
-        .dark-mode .pif-input {
+        .dark-mode .historical-pif-input {
           background: var(--gray-200);
           border-color: var(--gray-400);
           color: var(--gray-900);
         }
 
-        .dark-mode .pif-amount-input {
+        .dark-mode .historical-pif-amount-input {
           background: linear-gradient(135deg, #065f46 0%, #047857 100%);
           color: white;
         }
 
-        .dark-mode .pif-currency-symbol {
+        .dark-mode .historical-pif-currency-symbol {
           color: white;
         }
 
-        .dark-mode .pif-info-box {
+        .dark-mode .historical-pif-info-box {
           background: var(--blue-900, #1e3a8a);
           border-color: var(--blue-700, #1d4ed8);
         }
 
-        .dark-mode .pif-info-title {
+        .dark-mode .historical-pif-info-title {
           color: var(--blue-200, #bfdbfe);
         }
 
-        .dark-mode .pif-info-content {
+        .dark-mode .historical-pif-info-content {
           color: var(--blue-200, #bfdbfe);
         }
 
-        .dark-mode .pif-modal-footer {
+        .dark-mode .historical-pif-modal-footer {
           background: var(--gray-200);
           border-color: var(--gray-300);
         }
 
         @media (max-width: 640px) {
-          .pif-modal {
+          .historical-pif-modal {
             margin: 0.5rem;
             max-height: 95vh;
           }
 
-          .pif-modal-footer {
+          .historical-pif-modal-footer {
             flex-direction: column;
           }
 
-          .pif-btn {
+          .historical-pif-btn {
             width: 100%;
           }
         }

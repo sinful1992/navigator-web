@@ -1,8 +1,6 @@
 // src/sync/conflictResolution.ts - Conflict resolution for concurrent operations
-// PHASE 1.3: Vector clock-based conflict detection and resolution
 import type { Operation } from './operations';
 import type { AppState } from '../types';
-import { OperationLogManager } from './operationLog';
 import { logger } from '../utils/logger';
 
 /**
@@ -25,73 +23,17 @@ export type ConflictResolution = {
 };
 
 /**
- * PHASE 1.3: Conflict metrics for monitoring
- */
-export type ConflictMetrics = {
-  totalConflicts: number;
-  conflictsByType: Record<string, number>;
-  resolutionsByStrategy: Record<string, number>;
-  dataLossEvents: number;
-};
-
-/**
- * PHASE 1.3: Outcome priority for concurrent completions
- * DEPRECATED: Single-user app now keeps both operations instead of using priority
- * Kept for reference only - no longer used in conflict resolution
- */
-// const OUTCOME_PRIORITY: Record<string, number> = {
-//   'PIF': 4,      // Paid in Full - highest priority
-//   'ARR': 3,      // Arrangement - medium-high
-//   'Done': 2,     // Done - medium
-//   'DA': 1,       // Did not attend - lowest priority
-// };
-
-/**
- * PHASE 1.3: Global conflict metrics
- */
-let conflictMetrics: ConflictMetrics = {
-  totalConflicts: 0,
-  conflictsByType: {},
-  resolutionsByStrategy: {},
-  dataLossEvents: 0,
-};
-
-/**
- * PHASE 1.3: Helper function to detect concurrency using vector clocks
- * Returns true if operations are concurrent (neither happened before the other)
- */
-function detectConcurrency(
-  op1: Operation,
-  op2: Operation,
-  manager?: OperationLogManager
-): boolean {
-  // If manager provided and both operations have vector clocks, use vector clock comparison
-  if (manager && op1.vectorClock && op2.vectorClock) {
-    const relationship = manager.compareVectorClocks(op1.vectorClock, op2.vectorClock);
-    return relationship === 'concurrent';
-  }
-
-  // Fallback to timestamp-based detection (weak indicator, but better than nothing)
-  // Operations are considered concurrent if timestamps are within 1 second
-  const time1 = new Date(op1.timestamp).getTime();
-  const time2 = new Date(op2.timestamp).getTime();
-  return Math.abs(time1 - time2) < 1000;
-}
-
-/**
  * Detects conflicts between operations
- * PHASE 1.3: Now accepts optional OperationLogManager for vector clock comparison
  */
 export function detectConflicts(
   operation: Operation,
   existingOperations: Operation[],
-  _currentState: AppState,
-  manager?: OperationLogManager
+  _currentState: AppState
 ): OperationConflict[] {
   const conflicts: OperationConflict[] = [];
 
   for (const existing of existingOperations) {
-    const conflict = detectConflictBetween(operation, existing, _currentState, manager);
+    const conflict = detectConflictBetween(operation, existing, _currentState);
     if (conflict) {
       conflicts.push(conflict);
     }
@@ -102,13 +44,11 @@ export function detectConflicts(
 
 /**
  * Detects conflict between two specific operations
- * PHASE 1.3: Uses vector clocks for more reliable concurrency detection
  */
 function detectConflictBetween(
   op1: Operation,
   op2: Operation,
-  _currentState: AppState,
-  manager?: OperationLogManager
+  _currentState: AppState
 ): OperationConflict | null {
   // Same operation ID = exact duplicate
   if (op1.id === op2.id) {
@@ -127,36 +67,51 @@ function detectConflictBetween(
         const comp1 = op1.payload.completion;
         const comp2 = op2.payload.completion;
 
-        // Same address, same list version = potential conflict
+        // Same address, same list version - check if truly concurrent
         if (comp1.index === comp2.index && comp1.listVersion === comp2.listVersion) {
-          // PHASE 1.3: Check if these completions are actually concurrent
-          // If they're causally related, only one truly happened at this address
-          const isConcurrent = detectConcurrency(op1, op2, manager);
+          const time1 = new Date(op1.timestamp).getTime();
+          const time2 = new Date(op2.timestamp).getTime();
+          const timeDiffMs = Math.abs(time1 - time2);
 
-          if (isConcurrent) {
+          // Only treat as conflict if:
+          // 1. Completions happened very close in time (< 5 seconds)
+          // 2. AND they're from different devices
+          // This prevents false conflicts when user completes same address multiple times
+          // for different people at that address (common workflow)
+          if (timeDiffMs < 5000 && op1.clientId !== op2.clientId) {
             return {
               operation1: op1,
               operation2: op2,
               conflictType: 'duplicate',
-              description: `Concurrent completion of address ${comp1.index}`,
+              description: `Concurrent completion of address ${comp1.index} (${timeDiffMs}ms apart)`,
             };
           }
+
+          // Sequential completions (> 5 seconds apart) or same device = not a conflict
+          // User visiting multiple people at the same address is normal workflow
+          logger.debug('Completions are sequential, not concurrent', {
+            index: comp1.index,
+            timeDiffMs,
+            sameDevice: op1.clientId === op2.clientId,
+          });
         }
       }
       break;
 
     case 'ACTIVE_INDEX_SET':
       if (op2.type === 'ACTIVE_INDEX_SET') {
-        // PHASE 1.3: Use vector clocks for reliable concurrency detection
-        // Vector clocks are more reliable than sequence proximity
-        const isConcurrent = detectConcurrency(op1, op2, manager);
+        // Concurrent active index changes
+        // Use sequence difference instead of time - more reliable for detecting conflicts
+        const sequenceDiff = Math.abs(op1.sequence - op2.sequence);
 
-        if (isConcurrent) {
+        // If sequences are very close (within 5 operations), consider it a race condition
+        // This is more reliable than time-based detection
+        if (sequenceDiff < 5) {
           return {
             operation1: op1,
             operation2: op2,
             conflictType: 'race_condition',
-            description: `Concurrent active index changes (detected via vector clock)`,
+            description: `Concurrent active index changes (sequence diff: ${sequenceDiff})`,
           };
         }
       }
@@ -167,14 +122,33 @@ function detectConflictBetween(
         const arr1 = op1.payload;
         const arr2 = op2.payload;
 
-        // Same arrangement = concurrent edit
+        // Same arrangement - check if truly concurrent
         if (arr1.id === arr2.id) {
-          return {
-            operation1: op1,
-            operation2: op2,
-            conflictType: 'concurrent_edit',
-            description: `Concurrent edits to arrangement ${arr1.id}`,
-          };
+          const time1 = new Date(op1.timestamp).getTime();
+          const time2 = new Date(op2.timestamp).getTime();
+          const timeDiffMs = Math.abs(time1 - time2);
+
+          // Only treat as conflict if:
+          // 1. Updates happened very close in time (< 5 seconds)
+          // 2. AND they're from different devices
+          // This prevents false conflicts when one device completes an arrangement
+          // and it syncs to another device
+          if (timeDiffMs < 5000 && op1.clientId !== op2.clientId) {
+            return {
+              operation1: op1,
+              operation2: op2,
+              conflictType: 'concurrent_edit',
+              description: `Concurrent edits to arrangement ${arr1.id} (${timeDiffMs}ms apart)`,
+            };
+          }
+
+          // Sequential edits (> 5 seconds apart) or same device = not a conflict
+          // The later operation is just an update that should be applied
+          logger.debug('Arrangement updates are sequential, not concurrent', {
+            arr1Id: arr1.id,
+            timeDiffMs,
+            sameDevice: op1.clientId === op2.clientId,
+          });
         }
       }
       break;
@@ -202,26 +176,21 @@ function detectConflictBetween(
 
 /**
  * Resolves conflicts using deterministic rules
- * PHASE 1.3: Now accepts optional OperationLogManager for vector clock-aware resolution
  */
 export function resolveConflicts(
   conflicts: OperationConflict[],
-  _currentState: AppState,
-  manager?: OperationLogManager
+  _currentState: AppState
 ): ConflictResolution {
   const resolvedOperations: Operation[] = [];
   const rejectedOperations: Operation[] = [];
   const transformedOperations: Operation[] = [];
 
   for (const conflict of conflicts) {
-    const resolution = resolveConflict(conflict, _currentState, manager);
+    const resolution = resolveConflict(conflict, _currentState);
 
     resolvedOperations.push(...resolution.resolvedOperations);
     rejectedOperations.push(...resolution.rejectedOperations);
     transformedOperations.push(...resolution.transformedOperations);
-
-    // PHASE 1.3: Track conflict metrics
-    trackConflict(conflict, resolution);
   }
 
   return {
@@ -233,12 +202,10 @@ export function resolveConflicts(
 
 /**
  * Resolves a single conflict using type-specific rules
- * PHASE 1.3: Enhanced with vector clock-aware resolution strategies
  */
 function resolveConflict(
   conflict: OperationConflict,
-  _currentState: AppState,
-  manager?: OperationLogManager
+  _currentState: AppState
 ): ConflictResolution {
   const { operation1: op1, operation2: op2, conflictType } = conflict;
 
@@ -251,17 +218,9 @@ function resolveConflict(
 
   switch (conflictType) {
     case 'duplicate':
-      // PHASE 1.4: For concurrent completions, keep both (single-user app)
-      if (op1.type === 'COMPLETION_CREATE' && op2.type === 'COMPLETION_CREATE') {
-        return resolveConcurrentCompletions(op1, op2);
-      }
       return resolveDuplicateConflict(op1, op2);
 
     case 'race_condition':
-      // PHASE 1.3: For concurrent active index, use vector clock causality
-      if (op1.type === 'ACTIVE_INDEX_SET' && op2.type === 'ACTIVE_INDEX_SET') {
-        return resolveConcurrentActiveIndex(op1, op2, manager);
-      }
       return resolveRaceCondition(op1, op2);
 
     case 'concurrent_edit':
@@ -278,149 +237,6 @@ function resolveConflict(
         transformedOperations: [],
       };
   }
-}
-
-/**
- * PHASE 1.4: Single-User App Fix - Never Reject Completions
- *
- * For a single-user app, concurrent completions are not a conflict:
- * - If user completes on Device A, they see it's done
- * - User won't complete same address on Device B (they see it exists)
- * - Both operations are legitimate and should be preserved
- * - Reducer handles duplicates by keeping latest completion per address
- *
- * This fixes data loss where ~494 completions were being rejected permanently.
- */
-function resolveConcurrentCompletions(
-  op1: Operation,
-  op2: Operation
-): ConflictResolution {
-  // Type guard to ensure we're working with COMPLETION_CREATE operations
-  if (op1.type !== 'COMPLETION_CREATE' || op2.type !== 'COMPLETION_CREATE') {
-    return resolveRaceCondition(op1, op2);
-  }
-
-  const comp1 = op1.payload.completion;
-  const comp2 = op2.payload.completion;
-
-  // SINGLE-USER APP FIX: Keep both operations, never reject
-  logger.info('Single-user app: Keeping both concurrent completions (no rejection)', {
-    address: comp1.index,
-    outcome1: comp1.outcome,
-    outcome2: comp2.outcome,
-    timestamp1: op1.timestamp,
-    timestamp2: op2.timestamp,
-  });
-
-  trackConflictMetric('resolution_strategy', 'single_user_keep_both');
-
-  // Return both as resolved - never reject
-  // Reducer will handle by showing latest completion per address
-  return {
-    resolvedOperations: [op1, op2],
-    rejectedOperations: [],
-    transformedOperations: [],
-  };
-}
-
-/**
- * PHASE 1.3: Resolve concurrent active index changes
- * Uses vector clock causality to determine correct operation order
- */
-function resolveConcurrentActiveIndex(
-  op1: Operation,
-  op2: Operation,
-  manager?: OperationLogManager
-): ConflictResolution {
-  // Type guard to ensure we're working with ACTIVE_INDEX_SET operations
-  if (op1.type !== 'ACTIVE_INDEX_SET' || op2.type !== 'ACTIVE_INDEX_SET') {
-    return resolveRaceCondition(op1, op2);
-  }
-
-  // Try to use vector clock causality if available
-  if (manager && op1.vectorClock && op2.vectorClock) {
-    const relationship = manager.compareVectorClocks(op1.vectorClock, op2.vectorClock);
-
-    if (relationship === 'before') {
-      // op1 happened before op2 - apply op2 (it came later)
-      logger.info('Resolved concurrent active index by vector clock causality:', {
-        winner: op2.payload.index,
-        loser: op1.payload.index,
-        reason: 'op2 happened after op1',
-      });
-
-      trackConflictMetric('resolution_strategy', 'causality_based');
-
-      return {
-        resolvedOperations: [op2],
-        rejectedOperations: [op1],
-        transformedOperations: [],
-      };
-    } else if (relationship === 'after') {
-      logger.info('Resolved concurrent active index by vector clock causality:', {
-        winner: op1.payload.index,
-        loser: op2.payload.index,
-        reason: 'op1 happened after op2',
-      });
-
-      trackConflictMetric('resolution_strategy', 'causality_based');
-
-      return {
-        resolvedOperations: [op1],
-        rejectedOperations: [op2],
-        transformedOperations: [],
-      };
-    }
-    // If concurrent, fall through to timestamp tiebreaker
-  }
-
-  // Concurrent: use timestamp (latest active index wins)
-  const time1 = new Date(op1.timestamp).getTime();
-  const time2 = new Date(op2.timestamp).getTime();
-
-  const winner = time1 > time2 ? op1 : op2;
-  const loser = winner === op1 ? op2 : op1;
-
-  logger.warn('Resolved concurrent active index by timestamp:', {
-    winner: winner.payload.index,
-    loser: loser.payload.index,
-  });
-
-  trackConflictMetric('resolution_strategy', 'timestamp_latest');
-
-  return {
-    resolvedOperations: [winner],
-    rejectedOperations: [loser],
-    transformedOperations: [],
-  };
-}
-
-/**
- * PHASE 1.3: Track conflict metrics for monitoring
- */
-function trackConflict(conflict: OperationConflict, resolution: ConflictResolution): void {
-  conflictMetrics.totalConflicts++;
-  conflictMetrics.conflictsByType[conflict.conflictType] =
-    (conflictMetrics.conflictsByType[conflict.conflictType] || 0) + 1;
-
-  if (resolution.rejectedOperations.length > 0) {
-    conflictMetrics.dataLossEvents++;
-  }
-
-  logger.debug('Conflict tracked:', {
-    type: conflict.conflictType,
-    resolved: resolution.resolvedOperations.length,
-    rejected: resolution.rejectedOperations.length,
-  });
-}
-
-/**
- * PHASE 1.3: Track specific conflict resolution metric
- */
-function trackConflictMetric(category: string, strategy: string): void {
-  const key = `${category}:${strategy}`;
-  conflictMetrics.resolutionsByStrategy[key] =
-    (conflictMetrics.resolutionsByStrategy[key] || 0) + 1;
 }
 
 /**
@@ -552,12 +368,10 @@ function resolveDependencyViolation(
 
 /**
  * Batch process operations with conflict resolution
- * PHASE 1.3: Now accepts optional OperationLogManager for vector clock-aware resolution
  */
 export function processOperationsWithConflictResolution(
   operations: Operation[],
-  currentState: AppState,
-  manager?: OperationLogManager
+  currentState: AppState
 ): {
   validOperations: Operation[];
   conflictsResolved: number;
@@ -572,14 +386,14 @@ export function processOperationsWithConflictResolution(
 
   for (const operation of sortedOps) {
     // Check for conflicts with already processed operations
-    const conflicts = detectConflicts(operation, processed, currentState, manager);
+    const conflicts = detectConflicts(operation, processed, currentState);
 
     if (conflicts.length === 0) {
       // No conflicts - accept the operation
       processed.push(operation);
     } else {
       // Resolve conflicts
-      const resolution = resolveConflicts(conflicts, currentState, manager);
+      const resolution = resolveConflicts(conflicts, currentState);
 
       processed.push(...resolution.resolvedOperations);
       processed.push(...resolution.transformedOperations);
@@ -593,24 +407,5 @@ export function processOperationsWithConflictResolution(
     validOperations: processed,
     conflictsResolved,
     operationsRejected: rejected.length,
-  };
-}
-
-/**
- * PHASE 1.3: Get current conflict metrics for monitoring
- */
-export function getConflictMetrics(): ConflictMetrics {
-  return { ...conflictMetrics };
-}
-
-/**
- * PHASE 1.3: Reset conflict metrics (useful for testing)
- */
-export function resetConflictMetrics(): void {
-  conflictMetrics = {
-    totalConflicts: 0,
-    conflictsByType: {},
-    resolutionsByStrategy: {},
-    dataLossEvents: 0,
   };
 }

@@ -6,6 +6,7 @@ import { useSettingsDropdown } from '../hooks/useSettingsDropdown';
 import { ReminderSettings } from './ReminderSettings';
 import { BonusSettingsModal } from './BonusSettingsModal';
 import { SyncDebugModal } from './SyncDebugModal';
+import { SyncRepairPanel } from './SyncRepairPanel';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import type { ReminderSettings as ReminderSettingsType, BonusSettings } from '../types';
 import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
@@ -39,6 +40,8 @@ interface SettingsDropdownProps {
   hasOwnershipIssue?: boolean;
   appState?: AppState;
   userEmail?: string;
+  userId?: string;
+  deviceId?: string;
 
   // New props for consolidated functionality
   onImportExcel?: (file: File) => void;
@@ -67,6 +70,8 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   hasOwnershipIssue,
   appState,
   userEmail,
+  userId,
+  deviceId,
   onImportExcel,
   onRestoreBackup,
   onManualSync,
@@ -283,6 +288,14 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
               {onManualSync && (
                 <div className="modern-subsection">
                   <SubsectionTitle>Cloud Sync</SubsectionTitle>
+
+                  {/* Sync Repair Panel - Sequence Collision Diagnostics */}
+                  {userId && deviceId && (
+                    <div style={{ marginBottom: '1rem' }}>
+                      <SyncRepairPanel userId={userId} deviceId={deviceId} />
+                    </div>
+                  )}
+
                   <SettingsActionButton
                     icon={isSyncing ? "⟳" : "🔄"}
                     text={isSyncing ? "Syncing..." : "Sync Now"}

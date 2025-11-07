@@ -2,7 +2,6 @@
 // PHASE 1.3: Enhanced with vector clock-based conflict resolution
 import type { AppState } from '../types';
 import type { Operation } from './operations';
-import { OperationLogManager } from './operationLog';
 import { processOperationsWithConflictResolution } from './conflictResolution';
 import { logger } from '../utils/logger';
 
@@ -500,8 +499,7 @@ export function reconstructState(
  */
 export function reconstructStateWithConflictResolution(
   initialState: AppState,
-  operations: Operation[],
-  manager?: OperationLogManager
+  operations: Operation[]
 ): AppState {
   const reconstructionInfo = {
     totalOperations: operations.length,
@@ -512,7 +510,7 @@ export function reconstructStateWithConflictResolution(
 
   // Apply conflict resolution
   const { validOperations, conflictsResolved, operationsRejected } =
-    processOperationsWithConflictResolution(operations, initialState, manager);
+    processOperationsWithConflictResolution(operations, initialState);
 
   const conflictInfo = {
     conflictsResolved,

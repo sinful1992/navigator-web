@@ -16,6 +16,7 @@ import {
 import { DEFAULT_BONUS_SETTINGS } from "./utils/bonusCalculator";
 import {
   setProtectionFlag,
+  clearProtectionFlag,
 } from "./utils/protectionFlags";
 // Extracted hooks
 import { usePersistedState } from "./hooks/usePersistedState";
@@ -468,6 +469,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
   }, [submitOperation]);
 
   const updateSession = React.useCallback((date: string, updates: Partial<DaySession>, createIfMissing: boolean = false) => {
+    // 🔧 CRITICAL FIX: Set protection flag BEFORE state mutation to prevent race condition
+    setProtectionFlag('navigator_session_protection');
+
     setBaseState((s: AppState) => {
       const sessionIndex = s.daySessions.findIndex((session: DaySession) => session.date === date);
 
@@ -516,9 +520,16 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       submitOperation({
         type: 'SESSION_UPDATE',
         payload: { date, updates }
-      }).catch(err => {
-        logger.error('Failed to submit session update operation:', err);
-      });
+      })
+        .then(() => {
+          // Clear protection flag after successful submission
+          clearProtectionFlag('navigator_session_protection');
+        })
+        .catch(err => {
+          logger.error('Failed to submit session update operation:', err);
+          // Clear protection flag even on error
+          clearProtectionFlag('navigator_session_protection');
+        });
     }
   }, [submitOperation]);
 
@@ -973,6 +984,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
     // Completion management
     complete: completionState.complete,
+    completeHistorical: completionState.completeHistorical,
     updateCompletion: completionState.updateCompletion,
     undo: completionState.undo,
     pendingCompletions: completionState.pendingCompletions,

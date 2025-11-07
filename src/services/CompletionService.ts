@@ -38,6 +38,31 @@ export class CompletionService {
   }
 
   /**
+   * Create historical completion object with custom date
+   * Used for recording payments received while off work
+   * @param data - Completion data without timestamp
+   * @param date - Custom date in YYYY-MM-DD format
+   * @returns Completion object with custom timestamp (end of day)
+   */
+  createHistoricalCompletionObject(
+    data: Omit<Completion, 'timestamp' | 'timeSpentSeconds' | 'index'> & { address: string },
+    date: string
+  ): Completion {
+    // Create timestamp at end of day (23:59:59) in local timezone
+    const timestampISO = new Date(`${date}T23:59:59`).toISOString();
+
+    return {
+      index: -1, // Special index for historical completions (not tied to current list)
+      lat: null,
+      lng: null,
+      ...data,
+      timestamp: timestampISO,
+      timeSpentSeconds: undefined, // No time tracking for historical entries
+      version: 1, // Start with version 1 for new completions
+    };
+  }
+
+  /**
    * Calculate time spent in seconds
    */
   calculateTimeSpent(startTime: string): number {

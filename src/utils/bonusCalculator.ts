@@ -163,18 +163,34 @@ export function calculateComplexBonus(
 
     // Check if we have individual enforcement fees
     if (completion.enforcementFees && completion.enforcementFees.length > 0) {
-      // Calculate total enforcement fees from array
-      const totalEnforcementFees = completion.enforcementFees.reduce((sum, fee) => sum + fee, 0);
+      // NEW: Calculate bonus for each enforcement fee individually
+      for (const enfFee of completion.enforcementFees) {
+        // Calculate debt for this specific enforcement fee
+        // D = E - 235, then reverse to get original debt using enforcement fee formula
+        // If E > 235, then D > 1500, so: E = 235 + 0.075 × (D - 1500)
+        // Solving: D = (E - 235) / 0.075 + 1500
+        let debt: number;
+        if (enfFee <= 235) {
+          debt = 1000; // Assume mid-range debt for standard enforcement fee
+        } else {
+          debt = (enfFee - 235) / 0.075 + 1500;
+        }
 
-      // Use amount (total collected) as authoritative source to calculate debt
-      const debt = calculateDebtFromTotal(amount, actualCases, totalEnforcementFees);
+        // Calculate bonus based on debt
+        if (debt > largePifThreshold) {
+          const additionalBonus = largePifPercentage * (debt - largePifThreshold);
+          totalBonus += Math.min(basePifBonus + additionalBonus, largePifCap);
+        } else {
+          totalBonus += basePifBonus;
+        }
+      }
 
-      // Calculate bonus based on debt (one bonus per debtor, not per case)
-      if (debt > largePifThreshold) {
-        const additionalBonus = largePifPercentage * (debt - largePifThreshold);
-        totalBonus += Math.min(basePifBonus + additionalBonus, largePifCap);
-      } else {
-        totalBonus += basePifBonus;
+      // Add bonus for linked cases (cases without enforcement fees)
+      // Safety check: if actualCases < enforcementFees.length, assume actualCases = enforcementFees.length (no linked cases)
+      const adjustedCases = Math.max(actualCases, completion.enforcementFees.length);
+      const linkedCases = adjustedCases - completion.enforcementFees.length;
+      if (linkedCases > 0) {
+        totalBonus += linkedCases * linkedCaseBonus;
       }
     } else {
       // LEGACY: Backward compatibility - use old calculation method
@@ -369,18 +385,29 @@ export function calculateBonusBreakdown(
 
       // Check if we have individual enforcement fees
       if (completion.enforcementFees && completion.enforcementFees.length > 0) {
-        // Calculate total enforcement fees from array
-        const totalEnforcementFees = completion.enforcementFees.reduce((sum, fee) => sum + fee, 0);
+        // Calculate bonus for each enforcement fee
+        for (const enfFee of completion.enforcementFees) {
+          let debt: number;
+          if (enfFee <= 235) {
+            debt = 1000;
+          } else {
+            debt = (enfFee - 235) / 0.075 + 1500;
+          }
 
-        // Use amount (total collected) as authoritative source to calculate debt
-        debtAmount = calculateDebtFromTotal(amount, actualCases, totalEnforcementFees);
+          if (debt > largePifThreshold) {
+            const additionalBonus = largePifPercentage * (debt - largePifThreshold);
+            bonusForThisPif += Math.min(basePifBonus + additionalBonus, largePifCap);
+          } else {
+            bonusForThisPif += basePifBonus;
+          }
+        }
 
-        // Calculate bonus based on debt (one bonus per debtor, not per case)
-        if (debtAmount > largePifThreshold) {
-          const additionalBonus = largePifPercentage * (debtAmount - largePifThreshold);
-          bonusForThisPif = Math.min(basePifBonus + additionalBonus, largePifCap);
-        } else {
-          bonusForThisPif = basePifBonus;
+        // Add bonus for linked cases
+        // Safety check: if actualCases < enforcementFees.length, assume actualCases = enforcementFees.length (no linked cases)
+        const adjustedCases = Math.max(actualCases, completion.enforcementFees.length);
+        const linkedCases = adjustedCases - completion.enforcementFees.length;
+        if (linkedCases > 0) {
+          bonusForThisPif += linkedCases * linkedCaseBonus;
         }
       } else {
         // Legacy calculation

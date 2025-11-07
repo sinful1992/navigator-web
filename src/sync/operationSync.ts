@@ -4,6 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import type { AppState } from "../types";
 import type { Operation } from "./operations";
+import { nextSequence, setSequenceAsync } from "./operations";
 import { OperationLogManager, getOperationLog, clearOperationLogsForUser, getOperationLogStats } from "./operationLog";
 import { reconstructState, reconstructStateWithConflictResolution } from "./reducer";
 import { logger } from "../utils/logger";
@@ -109,7 +110,7 @@ type UseOperationSync = {
 
   // New operation-based methods
   submitOperation: (operation: Omit<Operation, 'id' | 'timestamp' | 'clientId' | 'sequence'>) => Promise<void>;
-  subscribeToOperations: (onOperations: (operations: Operation[]) => void) => () => void;
+  subscribeToOperations: (onOperations: (allOperations: Operation[]) => void) => () => void;
   forceSync: () => Promise<void>;
   getStateFromOperations: () => AppState;
   getOperationLogState: () => ReturnType<OperationLogManager['getLogState']> | null; // 🔧 FIX: Expose operation log state for restore operations
@@ -149,10 +150,16 @@ export function useOperationSync(): UseOperationSync {
   const subscriptionCleanup = useRef<(() => void) | null>(null);
 
   // State change listeners (for notifying App.tsx of local operations)
-  const stateChangeListeners = useRef<Set<(operations: Operation[]) => void>>(new Set());
+  // 🔧 CRITICAL FIX: Listeners receive ALL operations from the log, not just deltas
+  const stateChangeListeners = useRef<Set<(allOperations: Operation[]) => void>>(new Set());
 
   // forceSync will be defined later but we need a ref to it for the online/offline effect
   const forceSyncRef = useRef<(() => Promise<void>) | null>(null);
+
+  // 🔧 CRITICAL FIX: Use refs for user and supabase to avoid closure issues
+  // Callbacks created early (when user=null) must check CURRENT values, not closure values
+  const userRef = useRef<User | null>(null);
+  const supabaseRef = useRef(supabase);
 
   // 🔧 PERFORMANCE: Cache state reconstruction to avoid rebuilding entire state on every operation
   // - Tracks lastOperationCount to only rebuild when operations actually change
@@ -283,6 +290,7 @@ export function useOperationSync(): UseOperationSync {
         if (operations.length > 0) {
           stateChangeListeners.current.forEach(listener => {
             try {
+              // 🔧 CRITICAL FIX: Pass ALL operations so subscriber can reconstruct complete state
               listener(operations);
             } catch (err) {
               logger.error('Error in state change listener during init:', err);
@@ -503,8 +511,7 @@ export function useOperationSync(): UseOperationSync {
               // Continue to state reconstruction with merged operations
               const newState = reconstructStateWithConflictResolution(
                 INITIAL_STATE,
-                mergedOps,
-                operationLog.current
+                mergedOps
               );
               logger.info('📊 BOOTSTRAP: Reconstructed state (from local + sanitized cloud):', {
                 addresses: newState.addresses?.length || 0,
@@ -518,9 +525,11 @@ export function useOperationSync(): UseOperationSync {
               setCurrentState(newState);
 
               // CRITICAL: Notify listeners so App.tsx updates UI!
+              // 🔧 CRITICAL FIX: Pass ALL operations from merged log, not just the delta
+              const allOperationsAfterMerge = operationLog.current.getAllOperations();
               for (const listener of stateChangeListeners.current) {
                 try {
-                  listener(mergedOps);
+                  listener(allOperationsAfterMerge);
                 } catch (err) {
                   logger.error('Error in state change listener:', err);
                 }
@@ -626,8 +635,7 @@ export function useOperationSync(): UseOperationSync {
               logger.info(`🔄 BOOTSTRAP: Reconstructing state from ${allOps.length} total operations`);
               const newState = reconstructStateWithConflictResolution(
                 INITIAL_STATE,
-                allOps,
-                operationLog.current
+                allOps
               );
               logger.info('📊 BOOTSTRAP: Reconstructed state:', {
                 addresses: newState.addresses?.length || 0,
@@ -641,10 +649,12 @@ export function useOperationSync(): UseOperationSync {
               setCurrentState(newState);
 
               // CRITICAL: Notify listeners so App.tsx updates UI!
+              // 🔧 CRITICAL FIX: Pass ALL operations from log, not just newOps delta
               logger.info(`📤 BOOTSTRAP: Notifying ${stateChangeListeners.current.size} listeners`);
+              const allOperationsAfterBootstrap = operationLog.current.getAllOperations();
               stateChangeListeners.current.forEach(listener => {
                 try {
-                  listener(newOps);
+                  listener(allOperationsAfterBootstrap);
                 } catch (err) {
                   logger.error('Error in state change listener:', err);
                 }
@@ -659,6 +669,22 @@ export function useOperationSync(): UseOperationSync {
           }
 
           setLastSyncTime(new Date());
+        }
+
+        // 🔧 CRITICAL FIX: Check for unsynced operations after bootstrap and sync immediately
+        // This fixes the race condition where operations are created, page refreshes before 2s timer,
+        // and operations never upload because AUTO-SYNC effect runs before operationLog is ready
+        if (operationLog.current) {
+          const unsyncedOps = operationLog.current.getUnsyncedOperations();
+          if (unsyncedOps.length > 0) {
+            logger.info(`🔄 BOOTSTRAP COMPLETE: Found ${unsyncedOps.length} unsynced operations, triggering immediate sync`);
+            // Trigger sync with slight delay to ensure everything is stable
+            setTimeout(() => {
+              if (scheduleBatchSyncRef.current) {
+                scheduleBatchSyncRef.current();
+              }
+            }, 100);
+          }
         }
       } catch (err) {
         logger.error('Failed to initialize user operation log:', err);
@@ -698,6 +724,9 @@ export function useOperationSync(): UseOperationSync {
   // 🔧 FIX: Track last time we logged "no progress" to prevent spam
   const lastNoProgressLogRef = useRef<number>(0);
 
+  // 🔧 CRITICAL FIX: Ref to scheduleBatchSync so it can be called from bootstrap effect
+  const scheduleBatchSyncRef = useRef<(() => void) | null>(null);
+
   // Trigger batch sync with debouncing
   const scheduleBatchSync = useCallback(() => {
     if (batchTimerRef.current) {
@@ -709,18 +738,24 @@ export function useOperationSync(): UseOperationSync {
     }
 
     batchTimerRef.current = setTimeout(async () => {
+      // 🔧 CRITICAL FIX: Check refs to get current values, not stale closures
+      const currentUser = userRef.current;
+      const currentSupabase = supabaseRef.current;
+
       logger.debug('🔄 BATCH SYNC CHECK:', {
         isOnline,
-        hasUser: !!user,
+        hasUser: !!currentUser,
         hasOperationLog: !!operationLog.current,
-        willSync: isOnline && !!user && !!operationLog.current
+        hasSupabase: !!currentSupabase,
+        willSync: isOnline && !!currentUser && !!operationLog.current && !!currentSupabase
       });
 
-      if (!isOnline || !user || !operationLog.current) {
+      if (!isOnline || !currentUser || !operationLog.current || !currentSupabase) {
         logger.debug('⏭️ BATCH SYNC SKIPPED - preconditions not met:', {
           isOnline,
-          user: user ? 'authenticated' : 'NOT AUTHENTICATED',
+          user: currentUser ? 'authenticated' : 'NOT AUTHENTICATED',
           operationLog: operationLog.current ? 'loaded' : 'NOT LOADED',
+          supabase: currentSupabase ? 'configured' : 'NOT CONFIGURED',
         });
         return;
       }
@@ -751,6 +786,16 @@ export function useOperationSync(): UseOperationSync {
   useEffect(() => {
     currentUserIdRef.current = user?.id ?? null;
   }, [user?.id]);
+
+  // 🔧 CRITICAL FIX: Keep userRef updated for closure-safe access
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  // 🔧 CRITICAL FIX: Keep scheduleBatchSyncRef updated so bootstrap can trigger sync
+  useEffect(() => {
+    scheduleBatchSyncRef.current = scheduleBatchSync;
+  }, [scheduleBatchSync]);
 
   // Submit a new operation
   const submitOperation = useCallback(async (
@@ -800,9 +845,11 @@ export function useOperationSync(): UseOperationSync {
     setCurrentState(newState);
 
     // Notify all listeners of state change (critical for App.tsx to update!)
+    // 🔧 CRITICAL FIX: Pass ALL operations from log, not just the single new operation
+    const allOperationsAfterSubmit = operationLog.current.getAllOperations();
     stateChangeListeners.current.forEach(listener => {
       try {
-        listener([persistedOperation]);
+        listener(allOperationsAfterSubmit);
       } catch (err) {
         logger.error('Error in state change listener:', err);
       }
@@ -830,12 +877,16 @@ export function useOperationSync(): UseOperationSync {
 
   // Sync operations to cloud
   const syncOperationsToCloud = useCallback(async () => {
+    // 🔧 CRITICAL FIX: Check refs to get current values, not stale closures
+    const currentUser = userRef.current;
+    const currentSupabase = supabaseRef.current;
+
     logger.debug('🔄 syncOperationsToCloud called');
-    if (!operationLog.current || !user || !supabase) {
+    if (!operationLog.current || !currentUser || !currentSupabase) {
       logger.debug('⏭️ SYNC SKIPPED - missing prerequisites:', {
         operationLog: !!operationLog.current,
-        user: !!user,
-        supabase: !!supabase,
+        user: !!currentUser,
+        supabase: !!currentSupabase,
       });
       return;
     }
@@ -899,11 +950,11 @@ export function useOperationSync(): UseOperationSync {
         try {
           await retryWithCustom(
             async () => {
-              const { error, status } = await supabase!
+              const { error, status } = await currentSupabase!
                 .from('navigator_operations')
                 .upsert({
                   // New columns
-                  user_id: user.id,
+                  user_id: currentUser.id,
                   operation_id: operation.id,
                   sequence_number: operation.sequence,
                   operation_type: operation.type,
@@ -924,6 +975,38 @@ export function useOperationSync(): UseOperationSync {
 
               // Return error for retry logic to evaluate
               if (error) {
+                // 🔧 CRITICAL FIX: Handle sequence collision (different from operation_id duplicate)
+                // Error 23505 can be either:
+                // 1. Duplicate operation_id (already uploaded) → safe to ignore
+                // 2. Duplicate sequence number (sequence collision) → must reassign sequence
+                if (error.code === '23505') {
+                  const errorMessage = error.message || '';
+                  const isSequenceCollision = errorMessage.includes('user_sequence_unique')
+                    || errorMessage.includes('sequence_number');
+
+                  if (isSequenceCollision) {
+                    logger.error('🚨 SEQUENCE COLLISION DETECTED:', {
+                      operation: operation.type,
+                      operationId: operation.id,
+                      sequence: operation.sequence,
+                      error: errorMessage,
+                    });
+
+                    // This is a sequence collision - different operation with same sequence already in cloud
+                    // We need to reassign this operation a new sequence
+                    const errorObj = new Error(`Sequence collision: ${errorMessage}`);
+                    (errorObj as any).status = status;
+                    (errorObj as any).code = 'SEQUENCE_COLLISION';
+                    (errorObj as any).details = error.details;
+                    (errorObj as any).originalSequence = operation.sequence;
+                    throw errorObj;
+                  } else {
+                    // Duplicate operation_id - already uploaded successfully
+                    logger.debug('Operation already uploaded (duplicate operation_id):', operation.id);
+                    return { success: true, alreadyExists: true };
+                  }
+                }
+
                 const errorObj = new Error(error.message);
                 (errorObj as any).status = status;
                 (errorObj as any).code = error.code;
@@ -959,6 +1042,161 @@ export function useOperationSync(): UseOperationSync {
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
+          const errorCode = (error as any)?.code;
+
+          // 🔧 CRITICAL FIX: Handle sequence collision by reassigning sequence
+          if (errorCode === 'SEQUENCE_COLLISION') {
+            logger.error('🔧 REPAIRING SEQUENCE COLLISION:', {
+              operation: operation.type,
+              oldSequence: operation.sequence,
+            });
+
+            try {
+              // Fetch max sequence from cloud to sync with reality
+              const { data: maxSeqData } = await currentSupabase!
+                .from('navigator_operations')
+                .select('sequence_number')
+                .eq('user_id', currentUser.id)
+                .order('sequence_number', { ascending: false })
+                .limit(1);
+
+              const cloudMaxSeq = maxSeqData?.[0]?.sequence_number || 0;
+              const localMaxSeq = operationLog.current.getLogState().lastSequence;
+              const newMaxSeq = Math.max(cloudMaxSeq, localMaxSeq);
+
+              logger.info('🔄 SEQUENCE SYNC:', {
+                cloudMax: cloudMaxSeq,
+                localMax: localMaxSeq,
+                newMax: newMaxSeq,
+              });
+
+              // 🔧 CRITICAL FIX: If cloud has sequences beyond our lastSyncSequence,
+              // we must FETCH those operations before advancing the pointer
+              // Otherwise we permanently skip/lose operations from other devices
+              const currentLastSynced = operationLog.current.getLogState().lastSyncSequence;
+              if (cloudMaxSeq > currentLastSynced) {
+                logger.info('🔄 FETCHING MISSING OPERATIONS before advancing sync pointer', {
+                  currentLastSynced,
+                  cloudMaxSeq,
+                  missingRange: `${currentLastSynced + 1}-${cloudMaxSeq}`,
+                  estimatedCount: cloudMaxSeq - currentLastSynced,
+                });
+
+                try {
+                  // 🔧 CRITICAL FIX: Paginate to fetch ALL missing operations
+                  // Supabase returns max 1000 rows - if gap > 1000, we need pagination
+                  const BATCH_SIZE = 1000;
+                  let allMissingOps: any[] = [];
+                  let page = 0;
+                  let hasMore = true;
+                  let fetchError: any = null;
+
+                  while (hasMore && !fetchError) {
+                    const { data: missingOpsData, error } = await currentSupabase!
+                      .from('navigator_operations')
+                      .select('operation_data, sequence_number')
+                      .eq('user_id', currentUser.id)
+                      .gt('sequence_number', currentLastSynced)
+                      .lte('sequence_number', cloudMaxSeq)
+                      .order('sequence_number', { ascending: true })
+                      .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
+
+                    if (error) {
+                      fetchError = error;
+                      break;
+                    }
+
+                    if (missingOpsData && missingOpsData.length > 0) {
+                      allMissingOps = allMissingOps.concat(missingOpsData);
+                      logger.info(`📥 MISSING OPS: Fetched page ${page + 1} (${missingOpsData.length} operations)`);
+                      hasMore = missingOpsData.length === BATCH_SIZE; // Continue if full batch
+                      page++;
+                    } else {
+                      hasMore = false;
+                    }
+                  }
+
+                  if (fetchError) {
+                    logger.error('❌ Failed to fetch missing operations:', fetchError);
+                    throw new Error(`Failed to fetch missing operations: ${fetchError.message}`);
+                  }
+
+                  if (allMissingOps.length > 0) {
+                    logger.info(`📥 FETCHED ${allMissingOps.length} missing operations from cloud (${page} pages)`);
+
+                    const missingOperations: Operation[] = allMissingOps
+                      .map(row => {
+                        const op = { ...row.operation_data };
+                        // Use database sequence_number (source of truth)
+                        if (row.sequence_number && typeof row.sequence_number === 'number') {
+                          op.sequence = row.sequence_number;
+                        }
+                        return op;
+                      })
+                      .filter(op => op.id && op.type); // Validate
+
+                    // Merge into local log
+                    const merged = await operationLog.current.mergeRemoteOperations(missingOperations);
+                    logger.info(`✅ MERGED ${merged.length} new operations into local log`);
+
+                    // Rebuild state to apply the operations
+                    const newState = rebuildStateIfNeeded(true);
+                    setCurrentState(newState);
+
+                    // Notify listeners
+                    const allOps = operationLog.current.getAllOperations();
+                    stateChangeListeners.current.forEach(listener => {
+                      try {
+                        listener(allOps);
+                      } catch (err) {
+                        logger.error('Error in state change listener:', err);
+                      }
+                    });
+                  } else {
+                    logger.info('📭 No missing operations found (gap may be from deleted operations)');
+                  }
+
+                  // NOW it's safe to advance the sync pointer
+                  await operationLog.current.markSyncedUpTo(cloudMaxSeq);
+                  logger.info('🔧 ADVANCED SYNC POINTER after fetching missing operations', {
+                    oldLastSynced: currentLastSynced,
+                    newLastSynced: cloudMaxSeq,
+                    gapSize: cloudMaxSeq - currentLastSynced,
+                    fetchedCount: allMissingOps.length,
+                  });
+                } catch (fetchErr) {
+                  logger.error('❌ CRITICAL: Failed to fetch missing operations before advancing pointer:', fetchErr);
+                  // Don't advance pointer if we couldn't fetch - better to retry than lose data
+                  throw fetchErr;
+                }
+              }
+
+              // Update sequence generator to avoid future collisions
+              await setSequenceAsync(newMaxSeq);
+
+              // Reassign operation a new sequence
+              const newSequence = await nextSequence();
+              const updatedOperation = { ...operation, sequence: newSequence };
+
+              // Update operation in log
+              await operationLog.current.updateOperationSequence(operation.id, newSequence);
+
+              logger.info('✅ SEQUENCE REASSIGNED:', {
+                operation: operation.type,
+                oldSequence: operation.sequence,
+                newSequence,
+              });
+
+              // Mark as needing immediate retry with new sequence
+              await retryQueueManager.removeFromQueue(operation.sequence);
+              await retryQueueManager.addToQueue(updatedOperation, 'Sequence reassigned - ready for upload', undefined);
+
+              continue; // Skip to next operation
+            } catch (repairError) {
+              logger.error('❌ SEQUENCE REPAIR FAILED:', repairError);
+              // Fall through to normal retry queue handling
+            }
+          }
 
           logger.error('❌ UPLOAD FAILED (after retries):', {
             operation: operation.type,
@@ -1276,8 +1514,7 @@ export function useOperationSync(): UseOperationSync {
           // PHASE 1.3: Use conflict resolution for vector clock-based integrity
           const newState = reconstructStateWithConflictResolution(
             INITIAL_STATE,
-            allOperations,
-            operationLog.current
+            allOperations
           );
           setCurrentState(newState);
 
@@ -1289,8 +1526,7 @@ export function useOperationSync(): UseOperationSync {
           const allOperations = operationLog.current.getAllOperations();
           const reconstructedState = reconstructStateWithConflictResolution(
             INITIAL_STATE,
-            allOperations,
-            operationLog.current
+            allOperations
           );
 
           // Check if state looks incomplete (completions without sessions)
@@ -1457,11 +1693,11 @@ export function useOperationSync(): UseOperationSync {
                     const allOperations = operationLog.current!.getAllOperations();
                     const newState = reconstructStateWithConflictResolution(
                       INITIAL_STATE,
-                      allOperations,
-                      operationLog.current!
+                      allOperations
                     );
                     setCurrentState(newState);
-                    onOperations(newOps);
+                    // 🔧 CRITICAL FIX: Pass ALL operations, not just newOps delta
+                    onOperations(allOperations);
 
                     logger.info('✅ REAL-TIME SYNC: State updated with remote operation');
                   } else {
@@ -1629,22 +1865,26 @@ export function useOperationSync(): UseOperationSync {
   // Auto-sync unsynced operations after initialization
   // This handles restored operations from backup that weren't uploaded
   useEffect(() => {
+    // 🔧 CRITICAL FIX: Check refs to get current values, not stale closures
+    const currentUser = userRef.current;
+    const currentSupabase = supabaseRef.current;
+
     logger.info('🔍 AUTO-SYNC EFFECT TRIGGERED:', {
-      hasUser: !!user,
-      userId: user?.id,
+      hasUser: !!currentUser,
+      userId: currentUser?.id,
       isOnline,
       isLoading,
       hasOperationLog: !!operationLog.current,
-      hasSupabase: !!supabase,
+      hasSupabase: !!currentSupabase,
     });
 
-    if (!user || !isOnline || !operationLog.current || isLoading || !supabase) {
+    if (!currentUser || !isOnline || !operationLog.current || isLoading || !currentSupabase) {
       logger.warn('⚠️ AUTO-SYNC SKIPPED - conditions not met:', {
-        hasUser: !!user,
+        hasUser: !!currentUser,
         isOnline,
         hasOperationLog: !!operationLog.current,
         isLoading,
-        hasSupabase: !!supabase,
+        hasSupabase: !!currentSupabase,
       });
       return;
     }
@@ -1669,7 +1909,7 @@ export function useOperationSync(): UseOperationSync {
           });
 
           // Inline sync to avoid dependency issues
-          if (operationLog.current && user && isOnline && supabase) {
+          if (operationLog.current && currentUser && isOnline && currentSupabase) {
             setIsSyncing(true);
             try {
               // BEST PRACTICE: Wrap auto-sync in retry logic
@@ -1703,11 +1943,11 @@ export function useOperationSync(): UseOperationSync {
                   || payload?.id
                   || operation.id;
 
-                const { error } = await supabase!
+                const { error } = await currentSupabase!
                   .from('navigator_operations')
                   .upsert({
                     // New columns
-                    user_id: user.id,
+                    user_id: currentUser.id,
                     operation_id: operation.id,
                     sequence_number: operation.sequence,
                     operation_type: operation.type,

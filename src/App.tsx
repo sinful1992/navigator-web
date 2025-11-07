@@ -45,7 +45,9 @@ import { BackupManager } from "./components/BackupManager";
 import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
-import { isProtectionActive, initializeProtectionFlags, setProtectionFlag } from "./utils/protectionFlags";
+import { showSuccess, showError } from "./utils/toast";
+import { setProtectionFlag, isProtectionActive } from "./utils/protectionFlags";
+import { StateProtectionService } from "./services/StateProtectionService";
 import { PrivacyConsent } from "./components/PrivacyConsent";
 import { EnhancedOfflineIndicator } from "./components/EnhancedOfflineIndicator";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
@@ -60,8 +62,11 @@ import { useStats } from "./hooks/useStats";
 import { OwnershipPrompt } from "./components/OwnershipPrompt";
 import { Sidebar } from "./components/Sidebar";
 import { SyncDiagnostic } from "./components/SyncDiagnostic";
+import { syncRepairConsole } from "./utils/syncRepairConsole";
+import { getOrCreateDeviceId } from "./services/deviceIdService";
 import { useConflictResolution } from "./hooks/useConflictResolution";
 import { ConflictResolutionModal } from "./components/ConflictResolutionModal";
+import { HistoricalPifModal } from "./components/HistoricalPifModal";
 // PHASE 5: Add timing constants for loading and initialization
 import {
   LOADING_SCREEN_DELAY_MS,
@@ -217,34 +222,22 @@ export default function App() {
 }
 
 function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync> }) {
+  const deviceId = React.useMemo(() => getOrCreateDeviceId(), []);
+
+  // Clean Architecture: Use StateProtectionService for centralized protection logic
+  const protectionService = React.useRef(new StateProtectionService()).current;
 
   // 🔧 PHASE 1.2.2 (REVISED): Initialize hybrid protection flags cache on app startup
   // FIX #3: Track readiness state to prevent race condition at startup
   // Hybrid architecture: in-memory cache for fast synchronous reads, IndexedDB for atomic updates
   const protectionFlagsReadyRef = React.useRef(false);
+  // 🔧 FIX #4: Track if this is initial bootstrap (allow through) vs live update (check protection)
+  const isInitialLoadRef = React.useRef(true);
 
   React.useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        await initializeProtectionFlags();
-        if (!cancelled) {
-          logger.debug('✅ Protection flags cache initialized (hybrid cache + IndexedDB)');
-          protectionFlagsReadyRef.current = true;
-        }
-      } catch (err) {
-        if (!cancelled) {
-          logger.warn('⚠️ Failed to initialize protection flags cache:', err);
-          // Continue anyway - fallback to empty cache, operations will still work
-          protectionFlagsReadyRef.current = true;
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    // Protection flags use localStorage and are ready immediately (no initialization needed)
+    protectionFlagsReadyRef.current = true;
+    logger.debug('✅ Protection flags ready (localStorage-based)');
   }, []); // Run once on mount
 
   const {
@@ -259,6 +252,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
     ownerMetadata,
     // Completion management (from useCompletionState)
     complete,
+    completeHistorical,
     updateCompletion,
     undo,
     // Address management (from useAddressState)
@@ -290,6 +284,8 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
   const [showChangeEmail, setShowChangeEmail] = React.useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = React.useState(false);
   const [showOwnershipPrompt, setShowOwnershipPrompt] = React.useState(false);
+  const [showHistoricalPif, setShowHistoricalPif] = React.useState(false);
+  const [historicalPifLoading, setHistoricalPifLoading] = React.useState(false);
 
   // PHASE 3: Conflict resolution (FIXED: Now submits UPDATE operations for sync)
   const conflictResolution = useConflictResolution({
@@ -496,10 +492,17 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
     }
   }, [cloudSync.user?.id]);
 
+  // Initialize sync repair console for debugging
+  React.useEffect(() => {
+    if (cloudSync.user?.id && deviceId) {
+      syncRepairConsole.init(cloudSync.user.id, deviceId);
+    }
+  }, [cloudSync.user?.id, deviceId]);
+
   // Delta sync subscription - Bootstrap handled by operationSync.ts
   React.useEffect(() => {
     const user = cloudSync.user;
-    if (!user || loading) return;
+    if (!user) return; // 🔧 FIX: Remove 'loading' check - causes race condition where subscription never activates
 
     logger.info('🔄 DELTA SYNC: Setting up operation subscription for user:', user.id);
 
@@ -517,27 +520,26 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         return;
       }
 
-      // 🔧 FIX #3: Block updates until protection flags are ready to prevent startup race
-      if (!protectionFlagsReadyRef.current) {
-        logger.info('⏳ APP: Protection flags not ready yet, deferring update');
+      // Clean Architecture: Use StateProtectionService for protection logic
+      const isInitialLoad = isInitialLoadRef.current;
+      if (isInitialLoad) {
+        isInitialLoadRef.current = false; // Mark as handled
+      }
+      if (isProtectionActive('navigator_session_protection')) {
+        logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
         return;
       }
 
-      // Protection flags
-      if (isProtectionActive('navigator_restore_in_progress')) {
-        logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_import_in_progress')) {
-        logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_active_protection')) {
-        logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
-        return;
-      }
+      // Delegate to service layer
+      const protectionCheck = protectionService.shouldAllowStateUpdate(
+        isInitialLoad,
+        protectionFlagsReadyRef.current
+      );
 
-      logger.info('✅ APP: No protection flags active, applying state update');
+      if (!protectionCheck.allowed) {
+        logger.info(`⏳ APP: State update blocked - ${protectionCheck.reason}`);
+        return;
+      }
 
       // Apply state update from operations
       if (typeof updaterOrState === 'function') {
@@ -594,7 +596,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
     return () => {
       if (cleanup) cleanup();
     };
-  }, [cloudSync.user, loading]);
+  }, [cloudSync.user]); // 🔧 FIX: Remove 'loading' dependency - subscription only needs user
 
   // REMOVED: Visibility change handler - was over-engineering after fixing React subscription bug
 
@@ -724,6 +726,49 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       }
     },
     [complete, backupState]
+  );
+
+  // Handler for historical PIF recording
+  const handleHistoricalPif = React.useCallback(
+    async (data: {
+      date: string;
+      address: string;
+      amount: string;
+      caseReference: string;
+      numberOfCases: number;
+      enforcementFees?: number[];
+    }) => {
+      setHistoricalPifLoading(true);
+      try {
+        await completeHistorical(
+          data.date,
+          data.address,
+          data.amount,
+          data.caseReference,
+          data.numberOfCases,
+          data.enforcementFees
+        );
+
+        showSuccess(`Historical PIF recorded: £${data.amount} on ${data.date}`);
+        setShowHistoricalPif(false);
+
+        // Local backup after recording
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const snap = backupState();
+          LocalBackupManager.storeLocalBackup(snap);
+          logger.info("Local storage backup after historical PIF successful");
+        } catch (backupError) {
+          logger.error("Local backup failed after historical PIF:", backupError);
+        }
+      } catch (error) {
+        logger.error("Failed to record historical PIF:", error);
+        showError(`Failed to record PIF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setHistoricalPifLoading(false);
+      }
+    },
+    [completeHistorical, backupState]
   );
 
   // REMOVED: Auto day start functionality to prevent random day starts
@@ -1275,6 +1320,8 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
               onShowSupabaseSetup={() => setShowSupabaseSetup(true)}
               onSignOut={cloudSync.signOut}
               hasSupabase={!!supabase}
+              userId={cloudSync.user?.id}
+              deviceId={deviceId}
             />
           </div>
 
@@ -1433,6 +1480,42 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
 
         {/* Floating Action Button */}
         <ManualAddressFAB onAdd={addAddress} />
+
+        {/* Historical PIF FAB */}
+        <button
+          className="historical-pif-fab"
+          onClick={() => setShowHistoricalPif(true)}
+          title="Record Historical PIF"
+          style={{
+            position: 'fixed',
+            bottom: '5.5rem',
+            right: '1.5rem',
+            width: '3.5rem',
+            height: '3.5rem',
+            borderRadius: '50%',
+            border: 'none',
+            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+            color: 'white',
+            fontSize: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+            zIndex: 1000,
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.1)';
+            e.currentTarget.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+          }}
+        >
+          📅
+        </button>
       </main>
 
       {/* Right Sidebar */}
@@ -1614,6 +1697,15 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           await cloudSync.signOut();
         }}
       />
+
+      {/* Historical PIF Recording Modal */}
+      {showHistoricalPif && (
+        <HistoricalPifModal
+          onConfirm={handleHistoricalPif}
+          onCancel={() => setShowHistoricalPif(false)}
+          isLoading={historicalPifLoading}
+        />
+      )}
 
 
       {/* Toast Notifications */}
