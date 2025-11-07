@@ -103,6 +103,12 @@ export function PifDetailsModal({
         return;
       }
 
+      // Validate that number of cases is at least the number of enforcement fees
+      if (parsedFees.length > 0 && parsedFees.length > numCases) {
+        alert(`Number of cases (${numCases}) must be at least the number of enforcement fees (${parsedFees.length}). If you have ${parsedFees.length} cases with enforcement fees and additional linked cases, please increase the number of cases.`);
+        return;
+      }
+
       finalEnforcementFees = parsedFees.length > 0 ? parsedFees : undefined;
     }
 
