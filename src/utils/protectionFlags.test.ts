@@ -9,8 +9,6 @@ import {
   getProtectionTimeRemaining,
   executeWithProtection,
   clearAllProtectionFlags,
-  closeDB,
-  initializeProtectionFlags,
 } from './protectionFlags';
 
 describe('Protection Flags System (Phase 1.2.2)', () => {
@@ -21,7 +19,7 @@ describe('Protection Flags System (Phase 1.2.2)', () => {
 
   afterEach(() => {
     // Cleanup after each test
-    closeDB();
+    clearAllProtectionFlags();
   });
 
   describe('setProtectionFlag', () => {

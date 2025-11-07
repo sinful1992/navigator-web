@@ -76,7 +76,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         },
       };
 
-      const conflicts = detectConflicts(op2, [op1], mockState, manager);
+      const conflicts = detectConflicts(op2, [op1], mockState);
 
       expect(conflicts).toHaveLength(1);
       expect(conflicts[0].conflictType).toBe('duplicate');
@@ -125,7 +125,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         },
       };
 
-      const conflicts = detectConflicts(op2, [op1], mockState, manager);
+      const conflicts = detectConflicts(op2, [op1], mockState);
 
       // Should not conflict because vc2 is after vc1 causally
       expect(conflicts).toHaveLength(0);
@@ -182,7 +182,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         description: 'Concurrent completion of address 5',
       };
 
-      const resolution = resolveConflicts([conflict], mockState, manager);
+      const resolution = resolveConflicts([conflict], mockState);
 
       expect(resolution.resolvedOperations).toHaveLength(1);
       const resolvedOp = resolution.resolvedOperations[0];
@@ -246,7 +246,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         description: 'Concurrent completion',
       };
 
-      const resolution = resolveConflicts([conflict], mockState, manager);
+      const resolution = resolveConflicts([conflict], mockState);
 
       // op1 should win (first writer)
       expect(resolution.resolvedOperations[0]).toBe(op1);
@@ -279,7 +279,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         payload: { index: 10 },
       };
 
-      const conflicts = detectConflicts(op2, [op1], mockState, manager);
+      const conflicts = detectConflicts(op2, [op1], mockState);
 
       expect(conflicts).toHaveLength(1);
       expect(conflicts[0].conflictType).toBe('race_condition');
@@ -319,7 +319,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         description: 'Concurrent active index changes',
       };
 
-      const resolution = resolveConflicts([conflict], mockState, manager);
+      const resolution = resolveConflicts([conflict], mockState);
 
       const resolvedOp = resolution.resolvedOperations[0];
       const rejectedOp = resolution.rejectedOperations[0];
@@ -377,7 +377,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         description: 'Test conflict',
       };
 
-      const resolution = resolveConflicts([conflict], mockState, manager);
+      const resolution = resolveConflicts([conflict], mockState);
 
       // Verify that conflict was resolved (one operation kept, one rejected)
       expect(resolution.resolvedOperations.length + resolution.rejectedOperations.length).toBe(1);
@@ -429,7 +429,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         description: 'Test conflict',
       };
 
-      const resolution = resolveConflicts([conflict], mockState, manager);
+      const resolution = resolveConflicts([conflict], mockState);
 
       // Verify conflict was resolved
       expect(resolution.resolvedOperations.length > 0 || resolution.rejectedOperations.length > 0).toBe(true);
@@ -502,7 +502,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         },
       };
 
-      const conflicts = detectConflicts(op2, [op1], mockState, manager);
+      const conflicts = detectConflicts(op2, [op1], mockState);
 
       // Should still detect conflict even without vector clocks (fallback to timestamp)
       expect(conflicts.length).toBeGreaterThanOrEqual(0); // May or may not conflict depending on timing
@@ -623,7 +623,7 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
         description: 'Test conflict',
       };
 
-      const resolution = resolveConflicts([conflict], mockState, manager);
+      const resolution = resolveConflicts([conflict], mockState);
 
       // PIF (priority 4) should win over UNKNOWN (priority 0)
       const resolvedOp = resolution.resolvedOperations[0];
