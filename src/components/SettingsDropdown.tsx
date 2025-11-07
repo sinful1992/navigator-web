@@ -6,7 +6,6 @@ import { useSettingsDropdown } from '../hooks/useSettingsDropdown';
 import { ReminderSettings } from './ReminderSettings';
 import { BonusSettingsModal } from './BonusSettingsModal';
 import { SyncDebugModal } from './SyncDebugModal';
-import { AddressAutocomplete } from './AddressAutocomplete';
 import { SyncRepairPanel } from './SyncRepairPanel';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import type { ReminderSettings as ReminderSettingsType, BonusSettings } from '../types';

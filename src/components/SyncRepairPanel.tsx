@@ -2,7 +2,7 @@
 // Mobile-friendly sync repair interface for Settings tab
 
 import React, { useState, useEffect } from 'react';
-import { diagnoseSyncIssues, repairSequenceCollisions, clearAllFailedOperations, getSyncStatus } from '../utils/syncDiagnostics';
+import { repairSequenceCollisions, clearAllFailedOperations, getSyncStatus } from '../utils/syncDiagnostics';
 import type { SyncDiagnostics } from '../utils/syncDiagnostics';
 import { logger } from '../utils/logger';
 

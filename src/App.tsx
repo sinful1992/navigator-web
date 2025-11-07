@@ -46,7 +46,7 @@ import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
 import { showSuccess, showError } from "./utils/toast";
-import { initializeProtectionFlags, setProtectionFlag, isProtectionActive } from "./utils/protectionFlags";
+import { setProtectionFlag, isProtectionActive, clearProtectionFlag } from "./utils/protectionFlags";
 import { StateProtectionService } from "./services/StateProtectionService";
 import { PrivacyConsent } from "./components/PrivacyConsent";
 import { EnhancedOfflineIndicator } from "./components/EnhancedOfflineIndicator";
@@ -63,6 +63,7 @@ import { OwnershipPrompt } from "./components/OwnershipPrompt";
 import { Sidebar } from "./components/Sidebar";
 import { SyncDiagnostic } from "./components/SyncDiagnostic";
 import { syncRepairConsole } from "./utils/syncRepairConsole";
+import { getOrCreateDeviceId } from "./services/deviceIdService";
 import { useConflictResolution } from "./hooks/useConflictResolution";
 import { ConflictResolutionModal } from "./components/ConflictResolutionModal";
 import { HistoricalPifModal } from "./components/HistoricalPifModal";
@@ -134,6 +135,7 @@ function StatsCard({ title, value, change, changeType, icon, iconType }: {
 
 export default function App() {
   const cloudSync = useUnifiedSync();
+  const deviceId = React.useMemo(() => getOrCreateDeviceId(), []);
 
   // 🎯 UX IMPROVEMENT: Only show loading screen if actually taking time
   const [showLoading, setShowLoading] = React.useState(false);
@@ -233,27 +235,9 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
   const isInitialLoadRef = React.useRef(true);
 
   React.useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        await initializeProtectionFlags();
-        if (!cancelled) {
-          logger.debug('✅ Protection flags cache initialized (hybrid cache + IndexedDB)');
-          protectionFlagsReadyRef.current = true;
-        }
-      } catch (err) {
-        if (!cancelled) {
-          logger.warn('⚠️ Failed to initialize protection flags cache:', err);
-          // Continue anyway - fallback to empty cache, operations will still work
-          protectionFlagsReadyRef.current = true;
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    // Protection flags use localStorage and are ready immediately (no initialization needed)
+    protectionFlagsReadyRef.current = true;
+    logger.debug('✅ Protection flags ready (localStorage-based)');
   }, []); // Run once on mount
 
   const {
@@ -541,7 +525,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       if (isInitialLoad) {
         isInitialLoadRef.current = false; // Mark as handled
       }
-      if (isProtectionActive('navigator_day_session_protection')) {
+      if (isProtectionActive('navigator_session_protection')) {
         logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
         return;
       }
