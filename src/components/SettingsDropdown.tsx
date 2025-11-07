@@ -5,6 +5,7 @@ import { ReminderSettings } from './ReminderSettings';
 import { BonusSettingsModal } from './BonusSettingsModal';
 import { SyncDebugModal } from './SyncDebugModal';
 import { AddressAutocomplete } from './AddressAutocomplete';
+import { SyncRepairPanel } from './SyncRepairPanel';
 import type { ReminderSettings as ReminderSettingsType, BonusSettings } from '../types';
 import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
 import type { AppState } from '../types';
@@ -30,6 +31,8 @@ interface SettingsDropdownProps {
   hasOwnershipIssue?: boolean;
   appState?: AppState;
   userEmail?: string;
+  userId?: string;
+  deviceId?: string;
 
   // New props for consolidated functionality
   onImportExcel?: (file: File) => void;
@@ -110,6 +113,8 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   hasOwnershipIssue,
   appState,
   userEmail,
+  userId,
+  deviceId,
   onImportExcel,
   onRestoreBackup,
   onManualSync,
@@ -410,6 +415,14 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
               {onManualSync && (
                 <div className="modern-subsection">
                   <div className="modern-subsection-title">Cloud Sync</div>
+
+                  {/* Sync Repair Panel - Mobile-Friendly */}
+                  {userId && deviceId && (
+                    <div style={{ marginBottom: '1rem' }}>
+                      <SyncRepairPanel userId={userId} deviceId={deviceId} />
+                    </div>
+                  )}
+
                   <button
                     className="modern-action-button"
                     onClick={() => {

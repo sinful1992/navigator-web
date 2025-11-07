@@ -1185,6 +1185,8 @@ function AuthedApp() {
               onShowSupabaseSetup={() => setShowSupabaseSetup(true)}
               onSignOut={cloudSync.signOut}
               hasSupabase={!!supabase}
+              userId={cloudSync.user?.id}
+              deviceId={deviceId}
             />
           </div>
 
