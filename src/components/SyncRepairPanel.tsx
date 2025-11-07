@@ -79,15 +79,6 @@ export const SyncRepairPanel: React.FC<SyncRepairPanelProps> = ({ userId, device
     }
   };
 
-  const getStatusColor = () => {
-    switch (status) {
-      case 'healthy': return '#10b981';
-      case 'warning': return '#f59e0b';
-      case 'error': return '#ef4444';
-      default: return '#6b7280';
-    }
-  };
-
   const getStatusIcon = () => {
     switch (status) {
       case 'healthy': return '✅';
@@ -98,72 +89,29 @@ export const SyncRepairPanel: React.FC<SyncRepairPanelProps> = ({ userId, device
   };
 
   return (
-    <div style={{
-      background: 'white',
-      borderRadius: '12px',
-      padding: '1.25rem',
-      marginBottom: '1rem',
-      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-    }}>
+    <div className="sync-repair-panel">
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '1rem',
-      }}>
-        <h3 style={{
-          margin: 0,
-          fontSize: '1.125rem',
-          fontWeight: 600,
-          color: '#111827',
-        }}>
+      <div className="sync-panel-header">
+        <h3 className="sync-panel-title">
           Sync Status
         </h3>
         <button
           onClick={() => setShowDetails(!showDetails)}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: '#6366f1',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            cursor: 'pointer',
-            padding: '0.25rem 0.5rem',
-          }}
+          className="sync-details-toggle"
         >
           {showDetails ? 'Hide' : 'Details'}
         </button>
       </div>
 
       {/* Status Card */}
-      <div style={{
-        background: `linear-gradient(135deg, ${getStatusColor()}15 0%, ${getStatusColor()}08 100%)`,
-        border: `2px solid ${getStatusColor()}40`,
-        borderRadius: '8px',
-        padding: '1rem',
-        marginBottom: showDetails ? '1rem' : '0',
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-          marginBottom: '0.5rem',
-        }}>
-          <span style={{ fontSize: '1.5rem' }}>{getStatusIcon()}</span>
-          <div style={{ flex: 1 }}>
-            <div style={{
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              color: '#111827',
-              marginBottom: '0.25rem',
-            }}>
+      <div className={`sync-status-card status-${status}`}>
+        <div className="sync-status-content">
+          <span className="sync-status-icon">{getStatusIcon()}</span>
+          <div className="sync-status-text">
+            <div className="sync-status-label">
               {status === 'loading' ? 'Checking...' : status.toUpperCase()}
             </div>
-            <div style={{
-              fontSize: '0.8125rem',
-              color: '#6b7280',
-            }}>
+            <div className="sync-status-message">
               {message}
             </div>
           </div>
@@ -171,27 +119,20 @@ export const SyncRepairPanel: React.FC<SyncRepairPanelProps> = ({ userId, device
 
         {/* Quick Stats */}
         {diagnostics && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '0.5rem',
-            marginTop: '0.75rem',
-            paddingTop: '0.75rem',
-            borderTop: '1px solid rgba(0, 0, 0, 0.1)',
-          }}>
-            <div>
-              <div style={{ fontSize: '0.6875rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <div className="sync-stats-grid">
+            <div className="sync-stat-item">
+              <div className="sync-stat-label">
                 Retry Queue
               </div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600, color: diagnostics.retryQueueCount > 0 ? '#f59e0b' : '#10b981' }}>
+              <div className={`sync-stat-value ${diagnostics.retryQueueCount > 0 ? 'warning' : 'success'}`}>
                 {diagnostics.retryQueueCount}
               </div>
             </div>
-            <div>
-              <div style={{ fontSize: '0.6875rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div className="sync-stat-item">
+              <div className="sync-stat-label">
                 Collisions
               </div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600, color: diagnostics.sequenceCollisions.length > 0 ? '#ef4444' : '#10b981' }}>
+              <div className={`sync-stat-value ${diagnostics.sequenceCollisions.length > 0 ? 'danger' : 'success'}`}>
                 {diagnostics.sequenceCollisions.length}
               </div>
             </div>
@@ -201,42 +142,22 @@ export const SyncRepairPanel: React.FC<SyncRepairPanelProps> = ({ userId, device
 
       {/* Detailed Diagnostics */}
       {showDetails && diagnostics && (
-        <div style={{
-          background: '#f9fafb',
-          borderRadius: '8px',
-          padding: '1rem',
-          marginBottom: '1rem',
-        }}>
-          <div style={{
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            color: '#6b7280',
-            marginBottom: '0.75rem',
-          }}>
+        <div className="sync-diagnostics-details">
+          <div className="sync-diagnostics-title">
             Diagnostic Details
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div className="sync-diagnostics-rows">
             <DetailRow label="Local Sequence" value={diagnostics.localMaxSequence} />
             <DetailRow label="Cloud Sequence" value={diagnostics.cloudMaxSequence} />
             <DetailRow label="Last Synced" value={diagnostics.localLastSynced} />
-            <DetailRow label="Gap" value={diagnostics.gap} color={diagnostics.gap > 100 ? '#f59e0b' : undefined} />
-            <DetailRow label="Unsynced" value={diagnostics.unsyncedCount} color={diagnostics.unsyncedCount > 0 ? '#f59e0b' : undefined} />
-            <DetailRow label="Dead Letter" value={diagnostics.deadLetterCount} color={diagnostics.deadLetterCount > 0 ? '#ef4444' : undefined} />
+            <DetailRow label="Gap" value={diagnostics.gap} warning={diagnostics.gap > 100} />
+            <DetailRow label="Unsynced" value={diagnostics.unsyncedCount} warning={diagnostics.unsyncedCount > 0} />
+            <DetailRow label="Dead Letter" value={diagnostics.deadLetterCount} danger={diagnostics.deadLetterCount > 0} />
           </div>
 
           {diagnostics.recommendation && (
-            <div style={{
-              marginTop: '0.75rem',
-              padding: '0.75rem',
-              background: 'white',
-              borderRadius: '6px',
-              fontSize: '0.8125rem',
-              color: '#374151',
-              lineHeight: '1.5',
-            }}>
+            <div className="sync-recommendation">
               <strong>Recommendation:</strong> {diagnostics.recommendation}
             </div>
           )}
@@ -245,27 +166,12 @@ export const SyncRepairPanel: React.FC<SyncRepairPanelProps> = ({ userId, device
 
       {/* Action Buttons */}
       {diagnostics && (diagnostics.sequenceCollisions.length > 0 || diagnostics.retryQueueCount > 0 || diagnostics.deadLetterCount > 0) && (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.5rem',
-        }}>
+        <div className="sync-actions">
           {diagnostics.sequenceCollisions.length > 0 && (
             <button
               onClick={handleRepair}
               disabled={isRepairing}
-              style={{
-                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.875rem 1rem',
-                fontSize: '0.9375rem',
-                fontWeight: 600,
-                cursor: isRepairing ? 'not-allowed' : 'pointer',
-                opacity: isRepairing ? 0.6 : 1,
-                boxShadow: '0 2px 4px rgba(99, 102, 241, 0.2)',
-              }}
+              className="sync-action-button primary"
             >
               {isRepairing ? '⏳ Repairing...' : '🔧 Repair Sequence Collisions'}
             </button>
@@ -275,17 +181,7 @@ export const SyncRepairPanel: React.FC<SyncRepairPanelProps> = ({ userId, device
             <button
               onClick={handleClearFailed}
               disabled={isRepairing}
-              style={{
-                background: 'white',
-                color: '#ef4444',
-                border: '2px solid #ef4444',
-                borderRadius: '8px',
-                padding: '0.875rem 1rem',
-                fontSize: '0.9375rem',
-                fontWeight: 600,
-                cursor: isRepairing ? 'not-allowed' : 'pointer',
-                opacity: isRepairing ? 0.6 : 1,
-              }}
+              className="sync-action-button danger"
             >
               {isRepairing ? '⏳ Clearing...' : '🗑️ Clear Failed Operations'}
             </button>
@@ -295,13 +191,7 @@ export const SyncRepairPanel: React.FC<SyncRepairPanelProps> = ({ userId, device
 
       {/* Healthy State Message */}
       {status === 'healthy' && diagnostics && diagnostics.sequenceCollisions.length === 0 && (
-        <div style={{
-          textAlign: 'center',
-          padding: '1rem',
-          color: '#10b981',
-          fontSize: '0.875rem',
-          fontWeight: 500,
-        }}>
+        <div className="sync-healthy-message">
           ✨ Everything is syncing perfectly!
         </div>
       )}
@@ -310,20 +200,423 @@ export const SyncRepairPanel: React.FC<SyncRepairPanelProps> = ({ userId, device
 };
 
 // Helper component for detail rows
-const DetailRow: React.FC<{ label: string; value: number; color?: string }> = ({ label, value, color }) => (
-  <div style={{
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  }}>
-    <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>{label}</span>
-    <span style={{
-      fontSize: '0.875rem',
-      fontWeight: 600,
-      color: color || '#111827',
-      fontFamily: 'monospace',
-    }}>
+const DetailRow: React.FC<{
+  label: string;
+  value: number;
+  warning?: boolean;
+  danger?: boolean;
+}> = ({ label, value, warning, danger }) => (
+  <div className="sync-detail-row">
+    <span className="sync-detail-label">{label}</span>
+    <span className={`sync-detail-value ${danger ? 'danger' : warning ? 'warning' : ''}`}>
       {value.toLocaleString()}
     </span>
   </div>
 );
+
+// Inject styles into document head
+if (typeof document !== 'undefined') {
+  const styleId = 'sync-repair-panel-styles';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      /* Sync Repair Panel Styles */
+      .sync-repair-panel {
+        background: white;
+        border-radius: 14px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        border: 1.5px solid rgba(99, 102, 241, 0.08);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .sync-repair-panel:hover {
+        border-color: rgba(99, 102, 241, 0.15);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.06);
+      }
+
+      /* Header */
+      .sync-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+      }
+
+      .sync-panel-title {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #111827;
+        letter-spacing: -0.01em;
+      }
+
+      .sync-details-toggle {
+        background: transparent;
+        border: none;
+        color: #6366f1;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        padding: 0.25rem 0.5rem;
+        border-radius: 6px;
+        transition: all 0.2s;
+      }
+
+      .sync-details-toggle:hover {
+        background: rgba(99, 102, 241, 0.1);
+      }
+
+      /* Status Card */
+      .sync-status-card {
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 0;
+        transition: all 0.3s;
+      }
+
+      .sync-status-card.status-healthy {
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.04) 100%);
+        border: 2px solid rgba(16, 185, 129, 0.25);
+      }
+
+      .sync-status-card.status-warning {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.04) 100%);
+        border: 2px solid rgba(245, 158, 11, 0.25);
+      }
+
+      .sync-status-card.status-error {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.04) 100%);
+        border: 2px solid rgba(239, 68, 68, 0.25);
+      }
+
+      .sync-status-card.status-loading {
+        background: linear-gradient(135deg, rgba(107, 114, 128, 0.08) 0%, rgba(107, 114, 128, 0.04) 100%);
+        border: 2px solid rgba(107, 114, 128, 0.25);
+      }
+
+      .sync-status-content {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .sync-status-icon {
+        font-size: 1.5rem;
+        line-height: 1;
+      }
+
+      .sync-status-text {
+        flex: 1;
+      }
+
+      .sync-status-label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #111827;
+        margin-bottom: 0.25rem;
+      }
+
+      .sync-status-message {
+        font-size: 0.8125rem;
+        color: #6b7280;
+        line-height: 1.4;
+      }
+
+      /* Quick Stats Grid */
+      .sync-stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+      }
+
+      .sync-stat-item {
+        text-align: center;
+      }
+
+      .sync-stat-label {
+        font-size: 0.6875rem;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+      }
+
+      .sync-stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      .sync-stat-value.success {
+        color: #10b981;
+      }
+
+      .sync-stat-value.warning {
+        color: #f59e0b;
+      }
+
+      .sync-stat-value.danger {
+        color: #ef4444;
+      }
+
+      /* Diagnostics Details */
+      .sync-diagnostics-details {
+        background: rgba(99, 102, 241, 0.03);
+        border-radius: 10px;
+        padding: 1rem;
+        margin-top: 1rem;
+        border: 1px solid rgba(99, 102, 241, 0.08);
+      }
+
+      .sync-diagnostics-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #6366f1;
+        margin-bottom: 0.75rem;
+      }
+
+      .sync-diagnostics-rows {
+        display: flex;
+        flex-direction: column;
+        gap: 0.625rem;
+      }
+
+      .sync-detail-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem;
+        background: white;
+        border-radius: 6px;
+      }
+
+      .sync-detail-label {
+        font-size: 0.8125rem;
+        color: #6b7280;
+        font-weight: 500;
+      }
+
+      .sync-detail-value {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #111827;
+        font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+      }
+
+      .sync-detail-value.warning {
+        color: #f59e0b;
+      }
+
+      .sync-detail-value.danger {
+        color: #ef4444;
+      }
+
+      /* Recommendation */
+      .sync-recommendation {
+        margin-top: 0.75rem;
+        padding: 0.75rem;
+        background: white;
+        border-radius: 8px;
+        font-size: 0.8125rem;
+        color: #374151;
+        line-height: 1.5;
+        border: 1px solid rgba(99, 102, 241, 0.12);
+      }
+
+      .sync-recommendation strong {
+        color: #6366f1;
+      }
+
+      /* Action Buttons */
+      .sync-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.625rem;
+        margin-top: 1rem;
+      }
+
+      .sync-action-button {
+        width: 100%;
+        padding: 0.875rem 1rem;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+      }
+
+      .sync-action-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .sync-action-button.primary {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: white;
+        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+      }
+
+      .sync-action-button.primary:hover:not(:disabled) {
+        box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+        transform: translateY(-1px);
+      }
+
+      .sync-action-button.danger {
+        background: white;
+        color: #ef4444;
+        border: 2px solid #ef4444;
+      }
+
+      .sync-action-button.danger:hover:not(:disabled) {
+        background: rgba(239, 68, 68, 0.08);
+        border-color: #dc2626;
+      }
+
+      /* Healthy Message */
+      .sync-healthy-message {
+        text-align: center;
+        padding: 1rem;
+        color: #10b981;
+        font-size: 0.875rem;
+        font-weight: 500;
+        background: rgba(16, 185, 129, 0.05);
+        border-radius: 8px;
+        margin-top: 1rem;
+      }
+
+      /* Dark Mode Support */
+      .dark-mode .sync-repair-panel {
+        background: rgba(17, 24, 39, 0.8);
+        border-color: rgba(139, 92, 246, 0.15);
+      }
+
+      .dark-mode .sync-repair-panel:hover {
+        border-color: rgba(139, 92, 246, 0.25);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+      }
+
+      .dark-mode .sync-panel-title,
+      .dark-mode .sync-status-label,
+      .dark-mode .sync-detail-value {
+        color: #f9fafb;
+      }
+
+      .dark-mode .sync-status-message,
+      .dark-mode .sync-detail-label {
+        color: #9ca3af;
+      }
+
+      .dark-mode .sync-status-card.status-healthy {
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.08) 100%);
+        border-color: rgba(16, 185, 129, 0.3);
+      }
+
+      .dark-mode .sync-status-card.status-warning {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(245, 158, 11, 0.08) 100%);
+        border-color: rgba(245, 158, 11, 0.3);
+      }
+
+      .dark-mode .sync-status-card.status-error {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(239, 68, 68, 0.08) 100%);
+        border-color: rgba(239, 68, 68, 0.3);
+      }
+
+      .dark-mode .sync-status-card.status-loading {
+        background: linear-gradient(135deg, rgba(107, 114, 128, 0.12) 0%, rgba(107, 114, 128, 0.08) 100%);
+        border-color: rgba(107, 114, 128, 0.3);
+      }
+
+      .dark-mode .sync-stats-grid {
+        border-top-color: rgba(255, 255, 255, 0.08);
+      }
+
+      .dark-mode .sync-diagnostics-details {
+        background: rgba(99, 102, 241, 0.08);
+        border-color: rgba(99, 102, 241, 0.15);
+      }
+
+      .dark-mode .sync-detail-row {
+        background: rgba(17, 24, 39, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .dark-mode .sync-recommendation {
+        background: rgba(17, 24, 39, 0.8);
+        border-color: rgba(99, 102, 241, 0.2);
+        color: #e5e7eb;
+      }
+
+      .dark-mode .sync-action-button.danger {
+        background: rgba(17, 24, 39, 0.8);
+        border-color: #ef4444;
+        color: #ef4444;
+      }
+
+      .dark-mode .sync-action-button.danger:hover:not(:disabled) {
+        background: rgba(239, 68, 68, 0.15);
+        border-color: #dc2626;
+      }
+
+      .dark-mode .sync-healthy-message {
+        background: rgba(16, 185, 129, 0.12);
+      }
+
+      /* Mobile Responsive */
+      @media (max-width: 768px) {
+        .sync-repair-panel {
+          padding: 1rem;
+          border-radius: 12px;
+        }
+
+        .sync-panel-title {
+          font-size: 0.9375rem;
+        }
+
+        .sync-status-icon {
+          font-size: 1.375rem;
+        }
+
+        .sync-status-label {
+          font-size: 0.8125rem;
+        }
+
+        .sync-status-message {
+          font-size: 0.75rem;
+        }
+
+        .sync-stat-value {
+          font-size: 1.25rem;
+        }
+
+        .sync-stat-label {
+          font-size: 0.625rem;
+        }
+
+        .sync-action-button {
+          padding: 0.75rem 0.875rem;
+          font-size: 0.875rem;
+        }
+
+        .sync-stats-grid {
+          gap: 0.5rem;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
