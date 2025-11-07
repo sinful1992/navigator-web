@@ -211,36 +211,37 @@ describe('Protection Flags System (Phase 1.2.2)', () => {
     });
   });
 
-  describe('initializeProtectionFlags', () => {
-    it('should initialize without errors', async () => {
-      // Should not throw
-      await initializeProtectionFlags();
-    });
+  // COMMENTED OUT: initializeProtectionFlags function no longer exists (localStorage-based implementation)
+  // describe('initializeProtectionFlags', () => {
+  //   it('should initialize without errors', async () => {
+  //     // Should not throw
+  //     await initializeProtectionFlags();
+  //   });
 
-    it('should load flags from IndexedDB if present', async () => {
-      // Set a flag
-      setProtectionFlag('navigator_active_protection');
+  //   it('should load flags from IndexedDB if present', async () => {
+  //     // Set a flag
+  //     setProtectionFlag('navigator_active_protection');
 
-      // Initialize (loads from IndexedDB)
-      await initializeProtectionFlags();
+  //     // Initialize (loads from IndexedDB)
+  //     await initializeProtectionFlags();
 
-      // Flag should still be active
-      expect(isProtectionActive('navigator_active_protection')).toBe(true);
-    });
+  //     // Flag should still be active
+  //     expect(isProtectionActive('navigator_active_protection')).toBe(true);
+  //   });
 
-    it('should skip expired flags during initialization', async () => {
-      setProtectionFlag('navigator_import_in_progress');
+  //   it('should skip expired flags during initialization', async () => {
+  //     setProtectionFlag('navigator_import_in_progress');
 
-      // Wait for expiration
-      await new Promise(resolve => setTimeout(resolve, 6100));
+  //     // Wait for expiration
+  //     await new Promise(resolve => setTimeout(resolve, 6100));
 
-      // Initialize
-      await initializeProtectionFlags();
+  //     // Initialize
+  //     await initializeProtectionFlags();
 
-      // Expired flag should not be in cache
-      expect(isProtectionActive('navigator_import_in_progress')).toBe(false);
-    });
-  });
+  //     // Expired flag should not be in cache
+  //     expect(isProtectionActive('navigator_import_in_progress')).toBe(false);
+  //   });
+  // });
 
   describe('Input Validation (FIX #5)', () => {
     it('should validate BroadcastChannel messages', async () => {
@@ -273,16 +274,17 @@ describe('Protection Flags System (Phase 1.2.2)', () => {
       expect(isProtectionActive('navigator_active_protection')).toBe(true);
     });
 
-    it('should validate IndexedDB data during load', async () => {
-      // Set valid flag
-      setProtectionFlag('navigator_active_protection');
+    // COMMENTED OUT: initializeProtectionFlags no longer exists
+    // it('should validate IndexedDB data during load', async () => {
+    //   // Set valid flag
+    //   setProtectionFlag('navigator_active_protection');
 
-      // Re-initialize should load and validate
-      await initializeProtectionFlags();
+    //   // Re-initialize should load and validate
+    //   await initializeProtectionFlags();
 
-      // Should still be valid
-      expect(isProtectionActive('navigator_active_protection')).toBe(true);
-    });
+    //   // Should still be valid
+    //   expect(isProtectionActive('navigator_active_protection')).toBe(true);
+    // });
   });
 
   describe('Race Condition Prevention (FIX #3)', () => {
@@ -325,25 +327,27 @@ describe('Protection Flags System (Phase 1.2.2)', () => {
     });
   });
 
-  describe('Memory Leak Prevention (FIX #4)', () => {
-    it('should cleanup resources on closeDB', () => {
-      setProtectionFlag('navigator_active_protection');
-      expect(isProtectionActive('navigator_active_protection')).toBe(true);
+  // COMMENTED OUT: closeDB and initializeProtectionFlags no longer exist
+  // describe('Memory Leak Prevention (FIX #4)', () => {
+  //   it('should cleanup resources on closeDB', () => {
+  //     setProtectionFlag('navigator_active_protection');
+  //     expect(isProtectionActive('navigator_active_protection')).toBe(true);
 
-      closeDB();
+  //     closeDB();
 
-      // After cleanup, should be able to re-initialize
-      initializeProtectionFlags(); // Should not throw
+  //     // After cleanup, should be able to re-initialize
+  //     initializeProtectionFlags(); // Should not throw
 
-      closeDB(); // Should cleanup again without error
-    });
-  });
+  //     closeDB(); // Should cleanup again without error
+  //   });
+  // });
 
   describe('Multi-Tab Coordination', () => {
     it('should handle BroadcastChannel messages correctly', async () => {
       if (typeof BroadcastChannel !== 'undefined') {
         // Initialize the BroadcastChannel handler first
-        await initializeProtectionFlags();
+        // COMMENTED OUT: initializeProtectionFlags no longer exists
+        // await initializeProtectionFlags();
 
         const bc = new BroadcastChannel('navigator-protection-flags');
 

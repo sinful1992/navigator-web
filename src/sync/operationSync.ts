@@ -511,8 +511,7 @@ export function useOperationSync(): UseOperationSync {
               // Continue to state reconstruction with merged operations
               const newState = reconstructStateWithConflictResolution(
                 INITIAL_STATE,
-                mergedOps,
-                operationLog.current
+                mergedOps
               );
               logger.info('📊 BOOTSTRAP: Reconstructed state (from local + sanitized cloud):', {
                 addresses: newState.addresses?.length || 0,
@@ -636,8 +635,7 @@ export function useOperationSync(): UseOperationSync {
               logger.info(`🔄 BOOTSTRAP: Reconstructing state from ${allOps.length} total operations`);
               const newState = reconstructStateWithConflictResolution(
                 INITIAL_STATE,
-                allOps,
-                operationLog.current
+                allOps
               );
               logger.info('📊 BOOTSTRAP: Reconstructed state:', {
                 addresses: newState.addresses?.length || 0,
@@ -1516,8 +1514,7 @@ export function useOperationSync(): UseOperationSync {
           // PHASE 1.3: Use conflict resolution for vector clock-based integrity
           const newState = reconstructStateWithConflictResolution(
             INITIAL_STATE,
-            allOperations,
-            operationLog.current
+            allOperations
           );
           setCurrentState(newState);
 
@@ -1529,8 +1526,7 @@ export function useOperationSync(): UseOperationSync {
           const allOperations = operationLog.current.getAllOperations();
           const reconstructedState = reconstructStateWithConflictResolution(
             INITIAL_STATE,
-            allOperations,
-            operationLog.current
+            allOperations
           );
 
           // Check if state looks incomplete (completions without sessions)
@@ -1697,8 +1693,7 @@ export function useOperationSync(): UseOperationSync {
                     const allOperations = operationLog.current!.getAllOperations();
                     const newState = reconstructStateWithConflictResolution(
                       INITIAL_STATE,
-                      allOperations,
-                      operationLog.current!
+                      allOperations
                     );
                     setCurrentState(newState);
                     // 🔧 CRITICAL FIX: Pass ALL operations, not just newOps delta
