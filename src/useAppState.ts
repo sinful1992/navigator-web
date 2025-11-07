@@ -1,109 +1,53 @@
-// src/useAppState.ts - FIXED VERSION - Prevent state corruption
+// src/useAppState.ts - REFACTORED VERSION - Composed from 7 focused hooks
 import * as React from "react";
 import { storageManager } from "./utils/storageManager";
 import { logger } from "./utils/logger";
-import { showWarning, showError } from "./utils/toast";
 import type {
-  AddressRow,
   AppState,
   Completion,
-  Outcome,
   DaySession,
   Arrangement,
-  UserSubscription,
-  ReminderSettings,
-  ReminderNotification,
-  BonusSettings,
 } from "./types";
+import type { SubmitOperationCallback } from "./types/operations";
 import {
   processArrangementReminders,
-  updateReminderStatus,
   cleanupOldNotifications,
-  DEFAULT_REMINDER_SETTINGS,
 } from "./services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "./utils/bonusCalculator";
-import { setProtectionFlag, clearProtectionFlag } from "./utils/protectionFlags";
+import {
+  setProtectionFlag,
+  clearProtectionFlag,
+} from "./utils/protectionFlags";
+// Extracted hooks
+import { usePersistedState } from "./hooks/usePersistedState";
+import { useSyncState } from "./hooks/useSyncState";
+import { useCompletionState } from "./hooks/useCompletionState";
+import { useAddressState } from "./hooks/useAddressState";
+import { useArrangementState } from "./hooks/useArrangementState";
+import { useSettingsState } from "./hooks/useSettingsState";
+import { useTimeTracking } from "./hooks/useTimeTracking";
+// Utility functions
+import { stampCompletionsWithVersion } from "./utils/validationUtils";
+import { applyOptimisticUpdates } from "./utils/optimisticUpdatesUtils";
+
+// Clean Architecture - Services and Repositories
+import { AddressRepository } from './repositories/AddressRepository';
+import { CompletionRepository } from './repositories/CompletionRepository';
+import { SessionRepository } from './repositories/SessionRepository';
+import { ArrangementRepository } from './repositories/ArrangementRepository';
+import { SettingsRepository } from './repositories/SettingsRepository';
+import { AddressService } from './services/AddressService';
+import { CompletionService } from './services/CompletionService';
+import { SessionService } from './services/SessionService';
+import { ArrangementService } from './services/ArrangementService';
+import { SettingsService } from './services/SettingsService';
+import { BackupService } from './services/BackupService';
+import { SyncService } from './services/SyncService';
 
 const STORAGE_KEY = "navigator_state_v5";
 const CURRENT_SCHEMA_VERSION = 5;
-
-type StateUpdate = {
-  id: string;
-  timestamp: string;
-  type: "optimistic" | "confirmed" | "reverted";
-  operation: "create" | "update" | "delete";
-  entity: "completion" | "arrangement" | "address" | "session";
-  data: any;
-};
-
-type OptimisticState = {
-  updates: Map<string, StateUpdate>;
-  pendingOperations: Set<string>;
-};
-
-const initial: AppState = {
-  addresses: [],
-  activeIndex: null,
-  activeStartTime: null,
-  completions: [],
-  daySessions: [],
-  arrangements: [],
-  currentListVersion: 1,
-  subscription: null,
-  reminderSettings: DEFAULT_REMINDER_SETTINGS,
-  reminderNotifications: [],
-  lastReminderProcessed: undefined,
-  bonusSettings: DEFAULT_BONUS_SETTINGS,
-};
-
-// 🔧 CRITICAL FIX: Safer deep copy that preserves data integrity
-// Data validation functions
-function validateCompletion(c: any): c is Completion {
-  return c &&
-    typeof c.index === 'number' &&
-    typeof c.address === 'string' &&
-    typeof c.outcome === 'string' &&
-    ['PIF', 'DA', 'Done', 'ARR'].includes(c.outcome) &&
-    typeof c.timestamp === 'string' &&
-    !isNaN(new Date(c.timestamp).getTime());
-}
-
-function validateAddressRow(a: any): a is AddressRow {
-  return a &&
-    typeof a.address === 'string' &&
-    a.address.trim().length > 0;
-}
-
-function validateAppState(state: any): state is AppState {
-  return state &&
-    Array.isArray(state.addresses) &&
-    Array.isArray(state.completions) &&
-    Array.isArray(state.daySessions) &&
-    Array.isArray(state.arrangements) &&
-    (state.activeIndex === null || typeof state.activeIndex === 'number') &&
-    typeof state.currentListVersion === 'number';
-}
-
-function stampCompletionsWithVersion(
-  completions: any[] | undefined,
-  version: number
-): Completion[] {
-  const src = Array.isArray(completions) ? completions : [];
-  return src
-    .filter(validateCompletion)
-    .map((c: any) => ({
-      ...c,
-      listVersion: typeof c?.listVersion === "number" ? c.listVersion : version,
-    }));
-}
-
-// Generate a deterministic ID for operations
-function generateOperationId(type: string, entity: string, data: any): string {
-  const key = `${type}_${entity}_${JSON.stringify(data).slice(0, 50)}_${Date.now()}`;
-  // Use encodeURIComponent to handle Unicode characters before base64 encoding
-  const unicodeSafeKey = encodeURIComponent(key);
-  return btoa(unicodeSafeKey).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
-}
+const DUPLICATE_COMPLETION_TOLERANCE_MS = 5000;
+const COMPLETION_MEMORY_CLEANUP_INTERVAL_MS = 60000;
 
 function closeSession(session: DaySession, endTime: Date): DaySession {
   const closed: DaySession = {
@@ -111,7 +55,7 @@ function closeSession(session: DaySession, endTime: Date): DaySession {
     end: endTime.toISOString(),
   };
 
-  const startMs = Date.parse(session.start);
+  const startMs = Date.parse(session.start || '');
   const endMs = endTime.getTime();
 
   if (!Number.isNaN(startMs) && !Number.isNaN(endMs)) {
@@ -126,7 +70,7 @@ function closeSession(session: DaySession, endTime: Date): DaySession {
 
 function autoCloseStaleSession(session: DaySession, now: Date): DaySession {
   const nowMs = now.getTime();
-  const startMs = Date.parse(session.start);
+  const startMs = Date.parse(session.start || '');
   let endMs = Date.parse(`${session.date}T23:59:59.999Z`);
 
   if (Number.isNaN(endMs)) {
@@ -223,7 +167,7 @@ export function prepareStartDaySessions(
   };
 }
 
-export function prepareEndDaySessions(
+function prepareEndDaySessions(
   sessions: DaySession[],
   today: string,
   now: Date
@@ -257,213 +201,35 @@ export function prepareEndDaySessions(
   };
 }
 
-// ---- device id helper ----
-const DEVICE_ID_KEY = "navigator_device_id";
-function getOrCreateDeviceId(): string {
-  try {
-    const existing = localStorage.getItem(DEVICE_ID_KEY);
-    if (existing) return existing;
-    const generated =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? (crypto as any).randomUUID()
-        : "dev_" + Math.random().toString(36).slice(2);
-    localStorage.setItem(DEVICE_ID_KEY, generated);
-    return generated;
-  } catch {
-    return "dev_" + Math.random().toString(36).slice(2);
-  }
-}
-
-// 🔧 CRITICAL FIX: Apply optimistic updates with better error handling and validation
-function applyOptimisticUpdates(
-  baseState: AppState,
-  updates: Map<string, StateUpdate>
-): AppState {
-  // Return base state immediately if no updates
-  if (updates.size === 0) {
-    return baseState;
-  }
-
-  try {
-    // Use immutable spread pattern instead of deep copy to avoid data corruption
-    let result: AppState = {
-      ...baseState,
-      addresses: [...baseState.addresses],
-      completions: [...baseState.completions],
-      arrangements: [...baseState.arrangements],
-      daySessions: [...baseState.daySessions]
-    };
-
-    // Sort updates by timestamp to apply in order
-    const sortedUpdates = Array.from(updates.values()).sort(
-      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    );
-
-    // Track if any critical state changes occur
-    let hasAddressChanges = false;
-    let hasCompletionChanges = false;
-
-    for (const update of sortedUpdates) {
-      if (update.type === "reverted") continue;
-
-      try {
-        switch (update.entity) {
-          case "completion":
-            hasCompletionChanges = true;
-            if (update.operation === "create") {
-              // Validate completion data
-              if (!update.data || typeof update.data.index !== 'number' || !update.data.outcome) {
-                logger.warn('Invalid completion data in optimistic update:', update.data);
-                continue;
-              }
-              
-              // Check for duplicates before adding
-              const isDuplicate = result.completions.some(c => 
-                c.index === update.data.index && 
-                c.outcome === update.data.outcome &&
-                Math.abs(new Date(c.timestamp).getTime() - new Date(update.data.timestamp).getTime()) < 1000
-              );
-              
-              if (!isDuplicate) {
-                result.completions = [update.data, ...result.completions];
-              }
-            } else if (update.operation === "update") {
-              result.completions = result.completions.map((c) =>
-                c.timestamp === update.data.originalTimestamp
-                  ? { ...c, ...update.data }
-                  : c
-              );
-            } else if (update.operation === "delete") {
-              result.completions = result.completions.filter(
-                (c) => c.timestamp !== update.data.timestamp
-              );
-            }
-            break;
-
-          case "arrangement":
-            if (update.operation === "create") {
-              result.arrangements = [...result.arrangements, update.data];
-            } else if (update.operation === "update") {
-              result.arrangements = result.arrangements.map((arr) =>
-                arr.id === update.data.id
-                  ? { ...arr, ...update.data, updatedAt: update.timestamp }
-                  : arr
-              );
-            } else if (update.operation === "delete") {
-              result.arrangements = result.arrangements.filter(
-                (arr) => arr.id !== update.data.id
-              );
-            }
-            break;
-
-          case "address":
-            hasAddressChanges = true;
-            if (update.operation === "create") {
-              // 🔧 FIX: Check for duplicate addresses before adding
-              const isDuplicate = result.addresses.some(a =>
-                a.address?.trim()?.toLowerCase() === update.data.address?.trim()?.toLowerCase()
-              );
-
-              if (!isDuplicate) {
-                result.addresses = [...result.addresses, update.data];
-              } else {
-                logger.warn('Skipping duplicate address in optimistic update:', update.data.address);
-              }
-            } else if (update.operation === "update") {
-              // bulk import path: update carries { addresses, bumpVersion, preserveCompletions }
-              if (update.data?.addresses) {
-                result.addresses = Array.isArray(update.data.addresses)
-                  ? update.data.addresses
-                  : result.addresses; // 🔧 FIX: Preserve existing if invalid
-                  
-                if (update.data.bumpVersion) {
-                  const currentVersion =
-                    typeof result.currentListVersion === "number"
-                      ? result.currentListVersion
-                      : 1;
-                  result.currentListVersion = currentVersion + 1;
-                  // Only reset completions if not preserving them
-                  if (!update.data.preserveCompletions) {
-                    result.completions = [];
-                  }
-                  result.activeIndex = null;
-                }
-              }
-            }
-            break;
-
-          case "session":
-            if (update.operation === "create") {
-              // 🔧 FIX: Validate session data
-              if (update.data && update.data.date && update.data.start) {
-                result.daySessions = [...result.daySessions, update.data];
-              } else {
-                logger.warn('Invalid session data in optimistic update:', update.data);
-              }
-            } else if (update.operation === "update") {
-              result.daySessions = result.daySessions.map((session) =>
-                session.date === update.data.date
-                  ? { ...session, ...update.data }
-                  : session
-              );
-            }
-            break;
-            
-          default:
-            logger.warn(`Unknown entity type in optimistic update: ${update.entity}`, update);
-            break;
-        }
-      } catch (updateError) {
-        logger.error(`Failed to apply optimistic update for ${update.entity}:`, updateError);
-        // Continue with other updates rather than failing completely
-      }
-    }
-
-    // 🔧 CRITICAL FIX: Validate result state before returning
-    if (hasAddressChanges && (!result.addresses || !Array.isArray(result.addresses))) {
-      logger.error('Optimistic updates corrupted addresses, reverting to base state');
-      return baseState;
-    }
-    
-    if (hasCompletionChanges && (!result.completions || !Array.isArray(result.completions))) {
-      logger.error('Optimistic updates corrupted completions, reverting to base state');
-      return baseState;
-    }
-
-    return result;
-    
-  } catch (error) {
-    logger.error('Failed to apply optimistic updates, returning base state:', error);
-    return baseState;
-  }
-}
-
-/**
- * Submit operation callback for delta sync
- * Called whenever a state-changing operation occurs
- */
-type SubmitOperationCallback = (operation: {
-  type: 'ADDRESS_BULK_IMPORT' | 'COMPLETION_CREATE' | 'ACTIVE_INDEX_SET' | 'ARRANGEMENT_CREATE' | 'ARRANGEMENT_UPDATE' | 'ARRANGEMENT_DELETE' | 'COMPLETION_UPDATE' | 'COMPLETION_DELETE' | 'ADDRESS_ADD' | 'SESSION_START' | 'SESSION_END' | 'SETTINGS_UPDATE_SUBSCRIPTION' | 'SETTINGS_UPDATE_REMINDER' | 'SETTINGS_UPDATE_BONUS';
-  payload: any;
-}) => Promise<void>;
-
 export function useAppState(userId?: string, submitOperation?: SubmitOperationCallback) {
-  const [baseState, setBaseState] = React.useState<AppState>(initial);
-  const [optimisticState, setOptimisticState] =
-    React.useState<OptimisticState>({
-      updates: new Map(),
-      pendingOperations: new Set(),
-    });
-  const [loading, setLoading] = React.useState(true);
+  // ---- Composed hooks ----
+  // 1. Persistence hook (loads/saves state)
+  const { state: baseState, setState: setBaseState, loading, ownerMetadata } = usePersistedState(userId);
 
-  // stable device id
-  const deviceId = React.useMemo(() => getOrCreateDeviceId(), []);
+  // 2. Sync hook (optimistic updates, conflicts, device ID)
+  const {
+    optimisticUpdates,
+    pendingOperations,
+    conflicts,
+    deviceId,
+    confirmOptimisticUpdate,
+    revertOptimisticUpdate,
+    clearOptimisticUpdates,
+    enqueueOp,
+    resolveConflict,
+    setConflicts,
+  } = useSyncState();
 
-  // Store current user ID for ownership tracking
-  const ownerUserIdRef = React.useRef<string | undefined>(userId);
-  React.useEffect(() => {
-    ownerUserIdRef.current = userId;
-  }, [userId]);
+  // Helper function to wrap enqueueOp for extracted hooks
+  const addOptimisticUpdate = React.useCallback(
+    (operation: string, entity: string, data: unknown, operationId?: string): string => {
+      const id = operationId || `${operation}_${entity}_${Date.now()}`;
+      // enqueueOp expects: (entity, operation, data, operationId)
+      enqueueOp(entity as 'completion' | 'arrangement' | 'address' | 'session', operation as 'create' | 'update' | 'delete', data, id);
+      return id;
+    },
+    [enqueueOp]
+  );
 
   // Computed state with optimistic updates applied
   const state = React.useMemo(() => {
@@ -473,464 +239,110 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       logger.warn('Missing bonusSettings in baseState, applying default');
       patchedBaseState = { ...baseState, bonusSettings: DEFAULT_BONUS_SETTINGS };
       // Update baseState immediately
-      setTimeout(() => setBaseState(patchedBaseState), 0);
+      setTimeout(() => setBaseState((s: AppState) => ({ ...s, bonusSettings: DEFAULT_BONUS_SETTINGS })), 0);
     }
-    return applyOptimisticUpdates(patchedBaseState, optimisticState.updates);
-  }, [baseState, optimisticState.updates]);
+    return applyOptimisticUpdates(patchedBaseState, optimisticUpdates);
+  }, [baseState, optimisticUpdates, setBaseState]);
 
-  // Track conflicts
-  const [conflicts, setConflicts] = React.useState<Map<string, any>>(
-    new Map()
-  );
+  // ---- Initialize domain services and repositories ----
+  // Clean Architecture: Repositories (data access) + Services (business logic)
+  const servicesAndRepos = React.useMemo(() => {
+    if (!submitOperation) return null;
 
-  // Track loaded owner metadata for ownership verification
-  const [ownerMetadata, setOwnerMetadata] = React.useState<{
-    ownerUserId?: string;
-    ownerChecksum?: string;
-  }>({});
+    // Cast submitOperation to SubmitOperationFn for BaseRepository compatibility
+    // SubmitOperationCallback (SubmitOperation) is compatible with SubmitOperationFn (Partial<Operation>)
+    const submitOpFn = submitOperation as any;
 
-  // ---- load from IndexedDB (with validation and migration) ----
-  React.useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const saved = (await storageManager.queuedGet(STORAGE_KEY)) as any;
-        if (!alive) return;
+    // Initialize repositories (data access layer)
+    const addressRepo = new AddressRepository(submitOpFn, deviceId);
+    const completionRepo = new CompletionRepository(submitOpFn, deviceId);
+    const sessionRepo = new SessionRepository(submitOpFn, deviceId);
+    const arrangementRepo = new ArrangementRepository(submitOpFn, deviceId);
+    const settingsRepo = new SettingsRepository(submitOpFn, deviceId);
 
-        if (saved) {
-          // 🔒 SECURITY: Validate IndexedDB data ownership
-          const loadedOwnerUserId = saved._ownerUserId;
-          const loadedOwnerChecksum = saved._ownerChecksum;
-          const expectedUserId = localStorage.getItem('navigator_expected_user_id');
+    // Initialize services (business logic layer - pure, no data access)
+    const addressService = new AddressService();
+    const completionService = new CompletionService();
+    const sessionService = new SessionService();
+    const arrangementService = new ArrangementService();
+    const settingsService = new SettingsService();
+    const backupService = new BackupService();
+    const syncService = new SyncService(submitOpFn);
 
-          // Critical validation: Check if IndexedDB data belongs to current user
-          if (expectedUserId && loadedOwnerUserId && loadedOwnerUserId !== expectedUserId) {
-            logger.error(`🚨 INDEXEDDB CONTAMINATION: Data belongs to ${loadedOwnerUserId} but expected ${expectedUserId}`);
-
-            // Create emergency backup
-            const emergencyBackup = {
-              timestamp: new Date().toISOString(),
-              contaminatedData: saved,
-              expectedUserId,
-              actualUserId: loadedOwnerUserId,
-              reason: 'indexeddb_contamination'
-            };
-            localStorage.setItem(`navigator_emergency_backup_${Date.now()}`, JSON.stringify(emergencyBackup));
-
-            // Clear contaminated data and start fresh
-            await storageManager.queuedSet(STORAGE_KEY, null);
-            logger.warn('🔒 SECURITY: Cleared contaminated IndexedDB data');
-
-            setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
-            return;
-          }
-
-          // Store owner metadata for verification
-          setOwnerMetadata({
-            ownerUserId: loadedOwnerUserId,
-            ownerChecksum: loadedOwnerChecksum
-          });
-
-          // Validate loaded data
-          if (!validateAppState(saved)) {
-            logger.warn('Loaded data failed validation, using initial state');
-            setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
-            return;
-          }
-
-          const version =
-            typeof saved.currentListVersion === "number"
-              ? saved.currentListVersion
-              : 1;
-          const next: AppState = {
-            addresses: saved.addresses.filter(validateAddressRow),
-            activeIndex: (typeof saved.activeIndex === "number") ? saved.activeIndex : null,
-            completions: stampCompletionsWithVersion(saved.completions, version),
-            daySessions: Array.isArray(saved.daySessions) ? saved.daySessions : [],
-            arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
-            currentListVersion: version,
-            subscription: saved.subscription || null,
-            reminderSettings: saved.reminderSettings || DEFAULT_REMINDER_SETTINGS,
-            reminderNotifications: Array.isArray(saved.reminderNotifications) ? saved.reminderNotifications : [],
-            lastReminderProcessed: saved.lastReminderProcessed,
-            bonusSettings: saved.bonusSettings || DEFAULT_BONUS_SETTINGS,
-            _schemaVersion: CURRENT_SCHEMA_VERSION,
-          };
-
-          logger.info('State loaded from IndexedDB:', {
-            hasBonusSettings: !!next.bonusSettings,
-            bonusSettings: next.bonusSettings
-          });
-
-          setBaseState(next);
-        } else {
-          // No saved data, use initial state with current schema version
-          setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
-        }
-      } catch (error) {
-        logger.error("Failed to load state from IndexedDB:", error);
-        // Use safe fallback
-        setBaseState({ ...initial, _schemaVersion: CURRENT_SCHEMA_VERSION });
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
+    return {
+      // Repositories (data access)
+      repositories: {
+        address: addressRepo,
+        completion: completionRepo,
+        session: sessionRepo,
+        arrangement: arrangementRepo,
+        settings: settingsRepo,
+      },
+      // Services (business logic)
+      services: {
+        address: addressService,
+        completion: completionService,
+        session: sessionService,
+        arrangement: arrangementService,
+        settings: settingsService,
+        backup: backupService,
+        sync: syncService,
+      },
     };
-  }, []);
+  }, [submitOperation, deviceId]);
 
-  // ---- persist to IndexedDB (debounced with error handling) ----
-  React.useEffect(() => {
-    if (loading) return;
+  // ---- Call extracted hooks ----
 
-    const t = setTimeout(async () => {
-      try {
-        // Add schema version and owner signature before saving
-        const stateToSave: any = {
-          ...baseState,
-          _schemaVersion: CURRENT_SCHEMA_VERSION
-        };
+  // 3. Completion state (create, update, delete completions)
+  const completionState = useCompletionState({
+    baseState,
+    addOptimisticUpdate,
+    confirmOptimisticUpdate,
+    submitOperation,
+    setBaseState,
+    services: servicesAndRepos?.services,
+    repositories: servicesAndRepos?.repositories,
+  });
 
-        // Add immutable owner signature if authenticated
-        if (ownerUserIdRef.current) {
-          stateToSave._ownerUserId = ownerUserIdRef.current;
-          // Create tamper-detection hash: hash(userId + timestamp + data checksum)
-          const dataChecksum = JSON.stringify({
-            addressCount: baseState.addresses.length,
-            completionCount: baseState.completions.length,
-            listVersion: baseState.currentListVersion
-          });
-          const signatureInput = `${ownerUserIdRef.current}|${dataChecksum}`;
-          stateToSave._ownerChecksum = btoa(signatureInput).slice(0, 32);
-        }
+  // 4. Address state (bulk import, add addresses)
+  const addressState = useAddressState({
+    baseState,
+    addOptimisticUpdate,
+    confirmOptimisticUpdate,
+    submitOperation,
+    setBaseState,
+    services: servicesAndRepos?.services,
+    repositories: servicesAndRepos?.repositories,
+  });
 
-        await storageManager.queuedSet(STORAGE_KEY, stateToSave);
+  // 5. Arrangement state (create, update, delete arrangements)
+  const arrangementState = useArrangementState({
+    baseState,
+    addOptimisticUpdate,
+    confirmOptimisticUpdate,
+    submitOperation,
+    setBaseState,
+    services: servicesAndRepos?.services,
+    repositories: servicesAndRepos?.repositories,
+  });
 
-      } catch (error: unknown) {
-        logger.error('Failed to persist state to IndexedDB:', error);
-      }
-    }, 150);
+  // 6. Settings state (subscription, reminder, bonus settings)
+  const settingsState = useSettingsState({
+    submitOperation,
+    setBaseState,
+    services: servicesAndRepos?.services,
+    repositories: servicesAndRepos?.repositories,
+  });
 
-    return () => clearTimeout(t);
-  }, [baseState, loading]);
+  // 7. Time tracking (active address, start/cancel time tracking)
+  const timeTrackingState = useTimeTracking({
+    baseState,
+    setBaseState,
+    submitOperation,
+    services: servicesAndRepos?.services,
+    repositories: servicesAndRepos?.repositories,
+  });
 
-  // ---- optimistic update helpers ----
-  const addOptimisticUpdate = React.useCallback(
-    (
-      operation: "create" | "update" | "delete",
-      entity: "completion" | "arrangement" | "address" | "session",
-      data: any,
-      operationId?: string
-    ): string => {
-      const id = operationId || generateOperationId(operation, entity, data);
-      const timestamp = new Date().toISOString();
-
-      const update: StateUpdate = {
-        id,
-        timestamp,
-        type: "optimistic",
-        operation,
-        entity,
-        data,
-      };
-
-      setOptimisticState((prev) => {
-        const updates = new Map(prev.updates);
-        updates.set(id, update);
-        return {
-          updates,
-          pendingOperations: new Set([...prev.pendingOperations, id]),
-        };
-      });
-
-      return id;
-    },
-    []
-  );
-
-  const confirmOptimisticUpdate = React.useCallback(
-    (operationId: string, confirmedData?: any) => {
-      setOptimisticState((prev) => {
-        const updates = new Map(prev.updates);
-        const pendingOperations = new Set(prev.pendingOperations);
-
-        const existing = updates.get(operationId);
-        if (existing) {
-          updates.set(operationId, {
-            ...existing,
-            type: "confirmed",
-            data: confirmedData || existing.data,
-          });
-        }
-
-        pendingOperations.delete(operationId);
-
-        return { updates, pendingOperations };
-      });
-
-      // Clean up confirmed updates after a delay
-      setTimeout(() => {
-        setOptimisticState((prev) => {
-          const updates = new Map(prev.updates);
-          updates.delete(operationId);
-          return { ...prev, updates };
-        });
-      }, 5000);
-    },
-    []
-  );
-
-  const revertOptimisticUpdate = React.useCallback(
-    (operationId: string, reason?: string) => {
-      logger.debug(`Reverting optimistic update ${operationId}:`, reason);
-
-      setOptimisticState((prev) => {
-        const updates = new Map(prev.updates);
-        const pendingOperations = new Set(prev.pendingOperations);
-
-        const existing = updates.get(operationId);
-        if (existing) {
-          updates.set(operationId, {
-            ...existing,
-            type: "reverted",
-          });
-        }
-
-        pendingOperations.delete(operationId);
-
-        return { updates, pendingOperations };
-      });
-
-      // Clean up reverted updates after a short delay
-      setTimeout(() => {
-        setOptimisticState((prev) => {
-          const updates = new Map(prev.updates);
-          updates.delete(operationId);
-          return { ...prev, updates };
-        });
-      }, 1000);
-    },
-    []
-  );
-
-  const clearOptimisticUpdates = React.useCallback(() => {
-    setOptimisticState({
-      updates: new Map(),
-      pendingOperations: new Set(),
-    });
-  }, []);
-
-  // ---------------- enhanced actions ----------------
-
-  /** Import a new Excel list: bump list version with option to preserve completions. */
-  const setAddresses = React.useCallback(
-    (rows: AddressRow[], preserveCompletions = true) => {
-      logger.info(`🔄 IMPORT START: Importing ${rows.length} addresses, preserveCompletions=${preserveCompletions}`);
-
-      // 🔧 CRITICAL FIX: Prevent import while address is active
-      if (baseState.activeIndex !== null) {
-        const activeAddress = baseState.addresses[baseState.activeIndex];
-        logger.error(`❌ IMPORT BLOCKED: Cannot import while address is active: "${activeAddress?.address}"`);
-        showError(`Please complete or cancel the active address before importing a new list.`);
-        return;
-      }
-
-      // 🔧 CRITICAL FIX: Set import protection flag to prevent cloud sync override
-      const importTime = setProtectionFlag('navigator_import_in_progress');
-      logger.info('🛡️ IMPORT PROTECTION ACTIVATED:', new Date(importTime).toISOString());
-
-      const operationId = generateOperationId("update", "address", {
-        type: "bulk_import",
-        count: rows.length,
-        preserve: preserveCompletions,
-      });
-
-      // 🔧 FIX: Validate rows before applying
-      const validRows = Array.isArray(rows) ? rows.filter(validateAddressRow) : [];
-
-      logger.info(`🔄 IMPORT VALIDATION: ${validRows.length} valid out of ${rows.length} total`);
-
-      if (validRows.length === 0) {
-        logger.warn('No valid addresses to import');
-        return;
-      }
-
-      // Apply optimistically
-      addOptimisticUpdate(
-        "update",
-        "address",
-        { addresses: validRows, bumpVersion: true, preserveCompletions },
-        operationId
-      );
-
-      // Apply to base state
-      setBaseState((s) => {
-        const newListVersion = (typeof s.currentListVersion === "number" ? s.currentListVersion : 1) + 1;
-        logger.info(`🔄 IMPORT BASE STATE UPDATE: addresses=${validRows.length}, preserveCompletions=${preserveCompletions}, oldCompletions=${s.completions.length}, newListVersion=${newListVersion}`);
-
-        // Active protection should prevent this from happening while address is active
-        if (s.activeIndex !== null) {
-          logger.error(`❌ IMPORT WHILE ACTIVE: This should never happen! activeIndex=${s.activeIndex}, protection should be blocking this`);
-        }
-
-        const newState = {
-          ...s,
-          addresses: validRows,
-          activeIndex: null,
-          activeStartTime: null, // 🔧 CRITICAL FIX: Clear activeStartTime when clearing activeIndex
-          currentListVersion: newListVersion,
-          completions: preserveCompletions ? s.completions : [],
-        };
-
-        logger.info(`🔄 IMPORT RESULT STATE: addresses=${newState.addresses.length}, completions=${newState.completions.length}, listVersion=${newState.currentListVersion}`);
-        return newState;
-      });
-
-      // Confirm immediately for local operations
-      confirmOptimisticUpdate(operationId);
-
-      // 🔥 DELTA SYNC: Submit operation to cloud immediately
-      if (submitOperation) {
-        submitOperation({
-          type: 'ADDRESS_BULK_IMPORT',
-          payload: {
-            addresses: validRows,
-            newListVersion: (typeof baseState.currentListVersion === "number" ? baseState.currentListVersion : 1) + 1,
-            preserveCompletions
-          }
-        }).catch(err => {
-          logger.error('Failed to submit bulk import operation:', err);
-        });
-      }
-
-      // 🔧 CRITICAL FIX: Clear import protection flag after a delay to allow state to settle
-      setTimeout(() => {
-        clearProtectionFlag('navigator_import_in_progress');
-        logger.info('🛡️ IMPORT PROTECTION CLEARED after import completion');
-      }, 2000); // 2 second protection window
-    },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, baseState.activeIndex, baseState.addresses]
-  );
-
-  /** Add a single address (used by Arrangements "manual address"). Returns new index. */
-  const addAddress = React.useCallback(
-    (addressRow: AddressRow): Promise<number> => {
-      return new Promise<number>((resolve) => {
-        // 🔧 FIX: Validate address before adding
-        if (!validateAddressRow(addressRow)) {
-          resolve(-1);
-          return;
-        }
-
-        const operationId = generateOperationId("create", "address", addressRow);
-
-        // Apply optimistically
-        addOptimisticUpdate("create", "address", addressRow, operationId);
-
-        // Apply to base state
-        setBaseState((s) => {
-          const newAddresses = [...s.addresses, addressRow];
-          const newIndex = newAddresses.length - 1;
-
-          // Resolve immediately with the new index
-          confirmOptimisticUpdate(operationId);
-          resolve(newIndex);
-
-          return { ...s, addresses: newAddresses };
-        });
-
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
-          submitOperation({
-            type: 'ADDRESS_ADD',
-            payload: { address: addressRow }
-          }).catch(err => {
-            logger.error('Failed to submit address add operation:', err);
-            // Don't throw - operation is saved locally and will retry
-          });
-        }
-      });
-    },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
-  );
-
-  const setActive = React.useCallback((idx: number) => {
-    // 🔧 CRITICAL FIX: Set protection flag (no timeout - cleared on Complete/Cancel)
-    setProtectionFlag('navigator_active_protection');
-
-    const now = new Date().toISOString();
-    let shouldSubmit = false;
-
-    setBaseState((s) => {
-      const address = s.addresses[idx];
-
-      // Check if there's already an active address
-      if (s.activeIndex !== null && s.activeIndex !== idx) {
-        const currentActiveAddress = s.addresses[s.activeIndex];
-        logger.warn(`Cannot start address #${idx} - address #${s.activeIndex} "${currentActiveAddress?.address}" is already active`);
-        showWarning(`Please complete or cancel the current active address first`);
-        localStorage.removeItem('navigator_active_protection');
-        return s; // Don't change state
-      }
-
-      // Check if this address is already completed (cross-device protection)
-      if (address) {
-        const isCompleted = s.completions.some(c =>
-          c.index === idx &&
-          (c.listVersion || s.currentListVersion) === s.currentListVersion
-        );
-
-        if (isCompleted) {
-          logger.warn(`Cannot set active - address at index ${idx} is already completed`);
-          showWarning(`This address is already completed`);
-          localStorage.removeItem('navigator_active_protection');
-          return s; // Don't change state
-        }
-      }
-
-      logger.info(`📍 STARTING CASE: Address #${idx} "${address?.address}" at ${now} - SYNC BLOCKED until Complete/Cancel`);
-      shouldSubmit = true;
-
-      return { ...s, activeIndex: idx, activeStartTime: now };
-    });
-
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-    if (shouldSubmit && submitOperation) {
-      submitOperation({
-        type: 'ACTIVE_INDEX_SET',
-        payload: { index: idx, startTime: now }
-      }).catch(err => {
-        logger.error('Failed to submit active index operation:', err);
-      });
-    }
-  }, [submitOperation]);
-
-  const cancelActive = React.useCallback(() => {
-    // 🔧 FIX: Clear protection to resume cloud sync
-    clearProtectionFlag('navigator_active_protection');
-
-    setBaseState((s) => {
-      logger.info(`📍 CANCELING ACTIVE: Clearing active state - SYNC RESUMED`);
-      return { ...s, activeIndex: null, activeStartTime: null };
-    });
-
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-    if (submitOperation) {
-      submitOperation({
-        type: 'ACTIVE_INDEX_SET',
-        payload: { index: null, startTime: null }
-      }).catch(err => {
-        logger.error('Failed to submit cancel active operation:', err);
-      });
-    }
-  }, [submitOperation]);
-
-  // Track pending completions to prevent double submissions
-  const [, setPendingCompletions] = React.useState<Set<number>>(new Set());
-  const pendingCompletionsRef = React.useRef<Set<number>>(new Set());
-  
-  /** ATOMIC: Enhanced completion with proper transaction handling */
   // Track recent completions to protect against cloud sync rollbacks
   const recentCompletionsRef = React.useRef<Map<string, { timestamp: number; completion: Completion }>>(new Map());
 
@@ -950,268 +362,10 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       if (removedCount > 0) {
         logger.debug(`🧹 Cleaned up ${removedCount} old completion entries from memory`);
       }
-    }, 15000); // Run cleanup every 15 seconds
+    }, COMPLETION_MEMORY_CLEANUP_INTERVAL_MS); // Run cleanup at regular interval
 
     return () => clearInterval(cleanupInterval);
   }, []);
-
-  const complete = React.useCallback(
-    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, enforcementFees?: number[]): Promise<string> => {
-      // Validate index is a valid number
-      if (!Number.isInteger(index) || index < 0) {
-        const error = `Invalid index: ${index}. Index must be a non-negative integer.`;
-        logger.error(error);
-        showError('Invalid address index. Please refresh and try again.');
-        throw new Error(error);
-      }
-
-      // Check array bounds
-      const currentState = baseState;
-      if (index >= currentState.addresses.length) {
-        const error = `Index ${index} out of bounds. Total addresses: ${currentState.addresses.length}`;
-        logger.error(error);
-        showError('Address not found. The list may have changed. Please refresh.');
-        throw new Error(error);
-      }
-
-      // Check if completion is already pending for this index
-      if (pendingCompletionsRef.current.has(index)) {
-        throw new Error(`Completion already pending for index ${index}`);
-      }
-
-      // Check if address exists and has valid data
-      const address = currentState.addresses[index];
-      if (!address || !address.address) {
-        const error = `Address at index ${index} is invalid or empty`;
-        logger.error(error);
-        showError('Invalid address data. Please refresh and try again.');
-        throw new Error(error);
-      }
-
-      // Check if already completed (timestamp-based check)
-      const existingCompletion = currentState.completions.find(
-        (c) => c.address === address.address && c.listVersion === currentState.currentListVersion
-      );
-
-      if (existingCompletion) {
-        // If there's an existing completion, check if it's recent (within last 30 seconds)
-        // This prevents rapid duplicate submissions but allows legitimate re-completion
-        const existingTime = new Date(existingCompletion.timestamp).getTime();
-        const now = Date.now();
-        const timeDiff = now - existingTime;
-
-        if (timeDiff < 30000) { // 30 seconds
-          showWarning(`Address "${address.address}" was already completed ${Math.round(timeDiff/1000)} seconds ago`);
-          return Promise.reject(); // Exit early but maintain function signature
-        }
-
-        logger.info(`🔄 RE-COMPLETING: Address "${address.address}" was previously completed ${new Date(existingCompletion.timestamp).toLocaleString()}, allowing new completion`);
-      }
-
-      const nowISO = new Date().toISOString();
-
-      // Calculate time spent on this case if it was the active one
-      let timeSpentSeconds: number | undefined;
-      if (currentState.activeIndex === index && currentState.activeStartTime) {
-        const startTime = new Date(currentState.activeStartTime).getTime();
-        const endTime = new Date(nowISO).getTime();
-        timeSpentSeconds = Math.floor((endTime - startTime) / 1000);
-        logger.info(`⏱️ CASE TIME TRACKED: ${Math.floor(timeSpentSeconds / 60)}m ${timeSpentSeconds % 60}s on "${address.address}"`);
-      }
-
-      const completion: Completion = {
-        index,
-        address: address.address,
-        lat: address.lat ?? null,
-        lng: address.lng ?? null,
-        outcome,
-        amount,
-        timestamp: nowISO,
-        listVersion: currentState.currentListVersion,
-        arrangementId,
-        caseReference,
-        timeSpentSeconds,
-        numberOfCases,
-        enforcementFees,
-      };
-
-      const operationId = generateOperationId(
-        "create",
-        "completion",
-        completion
-      );
-
-      try {
-        // Mark as pending
-        pendingCompletionsRef.current.add(index);
-        setPendingCompletions(new Set(pendingCompletionsRef.current));
-
-        // Apply all changes synchronously to avoid race conditions
-        const completionKey = `${index}_${outcome}_${currentState.currentListVersion}`;
-
-        // Track recent completion (cleanup happens in setState handler)
-        recentCompletionsRef.current.set(completionKey, {
-          timestamp: Date.now(),
-          completion
-        });
-
-        // Apply both optimistic and base state updates in single transaction
-        addOptimisticUpdate("create", "completion", completion, operationId);
-
-        setBaseState((s) => {
-          if (s.activeIndex === index) {
-            // 🔧 FIX: Clear protection when completing active address
-            clearProtectionFlag('navigator_active_protection');
-            logger.info(`📍 COMPLETED ACTIVE ADDRESS: Clearing active state - SYNC RESUMED`);
-          }
-
-          return {
-            ...s,
-            completions: [completion, ...s.completions],
-            activeIndex: s.activeIndex === index ? null : s.activeIndex,
-            activeStartTime: s.activeIndex === index ? null : s.activeStartTime,
-          };
-        });
-
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
-          submitOperation({
-            type: 'COMPLETION_CREATE',
-            payload: { completion }
-          }).catch(err => {
-            logger.error('Failed to submit completion operation:', err);
-            // Don't throw - operation is saved locally and will retry
-          });
-        }
-
-        return operationId;
-      } finally {
-        // Always clear pending state, even if above operations fail
-        pendingCompletionsRef.current.delete(index);
-        setPendingCompletions(new Set(pendingCompletionsRef.current));
-      }
-    },
-    [baseState, addOptimisticUpdate, submitOperation]
-  );
-
-  /** Enhanced undo with optimistic updates */
-  const undo = React.useCallback(
-    (index: number) => {
-      let completionToDelete: Completion | undefined;
-
-      setBaseState((s) => {
-        const arr = s.completions.slice();
-
-        // Find the most recent completion for this index and list version
-        let mostRecentPos = -1;
-        let mostRecentTime = 0;
-
-        for (let i = 0; i < arr.length; i++) {
-          const c = arr[i];
-          if (Number(c.index) === Number(index) &&
-              c.listVersion === s.currentListVersion) {
-            const completionTime = new Date(c.timestamp).getTime();
-            if (completionTime > mostRecentTime) {
-              mostRecentTime = completionTime;
-              mostRecentPos = i;
-            }
-          }
-        }
-
-        if (mostRecentPos >= 0) {
-          const completion = arr[mostRecentPos];
-          completionToDelete = completion;
-
-          const operationId = generateOperationId(
-            "delete",
-            "completion",
-            completion
-          );
-
-          // Add optimistic update for deletion
-          addOptimisticUpdate("delete", "completion", completion, operationId);
-
-          arr.splice(mostRecentPos, 1);
-
-          // Confirm immediately for local operations
-          setTimeout(() => confirmOptimisticUpdate(operationId), 0);
-        }
-
-        return { ...s, completions: arr };
-      });
-
-      // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-      if (completionToDelete && submitOperation) {
-        submitOperation({
-          type: 'COMPLETION_DELETE',
-          payload: {
-            timestamp: completionToDelete.timestamp,
-            index: completionToDelete.index,
-            listVersion: completionToDelete.listVersion,
-          }
-        }).catch(err => {
-          logger.error('Failed to submit completion delete operation:', err);
-        });
-      }
-    },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
-  );
-
-  /** Update an existing completion (e.g., change outcome or amount) */
-  const updateCompletion = React.useCallback(
-    (completionArrayIndex: number, updates: Partial<Completion>) => {
-      let originalTimestamp: string | undefined;
-      let shouldSubmit = false;
-
-      setBaseState((s) => {
-        if (
-          !Number.isInteger(completionArrayIndex) ||
-          completionArrayIndex < 0 ||
-          completionArrayIndex >= s.completions.length
-        ) {
-          logger.error('Invalid completion index:', completionArrayIndex);
-          return s;
-        }
-
-        const originalCompletion = s.completions[completionArrayIndex];
-        originalTimestamp = originalCompletion.timestamp;
-        shouldSubmit = true;
-
-        const updatedCompletion = { ...originalCompletion, ...updates };
-
-        const operationId = generateOperationId(
-          "update",
-          "completion",
-          { originalTimestamp: originalCompletion.timestamp, updates }
-        );
-
-        // Add optimistic update
-        addOptimisticUpdate("update", "completion", updatedCompletion, operationId);
-
-        const newCompletions = s.completions.slice();
-        newCompletions[completionArrayIndex] = updatedCompletion;
-
-        // Confirm immediately for local operations
-        setTimeout(() => confirmOptimisticUpdate(operationId), 0);
-
-        return { ...s, completions: newCompletions };
-      });
-
-      // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-      if (shouldSubmit && originalTimestamp && submitOperation) {
-        submitOperation({
-          type: 'COMPLETION_UPDATE',
-          payload: {
-            originalTimestamp,
-            updates,
-          }
-        }).catch(err => {
-          logger.error('Failed to submit completion update operation:', err);
-        });
-      }
-    },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
-  );
 
   // ---- 🔧 FIXED: Enhanced day tracking with better validation ----
 
@@ -1226,9 +380,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
     let shouldSubmit = false;
 
-    setBaseState((s) => {
+    setBaseState((s: AppState) => {
       // 🔧 IMPROVED: More specific check - only block if there's an active session TODAY
-      const activeTodaySession = s.daySessions.find((d) => d.date === today && !d.end);
+      const activeTodaySession = s.daySessions.find((d: DaySession) => d.date === today && !d.end);
 
       if (activeTodaySession) {
         logger.info('Day already active for today, skipping start');
@@ -1236,20 +390,19 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       }
 
       // 🔧 IMPROVED: Auto-close any stale sessions from previous days
-      const updatedSessions = s.daySessions.map((session) => {
+      const updatedSessions = s.daySessions.map((session: DaySession) => {
         if (session.date < today && !session.end) {
           logger.info('Auto-closing stale session from previous day:', session);
           return {
             ...session,
             end: new Date(session.date + 'T23:59:59.999Z').toISOString(),
-            durationSeconds: Math.floor((new Date(session.date + 'T23:59:59.999Z').getTime() - new Date(session.start).getTime()) / 1000)
+            durationSeconds: Math.floor((new Date(session.date + 'T23:59:59.999Z').getTime() - new Date(session.start || new Date()).getTime()) / 1000)
           };
         }
         return session;
       });
 
       logger.info('Starting new day session:', sess);
-      setProtectionFlag('navigator_day_session_protection');
       shouldSubmit = true;
 
       return {
@@ -1276,7 +429,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
     let endedSession: DaySession | undefined;
 
-    setBaseState((s) => {
+    setBaseState((s: AppState) => {
       const {
         updatedSessions,
         closedSessions,
@@ -1285,7 +438,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
       endedSession = session;
 
-      closedSessions.forEach((session) =>
+      closedSessions.forEach((session: DaySession) =>
         logger.info("Auto-closing stale day session before ending today", session)
       );
 
@@ -1298,7 +451,6 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       }
 
       logger.info("Ending day session:", endedSession);
-      clearProtectionFlag('navigator_day_session_protection');
       return { ...s, daySessions: updatedSessions };
     });
 
@@ -1316,230 +468,76 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     }
   }, [submitOperation]);
 
-  // ---- enhanced arrangements ----
+  const updateSession = React.useCallback((date: string, updates: Partial<DaySession>, createIfMissing: boolean = false) => {
+    // 🔧 CRITICAL FIX: Set protection flag BEFORE state mutation to prevent race condition
+    setProtectionFlag('navigator_session_protection');
 
-  const addArrangement = React.useCallback(
-    (
-      arrangementData: Omit<Arrangement, "id" | "createdAt" | "updatedAt">
-    ): Promise<string> => {
-      return new Promise((resolve) => {
-        const now = new Date().toISOString();
-        const id = `arr_${Date.now()}_${Math.random()
-          .toString(36)
-          .slice(2, 11)}`;
-        const newArrangement: Arrangement = {
-          ...arrangementData,
-          id,
-          createdAt: now,
-          updatedAt: now,
-        };
+    setBaseState((s: AppState) => {
+      const sessionIndex = s.daySessions.findIndex((session: DaySession) => session.date === date);
 
-        const operationId = generateOperationId(
-          "create",
-          "arrangement",
-          newArrangement
-        );
-        addOptimisticUpdate(
-          "create",
-          "arrangement",
-          newArrangement,
-          operationId
-        );
+      if (sessionIndex >= 0) {
+        // Update existing session
+        const updatedSessions = s.daySessions.map((session: DaySession, idx: number) => {
+          if (idx === sessionIndex) {
+            const updatedSession = { ...session, ...updates };
 
-        setBaseState((s) => {
-          setTimeout(() => {
-            confirmOptimisticUpdate(operationId);
-            resolve(id);
-          }, 0);
-          return { ...s, arrangements: [...s.arrangements, newArrangement] };
-        });
+            // Recalculate duration if both start and end are present
+            if (updatedSession.start && updatedSession.end) {
+              try {
+                const startTime = new Date(updatedSession.start).getTime();
+                const endTime = new Date(updatedSession.end).getTime();
+                if (endTime >= startTime) {
+                  updatedSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
+                } else {
+                  delete updatedSession.end;
+                  delete updatedSession.durationSeconds;
+                }
+              } catch (error) {
+                logger.error('Duration calculation failed:', error);
+              }
+            }
 
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (submitOperation) {
-          submitOperation({
-            type: 'ARRANGEMENT_CREATE',
-            payload: { arrangement: newArrangement }
-          }).catch(err => {
-            logger.error('Failed to submit arrangement create operation:', err);
-          });
-        }
-      });
-    },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
-  );
-
-  const updateArrangement = React.useCallback(
-    (id: string, updates: Partial<Arrangement>): Promise<void> => {
-      return new Promise((resolve) => {
-        let shouldSubmit = false;
-
-        const operationId = generateOperationId("update", "arrangement", {
-          id,
-          ...updates,
-        });
-
-        setBaseState((s) => {
-          // Check if arrangement exists before updating
-          const arrangement = s.arrangements.find((arr) => arr.id === id);
-          if (!arrangement) {
-            logger.warn(`Cannot update arrangement ${id} - not found`);
-            resolve();
-            return s;
+            return updatedSession;
           }
-
-          const updatedArrangement = {
-            ...updates,
-            id,
-            updatedAt: new Date().toISOString(),
-          };
-          addOptimisticUpdate(
-            "update",
-            "arrangement",
-            updatedArrangement,
-            operationId
-          );
-
-          const arrangements = s.arrangements.map((arr) =>
-            arr.id === id
-              ? { ...arr, ...updates, updatedAt: new Date().toISOString() }
-              : arr
-          );
-
-          setTimeout(() => {
-            confirmOptimisticUpdate(operationId);
-            resolve();
-          }, 0);
-
-          shouldSubmit = true;
-          return { ...s, arrangements };
+          return session;
         });
 
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if update occurred)
-        if (shouldSubmit && submitOperation) {
-          submitOperation({
-            type: 'ARRANGEMENT_UPDATE',
-            payload: { id, updates }
-          }).catch(err => {
-            logger.error('Failed to submit arrangement update operation:', err);
-          });
-        }
-      });
-    },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
-  );
+        logger.info('Updated session for date:', date, 'with updates:', updates);
+        return { ...s, daySessions: updatedSessions };
+      } else if (createIfMissing) {
+        // Create new session if it doesn't exist
+        const newSession: DaySession = { date, ...updates };
+        logger.info('Created new session for date:', date, 'with data:', updates);
+        return { ...s, daySessions: [...s.daySessions, newSession] };
+      } else {
+        logger.warn('Session not found for date:', date, 'and createIfMissing is false');
+        return s;
+      }
+    });
 
-  const deleteArrangement = React.useCallback(
-    (id: string): Promise<void> => {
-      return new Promise((resolve) => {
-        let shouldSubmit = false;
-
-        setBaseState((s) => {
-          const arrangement = s.arrangements.find((arr) => arr.id === id);
-          if (!arrangement) {
-            resolve();
-            return s;
-          }
-
-          const operationId = generateOperationId(
-            "delete",
-            "arrangement",
-            arrangement
-          );
-          addOptimisticUpdate("delete", "arrangement", { id }, operationId);
-
-          const arrangements = s.arrangements.filter((arr) => arr.id !== id);
-
-          setTimeout(() => {
-            confirmOptimisticUpdate(operationId);
-            resolve();
-          }, 0);
-
-          shouldSubmit = true;
-          return { ...s, arrangements };
+    // Submit operation to cloud
+    if (submitOperation) {
+      submitOperation({
+        type: 'SESSION_UPDATE',
+        payload: { date, updates }
+      })
+        .then(() => {
+          // Clear protection flag after successful submission
+          clearProtectionFlag('navigator_session_protection');
+        })
+        .catch(err => {
+          logger.error('Failed to submit session update operation:', err);
+          // Clear protection flag even on error
+          clearProtectionFlag('navigator_session_protection');
         });
-
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if deletion occurred)
-        if (shouldSubmit && submitOperation) {
-          submitOperation({
-            type: 'ARRANGEMENT_DELETE',
-            payload: { id }
-          }).catch(err => {
-            logger.error('Failed to submit arrangement delete operation:', err);
-          });
-        }
-      });
-    },
-    [addOptimisticUpdate, confirmOptimisticUpdate, submitOperation]
-  );
-
-  // ---- subscription management ----
-
-  const setSubscription = React.useCallback((subscription: UserSubscription | null) => {
-    setBaseState((s) => ({ ...s, subscription }));
-
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately
-    if (submitOperation) {
-      submitOperation({
-        type: 'SETTINGS_UPDATE_SUBSCRIPTION',
-        payload: { subscription }
-      }).catch(err => {
-        logger.error('Failed to submit subscription update operation:', err);
-      });
     }
   }, [submitOperation]);
-
-  // ---- reminder system management ----
-
-  const updateReminderSettings = React.useCallback((settings: ReminderSettings) => {
-    setBaseState((s) => ({ ...s, reminderSettings: settings }));
-
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately
-    if (submitOperation) {
-      submitOperation({
-        type: 'SETTINGS_UPDATE_REMINDER',
-        payload: { settings }
-      }).catch(err => {
-        logger.error('Failed to submit reminder settings update operation:', err);
-      });
-    }
-  }, [submitOperation]);
-
-  // ---- bonus settings management ----
-
-  const updateBonusSettings = React.useCallback((settings: BonusSettings) => {
-    setBaseState((s) => ({ ...s, bonusSettings: settings }));
-
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately
-    if (submitOperation) {
-      submitOperation({
-        type: 'SETTINGS_UPDATE_BONUS',
-        payload: { settings }
-      }).catch(err => {
-        logger.error('Failed to submit bonus settings update operation:', err);
-      });
-    }
-  }, [submitOperation]);
-
-  const updateReminderNotification = React.useCallback(
-    (notificationId: string, status: ReminderNotification['status'], message?: string) => {
-      setBaseState((s) => ({
-        ...s,
-        reminderNotifications: updateReminderStatus(
-          s.reminderNotifications || [],
-          notificationId,
-          status,
-          message
-        ),
-      }));
-    },
-    []
-  );
 
   const processReminders = React.useCallback(() => {
-    setBaseState((s) => {
+    setBaseState((s: AppState) => {
       const newNotifications = processArrangementReminders(s);
       const cleanedNotifications = cleanupOldNotifications(newNotifications, s.arrangements);
-      
+
       return {
         ...s,
         reminderNotifications: cleanedNotifications,
@@ -1587,6 +585,9 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   const restoreState = React.useCallback(
     async (obj: unknown, mergeStrategy: "replace" | "merge" = "replace") => {
+      console.log('✅ restoreState called with:', typeof obj, obj && typeof obj === 'object' ? Object.keys(obj as any).join(', ') : '');
+      console.log('✅ restoreState - completions count:', (obj as any)?.completions?.length || 0, 'daySessions count:', (obj as any)?.daySessions?.length || 0);
+
       if (!isValidState(obj)) {
         logger.error('🚨 RESTORE VALIDATION FAILED:', {
           hasObj: !!obj,
@@ -1771,13 +772,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         });
 
         // 🔧 CRITICAL FIX: Set restore flag to prevent cloud sync override
-        // Use 30 second protection window for testing
-        const restoreTime = Date.now();
-        localStorage.setItem('navigator_restore_in_progress', restoreTime.toString());
+        const restoreTime = setProtectionFlag('navigator_restore_in_progress');
         logger.info('🛡️ RESTORE PROTECTION ACTIVATED:', new Date(restoreTime).toISOString());
-
-        // Also set a backup protection flag that lasts longer
-        localStorage.setItem('navigator_last_restore', restoreTime.toString());
 
       } catch (persistError: unknown) {
         logger.error('Failed to persist restored state:', persistError);
@@ -1789,7 +785,8 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   // Enhanced setState for cloud sync with conflict detection and completion protection
   const setState = React.useCallback(
-    (newState: AppState | ((prev: AppState) => AppState)) => {
+    (updaterOrState: AppState | ((state: AppState) => AppState)) => {
+      const updater = typeof updaterOrState === 'function' ? updaterOrState : () => updaterOrState;
       // Check if we recently restored data and log any state changes
       const lastRestore = localStorage.getItem('navigator_last_restore');
       if (lastRestore) {
@@ -1797,18 +794,13 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         if (timeSinceRestore < 3600000) { // Log for 1 hour after restore
           logger.info('⚠️ STATE CHANGE AFTER RESTORE:', {
             timeSinceRestore: `${Math.round(timeSinceRestore/1000)}s`,
-            newStateType: typeof newState,
-            isFunction: typeof newState === 'function',
             timestamp: new Date().toISOString()
           });
         }
       }
 
       setBaseState((currentState) => {
-        const nextState =
-          typeof newState === "function"
-            ? (newState as (prev: AppState) => AppState)(currentState)
-            : newState;
+        const nextState = updater(currentState);
 
         // 🔧 CRITICAL FIX: Protect recent completions from being overwritten by cloud sync
         const protectedCompletions = [...nextState.completions];
@@ -1906,7 +898,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
               Math.abs(
                 new Date(c.timestamp).getTime() -
                   new Date(incoming.timestamp).getTime()
-              ) < 5000
+              ) < DUPLICATE_COMPLETION_TOLERANCE_MS
           );
 
           if (existing && existing.timestamp !== incoming.timestamp) {
@@ -1951,21 +943,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       // Clear optimistic updates when state is set from external source
       clearOptimisticUpdates();
     },
-    [clearOptimisticUpdates]
-  );
-
-  // ---- enqueueOp wrapper (requested) ----
-  const enqueueOp = React.useCallback(
-    (
-      entity: "completion" | "arrangement" | "address" | "session",
-      operation: "create" | "update" | "delete",
-      data: any,
-      operationId?: string
-    ): string => {
-      const id = addOptimisticUpdate(operation, entity, data, operationId);
-      return id;
-    },
-    [addOptimisticUpdate]
+    [clearOptimisticUpdates, setConflicts]
   );
 
   return {
@@ -1983,46 +961,53 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
     ownerMetadata,
 
     // Optimistic update management
-    optimisticUpdates: optimisticState.updates,
-    pendingOperations: optimisticState.pendingOperations,
+    optimisticUpdates,
+    pendingOperations,
     confirmOptimisticUpdate,
     revertOptimisticUpdate,
     clearOptimisticUpdates,
 
     // Conflicts
     conflicts,
-    resolveConflict: (
-      conflictId: string,
-      _resolution: "prefer_incoming" | "prefer_existing"
-    ) => {
-      setConflicts((prev) => {
-        const updated = new Map(prev);
-        updated.delete(conflictId);
-        return updated;
-      });
-    },
+    resolveConflict,
 
-    // Enhanced actions
-    setAddresses,
-    addAddress,
-    setActive,
-    cancelActive,
-    complete,
-    undo,
-    updateCompletion,
+    // Day tracking
     startDay,
     endDay,
-    addArrangement,
-    updateArrangement,
-    deleteArrangement,
-    setSubscription,
+    updateSession,
+
+    // Backup/restore
     backupState,
     restoreState,
-    // Reminder system
-    updateReminderSettings,
-    updateReminderNotification,
-    processReminders,
-    // Bonus settings
-    updateBonusSettings,
+
+    // ---- Composed hook exports ----
+
+    // Completion management
+    complete: completionState.complete,
+    completeHistorical: completionState.completeHistorical,
+    updateCompletion: completionState.updateCompletion,
+    undo: completionState.undo,
+    pendingCompletions: completionState.pendingCompletions,
+
+    // Address management
+    setAddresses: addressState.setAddresses,
+    addAddress: addressState.addAddress,
+
+    // Arrangement management
+    addArrangement: arrangementState.addArrangement,
+    updateArrangement: arrangementState.updateArrangement,
+    deleteArrangement: arrangementState.deleteArrangement,
+
+    // Settings management
+    setSubscription: settingsState.setSubscription,
+    updateReminderSettings: settingsState.updateReminderSettings,
+    updateBonusSettings: settingsState.updateBonusSettings,
+
+    // Time tracking
+    setActive: timeTrackingState.setActive,
+    cancelActive: timeTrackingState.cancelActive,
+    activeIndex: timeTrackingState.activeIndex,
+    activeStartTime: timeTrackingState.activeStartTime,
+    getTimeSpent: timeTrackingState.getTimeSpent,
   };
 }

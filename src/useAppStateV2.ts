@@ -297,7 +297,7 @@ export function useAppStateV2() {
                 end: new Date(session.date + 'T23:59:59.999Z').toISOString(),
                 durationSeconds: Math.floor(
                   (new Date(session.date + 'T23:59:59.999Z').getTime() -
-                   new Date(session.start).getTime()) / 1000
+                   new Date(session.start || new Date()).getTime()) / 1000
                 )
               };
             }
@@ -338,7 +338,7 @@ export function useAppStateV2() {
           ...s,
           daySessions: s.daySessions.map(session => {
             if (session.date === today && !session.end) {
-              const startTime = new Date(session.start).getTime();
+              const startTime = new Date(session.start || new Date()).getTime();
               const endTimeMs = new Date(endTime).getTime();
               const durationSeconds = Math.floor((endTimeMs - startTime) / 1000);
 

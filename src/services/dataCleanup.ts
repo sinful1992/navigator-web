@@ -1,8 +1,8 @@
 // src/services/dataCleanup.ts
 import type { AppState } from '../types';
+import { MS_PER_DAY } from '../constants';
 
 const CLEANUP_KEY = 'navigator_last_cleanup';
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 interface CleanupResult {
   deletedCompletions: number;
@@ -27,7 +27,7 @@ export async function performDataCleanup(
 
   if (lastCleanup) {
     const lastCleanupTime = parseInt(lastCleanup, 10);
-    if (!isNaN(lastCleanupTime) && (now - lastCleanupTime) < ONE_DAY_MS) {
+    if (!isNaN(lastCleanupTime) && (now - lastCleanupTime) < MS_PER_DAY) {
       return null; // Already ran today
     }
   }
@@ -130,5 +130,5 @@ export function shouldRunCleanup(): boolean {
   if (isNaN(lastCleanupTime)) return true;
 
   const now = Date.now();
-  return (now - lastCleanupTime) >= ONE_DAY_MS;
+  return (now - lastCleanupTime) >= MS_PER_DAY;
 }

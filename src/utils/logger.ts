@@ -26,8 +26,9 @@ function getLogLevel(): LogLevel {
     // Ignore errors
   }
 
-  // Default: normal in development, silent in production
-  return IS_DEVELOPMENT ? 'normal' : 'silent';
+  // Default: silent everywhere (user must explicitly enable logging)
+  // This prevents thousands of sync logs on every refresh
+  return 'silent';
 }
 
 /**
@@ -319,4 +320,26 @@ export const devConsole = {
 // Expose logger globally for browser console access
 if (typeof window !== 'undefined') {
   (window as any).logger = logger;
+
+  // Show helpful message on first load
+  const hasSeenLoggerMessage = sessionStorage.getItem('logger_message_shown');
+  if (!hasSeenLoggerMessage && IS_DEVELOPMENT) {
+    console.log(
+      '%c💡 Logging is disabled by default to improve performance',
+      'color: #0ea5e9; font-weight: bold; font-size: 12px;'
+    );
+    console.log(
+      '%cTo enable logging, use: %clogger.setLevel("verbose")%c or %clogger.setLevel("sync")',
+      'color: #64748b;',
+      'color: #10b981; font-weight: bold; background: #f0fdf4; padding: 2px 4px; border-radius: 3px;',
+      'color: #64748b;',
+      'color: #10b981; font-weight: bold; background: #f0fdf4; padding: 2px 4px; border-radius: 3px;'
+    );
+    console.log(
+      '%cCurrent level: %c' + getLogLevel(),
+      'color: #64748b;',
+      'color: #8b5cf6; font-weight: bold;'
+    );
+    sessionStorage.setItem('logger_message_shown', 'true');
+  }
 }

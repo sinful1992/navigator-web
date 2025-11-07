@@ -187,8 +187,8 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
         logger.warn('Failed to load upcoming deletions:', deletionsError);
       }
 
-    } catch (e: any) {
-      setError(e.message || 'Failed to load admin data');
+    } catch (e: unknown) {
+      setError((e as Error).message || 'Failed to load admin data');
     } finally {
       setLoading(false);
     }
@@ -221,8 +221,8 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
       
       alert('Subscription granted successfully!');
 
-    } catch (e: any) {
-      alert('Failed to grant subscription: ' + e.message);
+    } catch (e: unknown) {
+      alert('Failed to grant subscription: ' + (e as Error).message);
     } finally {
       setActionLoading(null);
     }
@@ -254,8 +254,8 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
 
       alert('Trial extended successfully!');
 
-    } catch (e: any) {
-      alert('Failed to extend trial: ' + e.message);
+    } catch (e: unknown) {
+      alert('Failed to extend trial: ' + (e as Error).message);
     } finally {
       setActionLoading(null);
     }
@@ -285,8 +285,8 @@ const AdminDashboardComponent = function AdminDashboard({ user, onClose }: Admin
 
       alert(`Scheduled deletion cancelled for ${userEmail}`);
 
-    } catch (e: any) {
-      alert('Failed to cancel deletion: ' + e.message);
+    } catch (e: unknown) {
+      alert('Failed to cancel deletion: ' + (e as Error).message);
     } finally {
       setActionLoading(null);
     }

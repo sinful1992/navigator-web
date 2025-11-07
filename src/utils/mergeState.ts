@@ -216,8 +216,8 @@ export function mergeStatePreservingActiveIndex(
     }
 
     if (existingHasEnd && candidateHasEnd) {
-      const existingEnd = new Date(existing.end ?? existing.start).getTime();
-      const candidateEnd = new Date(session.end ?? session.start).getTime();
+      const existingEnd = new Date(existing.end ?? existing.start ?? new Date()).getTime();
+      const candidateEnd = new Date(session.end ?? session.start ?? new Date()).getTime();
       if (candidateEnd > existingEnd) {
         mergedDaySessionsMap.set(session.date, session);
       }

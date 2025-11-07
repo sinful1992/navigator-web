@@ -28,11 +28,17 @@ export type Completion = {
   enforcementFees?: number[];
   /** @deprecated Legacy field - use enforcementFees array instead. Total enforcement fees charged across all cases. */
   totalEnforcementFees?: number;
+  /**
+   * PHASE 2: Optimistic concurrency version.
+   * Incremented on each UPDATE operation to detect conflicts.
+   * Starts at 1 on creation, undefined for legacy completions.
+   */
+  version?: number;
 };
 
 export type DaySession = {
   date: string;             // "YYYY-MM-DD"
-  start: string;            // ISO string
+  start?: string;           // ISO string (optional - session may be created before starting)
   end?: string;             // ISO string (undefined while active)
   durationSeconds?: number; // computed on end
 };
@@ -86,8 +92,14 @@ export type Arrangement = {
   // Recurring payment fields
   recurrenceType?: RecurrenceType;
   recurrenceInterval?: number;  // e.g., 1 for weekly, 2 for bi-weekly
-  totalPayments?: number;       // total number of payments expected
-  paymentsMade?: number;        // payments completed so far
+  paymentSchedule?: 'Single' | 'Weekly' | 'Bi-weekly' | 'Monthly';  // Payment frequency
+  totalPayments?: number;       // total number of payments expected (legacy name)
+  paymentsMade?: number;        // payments completed so far (legacy name)
+  numberOfPayments?: number;    // total number of payments expected (new name for services)
+  paidPayments?: number;        // payments completed so far (new name for services)
+  paymentAmount?: number;       // amount per payment
+  totalAmount?: number;         // total amount across all payments
+  nextPaymentDate?: string;     // ISO date string for next payment
   parentArrangementId?: string; // links recurring payments to original
   // Reminder tracking
   lastReminderSent?: string;    // ISO timestamp of last reminder
@@ -95,6 +107,12 @@ export type Arrangement = {
   reminderSchedule?: ReminderSchedule; // customizable reminder schedule
   nextReminderDue?: string;     // ISO timestamp for next scheduled reminder
   scheduledReminders?: string[]; // Array of ISO timestamps for all scheduled reminders
+  /**
+   * PHASE 2: Optimistic concurrency version.
+   * Incremented on each UPDATE operation to detect conflicts.
+   * Starts at 1 on creation, undefined for legacy arrangements.
+   */
+  version?: number;
 };
 
 export type SubscriptionStatus = "active" | "trial" | "expired" | "cancelled";
@@ -112,6 +130,7 @@ export type UserSubscription = {
   id: string;
   userId: string;
   planId: string;
+  tier?: string;              // subscription tier (basic, premium, etc.) - optional for legacy code
   status: SubscriptionStatus;
   currentPeriodStart: string; // ISO date
   currentPeriodEnd: string;   // ISO date
@@ -175,8 +194,11 @@ export type ReminderNotification = {
 
 export type ReminderSettings = {
   defaultSchedule: ReminderSchedule;
-  globalEnabled: boolean;
+  globalEnabled: boolean;        // legacy name for enabled toggle
+  enabled?: boolean;             // new name (optional for backward compatibility)
   smsEnabled: boolean;
+  emailEnabled?: boolean;        // email reminder toggle
+  daysBeforeReminder?: number;   // days before arrangement to send reminder
   agentProfile: AgentProfile;
   messageTemplates: MessageTemplate[];
   activeTemplateId: string;
@@ -190,17 +212,39 @@ export type ReminderSettings = {
 
 export type BonusCalculationType = 'simple' | 'complex' | 'custom';
 
+/**
+ * PHASE 3: Version Conflict
+ * Represents a detected version conflict that needs user resolution
+ */
+export type VersionConflict = {
+  id: string;                    // Unique conflict identifier
+  timestamp: string;             // When conflict was detected (ISO)
+  entityType: 'completion' | 'arrangement';
+  entityId: string;              // Completion timestamp or Arrangement ID
+  operationId: string;           // Operation that was rejected
+  expectedVersion: number;       // Version the operation expected
+  currentVersion: number;        // Actual version in state
+  // The conflicting data
+  remoteData: Partial<Completion> | Partial<Arrangement>;  // What the remote update wanted
+  localData: Completion | Arrangement;  // What we currently have
+  // Status
+  status: 'pending' | 'resolved' | 'dismissed';
+  resolvedAt?: string;           // When resolved (ISO)
+  resolution?: 'keep-local' | 'use-remote' | 'manual';  // How it was resolved
+};
+
 export type BonusSettings = {
   enabled: boolean;
-  calculationType: BonusCalculationType;
+  calculationType: BonusCalculationType;  // legacy name
+  type?: 'simple' | 'complex' | 'custom'; // new name for services (optional for backward compatibility)
 
-  // Simple calculation (£X per PIF - £Y per day threshold)
+  // Simple calculation (nested structure - legacy)
   simpleSettings?: {
     pifBonus: number;              // £ per PIF (e.g., 100)
     dailyThreshold: number;        // £ daily threshold (e.g., 100)
   };
 
-  // Complex calculation (based on PDF formula)
+  // Complex calculation (nested structure - legacy)
   complexSettings?: {
     baseEnforcementFee: number;    // £235 enforcement fee
     basePifBonus: number;          // £100 for standard PIF
@@ -209,10 +253,19 @@ export type BonusSettings = {
     largePifCap: number;           // £500 max bonus
     smallPifBonus: number;         // £30 for balance < £100
     linkedCaseBonus: number;       // £10 for linked cases with 0 fee
-    complianceFeePerCase: number;  // £75 per case
-    complianceFeeFixed: number;    // £122.5 fixed fee
+    complianceFeePerCase: number;  // £75 per case (no fixed fee)
     dailyThreshold: number;        // £100 per working day
   };
+
+  // Flattened properties for new services (optional)
+  simpleThreshold?: number;        // £ daily threshold (e.g., 100)
+  simplePercentage?: number;       // Percentage for simple calculation
+  dailyThreshold?: number;         // £100 per working day
+  largePifThreshold?: number;      // £1500 debt threshold
+  largePifPercentage?: number;     // Percentage for large PIFs
+  regularPifPercentage?: number;   // Percentage for regular PIFs
+  daPercentage?: number;           // Percentage for DA outcomes
+  donePercentage?: number;         // Percentage for Done outcomes
 
   // Custom JavaScript formula
   customFormula?: string;          // JavaScript expression: (T, N, D) => bonus
@@ -253,4 +306,9 @@ export type AppState = {
   _ownerUserId?: string;
   /** Internal: Owner checksum for tamper detection */
   _ownerChecksum?: string;
+  /**
+   * PHASE 3: Version conflicts detected during sync
+   * Conflicts are detected when remote UPDATE operations have version mismatches
+   */
+  conflicts?: VersionConflict[];
 };

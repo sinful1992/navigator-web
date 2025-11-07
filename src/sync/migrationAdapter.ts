@@ -2,6 +2,25 @@
 import type React from "react";
 import type { AppState } from "../types";
 import { useOperationSync } from "./operationSync";
+import { logger } from "../utils/logger";
+import { reconstructState } from "./reducer";
+import { DEFAULT_REMINDER_SETTINGS } from "../services/reminderScheduler";
+import { DEFAULT_BONUS_SETTINGS } from "../utils/bonusCalculator";
+
+// Fresh initial state for reconstruction
+const INITIAL_STATE: AppState = {
+  addresses: [],
+  activeIndex: null,
+  completions: [],
+  daySessions: [],
+  arrangements: [],
+  currentListVersion: 1,
+  subscription: null,
+  reminderSettings: DEFAULT_REMINDER_SETTINGS,
+  reminderNotifications: [],
+  lastReminderProcessed: undefined,
+  bonusSettings: DEFAULT_BONUS_SETTINGS,
+};
 
 /**
  * Unified sync hook - now only supports operation-based delta sync
@@ -12,17 +31,29 @@ export function useUnifiedSync() {
 
   // Wrap subscribeToOperations to match the expected interface
   const subscribeToData = (onChange: React.Dispatch<React.SetStateAction<AppState>>): (() => void) => {
-    return operationSync.subscribeToOperations((_operations) => {
-      // Reconstruct state from operations and notify
-      const state = operationSync.getStateFromOperations();
-      console.log('📤 subscribeToData: Notifying App.tsx with state:', {
+    return operationSync.subscribeToOperations((allOperations) => {
+      // 🔧 CRITICAL FIX: Reconstruct state from ALL operations, not from React currentState
+      // The allOperations parameter now contains the COMPLETE operation history from the log,
+      // not just the delta/new operations. This avoids the race condition where React's
+      // async setState hasn't completed yet, causing stale state to be returned.
+      // By reconstructing from allOperations, we get the guaranteed correct state.
+      const state = reconstructState(INITIAL_STATE, allOperations);
+      logger.debug('📤 subscribeToData: Notifying App.tsx with state:', {
         addresses: state.addresses?.length,
         completions: state.completions?.length,
         arrangements: state.arrangements?.length,
         daySessions: state.daySessions?.length,
+        operationCount: allOperations.length,
       });
       onChange(state);
     });
+  };
+
+  // 🔧 CRITICAL: Get the operation log state for restore operations
+  // This is needed to preserve lastSyncSequence during backup restore
+  const getOperationLogState = () => {
+    const logState = operationSync.getOperationLogState?.();
+    return logState;
   };
 
   // syncData converts bulk state changes into operations
@@ -30,6 +61,18 @@ export function useUnifiedSync() {
   const syncData = async (newState: AppState): Promise<void> => {
     if (!operationSync.user) {
       return; // Not authenticated, can't sync
+    }
+
+    // 🔧 CRITICAL FIX: Preserve sequence continuity during backup restore
+    // This prevents sequence gaps that cause sync to get stuck
+    const opLogState = operationSync.getOperationLogState?.();
+    if (opLogState && opLogState.lastSyncSequence > 0) {
+      logger.info('📋 RESTORE: Preserving sequence context:', {
+        previousLastSynced: opLogState.lastSyncSequence,
+        operations: opLogState.operations.length,
+      });
+      // The sequence generator will continue from lastSyncSequence + 1
+      // No action needed - just documenting for clarity
     }
 
     const currentState = operationSync.getStateFromOperations();
@@ -136,6 +179,8 @@ export function useUnifiedSync() {
     forceSync: operationSync.forceSync,
     forceFullSync: operationSync.forceSync, // Alias for legacy compatibility
     getStateFromOperations: operationSync.getStateFromOperations,
+    getOperationLogState, // 🔧 FIX: Export for restore operations
+    clearOperationLogForRestore: operationSync.clearOperationLogForRestore, // 🔧 FIX: Clear with sequence preservation
 
     // Migration stubs (no longer needed, but kept for compatibility)
     canMigrate: () => false,

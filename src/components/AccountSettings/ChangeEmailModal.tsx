@@ -27,8 +27,8 @@ export function ChangeEmailModal({ open, onClose }: ChangeEmailModalProps) {
             if (error) throw error;
             window.alert('Confirmation email sent! Please check your inbox.');
             onClose();
-          } catch (err: any) {
-            window.alert('Error: ' + err.message);
+          } catch (err: unknown) {
+            window.alert('Error: ' + (err as Error).message);
           }
         }}>
           <div style={{ marginBottom: '1rem' }}>

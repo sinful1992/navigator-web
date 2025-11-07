@@ -1,12 +1,16 @@
 // src/sync/operations.ts - Event-based sync operations
 import type { Completion, AddressRow, DaySession, Arrangement, UserSubscription, ReminderSettings, BonusSettings } from '../types';
 
+// Vector clock type for conflict detection
+export type VectorClock = Record<string, number>;
+
 // Base operation structure
 export type BaseOperation = {
   id: string;
   timestamp: string;
   clientId: string; // Which device created this
   sequence: number; // For ordering
+  vectorClock?: VectorClock; // Optional vector clock for conflict detection
 };
 
 // All possible operations in the system
@@ -31,6 +35,11 @@ export type CompletionOperation = BaseOperation & (
       payload: {
         originalTimestamp: string;
         updates: Partial<Completion>;
+        /**
+         * PHASE 2: Expected version for optimistic concurrency.
+         * If provided, update will fail if current version doesn't match.
+         */
+        expectedVersion?: number;
       };
     }
   | {
@@ -76,6 +85,13 @@ export type SessionOperation = BaseOperation & (
         endTime: string;
       };
     }
+  | {
+      type: 'SESSION_UPDATE';
+      payload: {
+        date: string;
+        updates: Partial<DaySession>;
+      };
+    }
 );
 
 // Arrangement operations
@@ -91,6 +107,11 @@ export type ArrangementOperation = BaseOperation & (
       payload: {
         id: string;
         updates: Partial<Arrangement>;
+        /**
+         * PHASE 2: Expected version for optimistic concurrency.
+         * If provided, update will fail if current version doesn't match.
+         */
+        expectedVersion?: number;
       };
     }
   | {
@@ -149,10 +170,12 @@ export function createOperation<T extends Operation>(
   } as T;
 }
 
-// Thread-safe sequence generator to prevent race conditions
+// PHASE 1.3: Thread-safe sequence generator with atomic operations
+// Prevents race conditions where two operations could get the same sequence number
 class SequenceGenerator {
   private sequence = 0;
   private lock = Promise.resolve();
+  private readonly MAX_REASONABLE_SEQUENCE = 1000000; // Max reasonable value (10 years of heavy use)
 
   async next(): Promise<number> {
     // Queue this request and wait for previous ones to complete
@@ -170,8 +193,45 @@ class SequenceGenerator {
     }
   }
 
+  // PHASE 1.3: CRITICAL FIX - Make set() also respect the lock
+  // Prevents race condition where set() and next() could execute concurrently
+  async setAsync(seq: number): Promise<void> {
+    const myTurn = this.lock;
+    let release: () => void = () => {};
+    this.lock = new Promise<void>(resolve => { release = resolve; });
+
+    await myTurn; // Wait for previous operations
+
+    try {
+      // 🚨 CRITICAL: Cap unreasonable sequences (likely Unix timestamps)
+      const cappedSeq = Math.min(seq, this.MAX_REASONABLE_SEQUENCE);
+      if (cappedSeq < seq) {
+        console.error('🚨 CRITICAL: Sequence capped to prevent timestamp poisoning', {
+          original: seq,
+          capped: cappedSeq,
+          reason: 'Sequence number exceeded maximum (likely Unix timestamp)',
+          stack: new Error().stack?.split('\n').slice(0, 3).join('\n'),
+        });
+      }
+      this.sequence = Math.max(this.sequence, cappedSeq);
+    } finally {
+      release(); // Let next request proceed
+    }
+  }
+
+  // Synchronous version for backward compatibility (e.g., in error recovery paths)
   set(seq: number): void {
-    this.sequence = Math.max(this.sequence, seq);
+    // 🚨 CRITICAL: Cap unreasonable sequences instead of silently accepting them
+    const cappedSeq = Math.min(seq, this.MAX_REASONABLE_SEQUENCE);
+    if (cappedSeq < seq) {
+      console.error('🚨 CRITICAL: Sequence capped to prevent timestamp poisoning', {
+        original: seq,
+        capped: cappedSeq,
+        reason: 'Sequence number exceeded maximum (likely Unix timestamp)',
+        stack: new Error().stack?.split('\n').slice(0, 3).join('\n'),
+      });
+    }
+    this.sequence = Math.max(this.sequence, cappedSeq);
   }
 
   get current(): number {
@@ -187,5 +247,15 @@ export function nextSequence(): Promise<number> {
 }
 
 export function setSequence(seq: number): void {
+  // Delegates to SequenceGenerator which caps unreasonable values
+  // No need for separate validation here - generator handles it
   sequenceGenerator.set(seq);
+}
+
+// PHASE 1.3: Atomic version of setSequence (respects the lock)
+// Use this when you need to guarantee atomicity with next()
+export async function setSequenceAsync(seq: number): Promise<void> {
+  // Delegates to SequenceGenerator which caps unreasonable values
+  // No need for separate validation here - generator handles it
+  return sequenceGenerator.setAsync(seq);
 }

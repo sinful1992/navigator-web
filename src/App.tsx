@@ -1,4 +1,5 @@
 // src/App.tsx - Complete Modern Design with Right Sidebar
+// PHASE 6: Code splitting optimizations - lazy load tab-based components
 import * as React from "react";
 import "./App.css"; // Use the updated modern CSS
 import { useAppState } from "./useAppState";
@@ -8,25 +9,45 @@ import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";
 import { Auth } from "./Auth";
 import { AddressList } from "./AddressList";
-import Completed from "./Completed";
 import { DayPanel } from "./DayPanel";
-import { Arrangements } from "./Arrangements";
 import { readJsonFile } from "./backup";
-import type { AddressRow, Outcome, Completion } from "./types";
+import type { AddressRow, Outcome, Completion, DaySession } from "./types";
 import { supabase } from "./lib/supabaseClient";
 import ManualAddressFAB from "./ManualAddressFAB";
 import { SubscriptionManager } from "./SubscriptionManager";
 import { AdminDashboard } from "./AdminDashboard";
 import { useSubscription } from "./useSubscription";
 import { useAdmin } from "./useAdmin";
-import { EarningsCalendar } from "./EarningsCalendar";
-import { RoutePlanning } from "./RoutePlanning";
+
+// PHASE 6: Lazy load heavy tab components (code splitting)
+const Completed = React.lazy(() => import("./Completed"));
+const Arrangements = React.lazy(() => import("./Arrangements").then(m => ({ default: m.Arrangements })));
+const EarningsCalendar = React.lazy(() => import("./EarningsCalendar").then(m => ({ default: m.EarningsCalendar })));
+const RoutePlanning = React.lazy(() => import("./RoutePlanning").then(m => ({ default: m.RoutePlanning })));
+
+// PHASE 6: Loading fallback for lazy-loaded components
+function TabLoadingFallback() {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '60vh',
+      fontSize: '1rem',
+      color: 'var(--text-secondary)',
+    }}>
+      <span>⏳ Loading...</span>
+    </div>
+  );
+}
 import { SupabaseSetup } from "./components/SupabaseSetup";
 import { BackupManager } from "./components/BackupManager";
 import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
-import { isProtectionActive } from "./utils/protectionFlags";
+import { showSuccess, showError } from "./utils/toast";
+import { initializeProtectionFlags, setProtectionFlag, isProtectionActive } from "./utils/protectionFlags";
+import { StateProtectionService } from "./services/StateProtectionService";
 import { PrivacyConsent } from "./components/PrivacyConsent";
 import { EnhancedOfflineIndicator } from "./components/EnhancedOfflineIndicator";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
@@ -42,6 +63,18 @@ import { OwnershipPrompt } from "./components/OwnershipPrompt";
 import { Sidebar } from "./components/Sidebar";
 import { SyncDiagnostic } from "./components/SyncDiagnostic";
 import { syncRepairConsole } from "./utils/syncRepairConsole";
+import { useConflictResolution } from "./hooks/useConflictResolution";
+import { ConflictResolutionModal } from "./components/ConflictResolutionModal";
+import { HistoricalPifModal } from "./components/HistoricalPifModal";
+// PHASE 5: Add timing constants for loading and initialization
+import {
+  LOADING_SCREEN_DELAY_MS,
+  OFFLINE_DETECTION_TIMEOUT_MS,
+  MAX_LOADING_TIMEOUT_MS,
+  DATA_INTEGRITY_CHECK_DELAY_MS,
+  APP_STABILIZATION_TIMEOUT_MS,
+  ASYNC_OPERATION_TIMEOUT_MS,
+} from "./constants";
 
 export type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
@@ -108,22 +141,22 @@ export default function App() {
 
   React.useEffect(() => {
     if (cloudSync.isLoading) {
-      // Delay showing loading screen by 500ms - most sessions restore instantly
-      const timer = setTimeout(() => setShowLoading(true), 500);
+      // Delay showing loading screen - most sessions restore instantly
+      const timer = setTimeout(() => setShowLoading(true), LOADING_SCREEN_DELAY_MS);
 
-      // 🔧 CRITICAL FIX: If offline, skip loading after 3 seconds and let user access local data
+      // 🔧 CRITICAL FIX: If offline, skip loading and let user access local data
       const offlineTimer = setTimeout(() => {
         if (!navigator.onLine) {
           logger.warn('🔌 OFFLINE: Force skipping loading screen to allow local data access');
           setForceSkipLoading(true);
         }
-      }, 3000);
+      }, OFFLINE_DETECTION_TIMEOUT_MS);
 
-      // 🔧 CRITICAL FIX: Absolute timeout - never block for more than 10 seconds
+      // 🔧 CRITICAL FIX: Absolute timeout - never block
       const maxTimer = setTimeout(() => {
-        logger.warn('⏱️ TIMEOUT: Force skipping loading screen after 10 seconds');
+        logger.warn('⏱️ TIMEOUT: Force skipping loading screen after max timeout');
         setForceSkipLoading(true);
-      }, 10000);
+      }, MAX_LOADING_TIMEOUT_MS);
 
       return () => {
         clearTimeout(timer);
@@ -181,40 +214,77 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ModalProvider>
-        <AuthedApp />
+        <AuthedApp cloudSync={cloudSync} />
       </ModalProvider>
     </ErrorBoundary>
   );
 }
 
-function AuthedApp() {
-  const cloudSync = useUnifiedSync();
+function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync> }) {
+
+  // Clean Architecture: Use StateProtectionService for centralized protection logic
+  const protectionService = React.useRef(new StateProtectionService()).current;
+
+  // 🔧 PHASE 1.2.2 (REVISED): Initialize hybrid protection flags cache on app startup
+  // FIX #3: Track readiness state to prevent race condition at startup
+  // Hybrid architecture: in-memory cache for fast synchronous reads, IndexedDB for atomic updates
+  const protectionFlagsReadyRef = React.useRef(false);
+  // 🔧 FIX #4: Track if this is initial bootstrap (allow through) vs live update (check protection)
+  const isInitialLoadRef = React.useRef(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await initializeProtectionFlags();
+        if (!cancelled) {
+          logger.debug('✅ Protection flags cache initialized (hybrid cache + IndexedDB)');
+          protectionFlagsReadyRef.current = true;
+        }
+      } catch (err) {
+        if (!cancelled) {
+          logger.warn('⚠️ Failed to initialize protection flags cache:', err);
+          // Continue anyway - fallback to empty cache, operations will still work
+          protectionFlagsReadyRef.current = true;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []); // Run once on mount
 
   const {
     state,
     loading,
-    setAddresses,
-    addAddress,
-    setActive,
-    cancelActive,
-    complete,
-    undo,
-    updateCompletion,
     startDay,
     endDay,
+    updateSession,
     backupState,
     restoreState,
+    setState,
+    ownerMetadata,
+    // Completion management (from useCompletionState)
+    complete,
+    completeHistorical,
+    updateCompletion,
+    undo,
+    // Address management (from useAddressState)
+    setAddresses,
+    addAddress,
+    // Arrangement management (from useArrangementState)
     addArrangement,
     updateArrangement,
     deleteArrangement,
-    setState,
-    setBaseState,
-    deviceId,
-    enqueueOp,
+    // Settings management (from useSettingsState)
     updateReminderSettings,
     updateBonusSettings,
-    ownerMetadata,
-  } = useAppState(cloudSync.user?.id, cloudSync.submitOperation);
+    // Time tracking (from useTimeTracking)
+    setActive,
+    cancelActive,
+  } = useAppState(cloudSync.user?.id, cloudSync.submitOperation as any);
 
   const { confirm, alert } = useModalContext();
   const { settings } = useSettings();
@@ -230,6 +300,18 @@ function AuthedApp() {
   const [showChangeEmail, setShowChangeEmail] = React.useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = React.useState(false);
   const [showOwnershipPrompt, setShowOwnershipPrompt] = React.useState(false);
+  const [showHistoricalPif, setShowHistoricalPif] = React.useState(false);
+  const [historicalPifLoading, setHistoricalPifLoading] = React.useState(false);
+
+  // PHASE 3: Conflict resolution (FIXED: Now submits UPDATE operations for sync)
+  const conflictResolution = useConflictResolution({
+    conflicts: state.conflicts || [],
+    completions: state.completions,
+    arrangements: state.arrangements,
+    onStateUpdate: setState,
+    updateCompletion,
+    updateArrangement,
+  });
 
   // Tab navigation with URL hash sync and browser history support
   const { tab, navigateToTab, search, setSearch } = useTabNavigation();
@@ -320,8 +402,9 @@ function AuthedApp() {
 
       const data = (q.data ?? []) as CloudBackupRow[];
       setCloudBackups(data);
-    } catch (e: any) {
-      setCloudErr(e?.message || String(e));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      setCloudErr(message);
     } finally {
       setCloudBusy(false);
     }
@@ -366,12 +449,23 @@ function AuthedApp() {
           daySessions: currentSessions // Keep current sessions, don't restore from backup
         };
 
+        // 🔧 CRITICAL FIX: Set protection flag before restore
+        // Prevents real-time subscription from interfering with restore
+        // This blocks cloud sync during the 60-second restore window
+        setProtectionFlag('navigator_restore_in_progress');
+        logger.info('🔒 RESTORE: Protection flag set (60 seconds)');
+
         restoreState(data);
+
+        // 🔧 CRITICAL FIX: Clear operation log with sequence preservation before syncing
+        // This prevents sequence gaps that cause sync to get stuck
+        await cloudSync.clearOperationLogForRestore?.();
 
         // 🔧 CRITICAL FIX: Wait for restore protection window before syncing
         setTimeout(async () => {
           await cloudSync.syncData(data);
           lastFromCloudRef.current = JSON.stringify(data);
+          logger.info('✅ RESTORE: Sync complete, protection window expired');
         }, 61000); // Wait 61 seconds (after 60s protection window expires)
 
         // ARCHITECTURAL FIX: Post-restore session reconciliation
@@ -384,8 +478,9 @@ function AuthedApp() {
           type: "success"
         });
         setCloudMenuOpen(false);
-      } catch (e: any) {
-        setCloudErr(e?.message || String(e));
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        setCloudErr(message);
       } finally {
         setCloudBusy(false);
       }
@@ -423,7 +518,7 @@ function AuthedApp() {
   // Delta sync subscription - Bootstrap handled by operationSync.ts
   React.useEffect(() => {
     const user = cloudSync.user;
-    if (!user || loading) return;
+    if (!user) return; // 🔧 FIX: Remove 'loading' check - causes race condition where subscription never activates
 
     logger.info('🔄 DELTA SYNC: Setting up operation subscription for user:', user.id);
 
@@ -441,25 +536,26 @@ function AuthedApp() {
         return;
       }
 
-      // Protection flags
-      if (isProtectionActive('navigator_restore_in_progress')) {
-        logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_import_in_progress')) {
-        logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_active_protection')) {
-        logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
-        return;
+      // Clean Architecture: Use StateProtectionService for protection logic
+      const isInitialLoad = isInitialLoadRef.current;
+      if (isInitialLoad) {
+        isInitialLoadRef.current = false; // Mark as handled
       }
       if (isProtectionActive('navigator_day_session_protection')) {
         logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
         return;
       }
 
-      logger.info('✅ APP: No protection flags active, applying state update');
+      // Delegate to service layer
+      const protectionCheck = protectionService.shouldAllowStateUpdate(
+        isInitialLoad,
+        protectionFlagsReadyRef.current
+      );
+
+      if (!protectionCheck.allowed) {
+        logger.info(`⏳ APP: State update blocked - ${protectionCheck.reason}`);
+        return;
+      }
 
       // Apply state update from operations
       if (typeof updaterOrState === 'function') {
@@ -502,7 +598,7 @@ function AuthedApp() {
           arrangements: normalized.arrangements?.length || 0,
         });
 
-        setState(normalized);
+        setState(() => normalized);
         lastFromCloudRef.current = JSON.stringify(normalized);
         logger.info('✅ APP: setState called successfully');
       }
@@ -516,7 +612,7 @@ function AuthedApp() {
     return () => {
       if (cleanup) cleanup();
     };
-  }, [cloudSync.user, loading]);
+  }, [cloudSync.user]); // 🔧 FIX: Remove 'loading' dependency - subscription only needs user
 
   // REMOVED: Visibility change handler - was over-engineering after fixing React subscription bug
 
@@ -612,8 +708,8 @@ function AuthedApp() {
     // Check integrity every 30 seconds
     const integrityInterval = setInterval(checkDataIntegrity, 30 * 1000);
 
-    // Run initial check
-    setTimeout(checkDataIntegrity, 3000);
+    // Run initial check with semantic constant delay
+    setTimeout(checkDataIntegrity, DATA_INTEGRITY_CHECK_DELAY_MS);
 
     return () => clearInterval(integrityInterval);
   }, [safeState, cloudSync.user, cloudSync.isSyncing, cloudSync.lastSyncTime, hydrated, loading]);
@@ -648,6 +744,49 @@ function AuthedApp() {
     [complete, backupState]
   );
 
+  // Handler for historical PIF recording
+  const handleHistoricalPif = React.useCallback(
+    async (data: {
+      date: string;
+      address: string;
+      amount: string;
+      caseReference: string;
+      numberOfCases: number;
+      enforcementFees?: number[];
+    }) => {
+      setHistoricalPifLoading(true);
+      try {
+        await completeHistorical(
+          data.date,
+          data.address,
+          data.amount,
+          data.caseReference,
+          data.numberOfCases,
+          data.enforcementFees
+        );
+
+        showSuccess(`Historical PIF recorded: £${data.amount} on ${data.date}`);
+        setShowHistoricalPif(false);
+
+        // Local backup after recording
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const snap = backupState();
+          LocalBackupManager.storeLocalBackup(snap);
+          logger.info("Local storage backup after historical PIF successful");
+        } catch (backupError) {
+          logger.error("Local backup failed after historical PIF:", backupError);
+        }
+      } catch (error) {
+        logger.error("Failed to record historical PIF:", error);
+        showError(`Failed to record PIF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setHistoricalPifLoading(false);
+      }
+    },
+    [completeHistorical, backupState]
+  );
+
   // REMOVED: Auto day start functionality to prevent random day starts
   // Users can manually start/edit day times as needed
 
@@ -662,57 +801,25 @@ function AuthedApp() {
       }
       const newISO = parsed.toISOString();
       const dayKey = newISO.slice(0, 10);
-      
-      setBaseState((s) => {
-        const arr = s.daySessions.slice();
-        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
-        let targetSession: any;
 
-        if (sessionIndex >= 0) {
-          targetSession = { ...arr[sessionIndex], start: newISO };
-        } else {
-          targetSession = { date: dayKey, start: newISO };
+      // Find existing session to check if end time conflicts
+      const existingSession = state.daySessions.find((d: DaySession) => d.date === dayKey);
+      const updates: Partial<DaySession> = { start: newISO };
+
+      // If session has an end time that's before the new start, remove the end time
+      if (existingSession?.end) {
+        const start = new Date(newISO).getTime();
+        const end = new Date(existingSession.end).getTime();
+        if (end < start) {
+          updates.end = undefined;
+          updates.durationSeconds = undefined;
         }
+      }
 
-        if (targetSession.end) {
-          try {
-            const start = new Date(newISO).getTime();
-            const end = new Date(targetSession.end).getTime();
-            if (end >= start) {
-              targetSession.durationSeconds = Math.floor((end - start) / 1000);
-            } else {
-              delete targetSession.end;
-              delete targetSession.durationSeconds;
-            }
-          } catch (error) {
-            logger.error('Error calculating duration:', error);
-          }
-        }
-
-        const now = new Date().toISOString();
-        targetSession.updatedAt = now;
-        targetSession.updatedBy = deviceId;
-
-        const operationId = `edit_start_${dayKey}_${Date.now()}`;
-        const forServer = {
-          ...targetSession,
-          id: dayKey,
-          updatedAt: now,
-          updatedBy: deviceId,
-        };
-
-        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
-
-        if (sessionIndex >= 0) {
-          arr[sessionIndex] = targetSession;
-        } else {
-          arr.push(targetSession);
-        }
-
-        return { ...s, daySessions: arr };
-      });
+      // Use updateSession which handles state update + cloud sync
+      updateSession(dayKey, updates, true); // createIfMissing=true
     },
-    [setBaseState, deviceId, enqueueOp]
+    [state.daySessions, updateSession]
   );
 
   const handleEditEnd = React.useCallback(
@@ -726,60 +833,25 @@ function AuthedApp() {
       const endISO = parsed.toISOString();
       const dayKey = endISO.slice(0, 10);
 
-      setBaseState((s) => {
-        const arr = s.daySessions.slice();
-        let sessionIndex = arr.findIndex((d) => d.date === dayKey);
-        let targetSession: any;
+      // Find existing session to check if start time conflicts
+      const existingSession = state.daySessions.find((d: DaySession) => d.date === dayKey);
+      const updates: Partial<DaySession> = { end: endISO };
 
-        if (sessionIndex >= 0) {
-          targetSession = { ...arr[sessionIndex] };
-        } else {
-          targetSession = { date: dayKey, start: endISO };
+      // If session doesn't have a start, or start is after end, set start to end time
+      if (!existingSession?.start) {
+        updates.start = endISO;
+      } else {
+        const startTime = new Date(existingSession.start).getTime();
+        const endTime = new Date(endISO).getTime();
+        if (startTime > endTime) {
+          updates.start = endISO;
         }
+      }
 
-        targetSession.end = endISO;
-
-        if (targetSession.start) {
-          try {
-            const startTime = new Date(targetSession.start).getTime();
-            const endTime = new Date(endISO).getTime();
-            
-            if (endTime >= startTime) {
-              targetSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
-            } else {
-              targetSession.start = endISO;
-              targetSession.durationSeconds = 0;
-            }
-          } catch (error) {
-            logger.error('Error calculating duration:', error);
-            targetSession.durationSeconds = 0;
-          }
-        }
-
-        const now = new Date().toISOString();
-        targetSession.updatedAt = now;
-        targetSession.updatedBy = deviceId;
-
-        const operationId = `edit_end_${dayKey}_${Date.now()}`;
-        const forServer = {
-          ...targetSession,
-          id: dayKey,
-          updatedAt: now,
-          updatedBy: deviceId,
-        };
-
-        enqueueOp("session", sessionIndex >= 0 ? "update" : "create", forServer, operationId);
-
-        if (sessionIndex >= 0) {
-          arr[sessionIndex] = targetSession;
-        } else {
-          arr.push(targetSession);
-        }
-
-        return { ...s, daySessions: arr };
-      });
+      // Use updateSession which handles state update + cloud sync
+      updateSession(dayKey, updates, true); // createIfMissing=true
     },
-    [setBaseState, deviceId, enqueueOp]
+    [state.daySessions, updateSession]
   );
 
 
@@ -787,17 +859,89 @@ function AuthedApp() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
+      console.log('📥 RESTORE FILE: Starting restore, file size:', file.size, 'bytes');
       const raw = await readJsonFile(file);
+      console.log('📥 RESTORE FILE: readJsonFile returned:', typeof raw, Array.isArray(raw) ? 'array' : 'object', 'keys:', Object.keys(raw || {}).join(', '));
+      console.log('📥 RESTORE FILE: raw.completions type:', typeof (raw as any)?.completions, 'length:', (raw as any)?.completions?.length || 0);
+
       // ARCHITECTURAL FIX: File restore also preserves current session state
       const backupData = normalizeBackupData(raw);
+      console.log('📥 RESTORE: normalizeBackupData returned', backupData.completions.length, 'completions');
+      console.log('📥 RESTORE: Detailed check - completions is array:', Array.isArray(backupData.completions), 'first item:', backupData.completions[0] ? { index: (backupData.completions[0] as any).index, outcome: (backupData.completions[0] as any).outcome } : 'none');
+
       const currentSessions = safeState.daySessions; // Preserve current session state
+
+      // 🔧 CRITICAL FIX: Extract unique dates from completions and create SESSION_START operations
+      // This ensures all historical completions become visible by creating DaySession records
+      const completions = (backupData as any).completions || [];
+      console.log('📥 RESTORE: completions array has', completions.length, 'items');
+      const dateToStartTime = new Map<string, string>();
+
+      completions.forEach((c: any) => {
+        const date = c.timestamp.split('T')[0];
+        const currentStart = dateToStartTime.get(date);
+        // Keep the earliest timestamp for each date
+        if (!currentStart || c.timestamp < currentStart) {
+          dateToStartTime.set(date, c.timestamp);
+        }
+      });
+
+      // Create SESSION_START operations for dates without sessions
+      const existingDateSessions = new Set<string>();
+      (backupData as any).daySessions?.forEach((ds: any) => {
+        existingDateSessions.add(ds.date);
+      });
+
+      const generatedSessions: any[] = [];
+      dateToStartTime.forEach((startTime, date) => {
+        if (!existingDateSessions.has(date)) {
+          generatedSessions.push({
+            date,
+            start: startTime.substring(0, 19), // ISO format without Z
+            end: null
+          });
+        }
+      });
+
+      // 🔧 CRITICAL FIX: Merge historical sessions from backup with current sessions
+      // Backup may have daySessions from weeks ago. We need to restore those
+      // so completions from historical dates become visible and queryable.
+      const backupSessions = (backupData as any).daySessions || [];
+      const mergedSessions = [
+        ...backupSessions,
+        ...generatedSessions,
+        ...currentSessions.filter(cs =>
+          !backupSessions.some((bs: any) => bs.date === cs.date && bs.start === cs.start) &&
+          !generatedSessions.some((gs: any) => gs.date === cs.date && gs.start === cs.start)
+        )
+      ];
 
       const data = {
         ...backupData,
-        daySessions: currentSessions // Keep current sessions, don't restore from backup
+        daySessions: mergedSessions // Merge backup + current sessions + generated sessions
       };
 
+      // 🔧 CRITICAL FIX: Set protection flag before restore
+      // Prevents real-time subscription from interfering with restore
+      setProtectionFlag('navigator_restore_in_progress');
+      logger.info('🔒 FILE RESTORE: Protection flag set (60 seconds)');
+
       restoreState(data);
+
+      // 🔧 CRITICAL FIX: Clear operation log with sequence preservation before syncing
+      // This prevents sequence gaps that cause sync to get stuck
+      await cloudSync.clearOperationLogForRestore?.();
+
+      // 🔧 NOTE: Do NOT submit SESSION_START operations during restore
+      // The backup data already contains completions with timestamps
+      // The daySessions are merged locally (line 912)
+      // Submitting these would cause sequence number conflicts with existing operations
+      // Historical completions are already visible via timestamps in the completions array
+      if (generatedSessions.length > 0) {
+        logger.info(`📅 RESTORE: Generated ${generatedSessions.length} local daySessions for historical dates (not syncing to avoid conflicts)`, {
+          dates: generatedSessions.map(s => s.date).join(', ')
+        });
+      }
 
       // 🔧 CRITICAL FIX: Wait for restore protection window before syncing
       setTimeout(async () => {
@@ -814,11 +958,12 @@ function AuthedApp() {
         message: "Restore completed successfully!",
         type: "success"
       });
-    } catch (err: any) {
-      logger.error('Restore failed:', err);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('Restore failed:', message);
       await alert({
         title: "Error",
-        message: "Restore failed: " + (err?.message || err),
+        message: "Restore failed: " + message,
         type: "error"
       });
     } finally {
@@ -959,7 +1104,7 @@ function AuthedApp() {
     if (stats.count === 0 || (safeState.completions.length > 0 && stats.count < 3)) {
       setTimeout(async () => {
         await periodicBackup();
-      }, 5000); // After 5 seconds to allow app to stabilize
+      }, APP_STABILIZATION_TIMEOUT_MS); // Allow app to stabilize
     }
 
     return () => {
@@ -1007,12 +1152,18 @@ function AuthedApp() {
             daySessions: currentSessions // Keep current sessions, don't restore from backup
           };
 
+          // 🔧 CRITICAL FIX: Set protection flag before restore
+          // Prevents real-time subscription from interfering with restore
+          setProtectionFlag('navigator_restore_in_progress');
+          logger.info('🔒 BACKUP MANAGER RESTORE: Protection flag set (60 seconds)');
+
           restoreState(mergedData);
           if (cloudSync.user && supabase) {
             // 🔧 CRITICAL FIX: Wait for restore protection window before syncing
             setTimeout(async () => {
               await cloudSync.syncData(mergedData);
-            }, 31000); // Wait 31 seconds (after protection window expires)
+              logger.info('✅ BACKUP MANAGER: Sync complete, protection window expired');
+            }, 61000); // Wait 61 seconds (after protection window expires)
 
             // ARCHITECTURAL FIX: Post-restore session reconciliation
             reconcileSessionState(cloudSync, setState, supabase);
@@ -1216,10 +1367,10 @@ function AuthedApp() {
                   );
 
                   try {
-                    // Local backup with 15 second timeout (no cloud backup needed with delta sync)
+                    // Local backup with timeout (no cloud backup needed with delta sync)
                     await Promise.race([
                       LocalBackupManager.performCriticalBackup(snap, "day-end"),
-                      timeoutPromise(15000)
+                      timeoutPromise(ASYNC_OPERATION_TIMEOUT_MS)
                     ]);
                     logger.info("Local backup at day end successful");
                   } catch (error) {
@@ -1300,43 +1451,87 @@ function AuthedApp() {
           )}
 
           {tab === "completed" && (
-            <Completed
-              state={safeState}
-              onChangeOutcome={handleChangeOutcome}
-              onAddArrangement={addArrangement}
-              onComplete={handleComplete}
-            />
+            <React.Suspense fallback={<TabLoadingFallback />}>
+              <Completed
+                state={safeState}
+                onChangeOutcome={handleChangeOutcome}
+                onAddArrangement={addArrangement}
+                onComplete={handleComplete}
+              />
+            </React.Suspense>
           )}
 
           {tab === "arrangements" && (
-            <Arrangements
-              state={safeState}
-              onAddArrangement={addArrangement}
-              onUpdateArrangement={updateArrangement}
-              onDeleteArrangement={deleteArrangement}
-              onAddAddress={async (addr: AddressRow) => addAddress(addr)}
-              onComplete={handleComplete}
-              autoCreateForAddress={autoCreateArrangementFor}
-              onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
-            />
+            <React.Suspense fallback={<TabLoadingFallback />}>
+              <Arrangements
+                state={safeState}
+                onAddArrangement={addArrangement}
+                onUpdateArrangement={updateArrangement}
+                onDeleteArrangement={deleteArrangement}
+                onAddAddress={async (addr: AddressRow) => addAddress(addr)}
+                onComplete={handleComplete}
+                autoCreateForAddress={autoCreateArrangementFor}
+                onAutoCreateHandled={() => setAutoCreateArrangementFor(null)}
+              />
+            </React.Suspense>
           )}
 
           {tab === "earnings" && (
-            <EarningsCalendar state={safeState} user={cloudSync.user} />
+            <React.Suspense fallback={<TabLoadingFallback />}>
+              <EarningsCalendar state={safeState} user={cloudSync.user} />
+            </React.Suspense>
           )}
 
           {tab === "planning" && (
-            <RoutePlanning 
-              user={cloudSync.user}
-              onAddressesReady={(newAddresses) => {
-                setAddresses(newAddresses);
-              }}
-            />
+            <React.Suspense fallback={<TabLoadingFallback />}>
+              <RoutePlanning
+                user={cloudSync.user}
+                onAddressesReady={(newAddresses) => {
+                  setAddresses(newAddresses);
+                }}
+              />
+            </React.Suspense>
           )}
         </div>
 
         {/* Floating Action Button */}
         <ManualAddressFAB onAdd={addAddress} />
+
+        {/* Historical PIF FAB */}
+        <button
+          className="historical-pif-fab"
+          onClick={() => setShowHistoricalPif(true)}
+          title="Record Historical PIF"
+          style={{
+            position: 'fixed',
+            bottom: '5.5rem',
+            right: '1.5rem',
+            width: '3.5rem',
+            height: '3.5rem',
+            borderRadius: '50%',
+            border: 'none',
+            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+            color: 'white',
+            fontSize: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+            zIndex: 1000,
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.1)';
+            e.currentTarget.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+          }}
+        >
+          📅
+        </button>
       </main>
 
       {/* Right Sidebar */}
@@ -1519,6 +1714,15 @@ function AuthedApp() {
         }}
       />
 
+      {/* Historical PIF Recording Modal */}
+      {showHistoricalPif && (
+        <HistoricalPifModal
+          onConfirm={handleHistoricalPif}
+          onCancel={() => setShowHistoricalPif(false)}
+          isLoading={historicalPifLoading}
+        />
+      )}
+
 
       {/* Toast Notifications */}
       <ToastContainer />
@@ -1534,16 +1738,27 @@ function AuthedApp() {
           lastFromCloudRef.current = JSON.stringify(state);
         }}
         onDiscardData={() => {
-          setState({
+          setState(() => ({
             addresses: [],
             completions: [],
             arrangements: [],
             daySessions: [],
             activeIndex: null,
             currentListVersion: 1
-          });
+          }));
         }}
       />
+
+      {/* PHASE 3: Conflict Resolution Modal */}
+      {conflictResolution.pendingConflicts.length > 0 && (
+        <ConflictResolutionModal
+          conflict={conflictResolution.pendingConflicts[0]}
+          onResolveKeepLocal={() => conflictResolution.resolveKeepLocal(conflictResolution.pendingConflicts[0].id)}
+          onResolveUseRemote={() => conflictResolution.resolveUseRemote(conflictResolution.pendingConflicts[0].id)}
+          onDismiss={() => conflictResolution.dismissConflict(conflictResolution.pendingConflicts[0].id)}
+          onClose={() => conflictResolution.dismissConflict(conflictResolution.pendingConflicts[0].id)}
+        />
+      )}
 
       {/* PWA Install Prompt */}
       <PWAInstallPrompt />

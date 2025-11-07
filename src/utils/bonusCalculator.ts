@@ -17,12 +17,11 @@ export const DEFAULT_BONUS_SETTINGS: BonusSettings = {
     baseEnforcementFee: 235,      // £235 enforcement fee
     basePifBonus: 100,            // £100 for standard PIF
     largePifThreshold: 1500,      // £1500 debt threshold
-    largePifPercentage: 0.001875, // 2.5% of 7.5% = 0.025 * 0.075
+    largePifPercentage: 0.025,    // 2.5% of amount over £1500
     largePifCap: 500,             // £500 max bonus per PIF
     smallPifBonus: 30,            // £30 for balance < £100
     linkedCaseBonus: 10,          // £10 for linked cases with 0 fee
-    complianceFeePerCase: 75,     // £75 per case
-    complianceFeeFixed: 122.5,    // £122.5 fixed fee
+    complianceFeePerCase: 75,     // £75 per case (no fixed fee)
     dailyThreshold: 100,          // £100 per working day
   },
   adjustForWorkingDays: true,     // Adjust thresholds for actual working days
@@ -32,11 +31,11 @@ export const DEFAULT_BONUS_SETTINGS: BonusSettings = {
  * Calculate debt amount from total payment using reverse formula
  *
  * When totalEnforcementFees is provided:
- *   Formula: D = T - E_total - (75N + 122.5)
+ *   Formula: D = T - E_total - (75N)
  *   Where: T = total collected, E_total = total enforcement fees, N = number of cases
  *
  * Otherwise (legacy formula, assumes one enforcement fee in the 1.075 multiplier):
- *   Formula: D = (T - (75N + 122.5)) / 1.075
+ *   Formula: D = (T - 75N) / 1.075
  *
  * @param totalAmount - Total amount collected (T)
  * @param numberOfCases - Number of cases (N)
@@ -51,17 +50,25 @@ export function calculateDebtFromTotal(
   const N = numberOfCases;
   const T = totalAmount;
 
+  // DEBUG: Log for large amounts
+  if (T > 6000) {
+    logger.info('🔍 DEBT CALC:', { T, N, totalEnforcementFees });
+  }
+
   // If total enforcement fees are provided, use direct calculation
   if (totalEnforcementFees !== undefined && totalEnforcementFees !== null) {
-    // T = Total_Debt + E_total + (75N + 122.5)
-    // Therefore: Total_Debt = T - E_total - (75N + 122.5)
-    const D = T - totalEnforcementFees - (75 * N + 122.5);
+    // T = Total_Debt + E_total + 75N
+    // Therefore: Total_Debt = T - E_total - 75N
+    const D = T - totalEnforcementFees - (75 * N);
+    if (T > 6000) logger.info('🔍 DEBT RESULT (with fees):', D);
     return Math.max(0, D);
   }
 
   // Legacy formula: assumes one enforcement fee embedded in 1.075 multiplier
-  // D = (T - (75N + 122.5)) / 1.075
-  const D = (T - (75 * N + 122.5)) / 1.075;
+  // D = (T - 75N) / 1.075
+  const D = (T - (75 * N)) / 1.075;
+
+  if (T > 6000) logger.info('🔍 DEBT RESULT (legacy):', D);
 
   return Math.max(0, D); // Debt can't be negative
 }
@@ -142,34 +149,32 @@ export function calculateComplexBonus(
     const amount = parseFloat(completion.amount || '0');
     const actualCases = completion.numberOfCases || 1;
 
+    // DEBUG: Log case details for amounts over £6000
+    if (amount > 6000) {
+      logger.info('🔍 BONUS DEBUG:', {
+        amount,
+        caseRef: completion.caseReference,
+        numberOfCases: completion.numberOfCases,
+        actualCases,
+        totalEnforcementFees: completion.totalEnforcementFees,
+        enforcementFees: completion.enforcementFees
+      });
+    }
+
     // Check if we have individual enforcement fees
     if (completion.enforcementFees && completion.enforcementFees.length > 0) {
-      // NEW: Calculate bonus for each enforcement fee individually
-      for (const enfFee of completion.enforcementFees) {
-        // Calculate debt for this specific enforcement fee
-        // D = E - 235, then reverse to get original debt using enforcement fee formula
-        // If E > 235, then D > 1500, so: E = 235 + 0.075 × (D - 1500)
-        // Solving: D = (E - 235) / 0.075 + 1500
-        let debt: number;
-        if (enfFee <= 235) {
-          debt = 1000; // Assume mid-range debt for standard enforcement fee
-        } else {
-          debt = (enfFee - 235) / 0.075 + 1500;
-        }
+      // Calculate total enforcement fees from array
+      const totalEnforcementFees = completion.enforcementFees.reduce((sum, fee) => sum + fee, 0);
 
-        // Calculate bonus based on debt
-        if (debt > largePifThreshold) {
-          const additionalBonus = largePifPercentage * (debt - largePifThreshold);
-          totalBonus += Math.min(basePifBonus + additionalBonus, largePifCap);
-        } else {
-          totalBonus += basePifBonus;
-        }
-      }
+      // Use amount (total collected) as authoritative source to calculate debt
+      const debt = calculateDebtFromTotal(amount, actualCases, totalEnforcementFees);
 
-      // Add bonus for linked cases (cases without enforcement fees)
-      const linkedCases = actualCases - completion.enforcementFees.length;
-      if (linkedCases > 0) {
-        totalBonus += linkedCases * linkedCaseBonus;
+      // Calculate bonus based on debt (one bonus per debtor, not per case)
+      if (debt > largePifThreshold) {
+        const additionalBonus = largePifPercentage * (debt - largePifThreshold);
+        totalBonus += Math.min(basePifBonus + additionalBonus, largePifCap);
+      } else {
+        totalBonus += basePifBonus;
       }
     } else {
       // LEGACY: Backward compatibility - use old calculation method
@@ -364,27 +369,18 @@ export function calculateBonusBreakdown(
 
       // Check if we have individual enforcement fees
       if (completion.enforcementFees && completion.enforcementFees.length > 0) {
-        // Calculate bonus for each enforcement fee
-        for (const enfFee of completion.enforcementFees) {
-          let debt: number;
-          if (enfFee <= 235) {
-            debt = 1000;
-          } else {
-            debt = (enfFee - 235) / 0.075 + 1500;
-          }
+        // Calculate total enforcement fees from array
+        const totalEnforcementFees = completion.enforcementFees.reduce((sum, fee) => sum + fee, 0);
 
-          if (debt > largePifThreshold) {
-            const additionalBonus = largePifPercentage * (debt - largePifThreshold);
-            bonusForThisPif += Math.min(basePifBonus + additionalBonus, largePifCap);
-          } else {
-            bonusForThisPif += basePifBonus;
-          }
-        }
+        // Use amount (total collected) as authoritative source to calculate debt
+        debtAmount = calculateDebtFromTotal(amount, actualCases, totalEnforcementFees);
 
-        // Add bonus for linked cases
-        const linkedCases = actualCases - completion.enforcementFees.length;
-        if (linkedCases > 0) {
-          bonusForThisPif += linkedCases * linkedCaseBonus;
+        // Calculate bonus based on debt (one bonus per debtor, not per case)
+        if (debtAmount > largePifThreshold) {
+          const additionalBonus = largePifPercentage * (debtAmount - largePifThreshold);
+          bonusForThisPif = Math.min(basePifBonus + additionalBonus, largePifCap);
+        } else {
+          bonusForThisPif = basePifBonus;
         }
       } else {
         // Legacy calculation

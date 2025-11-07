@@ -1,6 +1,9 @@
 // src/sync/reducer.ts - State reconstruction from operations
+// PHASE 1.3: Enhanced with vector clock-based conflict resolution
 import type { AppState } from '../types';
 import type { Operation } from './operations';
+import { OperationLogManager } from './operationLog';
+import { processOperationsWithConflictResolution } from './conflictResolution';
 import { logger } from '../utils/logger';
 
 /**
@@ -13,38 +16,123 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'COMPLETION_CREATE': {
         const { completion } = operation.payload;
 
-        // Validate the completion doesn't already exist
-        const exists = state.completions.some(c =>
-          c.timestamp === completion.timestamp &&
-          c.index === completion.index &&
-          c.outcome === completion.outcome
-        );
-
-        if (exists) {
-          logger.warn('Skipping duplicate completion creation:', completion);
+        if (!completion) {
+          logger.error('❌ COMPLETION_CREATE: completion is undefined!', {
+            operation: operation.id,
+            payload: operation.payload,
+          });
           return state;
         }
 
+        // USER REQUIREMENT: Duplicate = Same timestamp (system bug creating 2 completions at exact same time)
+        // - Different timestamps = Different completions (even if same address/case)
+        // - Allows: Same address visited multiple times (2 people at same house)
+        // - Blocks: System creating duplicate completions with identical timestamp
+        const isDuplicate = state.completions.some(c => c.timestamp === completion.timestamp);
+
+        if (isDuplicate) {
+          logger.warn('🚨 DUPLICATE DETECTED: Skipping completion with identical timestamp', {
+            timestamp: completion.timestamp,
+            address: completion.address,
+            caseRef: completion.caseReference,
+            outcome: completion.outcome,
+            amount: completion.amount,
+          });
+          return state; // Skip this duplicate
+        }
+
+        // 🔍 DEBUG: Log completion being added (only in verbose mode)
+        logger.debug('📥 COMPLETION_CREATE applied:', {
+          seq: operation.sequence,
+          timestamp: completion.timestamp,
+          address: completion.address,
+          outcome: completion.outcome,
+          currentTotal: state.completions.length + 1
+        });
+
+        // PHASE 2: Set initial version on create
+        const versionedCompletion = {
+          ...completion,
+          version: completion.version || 1, // Default to 1 if not provided
+        };
+
         return {
           ...state,
-          completions: [completion, ...state.completions].sort(
+          completions: [versionedCompletion, ...state.completions].sort(
             (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           ),
           // Clear active index if this completion was for the active address
-          activeIndex: state.activeIndex === completion.index ? null : state.activeIndex,
-          // 🔧 CRITICAL FIX: Also clear activeStartTime to prevent orphaned time tracking
-          activeStartTime: state.activeIndex === completion.index ? null : state.activeStartTime,
+          activeIndex: state.activeIndex === versionedCompletion.index ? null : state.activeIndex,
         };
       }
 
       case 'COMPLETION_UPDATE': {
-        const { originalTimestamp, updates } = operation.payload;
+        const { originalTimestamp, updates, expectedVersion } = operation.payload;
 
+        // PHASE 2: Optimistic concurrency control
+        // Check version if expectedVersion provided
+        const targetCompletion = state.completions.find(c => c.timestamp === originalTimestamp);
+
+        if (expectedVersion !== undefined && targetCompletion) {
+          const currentVersion = targetCompletion.version || 1;
+
+          if (currentVersion !== expectedVersion) {
+            // Version mismatch - conflict detected
+            logger.warn('🚨 VERSION CONFLICT: Completion update rejected', {
+              timestamp: originalTimestamp,
+              expectedVersion,
+              currentVersion,
+              operation: operation.id,
+            });
+
+            // PHASE 3: Create conflict object for UI resolution
+            // Prevent duplicate conflicts for the same entity
+            const existingConflict = state.conflicts?.find(
+              c => c.entityType === 'completion' &&
+                   c.entityId === originalTimestamp &&
+                   c.status === 'pending'
+            );
+
+            if (existingConflict) {
+              logger.warn('🚨 DUPLICATE CONFLICT: Skipping duplicate conflict for completion', {
+                timestamp: originalTimestamp,
+                existingConflictId: existingConflict.id,
+              });
+              return state; // Skip creating duplicate conflict
+            }
+
+            const conflict: import('../types').VersionConflict = {
+              id: `conflict_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+              timestamp: new Date().toISOString(),
+              entityType: 'completion',
+              entityId: originalTimestamp,
+              operationId: operation.id,
+              expectedVersion,
+              currentVersion,
+              remoteData: updates,
+              localData: targetCompletion,
+              status: 'pending',
+            };
+
+            // Add conflict to state
+            return {
+              ...state,
+              conflicts: [...(state.conflicts || []), conflict],
+            };
+          }
+        }
+
+        // Apply update with incremented version
         return {
           ...state,
           completions: state.completions.map(c =>
             c.timestamp === originalTimestamp
-              ? { ...c, ...updates }
+              ? {
+                  ...c,
+                  ...updates,
+                  // Increment version on update (default to 1 if not set)
+                  version: (c.version || 1) + 1,
+                }
               : c
           ),
         };
@@ -53,6 +141,26 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'COMPLETION_DELETE': {
         const { timestamp, index, listVersion } = operation.payload;
 
+        // PHASE 3: Auto-dismiss conflicts for deleted entity
+        const updatedConflicts = state.conflicts?.map(c =>
+          c.entityType === 'completion' &&
+          c.entityId === timestamp &&
+          c.status === 'pending'
+            ? {
+                ...c,
+                status: 'dismissed' as const,
+                resolvedAt: new Date().toISOString(),
+              }
+            : c
+        );
+
+        if (updatedConflicts && updatedConflicts !== state.conflicts) {
+          logger.info('🗑️ CONFLICT AUTO-DISMISS: Entity deleted, dismissing conflicts', {
+            entityType: 'completion',
+            timestamp,
+          });
+        }
+
         return {
           ...state,
           completions: state.completions.filter(c => !(
@@ -60,6 +168,7 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
             c.index === index &&
             c.listVersion === listVersion
           )),
+          conflicts: updatedConflicts,
         };
       }
 
@@ -91,7 +200,6 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           currentListVersion: newListVersion,
           completions: preserveCompletions ? state.completions : [],
           activeIndex: null, // Reset active index on bulk import
-          activeStartTime: null, // 🔧 CRITICAL FIX: Also clear activeStartTime to prevent orphaned time tracking
         };
       }
 
@@ -107,15 +215,11 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'SESSION_START': {
         const { session } = operation.payload;
 
-        // Check if we already have an active session for this date
-        const hasActiveToday = state.daySessions.some(s =>
-          s.date === session.date && !s.end
-        );
-
-        if (hasActiveToday) {
-          logger.warn('Skipping session start - already active for date:', session.date);
-          return state;
-        }
+        // Single-user app: No duplicate check needed
+        // - If user starts session on Device A, Device B syncs and shows it
+        // - User won't start another session for same date (they see it's already started)
+        // - Operation-level deduplication (by operation ID) prevents actual duplicates
+        // - Duplicate check was blocking legitimate operations during state reconstruction
 
         // Auto-close any stale sessions from previous days
         const today = session.date;
@@ -126,7 +230,7 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
               ...s,
               end: new Date(s.date + 'T23:59:59.999Z').toISOString(),
               durationSeconds: Math.floor(
-                (new Date(s.date + 'T23:59:59.999Z').getTime() - new Date(s.start).getTime()) / 1000
+                (new Date(s.date + 'T23:59:59.999Z').getTime() - new Date(s.start || new Date()).getTime()) / 1000
               )
             };
           }
@@ -140,13 +244,13 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       }
 
       case 'SESSION_END': {
-        const { date, endTime } = operation.payload;
+        const { date, endTime} = operation.payload;
 
         return {
           ...state,
           daySessions: state.daySessions.map(session => {
             if (session.date === date && !session.end) {
-              const startTime = new Date(session.start).getTime();
+              const startTime = new Date(session.start || new Date()).getTime();
               const endTimeMs = new Date(endTime).getTime();
               const durationSeconds = Math.floor((endTimeMs - startTime) / 1000);
 
@@ -161,30 +265,118 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
         };
       }
 
-      case 'ARRANGEMENT_CREATE': {
-        const { arrangement } = operation.payload;
-
-        // Check if arrangement already exists
-        const exists = state.arrangements.some(a => a.id === arrangement.id);
-        if (exists) {
-          logger.warn('Skipping duplicate arrangement creation:', arrangement.id);
-          return state;
-        }
+      case 'SESSION_UPDATE': {
+        const { date, updates } = operation.payload;
 
         return {
           ...state,
-          arrangements: [...state.arrangements, arrangement],
+          daySessions: state.daySessions.map(session => {
+            if (session.date === date) {
+              const updatedSession = { ...session, ...updates };
+
+              // Recalculate duration if both start and end are present
+              if (updatedSession.start && updatedSession.end) {
+                const startTime = new Date(updatedSession.start).getTime();
+                const endTime = new Date(updatedSession.end).getTime();
+                updatedSession.durationSeconds = Math.floor((endTime - startTime) / 1000);
+              }
+
+              return updatedSession;
+            }
+            return session;
+          }),
+        };
+      }
+
+      case 'ARRANGEMENT_CREATE': {
+        const { arrangement } = operation.payload;
+
+        // Single-user app: No duplicate check needed
+        // - If user creates arrangement on Device A, Device B syncs and shows it
+        // - User won't create same arrangement again (they see it already exists)
+        // - Operation-level deduplication (by operation ID) prevents actual duplicates
+        // - Duplicate check was blocking legitimate operations during state reconstruction
+
+        // PHASE 2: Set initial version on create
+        const versionedArrangement = {
+          ...arrangement,
+          version: arrangement.version || 1, // Default to 1 if not provided
+        };
+
+        return {
+          ...state,
+          arrangements: [...state.arrangements, versionedArrangement],
         };
       }
 
       case 'ARRANGEMENT_UPDATE': {
-        const { id, updates } = operation.payload;
+        const { id, updates, expectedVersion } = operation.payload;
 
+        // PHASE 2: Optimistic concurrency control
+        // Check version if expectedVersion provided
+        const targetArrangement = state.arrangements.find(arr => arr.id === id);
+
+        if (expectedVersion !== undefined && targetArrangement) {
+          const currentVersion = targetArrangement.version || 1;
+
+          if (currentVersion !== expectedVersion) {
+            // Version mismatch - conflict detected
+            logger.warn('🚨 VERSION CONFLICT: Arrangement update rejected', {
+              id,
+              expectedVersion,
+              currentVersion,
+              operation: operation.id,
+            });
+
+            // PHASE 3: Create conflict object for UI resolution
+            // Prevent duplicate conflicts for the same entity
+            const existingConflict = state.conflicts?.find(
+              c => c.entityType === 'arrangement' &&
+                   c.entityId === id &&
+                   c.status === 'pending'
+            );
+
+            if (existingConflict) {
+              logger.warn('🚨 DUPLICATE CONFLICT: Skipping duplicate conflict for arrangement', {
+                id,
+                existingConflictId: existingConflict.id,
+              });
+              return state; // Skip creating duplicate conflict
+            }
+
+            const conflict: import('../types').VersionConflict = {
+              id: `conflict_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+              timestamp: new Date().toISOString(),
+              entityType: 'arrangement',
+              entityId: id,
+              operationId: operation.id,
+              expectedVersion,
+              currentVersion,
+              remoteData: updates,
+              localData: targetArrangement,
+              status: 'pending',
+            };
+
+            // Add conflict to state
+            return {
+              ...state,
+              conflicts: [...(state.conflicts || []), conflict],
+            };
+          }
+        }
+
+        // Apply update with incremented version
         return {
           ...state,
           arrangements: state.arrangements.map(arr =>
             arr.id === id
-              ? { ...arr, ...updates, updatedAt: operation.timestamp }
+              ? {
+                  ...arr,
+                  ...updates,
+                  updatedAt: operation.timestamp,
+                  // Increment version on update (default to 1 if not set)
+                  version: (arr.version || 1) + 1,
+                }
               : arr
           ),
         };
@@ -193,9 +385,30 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       case 'ARRANGEMENT_DELETE': {
         const { id } = operation.payload;
 
+        // PHASE 3: Auto-dismiss conflicts for deleted entity
+        const updatedConflicts = state.conflicts?.map(c =>
+          c.entityType === 'arrangement' &&
+          c.entityId === id &&
+          c.status === 'pending'
+            ? {
+                ...c,
+                status: 'dismissed' as const,
+                resolvedAt: new Date().toISOString(),
+              }
+            : c
+        );
+
+        if (updatedConflicts && updatedConflicts !== state.conflicts) {
+          logger.info('🗑️ CONFLICT AUTO-DISMISS: Entity deleted, dismissing conflicts', {
+            entityType: 'arrangement',
+            id,
+          });
+        }
+
         return {
           ...state,
           arrangements: state.arrangements.filter(arr => arr.id !== id),
+          conflicts: updatedConflicts,
         };
       }
 
@@ -282,46 +495,55 @@ export function reconstructState(
 }
 
 /**
- * Validates that an operation is compatible with current state
- * Used to prevent invalid operations from being applied
+ * PHASE 1.3: Reconstruct state with vector clock-based conflict resolution
+ * Applies conflict resolution before replaying operations for more accurate state
  */
-export function validateOperation(state: AppState, operation: Operation): boolean {
-  try {
-    switch (operation.type) {
-      case 'COMPLETION_CREATE': {
-        const { completion } = operation.payload;
-        // Check if address exists
-        if (!state.addresses[completion.index]) {
-          logger.warn('Invalid completion - address not found:', completion.index);
-          return false;
-        }
-        // Check if already completed
-        const existing = state.completions.find(c =>
-          c.index === completion.index &&
-          c.listVersion === completion.listVersion
-        );
-        if (existing) {
-          logger.warn('Invalid completion - already exists:', completion);
-          return false;
-        }
-        return true;
-      }
+export function reconstructStateWithConflictResolution(
+  initialState: AppState,
+  operations: Operation[],
+  manager?: OperationLogManager
+): AppState {
+  const reconstructionInfo = {
+    totalOperations: operations.length,
+    hasVectorClocks: operations.some(op => !!op.vectorClock),
+    completionOps: operations.filter(op => op.type === 'COMPLETION_CREATE').length,
+  };
+  logger.debug('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION START:', reconstructionInfo);
 
-      case 'ACTIVE_INDEX_SET': {
-        const { index } = operation.payload;
-        if (index !== null && !state.addresses[index]) {
-          logger.warn('Invalid active index - address not found:', index);
-          return false;
-        }
-        return true;
-      }
+  // Apply conflict resolution
+  const { validOperations, conflictsResolved, operationsRejected } =
+    processOperationsWithConflictResolution(operations, initialState, manager);
 
-      // Other operations are generally safe to apply
-      default:
-        return true;
-    }
-  } catch (error) {
-    logger.error('Error validating operation:', error, operation);
-    return false;
+  const conflictInfo = {
+    conflictsResolved,
+    operationsRejected,
+    validOperations: validOperations.length,
+    validCompletions: validOperations.filter(op => op.type === 'COMPLETION_CREATE').length,
+  };
+
+  if (conflictsResolved > 0 || operationsRejected > 0) {
+    logger.debug('Conflict resolution applied:', conflictInfo);
   }
+
+  // Sort resolved operations by sequence
+  const sortedOps = [...validOperations].sort((a, b) => a.sequence - b.sequence);
+
+  logger.debug('🔄 About to apply', sortedOps.length, 'operations (', sortedOps.filter(op => op.type === 'COMPLETION_CREATE').length, 'completions)');
+
+  // Apply resolved operations to state
+  const finalState = sortedOps.reduce(applyOperation, initialState);
+
+  const finalInfo = {
+    addresses: finalState.addresses?.length || 0,
+    completions: finalState.completions?.length || 0,
+    arrangements: finalState.arrangements?.length || 0,
+    daySessions: finalState.daySessions?.length || 0,
+    currentListVersion: finalState.currentListVersion,
+    conflictsResolved,
+    operationsRejected,
+  };
+  logger.debug('🔄 STATE RECONSTRUCTION WITH CONFLICT RESOLUTION COMPLETE:', finalInfo);
+
+  return finalState;
 }
+
