@@ -478,7 +478,7 @@ function PifDetailsRow({ date, state }: PifDetailsRowProps) {
             Number of PIFs
           </div>
           <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
-            {pifCompletions.reduce((sum, c) => sum + (c.numberOfCases || 1), 0)}
+            {pifCompletions.length}
           </div>
         </div>
         <div>
