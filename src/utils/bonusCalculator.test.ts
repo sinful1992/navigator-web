@@ -426,7 +426,6 @@ describe('bonusCalculator', () => {
         smallPifBonus: 30,
         linkedCaseBonus: 10,
         complianceFeePerCase: 75,
-        complianceFeeFixed: 122.5,
         dailyThreshold: 100,
       },
       adjustForWorkingDays: true,

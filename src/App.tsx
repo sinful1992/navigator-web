@@ -46,7 +46,7 @@ import { LocalBackupManager } from "./utils/localBackup";
 import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
 import { showSuccess, showError } from "./utils/toast";
-import { setProtectionFlag, isProtectionActive, clearProtectionFlag } from "./utils/protectionFlags";
+import { setProtectionFlag, isProtectionActive } from "./utils/protectionFlags";
 import { StateProtectionService } from "./services/StateProtectionService";
 import { PrivacyConsent } from "./components/PrivacyConsent";
 import { EnhancedOfflineIndicator } from "./components/EnhancedOfflineIndicator";
@@ -135,7 +135,6 @@ function StatsCard({ title, value, change, changeType, icon, iconType }: {
 
 export default function App() {
   const cloudSync = useUnifiedSync();
-  const deviceId = React.useMemo(() => getOrCreateDeviceId(), []);
 
   // 🎯 UX IMPROVEMENT: Only show loading screen if actually taking time
   const [showLoading, setShowLoading] = React.useState(false);
@@ -223,6 +222,7 @@ export default function App() {
 }
 
 function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync> }) {
+  const deviceId = React.useMemo(() => getOrCreateDeviceId(), []);
 
   // Clean Architecture: Use StateProtectionService for centralized protection logic
   const protectionService = React.useRef(new StateProtectionService()).current;
