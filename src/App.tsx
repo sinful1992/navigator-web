@@ -41,6 +41,7 @@ import { useStats } from "./hooks/useStats";
 import { OwnershipPrompt } from "./components/OwnershipPrompt";
 import { Sidebar } from "./components/Sidebar";
 import { SyncDiagnostic } from "./components/SyncDiagnostic";
+import { syncRepairConsole } from "./utils/syncRepairConsole";
 
 export type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning";
 
@@ -411,6 +412,13 @@ function AuthedApp() {
       }
     }
   }, [cloudSync.user?.id]);
+
+  // Initialize sync repair console for debugging
+  React.useEffect(() => {
+    if (cloudSync.user?.id && deviceId) {
+      syncRepairConsole.init(cloudSync.user.id, deviceId);
+    }
+  }, [cloudSync.user?.id, deviceId]);
 
   // Delta sync subscription - Bootstrap handled by operationSync.ts
   React.useEffect(() => {
