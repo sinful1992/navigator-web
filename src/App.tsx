@@ -62,6 +62,7 @@ import { useStats } from "./hooks/useStats";
 import { OwnershipPrompt } from "./components/OwnershipPrompt";
 import { Sidebar } from "./components/Sidebar";
 import { SyncDiagnostic } from "./components/SyncDiagnostic";
+import { syncRepairConsole } from "./utils/syncRepairConsole";
 import { useConflictResolution } from "./hooks/useConflictResolution";
 import { ConflictResolutionModal } from "./components/ConflictResolutionModal";
 import { HistoricalPifModal } from "./components/HistoricalPifModal";
@@ -507,6 +508,13 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
     }
   }, [cloudSync.user?.id]);
 
+  // Initialize sync repair console for debugging
+  React.useEffect(() => {
+    if (cloudSync.user?.id && deviceId) {
+      syncRepairConsole.init(cloudSync.user.id, deviceId);
+    }
+  }, [cloudSync.user?.id, deviceId]);
+
   // Delta sync subscription - Bootstrap handled by operationSync.ts
   React.useEffect(() => {
     const user = cloudSync.user;
@@ -532,6 +540,10 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       const isInitialLoad = isInitialLoadRef.current;
       if (isInitialLoad) {
         isInitialLoadRef.current = false; // Mark as handled
+      }
+      if (isProtectionActive('navigator_day_session_protection')) {
+        logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
+        return;
       }
 
       // Delegate to service layer
@@ -1324,6 +1336,8 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
               onShowSupabaseSetup={() => setShowSupabaseSetup(true)}
               onSignOut={cloudSync.signOut}
               hasSupabase={!!supabase}
+              userId={cloudSync.user?.id}
+              deviceId={deviceId}
             />
           </div>
 

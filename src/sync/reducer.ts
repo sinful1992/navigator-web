@@ -512,7 +512,7 @@ export function reconstructStateWithConflictResolution(
 
   // Apply conflict resolution
   const { validOperations, conflictsResolved, operationsRejected } =
-    processOperationsWithConflictResolution(operations, initialState, manager);
+    processOperationsWithConflictResolution(operations, initialState);
 
   const conflictInfo = {
     conflictsResolved,
