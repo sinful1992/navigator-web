@@ -475,10 +475,18 @@ function PifDetailsRow({ date, state }: PifDetailsRowProps) {
         </div>
         <div>
           <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            Number of Cases
+            Number of PIFs
           </div>
           <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
             {pifCompletions.length}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            Total Cases
+          </div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
+            {pifCompletions.reduce((sum, c) => sum + (c.numberOfCases || 1), 0)}
           </div>
         </div>
         {bonusEarned > 0 && (
@@ -509,13 +517,16 @@ function PifDetailsRow({ date, state }: PifDetailsRowProps) {
         }}>
           {pifCompletions.map((c, idx) => {
             const amount = parseFloat(c.amount || '0');
+            const numCases = c.numberOfCases || 1;
 
-            // Calculate enforcement fees per TCG Regulations 2014
-            const complianceFee = 75;
-            const baseFee = 235;
-            const amountOverThreshold = Math.max(0, amount - 1500);
-            const percentageFee = amountOverThreshold * 0.075; // 7.5%
-            const enforcementFee = complianceFee + baseFee + percentageFee;
+            // Display actual enforcement fees from the completion
+            const totalEnfFees = c.enforcementFees && c.enforcementFees.length > 0
+              ? c.enforcementFees.reduce((sum, fee) => sum + fee, 0)
+              : (c.totalEnforcementFees || 0);
+
+            const linkedCases = c.enforcementFees && c.enforcementFees.length > 0
+              ? Math.max(0, numCases - c.enforcementFees.length)
+              : 0;
 
             return (
               <div
@@ -534,7 +545,7 @@ function PifDetailsRow({ date, state }: PifDetailsRowProps) {
                 <div style={{ color: 'var(--text-muted)' }}>
                   {formatCurrency(amount)}
                 </div>
-                {pifCompletions.length > 1 && (
+                {numCases > 1 && (
                   <div style={{
                     fontSize: '0.75rem',
                     color: 'var(--text-muted)',
@@ -542,7 +553,24 @@ function PifDetailsRow({ date, state }: PifDetailsRowProps) {
                     borderTop: '1px solid var(--border-light)',
                     paddingTop: '0.25rem'
                   }}>
-                    Enf. Fee: {formatCurrency(enforcementFee)}
+                    {numCases} cases
+                    {c.enforcementFees && c.enforcementFees.length > 0 && (
+                      <span>
+                        {' '}· {c.enforcementFees.length} enf fees ({formatCurrency(totalEnfFees)})
+                        {linkedCases > 0 && <span> · {linkedCases} linked</span>}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {pifCompletions.length > 1 && numCases === 1 && totalEnfFees > 0 && (
+                  <div style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--text-muted)',
+                    marginTop: '0.25rem',
+                    borderTop: '1px solid var(--border-light)',
+                    paddingTop: '0.25rem'
+                  }}>
+                    Enf. Fee: {formatCurrency(totalEnfFees)}
                   </div>
                 )}
               </div>
