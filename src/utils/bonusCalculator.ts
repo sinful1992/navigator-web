@@ -167,7 +167,9 @@ export function calculateComplexBonus(
       }
 
       // Add bonus for linked cases (cases without enforcement fees)
-      const linkedCases = actualCases - completion.enforcementFees.length;
+      // Safety check: if actualCases < enforcementFees.length, assume actualCases = enforcementFees.length (no linked cases)
+      const adjustedCases = Math.max(actualCases, completion.enforcementFees.length);
+      const linkedCases = adjustedCases - completion.enforcementFees.length;
       if (linkedCases > 0) {
         totalBonus += linkedCases * linkedCaseBonus;
       }
@@ -382,7 +384,9 @@ export function calculateBonusBreakdown(
         }
 
         // Add bonus for linked cases
-        const linkedCases = actualCases - completion.enforcementFees.length;
+        // Safety check: if actualCases < enforcementFees.length, assume actualCases = enforcementFees.length (no linked cases)
+        const adjustedCases = Math.max(actualCases, completion.enforcementFees.length);
+        const linkedCases = adjustedCases - completion.enforcementFees.length;
         if (linkedCases > 0) {
           bonusForThisPif += linkedCases * linkedCaseBonus;
         }

@@ -415,6 +415,104 @@ describe('bonusCalculator', () => {
     });
   });
 
+  describe('Enforcement Fees Array Calculation', () => {
+    const complexSettings: BonusSettings = {
+      enabled: true,
+      calculationType: 'complex',
+      complexSettings: {
+        baseEnforcementFee: 235,
+        basePifBonus: 100,
+        largePifThreshold: 1500,
+        largePifPercentage: 0.001875,
+        largePifCap: 500,
+        smallPifBonus: 30,
+        linkedCaseBonus: 10,
+        complianceFeePerCase: 75,
+        complianceFeeFixed: 122.5,
+        dailyThreshold: 100,
+      },
+      adjustForWorkingDays: true,
+    };
+
+    it('should calculate bonus for 11 cases with 3 enforcement fees', () => {
+      // User scenario: 11 cases with 3 enforcement fees
+      // Expected: 3 × £100 (enforcement fees) + 8 × £10 (linked cases) = £380
+      const completion: Completion = {
+        index: 0,
+        address: 'Test Address',
+        lat: null,
+        lng: null,
+        outcome: 'PIF',
+        amount: '5000.00',
+        timestamp: new Date().toISOString(),
+        listVersion: 1,
+        numberOfCases: 11,
+        enforcementFees: [235, 235, 235], // 3 standard enforcement fees
+      };
+
+      const workingDays = 1;
+      const breakdown = calculateBonusBreakdown([completion], workingDays, complexSettings);
+
+      // 3 enforcement fees × £100 = £300
+      // 8 linked cases × £10 = £80
+      // Total = £380
+      // After threshold (£100) = £280
+      expect(breakdown.grossBonus).toBe(380);
+      expect(breakdown.threshold).toBe(100);
+      expect(breakdown.netBonus).toBe(280);
+    });
+
+    it('should calculate bonus for multiple enforcement fees with different amounts', () => {
+      const completion: Completion = {
+        index: 0,
+        address: 'Test Address',
+        lat: null,
+        lng: null,
+        outcome: 'PIF',
+        amount: '5000.00',
+        timestamp: new Date().toISOString(),
+        listVersion: 1,
+        numberOfCases: 5,
+        enforcementFees: [272.50, 310.00], // 2 enforcement fees (large debts)
+      };
+
+      const workingDays = 1;
+      const breakdown = calculateBonusBreakdown([completion], workingDays, complexSettings);
+
+      // 2 enforcement fees with large debts will be > £100 each
+      // 3 linked cases × £10 = £30
+      expect(breakdown.grossBonus).toBeGreaterThan(230); // At least £200 + £30
+      expect(breakdown.totalCases).toBe(5);
+    });
+
+    it('should handle edge case where numberOfCases < enforcementFees.length (data inconsistency)', () => {
+      // Edge case: numberOfCases incorrectly set to 1 when there are 3 enforcement fees
+      // This should be handled gracefully by treating it as 3 cases (no linked cases)
+      const completion: Completion = {
+        index: 0,
+        address: 'Test Address',
+        lat: null,
+        lng: null,
+        outcome: 'PIF',
+        amount: '5000.00',
+        timestamp: new Date().toISOString(),
+        listVersion: 1,
+        numberOfCases: 1, // Incorrectly set (should be 11)
+        enforcementFees: [235, 235, 235], // 3 enforcement fees
+      };
+
+      const workingDays = 1;
+      const breakdown = calculateBonusBreakdown([completion], workingDays, complexSettings);
+
+      // With the fix: adjustedCases = max(1, 3) = 3
+      // linkedCases = 3 - 3 = 0
+      // Bonus = 3 × £100 = £300 (no linked case bonus since data is inconsistent)
+      expect(breakdown.grossBonus).toBe(300);
+      expect(breakdown.threshold).toBe(100);
+      expect(breakdown.netBonus).toBe(200);
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should handle disabled bonus', () => {
       const disabledSettings: BonusSettings = {
