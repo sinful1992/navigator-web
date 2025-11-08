@@ -8,6 +8,9 @@ import { ConflictResolutionService } from '../services/ConflictResolutionService
 import { ConflictMetricsService } from '../services/ConflictMetricsService';
 import { logger } from '../utils/logger';
 
+// Type for submitOperation callback
+type SubmitOperationCallback = (operation: { type: string; payload: any }) => Promise<void>;
+
 export interface UseConflictResolutionProps {
   conflicts: VersionConflict[];
   completions: Completion[];
@@ -16,6 +19,7 @@ export interface UseConflictResolutionProps {
   // PHASE 3 FIX: Operation submission for sync
   updateCompletion: (index: number, updates: Partial<Completion>) => void;
   updateArrangement: (id: string, updates: Partial<Arrangement>) => void;
+  submitOperation?: SubmitOperationCallback;
 }
 
 export interface UseConflictResolutionReturn {
@@ -51,6 +55,7 @@ export function useConflictResolution({
   onStateUpdate,
   updateCompletion,
   updateArrangement,
+  submitOperation,
 }: UseConflictResolutionProps): UseConflictResolutionReturn {
 
   // Track conflicts we've already recorded in metrics
@@ -209,6 +214,16 @@ export function useConflictResolution({
         ),
       }));
 
+      // Submit CONFLICT_RESOLVE operation for persistence
+      if (submitOperation) {
+        submitOperation({
+          type: 'CONFLICT_RESOLVE',
+          payload: { conflictId, resolution: 'keep-local' },
+        }).catch(err => {
+          logger.error('Failed to submit conflict resolve operation:', err);
+        });
+      }
+
       // PHASE 3: Track resolution in metrics
       ConflictMetricsService.trackConflictResolved(conflict, 'keep-local').catch(err => {
         logger.error('Failed to track conflict resolution:', err);
@@ -216,7 +231,7 @@ export function useConflictResolution({
 
       logger.info('✅ Conflict resolved: Kept local changes', { conflictId });
     },
-    [conflicts, onStateUpdate]
+    [conflicts, onStateUpdate, submitOperation]
   );
 
   /**
@@ -275,6 +290,16 @@ export function useConflictResolution({
         ),
       }));
 
+      // Submit CONFLICT_RESOLVE operation for persistence
+      if (submitOperation) {
+        submitOperation({
+          type: 'CONFLICT_RESOLVE',
+          payload: { conflictId, resolution: 'use-remote' },
+        }).catch(err => {
+          logger.error('Failed to submit conflict resolve operation:', err);
+        });
+      }
+
       // PHASE 3: Track resolution in metrics
       ConflictMetricsService.trackConflictResolved(conflict, 'use-remote').catch(err => {
         logger.error('Failed to track conflict resolution:', err);
@@ -282,7 +307,7 @@ export function useConflictResolution({
 
       logger.info('✅ Conflict resolved: Used remote changes (synced)', { conflictId });
     },
-    [conflicts, completions, updateCompletion, updateArrangement, onStateUpdate]
+    [conflicts, completions, updateCompletion, updateArrangement, onStateUpdate, submitOperation]
   );
 
   /**
@@ -341,6 +366,16 @@ export function useConflictResolution({
         ),
       }));
 
+      // Submit CONFLICT_RESOLVE operation for persistence
+      if (submitOperation) {
+        submitOperation({
+          type: 'CONFLICT_RESOLVE',
+          payload: { conflictId, resolution: 'manual' },
+        }).catch(err => {
+          logger.error('Failed to submit conflict resolve operation:', err);
+        });
+      }
+
       // PHASE 3: Track resolution in metrics
       ConflictMetricsService.trackConflictResolved(conflict, 'manual').catch(err => {
         logger.error('Failed to track conflict resolution:', err);
@@ -348,7 +383,7 @@ export function useConflictResolution({
 
       logger.info('✅ Conflict resolved: Manual merge (synced)', { conflictId });
     },
-    [conflicts, completions, updateCompletion, updateArrangement, onStateUpdate]
+    [conflicts, completions, updateCompletion, updateArrangement, onStateUpdate, submitOperation]
   );
 
   /**
@@ -380,6 +415,16 @@ export function useConflictResolution({
         ),
       }));
 
+      // Submit CONFLICT_DISMISS operation for persistence
+      if (submitOperation) {
+        submitOperation({
+          type: 'CONFLICT_DISMISS',
+          payload: { conflictId },
+        }).catch(err => {
+          logger.error('Failed to submit conflict dismiss operation:', err);
+        });
+      }
+
       // PHASE 3: Track dismissal in metrics
       ConflictMetricsService.trackConflictDismissed(conflict).catch(err => {
         logger.error('Failed to track conflict dismissal:', err);
@@ -387,7 +432,7 @@ export function useConflictResolution({
 
       logger.info('✅ Conflict dismissed', { conflictId });
     },
-    [conflicts, onStateUpdate]
+    [conflicts, onStateUpdate, submitOperation]
   );
 
   /**

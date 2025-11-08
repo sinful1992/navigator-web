@@ -20,7 +20,8 @@ export type Operation =
   | SessionOperation
   | ArrangementOperation
   | ActiveIndexOperation
-  | SettingsOperation;
+  | SettingsOperation
+  | ConflictOperation;
 
 // Completion operations
 export type CompletionOperation = BaseOperation & (
@@ -149,6 +150,23 @@ export type SettingsOperation = BaseOperation & (
       type: 'SETTINGS_UPDATE_BONUS';
       payload: {
         settings: BonusSettings;
+      };
+    }
+);
+
+// Conflict operations
+export type ConflictOperation = BaseOperation & (
+  | {
+      type: 'CONFLICT_DISMISS';
+      payload: {
+        conflictId: string;
+      };
+    }
+  | {
+      type: 'CONFLICT_RESOLVE';
+      payload: {
+        conflictId: string;
+        resolution: 'keep-local' | 'use-remote' | 'manual';
       };
     }
 );

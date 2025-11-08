@@ -452,6 +452,43 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
         };
       }
 
+      case 'CONFLICT_DISMISS': {
+        const { conflictId } = operation.payload;
+
+        // Find and mark conflict as dismissed
+        return {
+          ...state,
+          conflicts: state.conflicts?.map(c =>
+            c.id === conflictId
+              ? {
+                  ...c,
+                  status: 'dismissed' as const,
+                  resolvedAt: operation.timestamp,
+                }
+              : c
+          ),
+        };
+      }
+
+      case 'CONFLICT_RESOLVE': {
+        const { conflictId, resolution } = operation.payload;
+
+        // Find and mark conflict as resolved
+        return {
+          ...state,
+          conflicts: state.conflicts?.map(c =>
+            c.id === conflictId
+              ? {
+                  ...c,
+                  status: 'resolved' as const,
+                  resolvedAt: operation.timestamp,
+                  resolution,
+                }
+              : c
+          ),
+        };
+      }
+
       default:
         logger.warn('Unknown operation type:', (operation as any).type);
         return state;

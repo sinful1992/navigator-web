@@ -295,6 +295,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
     onStateUpdate: setState,
     updateCompletion,
     updateArrangement,
+    submitOperation: cloudSync.submitOperation,
   });
 
   // Tab navigation with URL hash sync and browser history support
