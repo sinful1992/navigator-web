@@ -256,8 +256,9 @@ export function useConflictResolution({
           logger.error('Completion not found for conflict resolution:', conflict.entityId);
         }
       } else {
-        // Submit UPDATE operation (will sync to other devices)
-        updateArrangement(conflict.entityId, resolution.resolvedData as Partial<Arrangement>);
+        // PHASE 3 FIX: Skip version check when resolving conflicts to prevent conflict loop
+        // When user chooses "Use Remote Changes", we accept remote data without version validation
+        updateArrangement(conflict.entityId, resolution.resolvedData as Partial<Arrangement>, true);
       }
 
       // Mark conflict as resolved in state
@@ -322,8 +323,9 @@ export function useConflictResolution({
           logger.error('Completion not found for conflict resolution:', conflict.entityId);
         }
       } else {
-        // Submit UPDATE operation (will sync to other devices)
-        updateArrangement(conflict.entityId, resolution.resolvedData as Partial<Arrangement>);
+        // PHASE 3 FIX: Skip version check when resolving conflicts to prevent conflict loop
+        // Manual merge is also a conflict resolution, skip version validation
+        updateArrangement(conflict.entityId, resolution.resolvedData as Partial<Arrangement>, true);
       }
 
       // Mark conflict as resolved in state

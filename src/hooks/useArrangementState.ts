@@ -33,7 +33,7 @@ export interface UseArrangementStateReturn {
   addArrangement: (
     arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>
   ) => Promise<string>;
-  updateArrangement: (id: string, updates: Partial<Arrangement>) => Promise<void>;
+  updateArrangement: (id: string, updates: Partial<Arrangement>, skipVersionCheck?: boolean) => Promise<void>;
   deleteArrangement: (id: string) => Promise<void>;
 }
 
@@ -131,10 +131,11 @@ export function useArrangementState({
    *
    * @param id - Arrangement ID
    * @param updates - Partial updates to apply
+   * @param skipVersionCheck - If true, skips version checking (used for conflict resolution)
    * @returns Promise resolving when update is complete
    */
   const updateArrangement = React.useCallback(
-    (id: string, updates: Partial<Arrangement>): Promise<void> => {
+    (id: string, updates: Partial<Arrangement>, skipVersionCheck: boolean = false): Promise<void> => {
       return new Promise((resolve) => {
         let shouldSubmit = false;
         let currentVersion: number | undefined;
@@ -154,7 +155,8 @@ export function useArrangementState({
           }
 
           // PHASE 2: Capture current version for optimistic concurrency
-          currentVersion = arrangement.version;
+          // PHASE 3 FIX: Skip version check when resolving conflicts to prevent conflict loops
+          currentVersion = skipVersionCheck ? undefined : arrangement.version;
 
           const updatedArrangement = {
             ...updates,
@@ -179,14 +181,15 @@ export function useArrangementState({
         });
 
         // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if update occurred)
-        if (shouldSubmit && currentVersion !== undefined) {
-          if (repositories?.arrangement) {
-            // PHASE 2: Pass current version for conflict detection
+        if (shouldSubmit) {
+          if (repositories?.arrangement && currentVersion !== undefined) {
+            // PHASE 2: Pass current version for conflict detection (normal updates)
             repositories.arrangement.updateArrangement(id, updates, currentVersion).catch((err) => {
               logger.error('Failed to update arrangement:', err);
             });
           } else if (submitOperation) {
             // Fallback to direct submission
+            // PHASE 3 FIX: Skip expectedVersion when resolving conflicts (prevents conflict loop)
             submitOperation({
               type: 'ARRANGEMENT_UPDATE',
               payload: { id, updates, expectedVersion: currentVersion }
