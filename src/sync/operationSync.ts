@@ -200,7 +200,7 @@ export function useOperationSync(): UseOperationSync {
               return acc;
             }, {} as Record<string, number>));
 
-            const newOps = await operationLog.current.mergeRemoteOperations(remoteOperations);
+            const newOps = await operationLog.current.mergeRemoteOperations(remoteOperations, currentState);
             logger.info(`📥 BOOTSTRAP: Merged ${newOps.length} new operations (${remoteOperations.length - newOps.length} were duplicates)`);
 
             if (newOps.length > 0) {
@@ -576,7 +576,7 @@ export function useOperationSync(): UseOperationSync {
         const remoteOperations: Operation[] = data.map(row => row.operation_data);
 
         // Merge remote operations and resolve conflicts
-        const newOperations = await operationLog.current!.mergeRemoteOperations(remoteOperations);
+        const newOperations = await operationLog.current!.mergeRemoteOperations(remoteOperations, currentState);
 
         if (newOperations.length > 0) {
           const maxRemoteSequence = Math.max(...remoteOperations.map(op => op.sequence));
@@ -697,7 +697,7 @@ export function useOperationSync(): UseOperationSync {
             logger.info('✅ Processing remote operation:', operation.type);
 
             if (operationLog.current) {
-              const newOps = await operationLog.current.mergeRemoteOperations([operation]);
+              const newOps = await operationLog.current.mergeRemoteOperations([operation], currentState);
 
               if (newOps.length > 0) {
                 // 🔧 CRITICAL FIX: Don't mark operations from OTHER devices as synced

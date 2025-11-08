@@ -3,6 +3,8 @@ import type { Operation } from './operations';
 import { nextSequence, setSequence } from './operations';
 import { storageManager } from '../utils/storageManager';
 import { logger } from '../utils/logger';
+import { processOperationsWithConflictResolution } from './conflictResolution';
+import type { AppState } from '../types';
 
 const OPERATION_LOG_KEY = 'navigator_operation_log_v1';
 
@@ -124,8 +126,9 @@ export class OperationLogManager {
    * Add operations received from cloud sync
    * This handles merging remote operations with local ones
    * Uses transaction-like approach - all or nothing
+   * Now includes conflict resolution for concurrent operations
    */
-  async mergeRemoteOperations(remoteOps: Operation[]): Promise<Operation[]> {
+  async mergeRemoteOperations(remoteOps: Operation[], currentState: AppState): Promise<Operation[]> {
     if (!this.isLoaded) {
       await this.load();
     }
@@ -140,6 +143,7 @@ export class OperationLogManager {
 
     try {
       const newOperations: Operation[] = [];
+      const operationsToProcess: Operation[] = [];
 
       for (const remoteOp of remoteOps) {
         // Skip operations from this device (we already have them)
@@ -153,11 +157,39 @@ export class OperationLogManager {
         );
 
         if (!exists) {
-          this.log.operations.push(remoteOp);
-          newOperations.push(remoteOp);
+          operationsToProcess.push(remoteOp);
+        }
+      }
+
+      // Apply conflict resolution to the new operations
+      if (operationsToProcess.length > 0) {
+        logger.info('🔍 Processing operations with conflict resolution:', {
+          operationCount: operationsToProcess.length,
+          types: operationsToProcess.reduce((acc, op) => {
+            acc[op.type] = (acc[op.type] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>),
+        });
+
+        const { validOperations, conflictsResolved, operationsRejected } =
+          processOperationsWithConflictResolution(operationsToProcess, currentState);
+
+        if (conflictsResolved > 0 || operationsRejected > 0) {
+          logger.warn('⚠️ CONFLICT RESOLUTION APPLIED:', {
+            total: operationsToProcess.length,
+            valid: validOperations.length,
+            conflictsResolved,
+            rejected: operationsRejected,
+          });
+        }
+
+        // Add valid operations after conflict resolution
+        for (const validOp of validOperations) {
+          this.log.operations.push(validOp);
+          newOperations.push(validOp);
 
           // Update sequence tracking
-          this.log.lastSequence = Math.max(this.log.lastSequence, remoteOp.sequence);
+          this.log.lastSequence = Math.max(this.log.lastSequence, validOp.sequence);
           setSequence(this.log.lastSequence);
         }
       }
@@ -170,7 +202,7 @@ export class OperationLogManager {
         // Persist atomically - if this fails, we'll rollback
         await this.persist();
 
-        logger.info('Merged remote operations:', {
+        logger.info('✅ Merged remote operations with conflict resolution:', {
           newOperationCount: newOperations.length,
           totalOperationCount: this.log.operations.length,
         });
