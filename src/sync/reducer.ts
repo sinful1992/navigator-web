@@ -85,17 +85,19 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
             });
 
             // PHASE 3: Create conflict object for UI resolution
-            // Prevent duplicate conflicts for the same entity
+            // Prevent duplicate conflicts for the same entity (check ALL statuses, not just pending)
+            // FIX: Include dismissed/resolved conflicts to prevent recreation on state reconstruction
             const existingConflict = state.conflicts?.find(
               c => c.entityType === 'completion' &&
-                   c.entityId === originalTimestamp &&
-                   c.status === 'pending'
+                   c.entityId === originalTimestamp
+              // Removed status === 'pending' check - conflicts for this entity already exist
             );
 
             if (existingConflict) {
               logger.warn('🚨 DUPLICATE CONFLICT: Skipping duplicate conflict for completion', {
                 timestamp: originalTimestamp,
                 existingConflictId: existingConflict.id,
+                existingStatus: existingConflict.status,
               });
               return state; // Skip creating duplicate conflict
             }
@@ -328,17 +330,19 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
             });
 
             // PHASE 3: Create conflict object for UI resolution
-            // Prevent duplicate conflicts for the same entity
+            // Prevent duplicate conflicts for the same entity (check ALL statuses, not just pending)
+            // FIX: Include dismissed/resolved conflicts to prevent recreation on state reconstruction
             const existingConflict = state.conflicts?.find(
               c => c.entityType === 'arrangement' &&
-                   c.entityId === id &&
-                   c.status === 'pending'
+                   c.entityId === id
+              // Removed status === 'pending' check - conflicts for this entity already exist
             );
 
             if (existingConflict) {
               logger.warn('🚨 DUPLICATE CONFLICT: Skipping duplicate conflict for arrangement', {
                 id,
                 existingConflictId: existingConflict.id,
+                existingStatus: existingConflict.status,
               });
               return state; // Skip creating duplicate conflict
             }
