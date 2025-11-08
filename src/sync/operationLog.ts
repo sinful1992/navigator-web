@@ -165,14 +165,16 @@ export class OperationLogManager {
       if (operationsToProcess.length > 0) {
         logger.info('🔍 Processing operations with conflict resolution:', {
           operationCount: operationsToProcess.length,
+          existingInLog: this.log.operations.length,
           types: operationsToProcess.reduce((acc, op) => {
             acc[op.type] = (acc[op.type] || 0) + 1;
             return acc;
           }, {} as Record<string, number>),
         });
 
+        // 🔧 CRITICAL FIX: Pass existing operations to check for conflicts against them
         const { validOperations, conflictsResolved, operationsRejected } =
-          processOperationsWithConflictResolution(operationsToProcess, currentState);
+          processOperationsWithConflictResolution(operationsToProcess, currentState, this.log.operations);
 
         if (conflictsResolved > 0 || operationsRejected > 0) {
           logger.warn('⚠️ CONFLICT RESOLUTION APPLIED:', {

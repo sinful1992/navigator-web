@@ -330,10 +330,14 @@ function resolveDependencyViolation(
 
 /**
  * Batch process operations with conflict resolution
+ * @param operations - New operations to process
+ * @param currentState - Current application state
+ * @param existingOperations - Operations already in the log (to check for conflicts against)
  */
 export function processOperationsWithConflictResolution(
   operations: Operation[],
-  currentState: AppState
+  currentState: AppState,
+  existingOperations: Operation[] = []
 ): {
   validOperations: Operation[];
   conflictsResolved: number;
@@ -347,8 +351,11 @@ export function processOperationsWithConflictResolution(
   const sortedOps = [...operations].sort((a, b) => a.sequence - b.sequence);
 
   for (const operation of sortedOps) {
-    // Check for conflicts with already processed operations
-    const conflicts = detectConflicts(operation, processed, currentState);
+    // 🔧 CRITICAL FIX: Check for conflicts against BOTH:
+    // 1. Operations already in the log (existingOperations)
+    // 2. Operations processed in this batch (processed)
+    const allExistingOps = [...existingOperations, ...processed];
+    const conflicts = detectConflicts(operation, allExistingOps, currentState);
 
     if (conflicts.length === 0) {
       // No conflicts - accept the operation
