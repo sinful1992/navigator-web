@@ -88,7 +88,8 @@ export const ConflictResolutionModal: React.FC<ConflictResolutionModalProps> = (
     } else if (selectedResolution === 'remote') {
       onResolveUseRemote();
     }
-    onClose();
+    // Don't call onClose() - modal will close automatically when conflict is resolved
+    // Calling onClose() would trigger dismissConflict() which conflicts with resolve
   };
 
   return (
@@ -318,10 +319,7 @@ export const ConflictResolutionModal: React.FC<ConflictResolutionModalProps> = (
               Resolve Conflict
             </button>
             <button
-              onClick={() => {
-                onDismiss();
-                onClose();
-              }}
+              onClick={onDismiss}
               style={{
                 padding: '0.875rem 1.25rem',
                 background: theme.buttonSecondary,

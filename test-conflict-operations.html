@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Conflict Operations</title>
+</head>
+<body>
+    <h1>Open Browser Console</h1>
+    <script>
+        // Simulate the operation types
+        const operations = {
+            CONFLICT_DISMISS: 'CONFLICT_DISMISS',
+            CONFLICT_RESOLVE: 'CONFLICT_RESOLVE'
+        };
+        
+        // Check if these are defined
+        console.log('Operations:', operations);
+        
+        // Simulate submitOperation
+        const submitOperation = (operation) => {
+            console.log('📤 submitOperation called with:', operation);
+            console.log('Type:', operation.type);
+            console.log('Payload:', operation.payload);
+            return Promise.resolve();
+        };
+        
+        // Test CONFLICT_DISMISS
+        submitOperation({
+            type: 'CONFLICT_DISMISS',
+            payload: { conflictId: 'test-123' }
+        });
+        
+        // Test CONFLICT_RESOLVE
+        submitOperation({
+            type: 'CONFLICT_RESOLVE',
+            payload: { conflictId: 'test-456', resolution: 'keep-local' }
+        });
+    </script>
+</body>
+</html>

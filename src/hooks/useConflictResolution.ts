@@ -239,7 +239,8 @@ export function useConflictResolution({
    * Resolve conflict by using remote version
    * Application Layer: Coordinates resolution and state update
    *
-   * PHASE 3 FIX: Now submits UPDATE operation for cross-device sync
+   * FIX: Don't submit UPDATE operation - just update state directly and submit CONFLICT_RESOLVE
+   * The reducer will apply the resolved data when replaying operations
    */
   const resolveUseRemote = useCallback(
     (conflictId: string) => {
@@ -258,38 +259,57 @@ export function useConflictResolution({
 
       const resolution = ConflictResolutionService.resolveUseRemote(conflict);
 
-      // PHASE 3 FIX: Submit UPDATE operation for sync
+      // Update local state directly with resolved data (don't submit UPDATE operation)
       if (conflict.entityType === 'completion') {
-        // Find completion index in array
-        const completionIndex = completions.findIndex(
-          c => c.timestamp === conflict.entityId
-        );
+        onStateUpdate((state) => {
+          const completionIndex = state.completions.findIndex(
+            c => c.timestamp === conflict.entityId
+          );
 
-        if (completionIndex !== -1) {
-          // Submit UPDATE operation (will sync to other devices)
-          updateCompletion(completionIndex, resolution.resolvedData as Partial<Completion>);
-        } else {
-          logger.error('Completion not found for conflict resolution:', conflict.entityId);
-        }
+          if (completionIndex === -1) {
+            logger.error('Completion not found for conflict resolution:', conflict.entityId);
+            return state;
+          }
+
+          return {
+            ...state,
+            completions: state.completions.map((c, i) =>
+              i === completionIndex
+                ? { ...c, ...resolution.resolvedData, version: conflict.expectedVersion }
+                : c
+            ),
+            conflicts: state.conflicts?.map(c =>
+              c.id === conflictId
+                ? {
+                    ...c,
+                    status: 'resolved' as const,
+                    resolvedAt: new Date().toISOString(),
+                    resolution: 'use-remote' as const,
+                  }
+                : c
+            ),
+          };
+        });
       } else {
-        // Submit UPDATE operation (will sync to other devices)
-        updateArrangement(conflict.entityId, resolution.resolvedData as Partial<Arrangement>);
+        onStateUpdate((state) => ({
+          ...state,
+          arrangements: state.arrangements.map((arr) =>
+            arr.id === conflict.entityId
+              ? { ...arr, ...resolution.resolvedData, version: conflict.expectedVersion }
+              : arr
+          ),
+          conflicts: state.conflicts?.map(c =>
+            c.id === conflictId
+              ? {
+                  ...c,
+                  status: 'resolved' as const,
+                  resolvedAt: new Date().toISOString(),
+                  resolution: 'use-remote' as const,
+                }
+              : c
+          ),
+        }));
       }
-
-      // Mark conflict as resolved in state
-      onStateUpdate((state) => ({
-        ...state,
-        conflicts: state.conflicts?.map(c =>
-          c.id === conflictId
-            ? {
-                ...c,
-                status: 'resolved' as const,
-                resolvedAt: new Date().toISOString(),
-                resolution: 'use-remote' as const,
-              }
-            : c
-        ),
-      }));
 
       // Submit CONFLICT_RESOLVE operation for persistence
       if (submitOperation) {
@@ -306,16 +326,16 @@ export function useConflictResolution({
         logger.error('Failed to track conflict resolution:', err);
       });
 
-      logger.info('✅ Conflict resolved: Used remote changes (synced)', { conflictId });
+      logger.info('✅ Conflict resolved: Used remote changes', { conflictId });
     },
-    [conflicts, completions, updateCompletion, updateArrangement, onStateUpdate, submitOperation]
+    [conflicts, onStateUpdate, submitOperation]
   );
 
   /**
    * Resolve conflict with manual merge
    * Application Layer: Coordinates manual resolution
    *
-   * PHASE 3 FIX: Now submits UPDATE operation for cross-device sync
+   * FIX: Don't submit UPDATE operation - just update state directly and submit CONFLICT_RESOLVE
    */
   const resolveManual = useCallback(
     (conflictId: string, manualData: Partial<Completion> | Partial<Arrangement>) => {
@@ -334,38 +354,57 @@ export function useConflictResolution({
 
       const resolution = ConflictResolutionService.resolveManual(conflict, manualData);
 
-      // PHASE 3 FIX: Submit UPDATE operation for sync
+      // Update local state directly with resolved data (don't submit UPDATE operation)
       if (conflict.entityType === 'completion') {
-        // Find completion index in array
-        const completionIndex = completions.findIndex(
-          c => c.timestamp === conflict.entityId
-        );
+        onStateUpdate((state) => {
+          const completionIndex = state.completions.findIndex(
+            c => c.timestamp === conflict.entityId
+          );
 
-        if (completionIndex !== -1) {
-          // Submit UPDATE operation (will sync to other devices)
-          updateCompletion(completionIndex, resolution.resolvedData as Partial<Completion>);
-        } else {
-          logger.error('Completion not found for conflict resolution:', conflict.entityId);
-        }
+          if (completionIndex === -1) {
+            logger.error('Completion not found for conflict resolution:', conflict.entityId);
+            return state;
+          }
+
+          return {
+            ...state,
+            completions: state.completions.map((c, i) =>
+              i === completionIndex
+                ? { ...c, ...resolution.resolvedData, version: (c.version || 1) + 1 }
+                : c
+            ),
+            conflicts: state.conflicts?.map(c =>
+              c.id === conflictId
+                ? {
+                    ...c,
+                    status: 'resolved' as const,
+                    resolvedAt: new Date().toISOString(),
+                    resolution: 'manual' as const,
+                  }
+                : c
+            ),
+          };
+        });
       } else {
-        // Submit UPDATE operation (will sync to other devices)
-        updateArrangement(conflict.entityId, resolution.resolvedData as Partial<Arrangement>);
+        onStateUpdate((state) => ({
+          ...state,
+          arrangements: state.arrangements.map((arr) =>
+            arr.id === conflict.entityId
+              ? { ...arr, ...resolution.resolvedData, version: (arr.version || 1) + 1 }
+              : arr
+          ),
+          conflicts: state.conflicts?.map(c =>
+            c.id === conflictId
+              ? {
+                  ...c,
+                  status: 'resolved' as const,
+                  resolvedAt: new Date().toISOString(),
+                  resolution: 'manual' as const,
+                }
+              : c
+          ),
+        }));
       }
-
-      // Mark conflict as resolved in state
-      onStateUpdate((state) => ({
-        ...state,
-        conflicts: state.conflicts?.map(c =>
-          c.id === conflictId
-            ? {
-                ...c,
-                status: 'resolved' as const,
-                resolvedAt: new Date().toISOString(),
-                resolution: 'manual' as const,
-              }
-            : c
-        ),
-      }));
 
       // Submit CONFLICT_RESOLVE operation for persistence
       if (submitOperation) {
@@ -382,9 +421,9 @@ export function useConflictResolution({
         logger.error('Failed to track conflict resolution:', err);
       });
 
-      logger.info('✅ Conflict resolved: Manual merge (synced)', { conflictId });
+      logger.info('✅ Conflict resolved: Manual merge', { conflictId });
     },
-    [conflicts, completions, updateCompletion, updateArrangement, onStateUpdate, submitOperation]
+    [conflicts, onStateUpdate, submitOperation]
   );
 
   /**
