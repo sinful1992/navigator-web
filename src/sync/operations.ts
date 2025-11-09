@@ -278,6 +278,9 @@ export async function setSequenceAsync(seq: number): Promise<void> {
   return sequenceGenerator.setAsync(seq);
 }
 
+// Track last generated timestamp to prevent rapid-fire duplicates
+let lastGeneratedTimestamp: string | null = null;
+
 /**
  * Generate a monotonic timestamp that ensures new operations never get stranded.
  *
@@ -286,32 +289,53 @@ export async function setSequenceAsync(seq: number): Promise<void> {
  * 2. New operation gets timestamp ≤ lastSyncTimestamp
  * 3. Operation permanently stranded (never appears in getUnsyncedOperations)
  *
- * @param lastSyncTimestamp - Current sync cursor (null if never synced)
- * @returns ISO timestamp string guaranteed to be > lastSyncTimestamp
+ * Also prevents rapid-fire operations from getting duplicate timestamps by
+ * tracking the last generated timestamp in memory.
+ *
+ * @param maxLocalTimestamp - Maximum timestamp from ALL local operations (null if no operations)
+ * @returns ISO timestamp string guaranteed to be unique
  */
-export function generateMonotonicTimestamp(lastSyncTimestamp: string | null): string {
+export function generateMonotonicTimestamp(maxLocalTimestamp: string | null): string {
   const now = new Date().toISOString();
 
-  // First operation or never synced - use current time
-  if (!lastSyncTimestamp) {
+  // Find the maximum timestamp we need to exceed
+  let maxTimestamp = maxLocalTimestamp;
+
+  // If we've generated a timestamp recently, use the max of local and last generated
+  if (lastGeneratedTimestamp) {
+    if (!maxTimestamp) {
+      maxTimestamp = lastGeneratedTimestamp;
+    } else {
+      const localTime = new Date(maxTimestamp).getTime();
+      const lastGenTime = new Date(lastGeneratedTimestamp).getTime();
+      maxTimestamp = lastGenTime > localTime ? lastGeneratedTimestamp : maxTimestamp;
+    }
+  }
+
+  // First operation - use current time
+  if (!maxTimestamp) {
+    lastGeneratedTimestamp = now;
     return now;
   }
 
   const nowTime = new Date(now).getTime();
-  const cursorTime = new Date(lastSyncTimestamp).getTime();
+  const maxTime = new Date(maxTimestamp).getTime();
 
-  // Clock moved backward or exactly equal - advance cursor by 1ms
-  if (nowTime <= cursorTime) {
-    const monotonicTime = new Date(cursorTime + 1).toISOString();
-    console.warn('⏰ MONOTONIC TIMESTAMP: Clock backward detected', {
+  // Clock moved backward or exactly equal - advance by 1ms
+  if (nowTime <= maxTime) {
+    const monotonicTime = new Date(maxTime + 1).toISOString();
+    lastGeneratedTimestamp = monotonicTime;
+
+    console.warn('⏰ MONOTONIC TIMESTAMP: Adjusted timestamp', {
       systemTime: now,
-      cursorTime: lastSyncTimestamp,
+      maxTime: maxTimestamp,
       adjustedTo: monotonicTime,
-      reason: nowTime < cursorTime ? 'clock_backward' : 'exact_collision'
+      reason: nowTime < maxTime ? 'clock_backward' : 'exact_collision'
     });
     return monotonicTime;
   }
 
-  // Normal case - current time is ahead of cursor
+  // Normal case - current time is ahead of max
+  lastGeneratedTimestamp = now;
   return now;
 }

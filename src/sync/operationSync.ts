@@ -830,10 +830,19 @@ export function useOperationSync(): UseOperationSync {
     // Create envelope without sequence - OperationLog will assign it
     // SECURITY: Add nonce for replay attack prevention
     // Use monotonic timestamp to prevent operations from being stranded if clock moves backward
-    const currentSyncCursor = operationLog.current.getLogState().lastSyncTimestamp;
+    // Get max timestamp from ALL local operations (not just synced ones) to prevent duplicates
+    const allOps = operationLog.current.getAllOperations();
+    const maxLocalTimestamp = allOps.length > 0
+      ? allOps.reduce((max, op) => {
+          const maxTime = new Date(max).getTime();
+          const opTime = new Date(op.timestamp).getTime();
+          return opTime > maxTime ? op.timestamp : max;
+        }, allOps[0].timestamp)
+      : null;
+
     const operationEnvelope = {
       id: `op_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      timestamp: generateMonotonicTimestamp(currentSyncCursor),
+      timestamp: generateMonotonicTimestamp(maxLocalTimestamp),
       clientId: deviceId.current,
       type: operationData.type,
       payload: operationData.payload,
