@@ -1,7 +1,7 @@
 // src/components/SyncDebugModal.tsx - Mobile-friendly sync diagnostics
 import * as React from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { getOperationLog, getOperationLogStats, repairCorruptedSequences } from '../sync/operationLog';
+import { getOperationLog, getOperationLogStats } from '../sync/operationLog';
 
 type SyncStats = {
   totalOperations: number;

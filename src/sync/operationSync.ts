@@ -2022,12 +2022,16 @@ if (typeof window !== 'undefined') {
 
       const user = await supabase?.auth.getUser();
       const userId = user?.data?.user?.id;
+      const deviceId = localStorage.getItem('navigator_device_id');
 
-      if (userId && supabase) {
+      if (userId && deviceId && supabase) {
         const { count } = await supabase
           .from('navigator_operations')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', userId);
+
+        const manager = getOperationLog(deviceId, userId);
+        await manager.load();
 
         console.log('  Cloud operations (total):', count);
         console.log('  Local sequence:', stats.sequenceRange.max);
@@ -2156,11 +2160,16 @@ if (typeof window !== 'undefined') {
           }
         }
 
-        // Mark all as synced
-        const maxSeq = Math.max(...operations.map(op => op.sequence));
-        await manager.markSyncedUpTo(maxSeq);
+        // Mark all as synced using max timestamp
+        const maxTimestamp = operations.reduce((max, op) => {
+          const maxTime = new Date(max).getTime();
+          const opTime = new Date(op.timestamp).getTime();
+          return opTime > maxTime ? op.timestamp : max;
+        }, operations[0]?.timestamp || '1970-01-01T00:00:00.000Z');
 
-        console.log(`✅ Repair complete! Uploaded ${uploaded} operations, synced up to sequence ${maxSeq}`);
+        await manager.markSyncedUpTo(maxTimestamp);
+
+        console.log(`✅ Repair complete! Uploaded ${uploaded} operations, synced up to ${maxTimestamp}`);
         alert(`✅ Sync repaired! Uploaded ${uploaded} operations to cloud. Refresh the page.`);
       } catch (err) {
         console.error('❌ Repair failed:', err);
