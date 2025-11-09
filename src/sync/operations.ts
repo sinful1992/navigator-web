@@ -277,3 +277,41 @@ export async function setSequenceAsync(seq: number): Promise<void> {
   // No need for separate validation here - generator handles it
   return sequenceGenerator.setAsync(seq);
 }
+
+/**
+ * Generate a monotonic timestamp that ensures new operations never get stranded.
+ *
+ * This prevents the timestamp cursor issue where:
+ * 1. Clock moves backward (DST, network time sync, cell tower switch)
+ * 2. New operation gets timestamp ≤ lastSyncTimestamp
+ * 3. Operation permanently stranded (never appears in getUnsyncedOperations)
+ *
+ * @param lastSyncTimestamp - Current sync cursor (null if never synced)
+ * @returns ISO timestamp string guaranteed to be > lastSyncTimestamp
+ */
+export function generateMonotonicTimestamp(lastSyncTimestamp: string | null): string {
+  const now = new Date().toISOString();
+
+  // First operation or never synced - use current time
+  if (!lastSyncTimestamp) {
+    return now;
+  }
+
+  const nowTime = new Date(now).getTime();
+  const cursorTime = new Date(lastSyncTimestamp).getTime();
+
+  // Clock moved backward or exactly equal - advance cursor by 1ms
+  if (nowTime <= cursorTime) {
+    const monotonicTime = new Date(cursorTime + 1).toISOString();
+    console.warn('⏰ MONOTONIC TIMESTAMP: Clock backward detected', {
+      systemTime: now,
+      cursorTime: lastSyncTimestamp,
+      adjustedTo: monotonicTime,
+      reason: nowTime < cursorTime ? 'clock_backward' : 'exact_collision'
+    });
+    return monotonicTime;
+  }
+
+  // Normal case - current time is ahead of cursor
+  return now;
+}

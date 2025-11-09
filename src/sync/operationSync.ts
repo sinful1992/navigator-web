@@ -4,6 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import type { AppState } from "../types";
 import type { Operation } from "./operations";
+import { generateMonotonicTimestamp } from "./operations";
 import { OperationLogManager, getOperationLog, clearOperationLogsForUser, getOperationLogStats } from "./operationLog";
 import { storageManager } from '../utils/storageManager';
 import { reconstructState, reconstructStateWithConflictResolution } from "./reducer";
@@ -828,9 +829,11 @@ export function useOperationSync(): UseOperationSync {
 
     // Create envelope without sequence - OperationLog will assign it
     // SECURITY: Add nonce for replay attack prevention
+    // Use monotonic timestamp to prevent operations from being stranded if clock moves backward
+    const currentSyncCursor = operationLog.current.getLogState().lastSyncTimestamp;
     const operationEnvelope = {
       id: `op_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      timestamp: new Date().toISOString(),
+      timestamp: generateMonotonicTimestamp(currentSyncCursor),
       clientId: deviceId.current,
       type: operationData.type,
       payload: operationData.payload,
