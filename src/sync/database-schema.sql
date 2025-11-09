@@ -59,10 +59,10 @@ CREATE POLICY "Users can access own operations" ON navigator_operations
   FOR ALL TO authenticated
   USING (auth.uid() = user_id);
 
--- Function to get operations since a sequence number
+-- Function to get operations since a timestamp
 CREATE OR REPLACE FUNCTION get_operations_since(
   target_user_id UUID,
-  since_sequence BIGINT DEFAULT 0
+  since_timestamp TIMESTAMPTZ DEFAULT '1970-01-01'::timestamptz
 )
 RETURNS TABLE (
   operation_data JSONB,
@@ -77,7 +77,7 @@ AS $$
     timestamp
   FROM navigator_operations
   WHERE user_id = target_user_id
-    AND sequence_number > since_sequence
+    AND timestamp > since_timestamp
   ORDER BY timestamp ASC, operation_id ASC;
 $$;
 

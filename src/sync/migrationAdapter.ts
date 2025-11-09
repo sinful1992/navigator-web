@@ -50,7 +50,7 @@ export function useUnifiedSync() {
   };
 
   // 🔧 CRITICAL: Get the operation log state for restore operations
-  // This is needed to preserve lastSyncSequence during backup restore
+  // This is needed to preserve lastSyncTimestamp during backup restore
   const getOperationLogState = () => {
     const logState = operationSync.getOperationLogState?.();
     return logState;
@@ -63,15 +63,15 @@ export function useUnifiedSync() {
       return; // Not authenticated, can't sync
     }
 
-    // 🔧 CRITICAL FIX: Preserve sequence continuity during backup restore
-    // This prevents sequence gaps that cause sync to get stuck
+    // 🔧 CRITICAL FIX: Preserve timestamp tracking during backup restore
+    // This prevents re-downloading operations we already have
     const opLogState = operationSync.getOperationLogState?.();
-    if (opLogState && opLogState.lastSyncSequence > 0) {
-      logger.info('📋 RESTORE: Preserving sequence context:', {
-        previousLastSynced: opLogState.lastSyncSequence,
+    if (opLogState && opLogState.lastSyncTimestamp) {
+      logger.info('📋 RESTORE: Preserving sync timestamp:', {
+        previousLastSynced: opLogState.lastSyncTimestamp,
         operations: opLogState.operations.length,
       });
-      // The sequence generator will continue from lastSyncSequence + 1
+      // Timestamp cursor will continue tracking from this point
       // No action needed - just documenting for clarity
     }
 
@@ -180,7 +180,7 @@ export function useUnifiedSync() {
     forceFullSync: operationSync.forceSync, // Alias for legacy compatibility
     getStateFromOperations: operationSync.getStateFromOperations,
     getOperationLogState, // 🔧 FIX: Export for restore operations
-    clearOperationLogForRestore: operationSync.clearOperationLogForRestore, // 🔧 FIX: Clear with sequence preservation
+    clearOperationLogForRestore: operationSync.clearOperationLogForRestore, // 🔧 FIX: Clear with timestamp preservation
 
     // Migration stubs (no longer needed, but kept for compatibility)
     canMigrate: () => false,

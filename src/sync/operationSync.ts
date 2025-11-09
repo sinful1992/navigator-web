@@ -1104,9 +1104,9 @@ export function useOperationSync(): UseOperationSync {
     }
 
     try {
-      const lastSequence = operationLog.current.getLogState().lastSyncSequence;
+      const lastSyncTimestamp = operationLog.current.getLogState().lastSyncTimestamp;
 
-      logger.info(`📥 FETCHING operations from cloud (after sequence ${lastSequence})...`);
+      logger.info(`📥 FETCHING operations from cloud (after timestamp ${lastSyncTimestamp || '(never)'})...`);
 
       // BEST PRACTICE: Wrap fetch in retry logic to handle transient network failures
       // 🔧 CRITICAL FIX: Paginate to fetch ALL new operations (Supabase default limit is 1000)
@@ -1118,12 +1118,19 @@ export function useOperationSync(): UseOperationSync {
           let hasMore = true;
 
           while (hasMore) {
-            const { data: fetchedData, error } = await supabase!
+            const query = supabase!
               .from('navigator_operations')
-              .select('operation_data, sequence_number')
-              .eq('user_id', user.id)
-              .gt('sequence_number', lastSequence)
-              .order('sequence_number', { ascending: true })
+              .select('operation_data, sequence_number, timestamp')
+              .eq('user_id', user.id);
+
+            // Filter by timestamp if we've synced before
+            if (lastSyncTimestamp) {
+              query.gt('timestamp', lastSyncTimestamp);
+            }
+
+            const { data: fetchedData, error } = await query
+              .order('timestamp', { ascending: true })
+              .order('operation_id', { ascending: true })
               .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
 
             if (error) {
