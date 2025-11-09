@@ -117,6 +117,18 @@ export type ActiveIndexSetPayload = {
   startTime?: string | null;
 };
 
+
+/**
+ * Conflict operation payloads
+ */
+export type ConflictDismissPayload = {
+  conflictId: string;
+};
+
+export type ConflictResolvePayload = {
+  conflictId: string;
+  resolution: 'keep-local' | 'use-remote' | 'manual';
+};
 /**
  * Discriminated union of all operation types
  */
@@ -142,7 +154,10 @@ export type SubmitOperation =
   | { type: 'SESSION_START'; payload: SessionStartPayload }
   | { type: 'SESSION_END'; payload: SessionEndPayload }
   // Active index tracking
-  | { type: 'ACTIVE_INDEX_SET'; payload: ActiveIndexSetPayload };
+  | { type: 'ACTIVE_INDEX_SET'; payload: ActiveIndexSetPayload }
+  // Conflict operations
+  | { type: 'CONFLICT_DISMISS'; payload: ConflictDismissPayload }
+  | { type: 'CONFLICT_RESOLVE'; payload: ConflictResolvePayload };
 
 /**
  * Callback for submitting operations to cloud sync

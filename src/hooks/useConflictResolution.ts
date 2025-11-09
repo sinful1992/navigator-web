@@ -7,9 +7,7 @@ import type { AppState, VersionConflict, Completion, Arrangement } from '../type
 import { ConflictResolutionService } from '../services/ConflictResolutionService';
 import { ConflictMetricsService } from '../services/ConflictMetricsService';
 import { logger } from '../utils/logger';
-
-// Type for submitOperation callback
-type SubmitOperationCallback = (operation: { type: string; payload: any }) => Promise<void>;
+import type { SubmitOperationCallback } from '../types/operations';
 
 export interface UseConflictResolutionProps {
   conflicts: VersionConflict[];
