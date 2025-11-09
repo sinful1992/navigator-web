@@ -305,13 +305,9 @@ export function useCompletionState({
         currentVersion = originalCompletion.version;
         shouldSubmit = true;
 
-        // 🔧 FIX: Increment version optimistically to match reducer behavior
-        // This prevents race conditions when multiple updates happen before sync completes
-        const updatedCompletion = {
-          ...originalCompletion,
-          ...updates,
-          version: (originalCompletion.version || 1) + 1,
-        };
+        // DON'T increment version locally - only reducer should increment versions
+        // Incrementing here causes conflicts when operation replays (expectedVersion mismatch)
+        const updatedCompletion = { ...originalCompletion, ...updates };
 
         const operationId = generateOperationId('update', 'completion', {
           originalTimestamp: originalCompletion.timestamp,

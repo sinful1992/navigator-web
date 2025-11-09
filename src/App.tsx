@@ -1498,15 +1498,13 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
             background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
             color: 'white',
             fontSize: '1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            display: 'grid',
+            placeItems: 'center',
             cursor: 'pointer',
             boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
             zIndex: 1000,
             transition: 'all 0.2s ease',
-            lineHeight: '1',
-            padding: '0'
+            fontFamily: 'system-ui, -apple-system, sans-serif'
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = 'scale(1.1)';
