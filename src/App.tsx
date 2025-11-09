@@ -1485,8 +1485,8 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           title="Record Historical PIF"
           style={{
             position: 'fixed',
-            bottom: '5.5rem',
-            right: '1.5rem',
+            bottom: '10rem',
+            right: '1.25rem',
             width: '3.5rem',
             height: '3.5rem',
             borderRadius: '50%',
