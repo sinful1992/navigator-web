@@ -3,7 +3,7 @@
 // Clean Architecture: Application layer orchestrates conflict resolution
 
 import { useCallback, useMemo, useEffect, useRef } from 'react';
-import type { AppState, VersionConflict } from '../types';
+import type { AppState, VersionConflict, Completion, Arrangement } from '../types';
 import { ConflictResolutionService } from '../services/ConflictResolutionService';
 import { ConflictMetricsService } from '../services/ConflictMetricsService';
 import { logger } from '../utils/logger';
