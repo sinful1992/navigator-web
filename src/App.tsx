@@ -1494,6 +1494,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
             background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
             color: 'white',
             fontSize: '1.5rem',
+            lineHeight: '1',
             display: 'grid',
             placeItems: 'center',
             cursor: 'pointer',
