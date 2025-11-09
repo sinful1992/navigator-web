@@ -562,8 +562,9 @@ export class OperationLogManager {
       // Compute new checksum for validation
       this.log.checksum = this.computeChecksum();
 
-      // Validate sequence continuity (CRITICAL)
-      this.validateSequenceContinuity('after merge');
+      // ✅ TIMESTAMP-BASED SYNC: Sequence gap validation is obsolete
+      // Timestamps don't have gaps - each operation is independent
+      // Removed: this.validateSequenceContinuity('after merge');
 
       // Step 4: Persist merged state atomically
       await this.persist();

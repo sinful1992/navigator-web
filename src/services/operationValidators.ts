@@ -146,6 +146,10 @@ function validateOperationTypePayload(type: string, payload: Record<string, unkn
     case 'SETTINGS_UPDATE_BONUS':
       return ValidationSuccess(undefined);
 
+    case 'CONFLICT_RESOLVE':
+    case 'CONFLICT_DISMISS':
+      return validateConflictPayload(payload);
+
     default:
       return ValidationFailure('type', ValidationErrorCode.INVALID_VALUE, `Unknown operation type: ${type}`);
   }
@@ -166,8 +170,9 @@ function validateCompletionCreatePayload(payload: Record<string, unknown>): Vali
     return ValidationFailure('completion.timestamp', ValidationErrorCode.REQUIRED, 'COMPLETION_CREATE: completion timestamp is required');
   }
 
-  if (!Number.isInteger(completion.index) || (completion.index as number) < 0) {
-    return ValidationFailure('completion.index', ValidationErrorCode.REQUIRED, 'COMPLETION_CREATE: completion index must be a non-negative integer');
+  // Allow index: -1 for Historical PIFs (recorded outside address list)
+  if (!Number.isInteger(completion.index) || ((completion.index as number) < -1)) {
+    return ValidationFailure('completion.index', ValidationErrorCode.REQUIRED, 'COMPLETION_CREATE: completion index must be -1 (historical) or non-negative integer');
   }
 
   return ValidationSuccess(undefined);
@@ -286,6 +291,18 @@ function validateArrangementDeletePayload(payload: Record<string, unknown>): Val
 function validateActiveIndexSetPayload(payload: Record<string, unknown>): ValidationResult<void> {
   if (!('index' in payload)) {
     return ValidationFailure('index', ValidationErrorCode.REQUIRED, 'ACTIVE_INDEX_SET: index field is required');
+  }
+
+  return ValidationSuccess(undefined);
+}
+
+/**
+ * Validate CONFLICT_RESOLVE and CONFLICT_DISMISS payload
+ * Required: conflictId
+ */
+function validateConflictPayload(payload: Record<string, unknown>): ValidationResult<void> {
+  if (!payload.conflictId || typeof payload.conflictId !== 'string') {
+    return ValidationFailure('conflictId', ValidationErrorCode.REQUIRED, 'CONFLICT operation: conflictId is required');
   }
 
   return ValidationSuccess(undefined);
