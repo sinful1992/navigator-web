@@ -324,9 +324,10 @@ export function useOperationSync(): UseOperationSync {
           while (hasMore && !fetchError) {
             const { data, error } = await supabase
               .from('navigator_operations')
-              .select('operation_data, sequence_number')
+              .select('operation_data, sequence_number, timestamp')
               .eq('user_id', user.id)
-              .order('sequence_number', { ascending: true })
+              .order('timestamp', { ascending: true })
+              .order('operation_id', { ascending: true })
               .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
 
             if (error) {
@@ -921,6 +922,7 @@ export function useOperationSync(): UseOperationSync {
 
       // 🔧 CRITICAL FIX: Track successful uploads instead of assuming all succeed
       const successfulSequences: number[] = [];
+      const successfulTimestamps: string[] = [];
 
       // Upload operations to cloud with retry logic
       for (const operation of allOpsToSync) {
@@ -1008,8 +1010,9 @@ export function useOperationSync(): UseOperationSync {
             { ...DEFAULT_RETRY_CONFIG, maxAttempts: 2 }
           );
 
-          // ✅ Track this as successfully uploaded
+          // ✅ Track this as successfully uploaded (by timestamp)
           successfulSequences.push(operation.sequence);
+          successfulTimestamps.push(operation.timestamp);
 
           // 🔄 PHASE 1: Remove from retry queue if this was a retry
           const wasRetry = retryItems.some(item => item.operation.sequence === operation.sequence);
@@ -1033,29 +1036,24 @@ export function useOperationSync(): UseOperationSync {
         }
       }
 
-      // 🔧 CRITICAL FIX: Only mark continuous sequences FROM current lastSyncSequence
-      // If lastSyncSequence=100 and ops [101,102,103] upload but 101 fails, we mark NOTHING
-      // Otherwise 101 becomes invisible and never retries!
-      if (successfulSequences.length > 0) {
-        successfulSequences.sort((a, b) => a - b);
+      // 🔧 TIMESTAMP-BASED SYNC: Mark up to highest successfully uploaded timestamp
+      // Unlike sequences, timestamps don't have "gaps" - each operation is independent
+      // We simply track the max timestamp of all successful uploads
+      if (successfulTimestamps.length > 0) {
+        // Find the maximum timestamp among successful uploads
+        const maxTimestamp = successfulTimestamps.reduce((max, ts) => {
+          const maxTime = new Date(max).getTime();
+          const tsTime = new Date(ts).getTime();
+          return tsTime > maxTime ? ts : max;
+        });
 
-        const currentLastSynced = operationLog.current.getLogState().lastSyncSequence;
-
-        // Find the highest continuous sequence starting from currentLastSynced + 1
-        let maxContinuousSeq = currentLastSynced;
-        for (const seq of successfulSequences) {
-          if (seq === maxContinuousSeq + 1) {
-            maxContinuousSeq = seq; // Extend the continuous chain
-          } else if (seq > maxContinuousSeq + 1) {
-            // Gap found! Can't advance past this
-            break;
-          }
-          // If seq <= maxContinuousSeq, it's already synced or duplicate, skip
-        }
+        const currentLastSynced = operationLog.current.getLogState().lastSyncTimestamp;
+        const maxTime = new Date(maxTimestamp).getTime();
+        const currentTime = currentLastSynced ? new Date(currentLastSynced).getTime() : 0;
 
         // Only update if we actually advanced
-        if (maxContinuousSeq > currentLastSynced) {
-          await operationLog.current.markSyncedUpTo(maxContinuousSeq);
+        if (maxTime > currentTime) {
+          await operationLog.current.markSyncedUpTo(maxTimestamp);
           setLastSyncTime(new Date());
 
           // 🔄 PHASE 1: Get retry queue stats for summary
@@ -1067,9 +1065,8 @@ export function useOperationSync(): UseOperationSync {
             failed: queueStats.total,
             inRetryQueue: queueStats.total,
             readyForRetry: queueStats.ready,
-            previousLastSynced: currentLastSynced,
-            newLastSynced: maxContinuousSeq,
-            advanced: maxContinuousSeq - currentLastSynced,
+            previousLastSynced: currentLastSynced || '(never)',
+            newLastSynced: maxTimestamp,
           };
           logger.debug('✅ SYNC COMPLETE:', syncSummary);
 
@@ -1080,21 +1077,6 @@ export function useOperationSync(): UseOperationSync {
               waitingForBackoff: queueStats.waiting,
               nextRetry: queueStats.oldestRetry,
             });
-          }
-        } else {
-          // 🔧 FIX: Only log "NO PROGRESS" once every 30 seconds to prevent spam
-          const now = Date.now();
-          if (now - lastNoProgressLogRef.current > 30000) {
-            const noProgressInfo = {
-              currentLastSynced,
-              successfulSequences: successfulSequences.slice(0, 5), // Show first 5
-              firstGap: successfulSequences[0] > currentLastSynced + 1
-                ? currentLastSynced + 1
-                : 'unknown',
-            };
-            logger.warn('⚠️ NO PROGRESS: Successful uploads exist but not continuous from last synced', noProgressInfo);
-            console.warn('⚠️ NO PROGRESS:', noProgressInfo);
-            lastNoProgressLogRef.current = now;
           }
         }
       } else {
@@ -1505,7 +1487,7 @@ export function useOperationSync(): UseOperationSync {
                     // Only mark as synced if this operation is from THIS device (shouldn't happen here since we filter above)
                     // This is just for safety in case the filter is removed
                     if (operation.clientId === deviceId.current) {
-                      await operationLog.current!.markSyncedUpTo(operation.sequence);
+                      await operationLog.current!.markSyncedUpTo(operation.timestamp);
                       logger.info('📥 REAL-TIME: Marked own operation as synced');
                     }
 
@@ -1741,6 +1723,7 @@ export function useOperationSync(): UseOperationSync {
 
               // 🔧 CRITICAL FIX: Track successful uploads (same as syncOperationsToCloud)
               const successfulSequences: number[] = [];
+              const successfulTimestamps: string[] = [];
               const failedOps: Array<{seq: number; type: string; error: string}> = [];
 
               for (const operation of opsToSync) {
@@ -1807,41 +1790,34 @@ export function useOperationSync(): UseOperationSync {
                   logger.debug('AUTO-SYNC: Duplicate operation (already uploaded):', operation.id);
                 }
 
-                // Track successful upload
+                // Track successful upload (by timestamp)
                 successfulSequences.push(operation.sequence);
+                successfulTimestamps.push(operation.timestamp);
               }
 
-              // 🔧 CRITICAL FIX: Only mark continuous sequences FROM current lastSyncSequence
-              // If lastSyncSequence=100 and ops [101,102,103] upload but 101 fails, we mark NOTHING
-              // Otherwise 101 becomes invisible and never retries!
-              if (successfulSequences.length > 0) {
-                successfulSequences.sort((a, b) => a - b);
+              // 🔧 TIMESTAMP-BASED SYNC: Mark up to highest successfully uploaded timestamp
+              if (successfulTimestamps.length > 0) {
+                // Find the maximum timestamp among successful uploads
+                const maxTimestamp = successfulTimestamps.reduce((max, ts) => {
+                  const maxTime = new Date(max).getTime();
+                  const tsTime = new Date(ts).getTime();
+                  return tsTime > maxTime ? ts : max;
+                });
 
-                const currentLastSynced = operationLog.current!.getLogState().lastSyncSequence;
-
-                // Find the highest continuous sequence starting from currentLastSynced + 1
-                let maxContinuousSeq = currentLastSynced;
-                for (const seq of successfulSequences) {
-                  if (seq === maxContinuousSeq + 1) {
-                    maxContinuousSeq = seq; // Extend the continuous chain
-                  } else if (seq > maxContinuousSeq + 1) {
-                    // Gap found! Can't advance past this
-                    break;
-                  }
-                  // If seq <= maxContinuousSeq, it's already synced or duplicate, skip
-                }
+                const currentLastSynced = operationLog.current!.getLogState().lastSyncTimestamp;
+                const maxTime = new Date(maxTimestamp).getTime();
+                const currentTime = currentLastSynced ? new Date(currentLastSynced).getTime() : 0;
 
                 // Only update if we actually advanced
-                if (maxContinuousSeq > currentLastSynced) {
-                  await operationLog.current!.markSyncedUpTo(maxContinuousSeq);
+                if (maxTime > currentTime) {
+                  await operationLog.current!.markSyncedUpTo(maxTimestamp);
 
                   logger.info('✅ AUTO-SYNC COMPLETE:', {
                     total: opsToSync.length,
                     succeeded: successfulSequences.length,
                     failed: failedOps.length,
-                    previousLastSynced: currentLastSynced,
-                    newLastSynced: maxContinuousSeq,
-                    advanced: maxContinuousSeq - currentLastSynced,
+                    previousLastSynced: currentLastSynced || '(never)',
+                    newLastSynced: maxTimestamp,
                   });
 
                   if (failedOps.length > 0) {
@@ -1849,19 +1825,6 @@ export function useOperationSync(): UseOperationSync {
                   }
 
                   setLastSyncTime(new Date());
-                } else {
-                  // 🔧 FIX: Only log "NO PROGRESS" once every 30 seconds to prevent spam
-                  const now = Date.now();
-                  if (now - lastNoProgressLogRef.current > 30000) {
-                    logger.warn('⚠️ AUTO-SYNC NO PROGRESS: Successful uploads exist but not continuous from last synced', {
-                      currentLastSynced,
-                      successfulSequences: successfulSequences.slice(0, 5),
-                      firstGap: successfulSequences[0] > currentLastSynced + 1
-                        ? currentLastSynced + 1
-                        : 'unknown',
-                    });
-                    lastNoProgressLogRef.current = now;
-                  }
                 }
               } else {
                 logger.error('❌ AUTO-SYNC: All uploads failed');

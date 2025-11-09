@@ -29,7 +29,7 @@ export type VectorClock = Record<string, number>;
 export type OperationLog = {
   operations: Operation[];
   lastSequence: number;
-  lastSyncSequence: number; // Last sequence we synced to cloud
+  lastSyncTimestamp: string | null; // Last timestamp we synced to cloud (null = never synced)
   checksum: string;
   vectorClock?: VectorClock; // PHASE 1.2.1: Track logical time per device
 };
@@ -44,7 +44,7 @@ export type TransactionLog = {
   operationsBefore: Operation[];
   operationsToMerge: Operation[];
   lastSequenceBefore: number;
-  lastSyncSequenceBefore: number;
+  lastSyncTimestampBefore: string | null;
   checksumBefore: string;
   timestamp: string;
 };
@@ -67,7 +67,7 @@ export class OperationLogManager {
   private log: OperationLog = {
     operations: [],
     lastSequence: 0,
-    lastSyncSequence: 0,
+    lastSyncTimestamp: null,
     checksum: '',
   };
 
@@ -118,7 +118,7 @@ export class OperationLogManager {
           this.log = {
             operations: [],
             lastSequence: 0,
-            lastSyncSequence: 0,
+            lastSyncTimestamp: null,
             checksum: '',
           };
           this.isLoaded = true;
@@ -178,7 +178,7 @@ export class OperationLogManager {
 
             this.log.operations = sortedOps;
             this.log.lastSequence = this.log.operations.length;
-            this.log.lastSyncSequence = 0; // Reset to 0 to resync everything
+            this.log.lastSyncTimestamp = null; // Reset to resync everything
             this.log.checksum = this.computeChecksum();
 
             // CRITICAL FIX: MUST await persist() to ensure corruption fix is saved to IndexedDB
@@ -220,7 +220,7 @@ export class OperationLogManager {
         logger.info('Loaded operation log:', {
           operationCount: this.log.operations.length,
           lastSequence: this.log.lastSequence,
-          lastSyncSequence: this.log.lastSyncSequence,
+          lastSyncTimestamp: this.log.lastSyncTimestamp,
           uniqueClients: this.clientSequences.size,
           vectorClock: this.vectorClock,
           // 🔍 DEBUG: Show operation type breakdown
@@ -267,7 +267,7 @@ export class OperationLogManager {
         const restoredLog: OperationLog = {
           operations: savedTransaction.operationsBefore,
           lastSequence: savedTransaction.lastSequenceBefore,
-          lastSyncSequence: savedTransaction.lastSyncSequenceBefore,
+          lastSyncTimestamp: savedTransaction.lastSyncTimestampBefore,
           checksum: savedTransaction.checksumBefore,
         };
         await storageManager.queuedSet(OPERATION_LOG_KEY, restoredLog);
@@ -285,7 +285,7 @@ export class OperationLogManager {
           await storageManager.queuedSet(OPERATION_LOG_KEY, {
             operations: savedTransaction.operationsBefore,
             lastSequence: savedTransaction.lastSequenceBefore,
-            lastSyncSequence: savedTransaction.lastSyncSequenceBefore,
+            lastSyncTimestamp: savedTransaction.lastSyncTimestampBefore,
             checksum: savedTransaction.checksumBefore,
           });
         }
@@ -338,10 +338,19 @@ export class OperationLogManager {
   }
 
   /**
-   * Get operations since a specific sequence number
+   * Get operations since a specific timestamp
+   * Returns all operations with timestamp > sinceTimestamp
    */
-  getOperationsSince(sequence: number): Operation[] {
-    return this.log.operations.filter(op => op.sequence > sequence);
+  getOperationsSince(sinceTimestamp: string | null): Operation[] {
+    if (!sinceTimestamp) {
+      return [...this.log.operations]; // Return all if never synced
+    }
+
+    const sinceTime = new Date(sinceTimestamp).getTime();
+    return this.log.operations.filter(op => {
+      const opTime = new Date(op.timestamp).getTime();
+      return opTime > sinceTime;
+    });
   }
 
   /**
@@ -352,13 +361,15 @@ export class OperationLogManager {
   }
 
   /**
-   * Mark operations as synced to cloud up to a specific sequence
+   * Mark operations as synced to cloud up to a specific timestamp
+   * Only advances the timestamp (never goes backwards)
    */
-  async markSyncedUpTo(sequence: number): Promise<void> {
-    const nextValue = Math.max(this.log.lastSyncSequence, sequence);
+  async markSyncedUpTo(timestamp: string): Promise<void> {
+    const newTime = new Date(timestamp).getTime();
+    const currentTime = this.log.lastSyncTimestamp ? new Date(this.log.lastSyncTimestamp).getTime() : 0;
 
-    if (nextValue !== this.log.lastSyncSequence) {
-      this.log.lastSyncSequence = nextValue;
+    if (newTime > currentTime) {
+      this.log.lastSyncTimestamp = timestamp;
       await this.persist();
     }
   }
@@ -367,7 +378,15 @@ export class OperationLogManager {
    * Get operations that haven't been synced to cloud yet
    */
   getUnsyncedOperations(): Operation[] {
-    return this.log.operations.filter(op => op.sequence > this.log.lastSyncSequence);
+    if (!this.log.lastSyncTimestamp) {
+      return [...this.log.operations]; // All unsynced if never synced
+    }
+
+    const lastSyncTime = new Date(this.log.lastSyncTimestamp).getTime();
+    return this.log.operations.filter(op => {
+      const opTime = new Date(op.timestamp).getTime();
+      return opTime > lastSyncTime;
+    });
   }
 
   /**
@@ -504,7 +523,7 @@ export class OperationLogManager {
       operationsBefore: [...this.log.operations],
       operationsToMerge,
       lastSequenceBefore: this.log.lastSequence,
-      lastSyncSequenceBefore: this.log.lastSyncSequence,
+      lastSyncTimestampBefore: this.log.lastSyncTimestamp,
       checksumBefore: this.log.checksum,
       timestamp: new Date().toISOString(),
     };
@@ -885,7 +904,7 @@ export class OperationLogManager {
     this.log = {
       operations: [],
       lastSequence: 0,
-      lastSyncSequence: 0,
+      lastSyncTimestamp: null,
       checksum: '',
     };
     setSequence(0);
@@ -894,52 +913,41 @@ export class OperationLogManager {
   }
 
   /**
-   * 🔧 CRITICAL FIX: Clear operations but preserve sequence continuity for restore
-   * This prevents sequence gaps during backup restore by:
-   * 1. Detecting if lastSyncSequence is corrupted (unreasonably high)
-   * 2. If corrupted, reset to 0 to start fresh
-   * 3. If valid, preserve it to continue sequence from cloud
-   * 4. Setting sequence counter appropriately
-   * This ensures new operations don't conflict with old ones, and doesn't perpetuate corruption
+   * 🔧 CRITICAL FIX: Clear operations but preserve sync timestamp for restore
+   * This prevents missing operations during backup restore by:
+   * 1. Preserving the last sync timestamp (if valid)
+   * 2. New operations will be created after this timestamp
+   * 3. On next sync, we'll fetch operations since this timestamp
+   * This ensures we don't re-download everything we already had
    */
   async clearForRestore(): Promise<void> {
-    const previousLastSynced = this.log.lastSyncSequence;
+    const previousLastSyncTimestamp = this.log.lastSyncTimestamp;
     const maxLocalSeq = this.log.operations.length > 0
       ? Math.max(...this.log.operations.map(op => op.sequence))
       : 0;
 
-    // 🔧 CRITICAL: Detect corrupted lastSyncSequence
-    // If lastSyncSequence > maxLocalSeq, it's corrupted (came from cloud operations with huge sequence numbers)
-    const isCorrupted = previousLastSynced > maxLocalSeq;
-
-    const nextLastSynced = isCorrupted ? 0 : previousLastSynced;
-
-    logger.info('🔧 RESTORE: Clearing operation log with sequence preservation:', {
-      previousLastSynced,
+    logger.info('🔧 RESTORE: Clearing operation log with timestamp preservation:', {
+      previousLastSyncTimestamp,
       maxLocalSeq,
-      isCorrupted,
-      nextLastSynced,
       operationsCleared: this.log.operations.length,
     });
 
-    // Clear operations and reset sequence if corrupted
+    // Clear operations but preserve sync timestamp
     this.log = {
       operations: [],
-      lastSequence: nextLastSynced,
-      lastSyncSequence: nextLastSynced,
+      lastSequence: 0,
+      lastSyncTimestamp: previousLastSyncTimestamp, // Preserve timestamp
       checksum: '',
     };
 
-    // Set sequence counter - if it was corrupted, reset to 0 so we start fresh
-    // This prevents perpetuating huge sequence numbers from cloud
-    setSequence(nextLastSynced);
+    // Reset sequence counter to 0 (will start fresh)
+    setSequence(0);
 
     await this.persist();
 
-    logger.info('✅ RESTORE: Operation log cleared, sequence state reset:', {
-      newLastSynced: nextLastSynced,
-      newStartSequence: nextLastSynced + 1,
-      corruptionDetected: isCorrupted,
+    logger.info('✅ RESTORE: Operation log cleared, timestamp preserved:', {
+      preservedTimestamp: previousLastSyncTimestamp,
+      newStartSequence: 1,
     });
   }
 
