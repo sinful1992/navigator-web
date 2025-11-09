@@ -7,7 +7,10 @@ import type { AppState, VersionConflict, Completion, Arrangement } from '../type
 import { ConflictResolutionService } from '../services/ConflictResolutionService';
 import { ConflictMetricsService } from '../services/ConflictMetricsService';
 import { logger } from '../utils/logger';
-import type { SubmitOperationCallback } from '../types/operations';
+import type { Operation } from '../sync/operations';
+
+// Type matching cloudSync.submitOperation from operationSync
+type SubmitOperationCallback = (operation: Omit<Operation, 'id' | 'timestamp' | 'clientId' | 'sequence'>) => Promise<void>;
 
 export interface UseConflictResolutionProps {
   conflicts: VersionConflict[];
