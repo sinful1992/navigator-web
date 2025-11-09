@@ -1221,90 +1221,9 @@ export function useOperationSync(): UseOperationSync {
         // Merge remote operations and resolve conflicts
         const newOperations = await operationLog.current!.mergeRemoteOperations(remoteOperations);
 
-        // ✅ TIMESTAMP-BASED SYNC: No gap detection needed!
-        // Timestamps don't have "gaps" - each operation is independent
-        // Old sequence-based gap recovery code removed
-        const gaps: any[] = []; // Unused - dead code below kept for reference
-        if (false) { // Dead code - keeping structure for now
-          logger.info(`🔄 GAP RECOVERY: Detected ${gaps.length} gaps, attempting recovery...`);
-
-          let totalRecovered = 0;
-          for (const gap of gaps) {
-            try {
-              // Fetch missing operations from cloud with pagination
-              // 🔧 CRITICAL FIX: Paginate gap recovery (gaps could be >1000 operations)
-              const BATCH_SIZE = 1000;
-              let gapData: any[] = [];
-              let page = 0;
-              let hasMore = true;
-              let gapError: any = null;
-
-              while (hasMore && !gapError) {
-                const { data: fetchedGapData, error } = await supabase!
-                  .from('navigator_operations')
-                  .select('operation_data, sequence_number')
-                  .eq('user_id', user.id)
-                  .gte('sequence_number', gap.from + 1)
-                  .lte('sequence_number', gap.to - 1)
-                  .order('sequence_number', { ascending: true })
-                  .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
-
-                if (error) {
-                  gapError = error;
-                  break;
-                }
-
-                if (fetchedGapData && fetchedGapData.length > 0) {
-                  gapData = gapData.concat(fetchedGapData);
-                  hasMore = fetchedGapData.length === BATCH_SIZE;
-                  page++;
-                } else {
-                  hasMore = false;
-                }
-              }
-
-              if (gapError) {
-                logger.error(`Failed to fetch gap ${gap.from}...${gap.to}:`, gapError);
-                continue;
-              }
-
-              if (gapData.length > 0) {
-                logger.info(`📥 RECOVERY: Found ${gapData.length} operations for gap ${gap.from}...${gap.to}`);
-
-                const gapOperations: Operation[] = gapData
-                  .map(row => {
-                    // 🔧 CRITICAL FIX: Use database sequence_number (correct) instead of operation_data.sequence (corrupted)
-                    const operation = { ...row.operation_data };
-                    if (row.sequence_number && typeof row.sequence_number === 'number') {
-                      operation.sequence = row.sequence_number;
-                    }
-                    return operation;
-                  })
-                  .filter(op => op && typeof op === 'object');
-
-                // Merge recovered operations and track what was actually merged
-                const actuallyMerged = await operationLog.current!.mergeRemoteOperations(gapOperations);
-                totalRecovered += actuallyMerged.length;
-
-                logger.info(`✅ RECOVERY: Merged ${actuallyMerged.length}/${gapOperations.length} operations for gap ${gap.from}...${gap.to}`, {
-                  requested: gapOperations.length,
-                  merged: actuallyMerged.length,
-                  duplicates: gapOperations.length - actuallyMerged.length,
-                });
-              } else {
-                logger.warn(`⚠️ RECOVERY: Gap ${gap.from}...${gap.to} not found in cloud (may have been deleted)`);
-              }
-            } catch (error) {
-              logger.error(`❌ RECOVERY: Failed to recover gap ${gap.from}...${gap.to}:`, error);
-            }
-          }
-
-          if (totalRecovered > 0) {
-            logger.info(`✅ GAP RECOVERY COMPLETE: Recovered ${totalRecovered} operations`);
-          } else {
-            logger.warn(`⚠️ GAP RECOVERY: No operations recovered (gaps may be from deleted operations)`);
-          }
-        }
+        // ✅ TIMESTAMP-BASED SYNC: No gap detection/recovery needed!
+        // Timestamps don't have "gaps" - each operation is independent and fetched by timestamp range
+        // Removed 80+ lines of sequence-based gap recovery code that's no longer applicable
 
         if (newOperations.length > 0) {
           // ✅ TIMESTAMP-BASED SYNC: Mark synced based on max timestamp
