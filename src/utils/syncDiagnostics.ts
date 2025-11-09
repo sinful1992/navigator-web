@@ -14,7 +14,7 @@ import { logger } from './logger';
 export interface SyncDiagnostics {
   localMaxSequence: number;
   cloudMaxSequence: number;
-  localLastSynced: number;
+  localLastSynced: string | null;
   gap: number;
   unsyncedCount: number;
   retryQueueCount: number;
@@ -94,7 +94,7 @@ export async function diagnoseSyncIssues(userId: string, deviceId: string): Prom
   const diagnostics: SyncDiagnostics = {
     localMaxSequence: localMaxSeq,
     cloudMaxSequence: cloudMaxSeq,
-    localLastSynced: logState.lastSyncSequence,
+    localLastSynced: logState.lastSyncTimestamp,
     gap,
     unsyncedCount: unsyncedOps.length,
     retryQueueCount: retryStats.total,
@@ -197,8 +197,9 @@ export async function repairSequenceCollisions(userId: string, deviceId: string)
       }
     }
 
-    // Mark up to cloudMaxSeq as synced (since cloud has them)
-    await operationLog.markSyncedUpTo(cloudMaxSeq);
+    // Note: markSyncedUpTo now requires timestamp, not sequence
+    // Since we've reassigned sequences, we don't need to call this
+    // The next sync will handle marking operations as synced by timestamp
 
     logger.info('✅ REPAIR: Complete', {
       reassignedCount,

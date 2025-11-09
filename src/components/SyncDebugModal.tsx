@@ -8,9 +8,8 @@ type SyncStats = {
   byType: Record<string, number>;
   duplicateCompletions: number;
   sequenceRange: { min: number; max: number };
-  lastSyncSequence: number;
+  lastSyncTimestamp: string | null;
   unsyncedCount: number; // 🔧 FIX: Actual count of unsynced operations
-  isCorrupted: boolean;
 };
 
 export function SyncDebugModal({ onClose }: { onClose: () => void }) {
@@ -42,10 +41,9 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
       // DEBUG: Log stats to console
       console.log('📊 SYNC DEBUG - Stats loaded:', {
         totalOperations: localStats.totalOperations,
-        lastSyncSequence: localStats.lastSyncSequence,
+        lastSyncTimestamp: localStats.lastSyncTimestamp,
         sequenceRange: localStats.sequenceRange,
-        isCorrupted: localStats.isCorrupted,
-        unsyncedCalc: localStats.totalOperations - localStats.lastSyncSequence
+        unsyncedCount: manager.getUnsyncedOperations().length
       });
 
       // 🔧 FIX: Calculate correct unsynced count
@@ -156,11 +154,11 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
       const manager = getOperationLog(storedDeviceId, currentUserId);
       await manager.load();
 
-      const oldLastSync = manager.getLogState().lastSyncSequence;
+      const oldLastSync = manager.getLogState().lastSyncTimestamp;
       const opsCount = manager.getAllOperations().length;
 
-      // Reset to 0
-      await manager.markSyncedUpTo(0);
+      // Reset to epoch (beginning of time)
+      await manager.markSyncedUpTo('1970-01-01T00:00:00.000Z');
 
       alert(`✅ Sync pointer reset!\n\nOld lastSync: ${oldLastSync}\nNew lastSync: 0\n\nOperations to sync: ${opsCount}\n\nRefreshing to trigger sync...`);
 
@@ -256,8 +254,12 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
       }
 
       if (uploaded > 0) {
-        const maxSeq = Math.max(...unsyncedOps.slice(0, uploaded).map(op => op.sequence));
-        await manager.markSyncedUpTo(maxSeq);
+        const maxTimestamp = unsyncedOps.slice(0, uploaded).reduce((max, op) => {
+          const maxTime = new Date(max).getTime();
+          const opTime = new Date(op.timestamp).getTime();
+          return opTime > maxTime ? op.timestamp : max;
+        }, unsyncedOps[0].timestamp);
+        await manager.markSyncedUpTo(maxTimestamp);
       }
 
       if (failed > 0) {
@@ -335,8 +337,8 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
   // DEBUG: Log render state
   if (stats && !loading) {
     console.log('📊 SYNC DEBUG - Render state:', {
-      isCorrupted: stats.isCorrupted,
-      willShowWarning: !!stats?.isCorrupted,
+      unsyncedCount: stats.unsyncedCount,
+      totalOperations: stats.totalOperations,
       stats
     });
   }
@@ -410,41 +412,14 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                     {unsyncedCount} {unsyncedCount > 0 ? '⚠️' : '✅'}
                   </span>
                 </Row>
-                {stats?.isCorrupted && (
-                  <Row label="Corruption">
-                    <span style={{ color: '#f44336', fontWeight: 'bold' }}>
-                      🚨 DETECTED
-                    </span>
-                  </Row>
-                )}
               </Section>
-
-              {/* Corruption Warning */}
-              {stats?.isCorrupted && (
-                <div style={{
-                  marginTop: '1rem',
-                  padding: '0.75rem',
-                  backgroundColor: '#ffebee',
-                  border: '2px solid #f44336',
-                  borderRadius: '6px',
-                  fontSize: '0.875rem'
-                }}>
-                  <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#c62828' }}>
-                    🚨 SEQUENCE NUMBER CORRUPTION DETECTED
-                  </div>
-                  <div>
-                    Your sync sequence numbers are corrupted. This prevents operations from syncing to the cloud.
-                    Use <strong>"Repair & Sync"</strong> button below to fix this.
-                  </div>
-                </div>
-              )}
 
               {/* Local Storage */}
               {stats && (
                 <Section title="💾 Local Storage">
                   <Row label="Total Operations">{stats.totalOperations}</Row>
                   <Row label="Sequence Range">{stats.sequenceRange.min} - {stats.sequenceRange.max}</Row>
-                  <Row label="Last Synced">{stats.lastSyncSequence}</Row>
+                  <Row label="Last Synced">{stats.lastSyncTimestamp || 'Never'}</Row>
                   <Row label="Duplicate Completions">
                     <span style={{ color: stats.duplicateCompletions > 0 ? '#ff9800' : 'inherit' }}>
                       {stats.duplicateCompletions} {stats.duplicateCompletions > 0 ? '⚠️' : ''}
@@ -513,25 +488,6 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                     📤 Force Upload
                   </button>
                 )}
-                {(stats?.isCorrupted || unsyncedCount < 0) && (
-                  <button
-                    onClick={repairAndSync}
-                    disabled={loading}
-                    style={{
-                      padding: '0.75rem 1rem',
-                      border: '1px solid #ff9800',
-                      backgroundColor: '#ff9800',
-                      color: 'white',
-                      borderRadius: '6px',
-                      cursor: loading ? 'not-allowed' : 'pointer',
-                      flex: '1',
-                      minWidth: '120px',
-                      opacity: loading ? 0.6 : 1
-                    }}
-                  >
-                    🔧 Repair & Sync
-                  </button>
-                )}
                 <button
                   onClick={clearLocal}
                   style={{
@@ -549,40 +505,22 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                 </button>
               </div>
 
-              {/* Advanced Actions - Show when unsynced or corrupted */}
-              {(stats?.isCorrupted || unsyncedCount < 0 || unsyncedCount > 0) && (
+              {/* Advanced Actions - Show when unsynced */}
+              {unsyncedCount > 0 && (
                 <div style={{ marginTop: '1rem' }}>
-                  {(stats?.isCorrupted || unsyncedCount < 0) && (
-                    <div style={{
-                      padding: '0.75rem',
-                      backgroundColor: '#ffebee',
-                      border: '2px solid #f44336',
-                      borderRadius: '6px',
-                      fontSize: '0.875rem',
-                      marginBottom: '0.5rem'
-                    }}>
-                      <div style={{ fontWeight: 'bold', color: '#c62828', marginBottom: '0.5rem' }}>
-                        🚨 SEVERE CORRUPTION DETECTED
-                      </div>
-                      <div>If "Repair & Sync" didn't work, you may need to reset the sync pointer or completely rebuild the cloud database:</div>
+                  <div style={{
+                    padding: '0.75rem',
+                    backgroundColor: '#fff3cd',
+                    border: '2px solid #ff9800',
+                    borderRadius: '6px',
+                    fontSize: '0.875rem',
+                    marginBottom: '0.5rem'
+                  }}>
+                    <div style={{ fontWeight: 'bold', color: '#856404', marginBottom: '0.5rem' }}>
+                      ⚠️ UNSYNCED OPERATIONS
                     </div>
-                  )}
-
-                  {(unsyncedCount > 0 && !stats?.isCorrupted && unsyncedCount >= 0) && (
-                    <div style={{
-                      padding: '0.75rem',
-                      backgroundColor: '#fff3cd',
-                      border: '2px solid #ff9800',
-                      borderRadius: '6px',
-                      fontSize: '0.875rem',
-                      marginBottom: '0.5rem'
-                    }}>
-                      <div style={{ fontWeight: 'bold', color: '#856404', marginBottom: '0.5rem' }}>
-                        ⚠️ UNSYNCED OPERATIONS
-                      </div>
-                      <div>You have {unsyncedCount} unsynced operations. If they're not uploading automatically, use "Reset Sync Pointer" to force upload:</div>
-                    </div>
-                  )}
+                    <div>You have {unsyncedCount} unsynced operations. If they're not uploading automatically, use "Reset Sync Pointer" to force upload:</div>
+                  </div>
 
                   <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
                     <button
@@ -602,26 +540,6 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                     >
                       🔄 Reset Sync Pointer
                     </button>
-
-                    {(stats?.isCorrupted || unsyncedCount < 0) && (
-                      <button
-                        onClick={clearCloudOperations}
-                        disabled={loading}
-                        style={{
-                          padding: '0.75rem 1rem',
-                          border: '2px solid #d32f2f',
-                          backgroundColor: '#d32f2f',
-                          color: 'white',
-                          borderRadius: '6px',
-                          cursor: loading ? 'not-allowed' : 'pointer',
-                          width: '100%',
-                          fontWeight: 'bold',
-                          opacity: loading ? 0.6 : 1
-                        }}
-                      >
-                        ☢️ CLEAR CLOUD OPERATIONS (DANGER)
-                      </button>
-                    )}
                   </div>
                 </div>
               )}

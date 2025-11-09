@@ -1077,46 +1077,15 @@ export function getOperationLogStats(manager: OperationLogManager): {
 }
 
 /**
- * REPAIR: Fix corrupted sequence numbers
- * This fixes the bug where lastSyncSequence becomes corrupted (too high)
- * Returns the number of operations that need to be synced
+ * DEPRECATED: This function is no longer needed with timestamp-based sync
+ * Sequence corruption is no longer possible since we use timestamps for sync tracking
+ *
+ * @deprecated Use timestamp-based sync instead
  */
 export async function repairCorruptedSequences(
   manager: OperationLogManager,
   actualCloudMaxSequence: number
 ): Promise<number> {
-  const state = manager.getLogState();
-  const ops = manager.getAllOperations();
-
-  if (ops.length === 0) {
-    logger.warn('No operations to repair');
-    return 0;
-  }
-
-  const maxLocalSequence = Math.max(...ops.map(o => o.sequence));
-
-  // Detect corruption
-  if (state.lastSyncSequence <= maxLocalSequence) {
-    logger.info('No corruption detected - lastSyncSequence is valid');
-    return 0;
-  }
-
-  logger.warn('🔧 CORRUPTION DETECTED:', {
-    lastSyncSequence: state.lastSyncSequence,
-    maxLocalSequence,
-    difference: state.lastSyncSequence - maxLocalSequence,
-  });
-
-  // Reset lastSyncSequence to the actual cloud max
-  // This will make getUnsyncedOperations() work correctly
-  await manager.markSyncedUpTo(actualCloudMaxSequence);
-
-  const unsyncedCount = ops.filter(op => op.sequence > actualCloudMaxSequence).length;
-
-  logger.info('✅ REPAIRED:', {
-    newLastSyncSequence: actualCloudMaxSequence,
-    unsyncedOperations: unsyncedCount,
-  });
-
-  return unsyncedCount;
+  logger.warn('⚠️ repairCorruptedSequences() is deprecated - timestamp-based sync does not have sequence corruption');
+  return 0;
 }

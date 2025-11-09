@@ -4,7 +4,6 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import type { AppState } from "../types";
 import type { Operation } from "./operations";
-import { nextSequence, setSequenceAsync } from "./operations";
 import { OperationLogManager, getOperationLog, clearOperationLogsForUser, getOperationLogStats } from "./operationLog";
 import { storageManager } from '../utils/storageManager';
 import { reconstructState, reconstructStateWithConflictResolution } from "./reducer";
@@ -723,9 +722,6 @@ export function useOperationSync(): UseOperationSync {
   const batchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingBatchRef = useRef<boolean>(false);
 
-  // 🔧 FIX: Track last time we logged "no progress" to prevent spam
-  const lastNoProgressLogRef = useRef<number>(0);
-
   // 🔧 CRITICAL FIX: Ref to scheduleBatchSync so it can be called from bootstrap effect
   const scheduleBatchSyncRef = useRef<(() => void) | null>(null);
 
@@ -1224,6 +1220,7 @@ export function useOperationSync(): UseOperationSync {
         // ✅ TIMESTAMP-BASED SYNC: No gap detection needed!
         // Timestamps don't have "gaps" - each operation is independent
         // Old sequence-based gap recovery code removed
+        const gaps: any[] = []; // Unused - dead code below kept for reference
         if (false) { // Dead code - keeping structure for now
           logger.info(`🔄 GAP RECOVERY: Detected ${gaps.length} gaps, attempting recovery...`);
 
@@ -1306,17 +1303,18 @@ export function useOperationSync(): UseOperationSync {
         }
 
         if (newOperations.length > 0) {
-          // 🔧 CRITICAL FIX: Mark synced based on ACTUAL max in log, not cloud max
-          // Cloud max might be higher due to deduplication or gaps
+          // ✅ TIMESTAMP-BASED SYNC: Mark synced based on max timestamp
           const allOperations = operationLog.current.getAllOperations();
-          const actualMaxSequence = allOperations.length > 0
-            ? Math.max(...allOperations.map(op => op.sequence))
-            : 0;
+          const maxTimestamp = allOperations.reduce((max, op) => {
+            const maxTime = new Date(max).getTime();
+            const opTime = new Date(op.timestamp).getTime();
+            return opTime > maxTime ? op.timestamp : max;
+          }, allOperations[0]?.timestamp || new Date(0).toISOString());
 
-          if (Number.isFinite(actualMaxSequence) && actualMaxSequence > 0) {
-            await operationLog.current!.markSyncedUpTo(actualMaxSequence);
-            logger.info('✅ INCREMENTAL SYNC: Marked synced up to actual max sequence', {
-              actualMaxSequence,
+          if (maxTimestamp && maxTimestamp !== new Date(0).toISOString()) {
+            await operationLog.current!.markSyncedUpTo(maxTimestamp);
+            logger.info('✅ INCREMENTAL SYNC: Marked synced up to max timestamp', {
+              maxTimestamp,
               newOpsCount: newOperations.length,
               totalOpsInLog: allOperations.length,
             });

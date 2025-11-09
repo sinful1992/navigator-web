@@ -11,7 +11,7 @@ type DiagnosticData = {
   localOperations: number;
   localAddresses: number;
   localCompletions: number;
-  lastSyncSequence: number;
+  lastSyncTimestamp: string | null;
   unsyncedOperations: number;
   operationBreakdown: Record<string, number>;
 
@@ -59,7 +59,7 @@ export function SyncDiagnostic({ userId, currentState }: {
 
       logger.info('📊 DIAGNOSTIC: Local stats:', {
         totalOps: localOps.length,
-        lastSyncSeq: logState.lastSyncSequence,
+        lastSyncTimestamp: logState.lastSyncTimestamp,
         unsynced: unsyncedOps.length,
         breakdown: operationBreakdown,
       });
@@ -140,7 +140,7 @@ export function SyncDiagnostic({ userId, currentState }: {
         localOperations: localOps.length,
         localAddresses: currentState.addresses.length,
         localCompletions: currentState.completions.length,
-        lastSyncSequence: logState.lastSyncSequence,
+        lastSyncTimestamp: logState.lastSyncTimestamp,
         unsyncedOperations: unsyncedOps.length,
         operationBreakdown,
         cloudOperations: cloudOps,
