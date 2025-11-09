@@ -28,25 +28,22 @@ CREATE TABLE navigator_operations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   operation_id TEXT NOT NULL, -- Client-generated operation ID
-  sequence_number BIGINT NOT NULL,
+  sequence_number BIGINT, -- Legacy field (nullable, for diagnostics only)
   operation_type TEXT NOT NULL, -- 'COMPLETION_CREATE', 'ADDRESS_ADD', etc.
   operation_data JSONB NOT NULL, -- Full operation object
   client_id TEXT NOT NULL, -- Which device created this operation
-  timestamp TIMESTAMPTZ NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL, -- Primary ordering field
   server_timestamp TIMESTAMPTZ DEFAULT NOW(),
   applied BOOLEAN DEFAULT FALSE, -- For future use in conflict resolution
 
   -- Constraints
-  UNIQUE(user_id, operation_id), -- Prevent duplicate operations
-  UNIQUE(user_id, sequence_number) -- Ensure sequence ordering per user
+  UNIQUE(user_id, operation_id) -- Prevent duplicate operations (idempotency)
+  -- Note: sequence_number is now nullable and NOT unique (legacy field for diagnostics only)
 );
 
--- Indexes for performance
-CREATE INDEX idx_navigator_operations_user_sequence
-ON navigator_operations(user_id, sequence_number);
-
-CREATE INDEX idx_navigator_operations_user_timestamp
-ON navigator_operations(user_id, timestamp);
+-- Indexes for performance (timestamp-based sync)
+CREATE INDEX idx_navigator_operations_user_timestamp_id
+ON navigator_operations(user_id, timestamp, operation_id);
 
 CREATE INDEX idx_navigator_operations_type
 ON navigator_operations(user_id, operation_type);
