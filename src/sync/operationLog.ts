@@ -188,7 +188,7 @@ export class OperationLogManager {
             logger.info('✅ LOAD: Fixed and persisted corrupted sequences', {
               totalOperations: this.log.operations.length,
               newLastSequence: this.log.lastSequence,
-              newLastSyncSequence: this.log.lastSyncSequence,
+              newLastSyncTimestamp: this.log.lastSyncTimestamp,
             });
           }
         } catch (error) {
@@ -1040,8 +1040,7 @@ export function getOperationLogStats(manager: OperationLogManager): {
   byType: Record<string, number>;
   duplicateCompletions: number;
   sequenceRange: { min: number; max: number };
-  lastSyncSequence: number;
-  isCorrupted: boolean;
+  lastSyncTimestamp: string | null;
 } {
   const ops = manager.getAllOperations();
   const byType: Record<string, number> = {};
@@ -1066,18 +1065,14 @@ export function getOperationLogStats(manager: OperationLogManager): {
   const sequences = ops.map(o => o.sequence);
   const min = sequences.length > 0 ? Math.min(...sequences) : 0;
   const max = sequences.length > 0 ? Math.max(...sequences) : 0;
-  const lastSyncSequence = manager.getLogState().lastSyncSequence;
-
-  // Detect corruption: lastSyncSequence should never be greater than max sequence
-  const isCorrupted = lastSyncSequence > max;
+  const lastSyncTimestamp = manager.getLogState().lastSyncTimestamp;
 
   return {
     totalOperations: ops.length,
     byType,
     duplicateCompletions,
     sequenceRange: { min, max },
-    lastSyncSequence,
-    isCorrupted,
+    lastSyncTimestamp,
   };
 }
 

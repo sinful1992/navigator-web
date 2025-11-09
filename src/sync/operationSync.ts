@@ -6,6 +6,7 @@ import type { AppState } from "../types";
 import type { Operation } from "./operations";
 import { nextSequence, setSequenceAsync } from "./operations";
 import { OperationLogManager, getOperationLog, clearOperationLogsForUser, getOperationLogStats } from "./operationLog";
+import { storageManager } from '../utils/storageManager';
 import { reconstructState, reconstructStateWithConflictResolution } from "./reducer";
 import { logger } from "../utils/logger";
 import { DEFAULT_REMINDER_SETTINGS } from "../services/reminderScheduler";
@@ -309,7 +310,7 @@ export function useOperationSync(): UseOperationSync {
           logger.info('🔄 BOOTSTRAP: Fetching operations from cloud for user:', user.id);
 
           // 🔧 CRITICAL FIX: On bootstrap, fetch ALL operations for the user, not just ones after lastSequence
-          // WHY: lastSyncSequence can get out of sync and cause operations to be skipped
+          // WHY: lastSyncTimestamp tracking ensures we don't miss operations
           // The merge logic will deduplicate anyway, and we get a complete picture
           // This ensures we never miss operations due to sequence tracking issues
 
@@ -1961,7 +1962,7 @@ if (typeof window !== 'undefined') {
       console.log('  By type:', stats.byType);
       console.log('  Duplicate completions:', stats.duplicateCompletions);
       console.log('  Sequence range:', stats.sequenceRange);
-      console.log('  Last synced sequence:', stats.lastSyncSequence);
+      console.log('  Last synced timestamp:', stats.lastSyncTimestamp || '(never)');
 
       return stats;
     },
@@ -2020,8 +2021,8 @@ if (typeof window !== 'undefined') {
 
         console.log('  Cloud operations (total):', count);
         console.log('  Local sequence:', stats.sequenceRange.max);
-        console.log('  Last synced sequence:', stats.lastSyncSequence);
-        console.log('  Unsynced operations:', stats.totalOperations - stats.lastSyncSequence);
+        console.log('  Last synced timestamp:', stats.lastSyncTimestamp || '(never)');
+        console.log('  Unsynced operations:', manager.getUnsyncedOperations().length);
       }
     },
 
@@ -2081,9 +2082,11 @@ if (typeof window !== 'undefined') {
         const operations = manager.getAllOperations();
         console.log(`📊 Found ${operations.length} operations to sync`);
 
-        // Reset the last sync sequence to 0
-        await manager.markSyncedUpTo(0);
-        console.log('✅ Reset lastSyncSequence to 0');
+        // Reset sync timestamp to force re-upload (use epoch timestamp so all operations are "newer")
+        const logState = manager.getLogState();
+        logState.lastSyncTimestamp = '1970-01-01T00:00:00.000Z'; // Epoch - all operations are newer than this
+        await storageManager.queuedSet('navigator_operation_log_v1', logState);
+        console.log('✅ Reset lastSyncTimestamp to epoch (all operations will be uploaded)');
 
         // Upload all operations to cloud
         let uploaded = 0;
