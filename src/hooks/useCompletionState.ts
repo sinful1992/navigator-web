@@ -305,7 +305,13 @@ export function useCompletionState({
         currentVersion = originalCompletion.version;
         shouldSubmit = true;
 
-        const updatedCompletion = { ...originalCompletion, ...updates };
+        // 🔧 FIX: Increment version optimistically to match reducer behavior
+        // This prevents race conditions when multiple updates happen before sync completes
+        const updatedCompletion = {
+          ...originalCompletion,
+          ...updates,
+          version: (originalCompletion.version || 1) + 1,
+        };
 
         const operationId = generateOperationId('update', 'completion', {
           originalTimestamp: originalCompletion.timestamp,

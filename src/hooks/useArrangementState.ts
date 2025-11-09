@@ -163,9 +163,16 @@ export function useArrangementState({
           };
           addOptimisticUpdate('update', 'arrangement', updatedArrangement, operationId);
 
+          // 🔧 FIX: Increment version optimistically to match reducer behavior
+          // This prevents race conditions when multiple updates happen before sync completes
           const arrangements = s.arrangements.map((arr) =>
             arr.id === id
-              ? { ...arr, ...updates, updatedAt: new Date().toISOString() }
+              ? {
+                  ...arr,
+                  ...updates,
+                  updatedAt: new Date().toISOString(),
+                  version: (arr.version || 1) + 1,
+                }
               : arr
           );
 
