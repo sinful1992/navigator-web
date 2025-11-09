@@ -3,7 +3,7 @@
 // Clean Architecture: Application layer orchestrates conflict resolution
 
 import { useCallback, useMemo, useEffect, useRef } from 'react';
-import type { AppState, VersionConflict, Completion, Arrangement } from '../types';
+import type { AppState, VersionConflict } from '../types';
 import { ConflictResolutionService } from '../services/ConflictResolutionService';
 import { ConflictMetricsService } from '../services/ConflictMetricsService';
 import { logger } from '../utils/logger';
@@ -14,12 +14,7 @@ type SubmitOperationCallback = (operation: Omit<Operation, 'id' | 'timestamp' | 
 
 export interface UseConflictResolutionProps {
   conflicts: VersionConflict[];
-  completions: Completion[];
-  arrangements: Arrangement[];
   onStateUpdate: (updater: (state: AppState) => AppState) => void;
-  // PHASE 3 FIX: Operation submission for sync
-  updateCompletion: (index: number, updates: Partial<Completion>) => void;
-  updateArrangement: (id: string, updates: Partial<Arrangement>) => void;
   submitOperation?: SubmitOperationCallback;
 }
 
@@ -51,11 +46,7 @@ export interface UseConflictResolutionReturn {
  */
 export function useConflictResolution({
   conflicts,
-  completions,
-  arrangements: _arrangements, // Prefix with _ to indicate intentionally unused (may be needed in future)
   onStateUpdate,
-  updateCompletion,
-  updateArrangement,
   submitOperation,
 }: UseConflictResolutionProps): UseConflictResolutionReturn {
 

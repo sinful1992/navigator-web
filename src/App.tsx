@@ -287,14 +287,10 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
   const [showHistoricalPif, setShowHistoricalPif] = React.useState(false);
   const [historicalPifLoading, setHistoricalPifLoading] = React.useState(false);
 
-  // PHASE 3: Conflict resolution (FIXED: Now submits UPDATE operations for sync)
+  // PHASE 3: Conflict resolution (FIX: Only submits CONFLICT operations, not UPDATE)
   const conflictResolution = useConflictResolution({
     conflicts: state.conflicts || [],
-    completions: state.completions,
-    arrangements: state.arrangements,
     onStateUpdate: setState,
-    updateCompletion,
-    updateArrangement,
     submitOperation: cloudSync.submitOperation,
   });
 
