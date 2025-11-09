@@ -1221,9 +1221,10 @@ export function useOperationSync(): UseOperationSync {
         // Merge remote operations and resolve conflicts
         const newOperations = await operationLog.current!.mergeRemoteOperations(remoteOperations);
 
-        // BEST PRACTICE: Check for sequence gaps after merge and attempt recovery
-        const gaps = operationLog.current!.validateSequenceContinuity('after fetch and merge');
-        if (gaps.length > 0) {
+        // ✅ TIMESTAMP-BASED SYNC: No gap detection needed!
+        // Timestamps don't have "gaps" - each operation is independent
+        // Old sequence-based gap recovery code removed
+        if (false) { // Dead code - keeping structure for now
           logger.info(`🔄 GAP RECOVERY: Detected ${gaps.length} gaps, attempting recovery...`);
 
           let totalRecovered = 0;
