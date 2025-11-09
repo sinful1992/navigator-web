@@ -1083,8 +1083,8 @@ export function getOperationLogStats(manager: OperationLogManager): {
  * @deprecated Use timestamp-based sync instead
  */
 export async function repairCorruptedSequences(
-  manager: OperationLogManager,
-  actualCloudMaxSequence: number
+  _manager: OperationLogManager,
+  _actualCloudMaxSequence: number
 ): Promise<number> {
   logger.warn('⚠️ repairCorruptedSequences() is deprecated - timestamp-based sync does not have sequence corruption');
   return 0;

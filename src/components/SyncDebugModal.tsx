@@ -91,50 +91,6 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
-  const repairAndSync = React.useCallback(async () => {
-    if (!confirm('🔧 This will repair corrupted sequence numbers and force sync unsynced operations. Continue?')) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const storedDeviceId = localStorage.getItem('navigator_device_id');
-      const user = await supabase?.auth.getUser();
-      const currentUserId = user?.data?.user?.id;
-
-      if (!storedDeviceId || !currentUserId || !supabase) {
-        alert('❌ Not authenticated');
-        return;
-      }
-
-      // Get actual max sequence from cloud
-      const { data, error } = await supabase
-        .from('navigator_operations')
-        .select('sequence_number')
-        .eq('user_id', currentUserId)
-        .order('sequence_number', { ascending: false })
-        .limit(1);
-
-      if (error) {
-        throw error;
-      }
-
-      const cloudMaxSequence = data && data.length > 0 ? data[0].sequence_number : 0;
-
-      // Repair the corruption
-      const manager = getOperationLog(storedDeviceId, currentUserId);
-      await manager.load();
-      const unsyncedCount = await repairCorruptedSequences(manager, cloudMaxSequence);
-
-      alert(`✅ Repaired!\n\n${unsyncedCount} operations need to be synced.\n\nRefreshing to apply changes...`);
-      window.location.reload();
-    } catch (err) {
-      alert('❌ Error: ' + String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   const resetSyncPointer = React.useCallback(async () => {
     if (!confirm('🔧 Reset sync pointer to 0?\n\nThis will force all local operations to re-upload to cloud.\n\nContinue?')) {
       return;
@@ -272,55 +228,6 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
     } catch (err) {
       alert('❌ Error: ' + String(err));
       console.error('Force upload error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [loadDiagnostics]);
-
-  const clearCloudOperations = React.useCallback(async () => {
-    if (!confirm('⚠️ DELETE ALL CLOUD OPERATIONS?\n\nThis will delete all operations from the cloud database.\n\nOnly proceed if you have exported your data!\n\nContinue?')) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const user = await supabase?.auth.getUser();
-      const currentUserId = user?.data?.user?.id;
-
-      if (!currentUserId || !supabase) {
-        alert('❌ Not authenticated');
-        return;
-      }
-
-      // Count before
-      const { count: beforeCount } = await supabase
-        .from('navigator_operations')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', currentUserId);
-
-      console.log('📊 Operations before delete:', beforeCount);
-
-      // Delete all
-      const { error } = await supabase
-        .from('navigator_operations')
-        .delete()
-        .eq('user_id', currentUserId);
-
-      if (error) {
-        throw error;
-      }
-
-      // Verify
-      const { count: afterCount } = await supabase
-        .from('navigator_operations')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', currentUserId);
-
-      alert(`✅ Cloud Cleared!\n\nDeleted: ${beforeCount} operations\nRemaining: ${afterCount}\n\nNext steps:\n1. Tap "Clear Local"\n2. Restore from JSON backup\n3. Wait for sync`);
-
-      await loadDiagnostics(); // Refresh stats
-    } catch (err) {
-      alert('❌ Error: ' + String(err));
     } finally {
       setLoading(false);
     }

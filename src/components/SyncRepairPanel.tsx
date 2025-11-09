@@ -150,7 +150,12 @@ export const SyncRepairPanel: React.FC<SyncRepairPanelProps> = ({ userId, device
           <div className="sync-diagnostics-rows">
             <DetailRow label="Local Sequence" value={diagnostics.localMaxSequence} />
             <DetailRow label="Cloud Sequence" value={diagnostics.cloudMaxSequence} />
-            <DetailRow label="Last Synced" value={diagnostics.localLastSynced} />
+            <div className="sync-detail-row">
+              <span className="sync-detail-label">Last Synced</span>
+              <span className="sync-detail-value">
+                {diagnostics.localLastSynced || 'Never'}
+              </span>
+            </div>
             <DetailRow label="Gap" value={diagnostics.gap} warning={diagnostics.gap > 100} />
             <DetailRow label="Unsynced" value={diagnostics.unsyncedCount} warning={diagnostics.unsyncedCount > 0} />
             <DetailRow label="Dead Letter" value={diagnostics.deadLetterCount} danger={diagnostics.deadLetterCount > 0} />

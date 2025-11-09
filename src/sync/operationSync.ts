@@ -488,17 +488,19 @@ export function useOperationSync(): UseOperationSync {
               // 🔧 CRITICAL VERIFICATION: Mark synced based on ACTUAL log state
               // Even if merge returns 0 (deduplication), we must mark actual ops as synced
               const logStateAfterMerge = operationLog.current.getAllOperations();
-              const actualMaxSeq = logStateAfterMerge.length > 0
-                ? Math.max(...logStateAfterMerge.map(op => op.sequence))
-                : 0;
+              const maxTimestamp = logStateAfterMerge.reduce((max, op) => {
+                const maxTime = new Date(max).getTime();
+                const opTime = new Date(op.timestamp).getTime();
+                return opTime > maxTime ? op.timestamp : max;
+              }, logStateAfterMerge[0]?.timestamp || '1970-01-01T00:00:00.000Z');
 
-              if (Number.isFinite(actualMaxSeq) && actualMaxSeq > 0) {
-                await operationLog.current.markSyncedUpTo(actualMaxSeq);
-                logger.info('✅ BOOTSTRAP: Marked ALL sequences as synced (corruption path)', {
+              if (maxTimestamp && maxTimestamp !== '1970-01-01T00:00:00.000Z') {
+                await operationLog.current.markSyncedUpTo(maxTimestamp);
+                logger.info('✅ BOOTSTRAP: Marked ALL operations as synced (corruption path)', {
                   sanitizedOpsRequested: sanitizedOps.length,
                   sanitizedOpsMerged: newOpsFromSanitized.length,
                   totalOpsInLog: logStateAfterMerge.length,
-                  maxSequenceInLog: actualMaxSeq,
+                  maxTimestamp,
                   status: newOpsFromSanitized.length > 0 ? 'merged' : 'deduplicated',
                 });
               } else {
@@ -606,19 +608,21 @@ export function useOperationSync(): UseOperationSync {
                   // DON'T use this corrupted sequence - it will poison our local sequence generator
                   logger.info('📥 BOOTSTRAP: Skipping corrupted sequence number marking (would cause sequence collision)');
                 } else if (Number.isFinite(maxCloudSeq)) {
-                  // 🔧 CRITICAL FIX: Use ACTUAL max sequence in log, not cloud max sequence
-                  // Cloud sequence might be higher than local due to deduplication or gaps
-                  const actualMaxSeqAfterMerge = operationLog.current.getAllOperations().length > 0
-                    ? Math.max(...operationLog.current.getAllOperations().map(op => op.sequence))
-                    : 0;
+                  // ✅ TIMESTAMP-BASED SYNC: Use max timestamp in log
+                  const allOperations = operationLog.current.getAllOperations();
+                  const maxTimestampAfterMerge = allOperations.reduce((max, op) => {
+                    const maxTime = new Date(max).getTime();
+                    const opTime = new Date(op.timestamp).getTime();
+                    return opTime > maxTime ? op.timestamp : max;
+                  }, allOperations[0]?.timestamp || '1970-01-01T00:00:00.000Z');
 
-                  if (actualMaxSeqAfterMerge > 0) {
-                    await operationLog.current.markSyncedUpTo(actualMaxSeqAfterMerge);
-                    logger.info(`✅ BOOTSTRAP: Marked ALL sequences as synced (normal path)`, {
+                  if (maxTimestampAfterMerge && maxTimestampAfterMerge !== '1970-01-01T00:00:00.000Z') {
+                    await operationLog.current.markSyncedUpTo(maxTimestampAfterMerge);
+                    logger.info(`✅ BOOTSTRAP: Marked ALL operations as synced (normal path)`, {
                       cloudMaxSeq,
                       localMaxSeqBefore: localMaxSeq,
-                      actualMaxSeqInLog: actualMaxSeqAfterMerge,
-                      totalOpsInLog: operationLog.current.getAllOperations().length,
+                      maxTimestampInLog: maxTimestampAfterMerge,
+                      totalOpsInLog: allOperations.length,
                       totalRemoteOps: remoteOperations.length,
                       gap,
                       threshold: SEQUENCE_CORRUPTION_THRESHOLD,
