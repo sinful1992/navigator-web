@@ -101,17 +101,18 @@ function detectConflictBetween(
     case 'ACTIVE_INDEX_SET':
       if (op2.type === 'ACTIVE_INDEX_SET') {
         // Concurrent active index changes
-        // Use sequence difference instead of time - more reliable for detecting conflicts
-        const sequenceDiff = Math.abs(op1.sequence - op2.sequence);
+        // Use timestamp difference for detecting conflicts
+        const time1 = new Date(op1.timestamp).getTime();
+        const time2 = new Date(op2.timestamp).getTime();
+        const timeDiffMs = Math.abs(time1 - time2);
 
-        // If sequences are very close (within 5 operations), consider it a race condition
-        // This is more reliable than time-based detection
-        if (sequenceDiff < 5) {
+        // If timestamps are very close (within 5 seconds), consider it a race condition
+        if (timeDiffMs < 5000) {
           return {
             operation1: op1,
             operation2: op2,
             conflictType: 'race_condition',
-            description: `Concurrent active index changes (sequence diff: ${sequenceDiff})`,
+            description: `Concurrent active index changes (${timeDiffMs}ms apart)`,
           };
         }
       }
@@ -381,8 +382,12 @@ export function processOperationsWithConflictResolution(
   const rejected: Operation[] = [];
   let conflictsResolved = 0;
 
-  // Sort by sequence to process in order
-  const sortedOps = [...operations].sort((a, b) => a.sequence - b.sequence);
+  // Sort by timestamp to process in chronological order (sequence no longer reliable)
+  const sortedOps = [...operations].sort((a, b) => {
+    const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    if (timeDiff !== 0) return timeDiff;
+    return a.id.localeCompare(b.id); // Tie-breaker for same timestamp
+  });
 
   for (const operation of sortedOps) {
     // Check for conflicts with already processed operations

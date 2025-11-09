@@ -135,8 +135,12 @@ export class RetryQueueManager {
       }
     }
 
-    // Sort by sequence number (oldest first)
-    readyItems.sort((a, b) => a.operation.sequence - b.operation.sequence);
+    // Sort by timestamp (oldest first)
+    readyItems.sort((a, b) => {
+      const timeDiff = new Date(a.operation.timestamp).getTime() - new Date(b.operation.timestamp).getTime();
+      if (timeDiff !== 0) return timeDiff;
+      return a.operation.id.localeCompare(b.operation.id);
+    });
 
     if (readyItems.length > 0) {
       logger.info('🔄 RETRY QUEUE: Operations ready for retry', {
@@ -178,8 +182,12 @@ export class RetryQueueManager {
       }
     }
 
-    // Sort by sequence number
-    items.sort((a, b) => a.operation.sequence - b.operation.sequence);
+    // Sort by timestamp
+    items.sort((a, b) => {
+      const timeDiff = new Date(a.operation.timestamp).getTime() - new Date(b.operation.timestamp).getTime();
+      if (timeDiff !== 0) return timeDiff;
+      return a.operation.id.localeCompare(b.operation.id);
+    });
 
     return items;
   }

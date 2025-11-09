@@ -78,7 +78,7 @@ AS $$
   FROM navigator_operations
   WHERE user_id = target_user_id
     AND sequence_number > since_sequence
-  ORDER BY sequence_number ASC;
+  ORDER BY timestamp ASC, operation_id ASC;
 $$;
 
 -- Function to reconstruct current state from operations
@@ -108,12 +108,12 @@ BEGIN
   -- Start with initial state
   result := initial_state;
 
-  -- Apply operations in sequence order
+  -- Apply operations in chronological order
   FOR op IN
     SELECT operation_data
     FROM navigator_operations
     WHERE user_id = target_user_id
-    ORDER BY sequence_number ASC
+    ORDER BY timestamp ASC, operation_id ASC
   LOOP
     -- Here you would apply each operation to transform the state
     -- For now, we'll just return the operations for client-side processing

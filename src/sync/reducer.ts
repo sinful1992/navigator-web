@@ -507,8 +507,12 @@ export function reconstructState(
   initialState: AppState,
   operations: Operation[]
 ): AppState {
-  // Sort operations by sequence number to ensure deterministic replay
-  const sortedOps = [...operations].sort((a, b) => a.sequence - b.sequence);
+  // Sort operations by timestamp to ensure chronological replay
+  const sortedOps = [...operations].sort((a, b) => {
+    const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    if (timeDiff !== 0) return timeDiff;
+    return a.id.localeCompare(b.id); // Tie-breaker for same timestamp
+  });
 
   logger.info('🔄 STATE RECONSTRUCTION START:', {
     totalOperations: operations.length,
@@ -564,8 +568,12 @@ export function reconstructStateWithConflictResolution(
     logger.debug('Conflict resolution applied:', conflictInfo);
   }
 
-  // Sort resolved operations by sequence
-  const sortedOps = [...validOperations].sort((a, b) => a.sequence - b.sequence);
+  // Sort resolved operations by timestamp
+  const sortedOps = [...validOperations].sort((a, b) => {
+    const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    if (timeDiff !== 0) return timeDiff;
+    return a.id.localeCompare(b.id); // Tie-breaker for same timestamp
+  });
 
   logger.debug('🔄 About to apply', sortedOps.length, 'operations (', sortedOps.filter(op => op.type === 'COMPLETION_CREATE').length, 'completions)');
 

@@ -164,8 +164,12 @@ export class OperationLogManager {
               }
             }
 
-            // Sort operations by their original sequence to maintain relative order
-            const sortedOps = [...this.log.operations].sort((a, b) => a.sequence - b.sequence);
+            // Sort operations by timestamp to maintain chronological order
+            const sortedOps = [...this.log.operations].sort((a, b) => {
+              const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+              if (timeDiff !== 0) return timeDiff;
+              return a.id.localeCompare(b.id);
+            });
 
             // Reassign clean sequential numbers
             for (let i = 0; i < sortedOps.length; i++) {
@@ -529,8 +533,12 @@ export class OperationLogManager {
         this.log.lastSequence = Math.max(this.log.lastSequence, remoteOp.sequence);
       }
 
-      // Sort operations by sequence to maintain order
-      this.log.operations.sort((a, b) => a.sequence - b.sequence);
+      // Sort operations by timestamp to maintain chronological order
+      this.log.operations.sort((a, b) => {
+        const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return a.id.localeCompare(b.id);
+      });
 
       // Compute new checksum for validation
       this.log.checksum = this.computeChecksum();
@@ -952,7 +960,11 @@ export class OperationLogManager {
 
     // Create deterministic string from operations
     const operationsStr = this.log.operations
-      .sort((a, b) => a.sequence - b.sequence) // Ensure consistent ordering
+      .sort((a, b) => {
+        const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return a.id.localeCompare(b.id);
+      }) // Ensure consistent ordering
       .map(op => `${op.id}:${op.sequence}:${op.type}`)
       .join('|');
 
