@@ -136,6 +136,14 @@ function StatsCard({ title, value, change, changeType, icon, iconType }: {
 export default function App() {
   const cloudSync = useUnifiedSync();
 
+  // 🔧 TEMPORARY: Expose cloudSync for migration script
+  React.useEffect(() => {
+    (window as any).cloudSync = cloudSync;
+    return () => {
+      delete (window as any).cloudSync;
+    };
+  }, [cloudSync]);
+
   // 🎯 UX IMPROVEMENT: Only show loading screen if actually taking time
   const [showLoading, setShowLoading] = React.useState(false);
   const [forceSkipLoading, setForceSkipLoading] = React.useState(false);
