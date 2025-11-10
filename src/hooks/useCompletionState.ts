@@ -327,10 +327,10 @@ export function useCompletionState({
       });
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-      if (shouldSubmit && originalTimestamp && currentVersion !== undefined) {
+      if (shouldSubmit && originalTimestamp) {
         if (repositories?.completion) {
-          // PHASE 2: Pass current version for conflict detection
-          repositories.completion.updateCompletion(originalTimestamp, updates, currentVersion).catch(err => {
+          // TIMESTAMP-ORDERED SYNC: No version checking needed
+          repositories.completion.updateCompletion(originalTimestamp, updates).catch(err => {
             logger.error('Failed to update completion:', err);
           });
         } else if (submitOperation) {
@@ -340,7 +340,6 @@ export function useCompletionState({
             payload: {
               originalTimestamp,
               updates,
-              expectedVersion: currentVersion,
             }
           }).catch(err => {
             logger.error('Failed to update completion update operation:', err);

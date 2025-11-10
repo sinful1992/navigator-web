@@ -181,17 +181,17 @@ export function useArrangementState({
         });
 
         // 🔥 DELTA SYNC: Submit operation to cloud immediately (only if update occurred)
-        if (shouldSubmit && currentVersion !== undefined) {
+        if (shouldSubmit) {
           if (repositories?.arrangement) {
-            // PHASE 2: Pass current version for conflict detection
-            repositories.arrangement.updateArrangement(id, updates, currentVersion).catch((err) => {
+            // TIMESTAMP-ORDERED SYNC: No version checking needed
+            repositories.arrangement.updateArrangement(id, updates).catch((err) => {
               logger.error('Failed to update arrangement:', err);
             });
           } else if (submitOperation) {
             // Fallback to direct submission
             submitOperation({
               type: 'ARRANGEMENT_UPDATE',
-              payload: { id, updates, expectedVersion: currentVersion }
+              payload: { id, updates }
             }).catch((err) => {
               logger.error('Failed to submit arrangement update operation:', err);
             });

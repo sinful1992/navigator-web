@@ -44,19 +44,19 @@ export class ArrangementRepository extends BaseRepository {
   /**
    * Persist arrangement update
    *
-   * PHASE 2: Optimistic Concurrency Control (MANDATORY VERSION CHECK)
+   * TIMESTAMP-ORDERED DELTA SYNC: No version checking needed
+   * Operations are applied in timestamp order, latest update wins
+   *
    * @param id - Arrangement identifier
    * @param updates - Partial updates to apply
-   * @param expectedVersion - Expected current version (REQUIRED for conflict detection)
    */
   async updateArrangement(
     id: string,
-    updates: Partial<Arrangement>,
-    expectedVersion: number  // ← REQUIRED, not optional
+    updates: Partial<Arrangement>
   ): Promise<void> {
     await this.submit({
       type: 'ARRANGEMENT_UPDATE',
-      payload: { id, updates, expectedVersion },
+      payload: { id, updates },
     });
   }
 

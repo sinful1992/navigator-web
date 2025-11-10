@@ -66,67 +66,11 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       }
 
       case 'COMPLETION_UPDATE': {
-        const { originalTimestamp, updates, expectedVersion } = operation.payload;
+        const { originalTimestamp, updates } = operation.payload;
 
-        // PHASE 2: Optimistic concurrency control
-        // Check version if expectedVersion provided
-        const targetCompletion = state.completions.find(c => c.timestamp === originalTimestamp);
-
-        if (expectedVersion !== undefined && targetCompletion) {
-          const currentVersion = targetCompletion.version || 1;
-
-          if (currentVersion !== expectedVersion) {
-            // Version mismatch - conflict detected
-            logger.warn('🚨 VERSION CONFLICT: Completion update rejected', {
-              timestamp: originalTimestamp,
-              expectedVersion,
-              currentVersion,
-              operation: operation.id,
-            });
-
-            // PHASE 3: Create conflict object for UI resolution
-            // Prevent duplicate conflicts for the same entity (check ALL statuses, not just pending)
-            // FIX: Include dismissed/resolved conflicts to prevent recreation on state reconstruction
-            const existingConflict = state.conflicts?.find(
-              c => c.entityType === 'completion' &&
-                   c.entityId === originalTimestamp
-              // Removed status === 'pending' check - conflicts for this entity already exist
-            );
-
-            if (existingConflict) {
-              logger.warn('🚨 DUPLICATE CONFLICT: Skipping duplicate conflict for completion', {
-                timestamp: originalTimestamp,
-                existingConflictId: existingConflict.id,
-                existingStatus: existingConflict.status,
-              });
-              return state; // Skip creating duplicate conflict
-            }
-
-            // DETERMINISTIC CONFLICT ID: Based on operation ID, not random
-            // This ensures the same operation always creates the same conflict
-            // which allows CONFLICT_DISMISS/RESOLVE to work across state reconstructions
-            const conflict: import('../types').VersionConflict = {
-              id: `conflict_completion_${operation.id}`,
-              timestamp: new Date().toISOString(),
-              entityType: 'completion',
-              entityId: originalTimestamp,
-              operationId: operation.id,
-              expectedVersion,
-              currentVersion,
-              remoteData: updates,
-              localData: targetCompletion,
-              status: 'pending',
-            };
-
-            // Add conflict to state
-            return {
-              ...state,
-              conflicts: [...(state.conflicts || []), conflict],
-            };
-          }
-        }
-
-        // Apply update with incremented version
+        // TIMESTAMP-ORDERED DELTA SYNC: No version checking needed
+        // Operations are applied in timestamp order, latest update wins
+        // This is the correct approach for single-user, multi-device sync
         return {
           ...state,
           completions: state.completions.map(c =>
@@ -134,7 +78,7 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
               ? {
                   ...c,
                   ...updates,
-                  // Increment version on update (default to 1 if not set)
+                  // Keep version tracking for data integrity
                   version: (c.version || 1) + 1,
                 }
               : c
@@ -314,67 +258,11 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       }
 
       case 'ARRANGEMENT_UPDATE': {
-        const { id, updates, expectedVersion } = operation.payload;
+        const { id, updates } = operation.payload;
 
-        // PHASE 2: Optimistic concurrency control
-        // Check version if expectedVersion provided
-        const targetArrangement = state.arrangements.find(arr => arr.id === id);
-
-        if (expectedVersion !== undefined && targetArrangement) {
-          const currentVersion = targetArrangement.version || 1;
-
-          if (currentVersion !== expectedVersion) {
-            // Version mismatch - conflict detected
-            logger.warn('🚨 VERSION CONFLICT: Arrangement update rejected', {
-              id,
-              expectedVersion,
-              currentVersion,
-              operation: operation.id,
-            });
-
-            // PHASE 3: Create conflict object for UI resolution
-            // Prevent duplicate conflicts for the same entity (check ALL statuses, not just pending)
-            // FIX: Include dismissed/resolved conflicts to prevent recreation on state reconstruction
-            const existingConflict = state.conflicts?.find(
-              c => c.entityType === 'arrangement' &&
-                   c.entityId === id
-              // Removed status === 'pending' check - conflicts for this entity already exist
-            );
-
-            if (existingConflict) {
-              logger.warn('🚨 DUPLICATE CONFLICT: Skipping duplicate conflict for arrangement', {
-                id,
-                existingConflictId: existingConflict.id,
-                existingStatus: existingConflict.status,
-              });
-              return state; // Skip creating duplicate conflict
-            }
-
-            // DETERMINISTIC CONFLICT ID: Based on operation ID, not random
-            // This ensures the same operation always creates the same conflict
-            // which allows CONFLICT_DISMISS/RESOLVE to work across state reconstructions
-            const conflict: import('../types').VersionConflict = {
-              id: `conflict_arrangement_${operation.id}`,
-              timestamp: new Date().toISOString(),
-              entityType: 'arrangement',
-              entityId: id,
-              operationId: operation.id,
-              expectedVersion,
-              currentVersion,
-              remoteData: updates,
-              localData: targetArrangement,
-              status: 'pending',
-            };
-
-            // Add conflict to state
-            return {
-              ...state,
-              conflicts: [...(state.conflicts || []), conflict],
-            };
-          }
-        }
-
-        // Apply update with incremented version
+        // TIMESTAMP-ORDERED DELTA SYNC: No version checking needed
+        // Operations are applied in timestamp order, latest update wins
+        // This is the correct approach for single-user, multi-device sync
         return {
           ...state,
           arrangements: state.arrangements.map(arr =>
@@ -383,7 +271,7 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
                   ...arr,
                   ...updates,
                   updatedAt: operation.timestamp,
-                  // Increment version on update (default to 1 if not set)
+                  // Keep version tracking for data integrity
                   version: (arr.version || 1) + 1,
                 }
               : arr

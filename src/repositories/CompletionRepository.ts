@@ -47,22 +47,21 @@ export class CompletionRepository extends BaseRepository {
   /**
    * Persist completion update
    *
-   * PHASE 2: Optimistic Concurrency Control (MANDATORY VERSION CHECK)
+   * TIMESTAMP-ORDERED DELTA SYNC: No version checking needed
+   * Operations are applied in timestamp order, latest update wins
+   *
    * @param originalTimestamp - Timestamp identifying the completion
    * @param updates - Partial updates to apply
-   * @param expectedVersion - Expected current version (REQUIRED for conflict detection)
    */
   async updateCompletion(
     originalTimestamp: string,
-    updates: Partial<Completion>,
-    expectedVersion: number  // ← REQUIRED, not optional
+    updates: Partial<Completion>
   ): Promise<void> {
     await this.submit({
       type: 'COMPLETION_UPDATE',
       payload: {
         originalTimestamp,
         updates,
-        expectedVersion,
       },
     });
   }

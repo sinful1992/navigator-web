@@ -22,11 +22,7 @@ export type CompletionCreatePayload = {
 export type CompletionUpdatePayload = {
   originalTimestamp: string;
   updates: Partial<Completion>;
-  /**
-   * PHASE 2: Expected version for optimistic concurrency.
-   * If provided, update will fail if current version doesn't match.
-   */
-  expectedVersion?: number;
+  // TIMESTAMP-ORDERED SYNC: No version checking needed
 };
 
 export type CompletionDeletePayload = {
@@ -67,11 +63,7 @@ export type ArrangementCreatePayload = {
 export type ArrangementUpdatePayload = {
   id: string;
   updates: Partial<Arrangement>;
-  /**
-   * PHASE 2: Expected version for optimistic concurrency.
-   * If provided, update will fail if current version doesn't match.
-   */
-  expectedVersion?: number;
+  // TIMESTAMP-ORDERED SYNC: No version checking needed
 };
 
 export type ArrangementDeletePayload = {
