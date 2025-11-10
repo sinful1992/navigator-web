@@ -7,7 +7,7 @@ import type { Operation } from "./operations";
 import { generateMonotonicTimestamp } from "./operations";
 import { OperationLogManager, getOperationLog, clearOperationLogsForUser, getOperationLogStats } from "./operationLog";
 import { storageManager } from '../utils/storageManager';
-import { reconstructState, reconstructStateWithConflictResolution } from "./reducer";
+import { reconstructState } from "./reducer";
 import { logger } from "../utils/logger";
 import { DEFAULT_REMINDER_SETTINGS } from "../services/reminderScheduler";
 import { DEFAULT_BONUS_SETTINGS } from "../utils/bonusCalculator";
@@ -513,7 +513,7 @@ export function useOperationSync(): UseOperationSync {
               }
 
               // Continue to state reconstruction with merged operations
-              const newState = reconstructStateWithConflictResolution(
+              const newState = reconstructState(
                 INITIAL_STATE,
                 mergedOps
               );
@@ -639,7 +639,7 @@ export function useOperationSync(): UseOperationSync {
               // PHASE 1.3: Use conflict resolution for vector clock-based integrity
               const allOps = operationLog.current.getAllOperations();
               logger.info(`🔄 BOOTSTRAP: Reconstructing state from ${allOps.length} total operations`);
-              const newState = reconstructStateWithConflictResolution(
+              const newState = reconstructState(
                 INITIAL_STATE,
                 allOps
               );
@@ -1257,7 +1257,7 @@ export function useOperationSync(): UseOperationSync {
 
           // Reconstruct state from all operations
           // PHASE 1.3: Use conflict resolution for vector clock-based integrity
-          const newState = reconstructStateWithConflictResolution(
+          const newState = reconstructState(
             INITIAL_STATE,
             allOperations
           );
@@ -1269,7 +1269,7 @@ export function useOperationSync(): UseOperationSync {
           logger.debug('⚠️ BOOTSTRAP: All cloud operations were duplicates - verifying state completeness');
 
           const allOperations = operationLog.current.getAllOperations();
-          const reconstructedState = reconstructStateWithConflictResolution(
+          const reconstructedState = reconstructState(
             INITIAL_STATE,
             allOperations
           );
@@ -1436,7 +1436,7 @@ export function useOperationSync(): UseOperationSync {
                     // Reconstruct state and notify
                     // PHASE 1.3: Use conflict resolution for vector clock-based integrity
                     const allOperations = operationLog.current!.getAllOperations();
-                    const newState = reconstructStateWithConflictResolution(
+                    const newState = reconstructState(
                       INITIAL_STATE,
                       allOperations
                     );
