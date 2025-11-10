@@ -286,7 +286,6 @@ export function useCompletionState({
   const updateCompletion = React.useCallback(
     (completionArrayIndex: number, updates: Partial<Completion>) => {
       let originalTimestamp: string | undefined;
-      let currentVersion: number | undefined;
       let shouldSubmit = false;
 
       setBaseState((s) => {
@@ -301,8 +300,6 @@ export function useCompletionState({
 
         const originalCompletion = s.completions[completionArrayIndex];
         originalTimestamp = originalCompletion.timestamp;
-        // PHASE 2: Capture current version for optimistic concurrency
-        currentVersion = originalCompletion.version;
         shouldSubmit = true;
 
         // DON'T increment version locally - only reducer should increment versions

@@ -137,7 +137,6 @@ export function useArrangementState({
     (id: string, updates: Partial<Arrangement>): Promise<void> => {
       return new Promise((resolve) => {
         let shouldSubmit = false;
-        let currentVersion: number | undefined;
 
         const operationId = generateOperationId('update', 'arrangement', {
           id,
@@ -152,9 +151,6 @@ export function useArrangementState({
             resolve();
             return s;
           }
-
-          // PHASE 2: Capture current version for optimistic concurrency
-          currentVersion = arrangement.version;
 
           const updatedArrangement = {
             ...updates,
