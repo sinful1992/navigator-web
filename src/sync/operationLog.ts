@@ -466,53 +466,19 @@ export class OperationLogManager {
       const exists = this.log.operations.some(localOp => localOp.id === remoteOp.id);
 
       if (exists) {
-        // 🔍 DEBUG: Track which operation types are being marked as duplicates
+        // Track duplicate types for summary
         duplicatesByType[remoteOp.type] = (duplicatesByType[remoteOp.type] || 0) + 1;
         duplicateOperations.push(remoteOp);
-        logger.debug('🔍 DEDUP: Skipping duplicate operation', {
-          opId: remoteOp.id.substring(0, 8),
-          type: remoteOp.type,
-          sequence: remoteOp.sequence,
-          clientId: remoteOp.clientId.substring(0, 8),
-        });
         return false;
       }
 
-      // 🔍 DEBUG: Track which operation types are new
+      // Track new operation types for summary
       newByType[remoteOp.type] = (newByType[remoteOp.type] || 0) + 1;
-      logger.debug('🔍 DEDUP: NEW operation from cloud', {
-        opId: remoteOp.id.substring(0, 8),
-        type: remoteOp.type,
-        sequence: remoteOp.sequence,
-        clientId: remoteOp.clientId.substring(0, 8),
-      });
       return true;
     });
 
-    // 🔍 DEBUG: Log summary of deduplication
-    const dedupSummary = {
-      totalRemoteOps: remoteOps.length,
-      ownDeviceOps: ownDeviceCount.count,
-      duplicateOps: duplicateOperations.length,
-      newOpsToMerge: operationsToMerge.length,
-      duplicatesByType: Object.keys(duplicatesByType).length > 0 ? duplicatesByType : 'none',
-      newByType: Object.keys(newByType).length > 0 ? newByType : 'none',
-      // 🔍 CRITICAL: Show if SESSION_START is missing from local operations
-      sessionStartInDuplicates: duplicatesByType['SESSION_START'] || 0,
-      sessionStartInNew: newByType['SESSION_START'] || 0,
-      localSessionStarts: this.log.operations.filter(op => op.type === 'SESSION_START').length,
-      localTotalOps: this.log.operations.length,
-    };
-    logger.debug('🔍 DEDUP SUMMARY', dedupSummary);
-
+    // No new operations to merge
     if (operationsToMerge.length === 0) {
-      // No new operations to merge
-      logger.warn('🔍 WARNING: All remote operations were duplicates', {
-        remoteCount: remoteOps.length,
-        localCount: this.log.operations.length,
-        duplicatesByType,
-        possibleIssue: 'Cloud operations may not match local operation IDs - deduplication may be broken',
-      });
       return [];
     }
 
