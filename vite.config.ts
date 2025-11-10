@@ -7,4 +7,6 @@ export default defineConfig({
   // Custom domain serves at root
   base: "/",
   plugins: [react()],
+  // Explicitly set production mode for builds
+  mode: process.env.NODE_ENV === 'production' ? 'production' : undefined,
 });

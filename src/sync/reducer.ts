@@ -40,14 +40,7 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           return state; // Skip this duplicate
         }
 
-        // 🔍 DEBUG: Log completion being added (only in verbose mode)
-        logger.debug('📥 COMPLETION_CREATE applied:', {
-          seq: operation.sequence,
-          timestamp: completion.timestamp,
-          address: completion.address,
-          outcome: completion.outcome,
-          currentTotal: state.completions.length + 1
-        });
+        // DEBUG logging removed - creates 1000+ logs during state reconstruction
 
         // PHASE 2: Set initial version on create
         const versionedCompletion = {
@@ -173,7 +166,7 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
         const today = session.date;
         const updatedSessions = state.daySessions.map(s => {
           if (s.date < today && !s.end) {
-            logger.info('Auto-closing stale session:', s);
+            // Auto-close without logging (creates noise during bootstrap with many stale sessions)
             return {
               ...s,
               end: new Date(s.date + 'T23:59:59.999Z').toISOString(),

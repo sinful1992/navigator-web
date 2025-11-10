@@ -39,7 +39,7 @@ jobs:
           EOF
 
       - name: Build
-        run: npm run build
+        run: NODE_ENV=production npm run build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

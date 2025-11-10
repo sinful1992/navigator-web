@@ -204,7 +204,7 @@ export function usePersistedState(userId?: string): UsePersistedStateReturn {
 
         await storageManager.queuedSet(STORAGE_KEY, stateToSave);
 
-        logger.debug('State persisted to IndexedDB');
+        // DEBUG logging removed - creates thousands of logs due to frequent persistence
       } catch (error) {
         logger.error('Failed to persist state to IndexedDB:', error);
       }
