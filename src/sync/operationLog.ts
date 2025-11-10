@@ -85,7 +85,6 @@ export class OperationLogManager {
   private vectorClock: VectorClock = {};
 
   private deviceId: string;
-  private userId: string;  // 🔧 FIX: Store userId for per-user IndexedDB keys
   private operationLogKey: string;  // 🔧 FIX: Per-user operation log key
   private transactionLogKey: string;  // 🔧 FIX: Per-user transaction log key
   private isLoaded = false;
@@ -93,7 +92,6 @@ export class OperationLogManager {
 
   constructor(deviceId: string, userId: string = 'local', onCorruptionDetected?: () => void) {
     this.deviceId = deviceId;
-    this.userId = userId;
     this.operationLogKey = getOperationLogKey(userId);
     this.transactionLogKey = getTransactionLogKey(userId);
     this.onCorruptionDetected = onCorruptionDetected;
