@@ -102,8 +102,11 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
               return state; // Skip creating duplicate conflict
             }
 
+            // DETERMINISTIC CONFLICT ID: Based on operation ID, not random
+            // This ensures the same operation always creates the same conflict
+            // which allows CONFLICT_DISMISS/RESOLVE to work across state reconstructions
             const conflict: import('../types').VersionConflict = {
-              id: `conflict_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+              id: `conflict_completion_${operation.id}`,
               timestamp: new Date().toISOString(),
               entityType: 'completion',
               entityId: originalTimestamp,
@@ -347,8 +350,11 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
               return state; // Skip creating duplicate conflict
             }
 
+            // DETERMINISTIC CONFLICT ID: Based on operation ID, not random
+            // This ensures the same operation always creates the same conflict
+            // which allows CONFLICT_DISMISS/RESOLVE to work across state reconstructions
             const conflict: import('../types').VersionConflict = {
-              id: `conflict_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+              id: `conflict_arrangement_${operation.id}`,
               timestamp: new Date().toISOString(),
               entityType: 'arrangement',
               entityId: id,
