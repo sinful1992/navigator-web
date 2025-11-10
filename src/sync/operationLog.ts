@@ -673,14 +673,8 @@ export class OperationLogManager {
     const currentMax = this.clientSequences.get(operation.clientId) || 0;
     const isOutOfOrder = operation.sequence <= currentMax;
 
-    if (isOutOfOrder) {
-      logger.warn('🔧 OUT-OF-ORDER OPERATION detected:', {
-        clientId: operation.clientId.substring(0, 8),
-        operationSequence: operation.sequence,
-        previousMax: currentMax,
-        gap: currentMax - operation.sequence,
-      });
-    }
+    // Out-of-order operations are normal - operations sorted by timestamp, not sequence
+    // No logging needed
 
     return { isOutOfOrder, previousMax: currentMax };
   }

@@ -359,11 +359,7 @@ export function useOperationSync(): UseOperationSync {
               const validation = validateSyncOperation(row.operation_data);
               if (!validation.success) {
                 const errorMsg = validation.errors?.[0]?.message || 'Unknown validation error';
-                logger.warn('🚨 SECURITY: Rejecting invalid operation from cloud:', {
-                  error: errorMsg,
-                  opId: row.operation_data?.id,
-                  opType: row.operation_data?.type,
-                });
+                // Silently reject invalid operations - validation errors logged in summary
                 invalidOps.push({
                   raw: row.operation_data,
                   error: errorMsg
@@ -394,11 +390,7 @@ export function useOperationSync(): UseOperationSync {
               remoteOperations.push(operation);
             }
 
-            if (invalidOps.length > 0) {
-              logger.error(`❌ BOOTSTRAP: Rejected ${invalidOps.length}/${allData.length} malformed operations`, {
-                sample: invalidOps.slice(0, 3)
-              });
-            }
+            // Silently skip invalid operations - already filtered out
 
             const remoteByType = remoteOperations.reduce((acc, op) => {
               acc[op.type] = (acc[op.type] || 0) + 1;
@@ -1225,9 +1217,7 @@ export function useOperationSync(): UseOperationSync {
           remoteOperations.push(operation);
         }
 
-        if (invalidOps.length > 0) {
-          logger.error(`❌ FETCH: Rejected ${invalidOps.length}/${data.length} malformed operations`);
-        }
+        // Silently skip invalid operations - already filtered out
 
         // Merge remote operations and resolve conflicts
         const newOperations = await operationLog.current!.mergeRemoteOperations(remoteOperations);
