@@ -461,10 +461,9 @@ export class OperationLogManager {
 
     // Filter operations to merge (skip already synced operations)
     const operationsToMerge = remoteOps.filter(remoteOp => {
-      // Skip operations from this device (already in local log)
-      if (remoteOp.clientId === this.deviceId) {
-        return false;
-      }
+      // 🔧 FIX: Removed deviceId check - it breaks when switching user contexts
+      // (e.g., local → authenticated) because different users use different IndexedDB keys
+      // The duplicate check below is sufficient to prevent redundant merges
 
       // Check if this operation is already in local log
       const alreadyExists = this.log.operations.some(localOp => localOp.id === remoteOp.id);
@@ -474,7 +473,7 @@ export class OperationLogManager {
         return false;
       }
 
-      // New operation from another device - merge it
+      // New operation - merge it
       return true;
     });
 
