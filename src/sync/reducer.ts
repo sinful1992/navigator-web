@@ -30,13 +30,8 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
         const isDuplicate = state.completions.some(c => c.timestamp === completion.timestamp);
 
         if (isDuplicate) {
-          logger.warn('🚨 DUPLICATE DETECTED: Skipping completion with identical timestamp', {
-            timestamp: completion.timestamp,
-            address: completion.address,
-            caseRef: completion.caseReference,
-            outcome: completion.outcome,
-            amount: completion.amount,
-          });
+          // Silently skip duplicates - no need to warn about legacy migration artifacts
+          // (976 duplicates exist from old migration, would create 976 logs on every refresh)
           return state; // Skip this duplicate
         }
 
