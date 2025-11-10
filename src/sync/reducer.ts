@@ -23,21 +23,10 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           return state;
         }
 
-        // USER REQUIREMENT: Duplicate = Same timestamp (system bug creating 2 completions at exact same time)
-        // - Different timestamps = Different completions (even if same address/case)
-        // - Allows: Same address visited multiple times (2 people at same house)
-        // - Blocks: System creating duplicate completions with identical timestamp
-        const isDuplicate = state.completions.some(c => c.timestamp === completion.timestamp);
+        // Duplicate detection removed - operation_id uniqueness enforced by Supabase
+        // Each operation can only be processed once, duplicates prevented at source
 
-        if (isDuplicate) {
-          // Silently skip duplicates - no need to warn about legacy migration artifacts
-          // (976 duplicates exist from old migration, would create 976 logs on every refresh)
-          return state; // Skip this duplicate
-        }
-
-        // DEBUG logging removed - creates 1000+ logs during state reconstruction
-
-        // PHASE 2: Set initial version on create
+        // Set initial version on create
         const versionedCompletion = {
           ...completion,
           version: completion.version || 1, // Default to 1 if not provided
