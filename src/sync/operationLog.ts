@@ -5,8 +5,15 @@ import { storageManager } from '../utils/storageManager';
 import { logger } from '../utils/logger';
 import { ENABLE_SEQUENCE_CONTINUITY_VALIDATION, SEQUENCE_CORRUPTION_THRESHOLD } from './syncConfig';
 
-const OPERATION_LOG_KEY = 'navigator_operation_log_v1';
-const TRANSACTION_LOG_KEY = 'navigator_transaction_log_v1';
+// 🔧 CRITICAL FIX: Per-user operation log keys to prevent data loss
+// Each user gets their own IndexedDB key to prevent overwriting when switching users
+function getOperationLogKey(userId: string): string {
+  return `navigator_operation_log_${userId}_v1`;
+}
+
+function getTransactionLogKey(userId: string): string {
+  return `navigator_transaction_log_${userId}_v1`;
+}
 
 /**
  * PHASE 1.2.1: Vector Clock for Multi-Device Conflict Detection
@@ -78,11 +85,17 @@ export class OperationLogManager {
   private vectorClock: VectorClock = {};
 
   private deviceId: string;
+  private userId: string;  // 🔧 FIX: Store userId for per-user IndexedDB keys
+  private operationLogKey: string;  // 🔧 FIX: Per-user operation log key
+  private transactionLogKey: string;  // 🔧 FIX: Per-user transaction log key
   private isLoaded = false;
   private onCorruptionDetected?: () => void;
 
-  constructor(deviceId: string, onCorruptionDetected?: () => void) {
+  constructor(deviceId: string, userId: string = 'local', onCorruptionDetected?: () => void) {
     this.deviceId = deviceId;
+    this.userId = userId;
+    this.operationLogKey = getOperationLogKey(userId);
+    this.transactionLogKey = getTransactionLogKey(userId);
     this.onCorruptionDetected = onCorruptionDetected;
   }
 
@@ -95,7 +108,7 @@ export class OperationLogManager {
       // First check for incomplete transaction (crash recovery)
       await this.recoverFromIncompleteTransaction();
 
-      const saved = await storageManager.queuedGet(OPERATION_LOG_KEY) as OperationLog | null;
+      const saved = await storageManager.queuedGet(this.operationLogKey) as OperationLog | null;
 
       if (saved) {
         // BEST PRACTICE: Validate saved data structure
@@ -246,7 +259,7 @@ export class OperationLogManager {
    */
   private async recoverFromIncompleteTransaction(): Promise<void> {
     try {
-      const savedTransaction = await storageManager.queuedGet(TRANSACTION_LOG_KEY) as TransactionLog | null;
+      const savedTransaction = await storageManager.queuedGet(this.transactionLogKey) as TransactionLog | null;
 
       if (!savedTransaction) {
         return; // No incomplete transaction
@@ -254,12 +267,12 @@ export class OperationLogManager {
 
       if (!savedTransaction.isInProgress) {
         // Transaction was completed, clear the log
-        await storageManager.queuedSet(TRANSACTION_LOG_KEY, null);
+        await storageManager.queuedSet(this.transactionLogKey, null);
         return;
       }
 
       // Transaction was incomplete - determine what happened
-      const currentLog = await storageManager.queuedGet(OPERATION_LOG_KEY) as OperationLog | null;
+      const currentLog = await storageManager.queuedGet(this.operationLogKey) as OperationLog | null;
 
       if (!currentLog) {
         // Main log was cleared - rollback by restoring from before-state
@@ -270,7 +283,7 @@ export class OperationLogManager {
           lastSyncTimestamp: savedTransaction.lastSyncTimestampBefore,
           checksum: savedTransaction.checksumBefore,
         };
-        await storageManager.queuedSet(OPERATION_LOG_KEY, restoredLog);
+        await storageManager.queuedSet(this.operationLogKey, restoredLog);
         setSequence(restoredLog.lastSequence);
       } else if (currentLog.checksum === savedTransaction.checksumBefore) {
         // Merge was never applied - clear transaction and continue
@@ -282,7 +295,7 @@ export class OperationLogManager {
 
         if (currentLog.operations.length !== expectedOpsCount) {
           logger.error('🔧 ATOMIC: State mismatch detected, attempting restoration');
-          await storageManager.queuedSet(OPERATION_LOG_KEY, {
+          await storageManager.queuedSet(this.operationLogKey, {
             operations: savedTransaction.operationsBefore,
             lastSequence: savedTransaction.lastSequenceBefore,
             lastSyncTimestamp: savedTransaction.lastSyncTimestampBefore,
@@ -292,7 +305,7 @@ export class OperationLogManager {
       }
 
       // Clear completed or rolled-back transaction
-      await storageManager.queuedSet(TRANSACTION_LOG_KEY, null);
+      await storageManager.queuedSet(this.transactionLogKey, null);
       logger.info('✅ ATOMIC: Transaction recovery completed');
     } catch (error) {
       logger.error('Failed to recover from incomplete transaction:', error);
@@ -486,7 +499,7 @@ export class OperationLogManager {
 
     try {
       // Persist transaction log (intent)
-      await storageManager.queuedSet(TRANSACTION_LOG_KEY, transactionLog);
+      await storageManager.queuedSet(this.transactionLogKey, transactionLog);
 
       // Step 3: Apply all operations to in-memory state (ATOMIC: all at once)
       const newOperations: Operation[] = [];
@@ -529,7 +542,7 @@ export class OperationLogManager {
       setSequence(this.log.lastSequence);
 
       // Step 5: Clear transaction log (marks transaction as complete)
-      await storageManager.queuedSet(TRANSACTION_LOG_KEY, null);
+      await storageManager.queuedSet(this.transactionLogKey, null);
 
       logger.info('✅ ATOMIC MERGE COMPLETE:', {
         newOperationCount: newOperations.length,
@@ -545,7 +558,7 @@ export class OperationLogManager {
       try {
         // Mark transaction as incomplete (recovery on next load will restore)
         const failedTransaction = { ...transactionLog, isInProgress: true };
-        await storageManager.queuedSet(TRANSACTION_LOG_KEY, failedTransaction);
+        await storageManager.queuedSet(this.transactionLogKey, failedTransaction);
       } catch (transactionError) {
         logger.error('Failed to mark transaction as failed:', transactionError);
       }
@@ -904,7 +917,7 @@ export class OperationLogManager {
 
   private async persist(): Promise<void> {
     try {
-      await storageManager.queuedSet(OPERATION_LOG_KEY, this.log);
+      await storageManager.queuedSet(this.operationLogKey, this.log);
     } catch (error) {
       logger.error('Failed to persist operation log:', error);
     }
@@ -951,7 +964,7 @@ export function getOperationLog(deviceId: string, userId: string = 'local'): Ope
   const key = `${userId}_${deviceId}`;
 
   if (!operationLogManagers.has(key)) {
-    operationLogManagers.set(key, new OperationLogManager(deviceId));
+    operationLogManagers.set(key, new OperationLogManager(deviceId, userId));
   }
 
   return operationLogManagers.get(key)!;

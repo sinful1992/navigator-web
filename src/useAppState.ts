@@ -369,7 +369,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   // ---- 🔧 FIXED: Enhanced day tracking with better validation ----
 
-  const startDay = React.useCallback(() => {
+  const startDay = React.useCallback(async () => {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
 
@@ -411,19 +411,20 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       };
     });
 
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-    if (shouldSubmit && submitOperation) {
-      submitOperation({
-        type: 'SESSION_START',
-        payload: { session: sess }
-      }).catch(err => {
-        logger.error('Failed to submit session start operation:', err);
-      });
+    // 🔥 CRITICAL FIX: AWAIT operation submission to ensure persistence before returning
+    // This prevents operation loss if page refreshes quickly after starting day
+    if (shouldSubmit && servicesAndRepos?.repositories.session) {
+      try {
+        await servicesAndRepos.repositories.session.saveSessionStart(sess);
+        logger.info('✅ Session start operation persisted successfully');
+      } catch (err) {
+        logger.error('❌ Failed to persist session start operation:', err);
+      }
     }
-  }, [submitOperation]);
+  }, [servicesAndRepos]);
 
 
-  const endDay = React.useCallback(() => {
+  const endDay = React.useCallback(async () => {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
 
@@ -454,19 +455,17 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       return { ...s, daySessions: updatedSessions };
     });
 
-    // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
-    if (submitOperation && endedSession && endedSession.end) {
-      submitOperation({
-        type: 'SESSION_END',
-        payload: {
-          date: endedSession.date,
-          endTime: endedSession.end,
-        }
-      }).catch(err => {
-        logger.error('Failed to submit session end operation:', err);
-      });
+    // 🔥 CRITICAL FIX: AWAIT operation submission to ensure persistence before returning
+    // This prevents operation loss if page refreshes quickly after ending day
+    if (servicesAndRepos?.repositories.session && endedSession && endedSession.end) {
+      try {
+        await servicesAndRepos.repositories.session.saveSessionEnd(endedSession.date, endedSession.end);
+        logger.info('✅ Session end operation persisted successfully');
+      } catch (err) {
+        logger.error('❌ Failed to persist session end operation:', err);
+      }
     }
-  }, [submitOperation]);
+  }, [servicesAndRepos]);
 
   const updateSession = React.useCallback((date: string, updates: Partial<DaySession>, createIfMissing: boolean = false) => {
     // 🔧 CRITICAL FIX: Set protection flag BEFORE state mutation to prevent race condition
