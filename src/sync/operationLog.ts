@@ -448,32 +448,22 @@ export class OperationLogManager {
       await this.load();
     }
 
-    // 🔍 DEBUG: Track deduplication
-    const duplicatesByType: Record<string, number> = {};
-    const newByType: Record<string, number> = {};
-    const ownDeviceCount = { count: 0 };
-    const duplicateOperations: Operation[] = [];
-
-    // Filter operations to merge (deduplication)
+    // Filter operations to merge (skip already synced operations)
     const operationsToMerge = remoteOps.filter(remoteOp => {
-      // Skip operations from this device (we already have them)
+      // Skip operations from this device (already in local log)
       if (remoteOp.clientId === this.deviceId) {
-        ownDeviceCount.count++;
         return false;
       }
 
-      // Check if we already have this operation
-      const exists = this.log.operations.some(localOp => localOp.id === remoteOp.id);
+      // Check if this operation is already in local log
+      const alreadyExists = this.log.operations.some(localOp => localOp.id === remoteOp.id);
 
-      if (exists) {
-        // Track duplicate types for summary
-        duplicatesByType[remoteOp.type] = (duplicatesByType[remoteOp.type] || 0) + 1;
-        duplicateOperations.push(remoteOp);
+      if (alreadyExists) {
+        // Operation already synced - skip it
         return false;
       }
 
-      // Track new operation types for summary
-      newByType[remoteOp.type] = (newByType[remoteOp.type] || 0) + 1;
+      // New operation from another device - merge it
       return true;
     });
 

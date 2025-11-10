@@ -566,14 +566,13 @@ export function useOperationSync(): UseOperationSync {
 
             logger.info('📥 BOOTSTRAP MERGE COMPLETE:', {
               newOpsCount: newOps.length,
-              duplicateCount: remoteOperations.length - newOps.length,
+              alreadySynced: remoteOperations.length - newOps.length,
               localBefore: localByTypeBefore,
               localAfter: localByTypeAfter,
               newOpsAdded: newOps.reduce((acc, op) => {
                 acc[op.type] = (acc[op.type] || 0) + 1;
                 return acc;
               }, {} as Record<string, number>),
-              // 🔍 CRITICAL: Did SESSION_START operations get merged?
               sessionStartBefore: localByTypeBefore['SESSION_START'] || 0,
               sessionStartAfter: localByTypeAfter['SESSION_START'] || 0,
               sessionStartAdded: newOps.filter(op => op.type === 'SESSION_START').length,
@@ -668,7 +667,7 @@ export function useOperationSync(): UseOperationSync {
 
               logger.info('✅ BOOTSTRAP: Complete with remote operations');
             } else {
-              logger.warn('⚠️ BOOTSTRAP: No new operations after merge - all were duplicates');
+              logger.info('✅ BOOTSTRAP: No new operations - all already synced');
             }
           } else {
             logger.info('✅ BOOTSTRAP: No new operations on server');
