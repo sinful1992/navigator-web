@@ -61,7 +61,6 @@ import { formatDateKey } from "./utils/dateFormatter";
 import { useStats } from "./hooks/useStats";
 import { OwnershipPrompt } from "./components/OwnershipPrompt";
 import { Sidebar } from "./components/Sidebar";
-import { SyncDiagnostic } from "./components/SyncDiagnostic";
 import { syncRepairConsole } from "./utils/syncRepairConsole";
 import { getOrCreateDeviceId } from "./services/deviceIdService";
 import { useConflictResolution } from "./hooks/useConflictResolution";
@@ -1493,7 +1492,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           title="Record Historical PIF"
           style={{
             position: 'fixed',
-            bottom: '10rem',
+            bottom: '5.5rem',
             right: '1.25rem',
             width: '3.5rem',
             height: '3.5rem',
@@ -1756,13 +1755,6 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       {/* GDPR Compliance: Privacy & Cookie Consent */}
       <PrivacyConsent />
 
-      {/* Sync Diagnostic Tool (Mobile-Friendly) */}
-      {cloudSync.user && (
-        <SyncDiagnostic
-          userId={cloudSync.user.id}
-          currentState={safeState}
-        />
-      )}
     </div>
   );
 }
