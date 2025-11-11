@@ -12,12 +12,22 @@ type SyncStats = {
   unsyncedCount: number; // 🔧 FIX: Actual count of unsynced operations
 };
 
+type CloudOperation = {
+  operation_id: string;
+  operation_type: string;
+  timestamp: string;
+  sequence_number: number | null;
+  client_id: string;
+};
+
 export function SyncDebugModal({ onClose }: { onClose: () => void }) {
   const [stats, setStats] = React.useState<SyncStats | null>(null);
   const [cloudCount, setCloudCount] = React.useState<number | null>(null);
+  const [cloudOperations, setCloudOperations] = React.useState<CloudOperation[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [deviceId, setDeviceId] = React.useState('');
   const [userId, setUserId] = React.useState('');
+  const [showCloudOps, setShowCloudOps] = React.useState(false);
 
   const loadDiagnostics = React.useCallback(async () => {
     setLoading(true);
@@ -54,13 +64,23 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
         unsyncedCount: unsyncedOpsCount,
       });
 
-      // Get cloud count
+      // Get cloud count and recent operations
       if (supabase) {
         const { count } = await supabase
           .from('navigator_operations')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', currentUserId);
         setCloudCount(count);
+
+        // Fetch most recent 20 operations from cloud
+        const { data: recentOps } = await supabase
+          .from('navigator_operations')
+          .select('operation_id, operation_type, timestamp, sequence_number, client_id')
+          .eq('user_id', currentUserId)
+          .order('timestamp', { ascending: false })
+          .limit(20);
+
+        setCloudOperations(recentOps || []);
       }
     } catch (err) {
       console.error('Failed to load diagnostics:', err);
@@ -340,6 +360,56 @@ export function SyncDebugModal({ onClose }: { onClose: () => void }) {
                 <Row label="Total Operations">
                   {cloudCount !== null ? cloudCount : 'Loading...'}
                 </Row>
+                <button
+                  onClick={() => setShowCloudOps(!showCloudOps)}
+                  style={{
+                    marginTop: '0.5rem',
+                    padding: '0.5rem 0.75rem',
+                    border: '1px solid #2196f3',
+                    backgroundColor: 'white',
+                    color: '#2196f3',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    width: '100%'
+                  }}
+                >
+                  {showCloudOps ? '▼' : '▶'} Show Recent Operations ({cloudOperations.length})
+                </button>
+                {showCloudOps && cloudOperations.length > 0 && (
+                  <div style={{
+                    marginTop: '0.5rem',
+                    maxHeight: '300px',
+                    overflowY: 'auto',
+                    border: '1px solid #e0e0e0',
+                    borderRadius: '4px',
+                    backgroundColor: '#fafafa'
+                  }}>
+                    {cloudOperations.map((op, idx) => (
+                      <div
+                        key={op.operation_id}
+                        style={{
+                          padding: '0.5rem',
+                          borderBottom: idx < cloudOperations.length - 1 ? '1px solid #e0e0e0' : 'none',
+                          fontSize: '0.8rem'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                          <strong style={{ color: '#2196f3' }}>{op.operation_type}</strong>
+                          <span style={{ color: '#666', fontSize: '0.75rem' }}>
+                            Seq: {op.sequence_number || 'N/A'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#666', fontFamily: 'monospace' }}>
+                          {new Date(op.timestamp).toLocaleString()}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#999', fontFamily: 'monospace', marginTop: '0.25rem' }}>
+                          ID: {op.operation_id.slice(0, 25)}...
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </Section>
 
               {/* Operations by Type */}
