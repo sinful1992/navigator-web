@@ -1051,31 +1051,53 @@ body {
   transform: scale(1.1) rotate(90deg);
 }
 
-/* FAB Button Positioning */
-.fab-add-address {
+/* FAB Button Positioning - Shared Base Styles */
+.fab-add-address,
+.historical-pif-fab {
   position: fixed;
-  bottom: 1.25rem;
   right: 1.25rem;
   width: 3.5rem;
   height: 3.5rem;
   border-radius: 50%;
   border: none;
-  background: linear-gradient(135deg, #10b981, #059669);
   color: white;
-  font-size: 2rem;
+  font-size: 1.75rem;
   line-height: 1;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
   z-index: 1000;
   transition: all 0.2s ease;
   font-family: system-ui, -apple-system, sans-serif;
+  /* Reset any inherited button styles */
+  padding: 0;
+  margin: 0;
+  text-decoration: none;
+}
+
+/* Add Address Button - Green at bottom */
+.fab-add-address {
+  bottom: 1.25rem;
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
 }
 
 .fab-add-address:hover {
   transform: scale(1.1);
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+}
+
+/* Historical PIF Button - Blue above green */
+.historical-pif-fab {
+  bottom: 5.5rem;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.historical-pif-fab:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
 }
 
 /* ==== Empty States ==== */

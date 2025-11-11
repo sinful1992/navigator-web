@@ -1490,34 +1490,6 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           className="historical-pif-fab"
           onClick={() => setShowHistoricalPif(true)}
           title="Record Historical PIF"
-          style={{
-            position: 'fixed',
-            bottom: '5.5rem',
-            right: '1.25rem',
-            width: '3.5rem',
-            height: '3.5rem',
-            borderRadius: '50%',
-            border: 'none',
-            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-            color: 'white',
-            fontSize: '1.5rem',
-            lineHeight: '1',
-            display: 'grid',
-            placeItems: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
-            zIndex: 1000,
-            transition: 'all 0.2s ease',
-            fontFamily: 'system-ui, -apple-system, sans-serif'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.1)';
-            e.currentTarget.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.4)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'scale(1)';
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
-          }}
         >
           📅
         </button>
