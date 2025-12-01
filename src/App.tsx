@@ -602,7 +602,13 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       // Session protection should only block ongoing realtime updates, not initial state load
       if (!isInitialLoad && isProtectionActive('navigator_session_protection')) {
         logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
+        logger.info('⚠️ DIAGNOSTIC: Session protection blocking non-initial update');
         return;
+      }
+
+      // 🔍 DIAGNOSTIC: Log initial load status
+      if (isInitialLoad) {
+        logger.info('✅ DIAGNOSTIC: Initial load detected - allowing state update through session protection');
       }
 
       // Delegate to service layer
@@ -624,6 +630,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
             addresses: prevState.addresses?.length || 0,
             completions: prevState.completions?.length || 0,
             arrangements: prevState.arrangements?.length || 0,
+            daySessions: prevState.daySessions?.length || 0,
           });
 
           const newState = updaterOrState(prevState);
@@ -631,6 +638,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
             addresses: newState.addresses?.length || 0,
             completions: newState.completions?.length || 0,
             arrangements: newState.arrangements?.length || 0,
+            daySessions: newState.daySessions?.length || 0,
           });
 
           const normalized = normalizeState(newState);
@@ -638,6 +646,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
             addresses: normalized.addresses?.length || 0,
             completions: normalized.completions?.length || 0,
             arrangements: normalized.arrangements?.length || 0,
+            daySessions: normalized.daySessions?.length || 0,
           });
 
           lastFromCloudRef.current = JSON.stringify(normalized);
@@ -648,6 +657,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           addresses: updaterOrState.addresses?.length || 0,
           completions: updaterOrState.completions?.length || 0,
           arrangements: updaterOrState.arrangements?.length || 0,
+          daySessions: updaterOrState.daySessions?.length || 0,
         });
 
         const normalized = normalizeState(updaterOrState);
@@ -655,6 +665,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           addresses: normalized.addresses?.length || 0,
           completions: normalized.completions?.length || 0,
           arrangements: normalized.arrangements?.length || 0,
+          daySessions: normalized.daySessions?.length || 0,
         });
 
         setState(() => normalized);

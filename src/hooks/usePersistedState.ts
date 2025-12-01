@@ -156,7 +156,17 @@ export function usePersistedState(userId?: string): UsePersistedStateReturn {
             hasBonusSettings: !!next.bonusSettings,
             addressCount: next.addresses.length,
             completionCount: next.completions.length,
+            daySessionsCount: next.daySessions.length,
           });
+
+          // 🔍 DIAGNOSTIC: Log day sessions details
+          if (next.daySessions.length > 0) {
+            logger.info('📅 DIAGNOSTIC: Day sessions loaded from IndexedDB:', next.daySessions.map(s => ({
+              date: s.date,
+              hasStart: !!s.start,
+              hasEnd: !!s.end,
+            })));
+          }
 
           if (alive) setBaseState(next);
         } else {
