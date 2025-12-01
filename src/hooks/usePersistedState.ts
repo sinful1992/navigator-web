@@ -9,7 +9,7 @@ import { DEFAULT_BONUS_SETTINGS } from '../utils/bonusCalculator';
 import { storageManager } from '../utils/storageManager';
 import { validateAppState, validateAddressRow, stampCompletionsWithVersion } from '../utils/validationUtils';
 import { logger } from '../utils/logger';
-import { STATE_PERSISTENCE_DEBOUNCE_MS } from '../constants';
+// STATE_PERSISTENCE_DEBOUNCE_MS import removed - debounce eliminated for data safety
 
 // Constants
 const STORAGE_KEY = "navigator_state_v5";
@@ -177,11 +177,13 @@ export function usePersistedState(userId?: string): UsePersistedStateReturn {
     };
   }, []);
 
-  // ---- Persist to IndexedDB (debounced with error handling) ----
+  // ---- Persist to IndexedDB (immediate - no debounce for data safety) ----
   React.useEffect(() => {
     if (loading) return;
 
-    const timeoutId = setTimeout(async () => {
+    // Persist immediately to prevent data loss on page close
+    // storageManager.queuedSet already serializes writes to prevent corruption
+    const persist = async () => {
       try {
         // Add schema version and owner signature before saving
         const stateToSave: any = {
@@ -208,9 +210,9 @@ export function usePersistedState(userId?: string): UsePersistedStateReturn {
       } catch (error) {
         logger.error('Failed to persist state to IndexedDB:', error);
       }
-    }, STATE_PERSISTENCE_DEBOUNCE_MS); // Debounce for frequent updates
+    };
 
-    return () => clearTimeout(timeoutId);
+    persist(); // Fire immediately, no debounce
   }, [baseState, loading]);
 
   return {

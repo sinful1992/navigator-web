@@ -51,9 +51,15 @@ export class SessionRepository extends BaseRepository {
    * Persist session update operation
    */
   async saveSessionUpdate(date: string, updates: Partial<DaySession>): Promise<void> {
-    await this.submit({
-      type: 'SESSION_UPDATE',
-      payload: { date, updates },
-    });
+    setProtectionFlag('navigator_session_protection');
+
+    try {
+      await this.submit({
+        type: 'SESSION_UPDATE',
+        payload: { date, updates },
+      });
+    } finally {
+      clearProtectionFlag('navigator_session_protection');
+    }
   }
 }

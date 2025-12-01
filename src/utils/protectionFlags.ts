@@ -12,22 +12,30 @@ type ProtectionFlag =
 const FLAG_CONFIGS: Record<ProtectionFlag, number> = {
   'navigator_restore_in_progress': 60000, // 60 seconds - extended to cover sync operation
   'navigator_import_in_progress': 6000,   // 6 seconds
-  'navigator_active_protection': Infinity, // 🔧 FIX: Never expire - only cleared on complete/cancel
-  'navigator_session_protection': Infinity // 🔧 FIX: Never expire - only cleared on endDay
+  'navigator_active_protection': 5 * 60 * 1000, // 5 minutes - safety timeout to prevent permanent deadlock
+  'navigator_session_protection': 60 * 1000 // 1 minute - safety timeout for session updates
 };
 
 /**
- * Set a protection flag with timestamp
+ * Set a protection flag with timestamp and timeout config
+ * Stores both setTime and timeout to create monotonic timestamp (immune to clock skew)
  * @returns timestamp when flag was set
  */
 export function setProtectionFlag(flag: ProtectionFlag): number {
-  const now = Date.now();
-  localStorage.setItem(flag, now.toString());
-  return now;
+  const setTime = Date.now();
+  const timeout = FLAG_CONFIGS[flag];
+
+  localStorage.setItem(
+    flag,
+    JSON.stringify({ setTime, timeout })
+  );
+
+  return setTime;
 }
 
 /**
  * Check if protection flag is active (within timeout window)
+ * Uses monotonic timestamp calculation (immune to clock skew)
  * @param flag - Protection flag to check
  * @param customMinTimeout - Optional custom minimum timeout in ms (flag must be older than this)
  * @returns true if protection is active, false otherwise
@@ -36,28 +44,56 @@ export function isProtectionActive(flag: ProtectionFlag, customMinTimeout?: numb
   const stored = localStorage.getItem(flag);
   if (!stored) return false;
 
-  const timestamp = parseInt(stored, 10);
-  if (isNaN(timestamp)) {
-    // Corrupted flag, clear it
-    clearProtectionFlag(flag);
-    return false;
+  try {
+    // Try new format (JSON with setTime and timeout)
+    const parsed = JSON.parse(stored);
+    const { setTime, timeout } = parsed;
+
+    // Calculate elapsed time using monotonic timestamp (always positive, immune to clock skew)
+    const elapsed = Date.now() - setTime;
+
+    // Detect clock skew (negative elapsed time means clock moved backward)
+    if (elapsed < 0) {
+      logger.warn('⚠️ Clock skew detected - clearing protection flag', { flag, elapsed });
+      clearProtectionFlag(flag);
+      return false;
+    }
+
+    // If custom minimum timeout is specified, flag must be older than that to be considered active
+    if (customMinTimeout !== undefined && elapsed < customMinTimeout) {
+      return true; // Still in waiting period
+    }
+
+    if (elapsed >= timeout) {
+      // Timeout expired, clear the flag
+      clearProtectionFlag(flag);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    // Fallback: try old format (plain timestamp string) for backward compatibility
+    const timestamp = parseInt(stored, 10);
+    if (isNaN(timestamp)) {
+      // Corrupted flag, clear it
+      clearProtectionFlag(flag);
+      return false;
+    }
+
+    const timeout = FLAG_CONFIGS[flag];
+    const elapsed = Date.now() - timestamp;
+
+    if (customMinTimeout !== undefined && elapsed < customMinTimeout) {
+      return true;
+    }
+
+    if (elapsed >= timeout) {
+      clearProtectionFlag(flag);
+      return false;
+    }
+
+    return true;
   }
-
-  const timeout = FLAG_CONFIGS[flag];
-  const elapsed = Date.now() - timestamp;
-
-  // If custom minimum timeout is specified, flag must be older than that to be considered active
-  if (customMinTimeout !== undefined && elapsed < customMinTimeout) {
-    return true; // Still in waiting period
-  }
-
-  if (elapsed >= timeout) {
-    // Timeout expired, clear the flag
-    clearProtectionFlag(flag);
-    return false;
-  }
-
-  return true;
 }
 
 /**
@@ -75,14 +111,26 @@ export function getProtectionTimeRemaining(flag: ProtectionFlag): number {
   const stored = localStorage.getItem(flag);
   if (!stored) return 0;
 
-  const timestamp = parseInt(stored, 10);
-  if (isNaN(timestamp)) return 0;
+  try {
+    // Try new format (JSON with setTime and timeout)
+    const parsed = JSON.parse(stored);
+    const { setTime, timeout } = parsed;
 
-  const timeout = FLAG_CONFIGS[flag];
-  const elapsed = Date.now() - timestamp;
-  const remaining = timeout - elapsed;
+    const elapsed = Date.now() - setTime;
+    const remaining = timeout - elapsed;
 
-  return Math.max(0, remaining);
+    return Math.max(0, remaining);
+  } catch (error) {
+    // Fallback: try old format (plain timestamp string)
+    const timestamp = parseInt(stored, 10);
+    if (isNaN(timestamp)) return 0;
+
+    const timeout = FLAG_CONFIGS[flag];
+    const elapsed = Date.now() - timestamp;
+    const remaining = timeout - elapsed;
+
+    return Math.max(0, remaining);
+  }
 }
 
 /**

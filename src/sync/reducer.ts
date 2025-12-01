@@ -37,8 +37,10 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           completions: [versionedCompletion, ...state.completions].sort(
             (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           ),
-          // Clear active index if this completion was for the active address
+          // Clear active index AND activeStartTime if this completion was for the active address
+          // 🔧 FIX 2D: Prevent stale activeStartTime after completion
           activeIndex: state.activeIndex === versionedCompletion.index ? null : state.activeIndex,
+          activeStartTime: state.activeIndex === versionedCompletion.index ? null : state.activeStartTime,
         };
       }
 

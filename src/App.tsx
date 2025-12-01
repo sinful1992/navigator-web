@@ -5,6 +5,8 @@ import "./App.css"; // Use the updated modern CSS
 import { useAppState } from "./useAppState";
 import { normalizeState, normalizeBackupData } from "./utils/normalizeState";
 import { useUnifiedSync } from "./sync/migrationAdapter";
+import { pendingOperationsCount } from "./sync/operationSync";
+import { storageManager } from "./utils/storageManager";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
 import { logger } from "./utils/logger";
 import { Auth } from "./Auth";
@@ -308,6 +310,72 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
 
   const [hydrated, setHydrated] = React.useState(false);
   const lastFromCloudRef = React.useRef<string | null>(null);
+
+  // ---- Data Loss Prevention: beforeunload handler ----
+  // Track pending async operations to block navigation if critical data hasn't been saved
+  const storageWritePendingRef = React.useRef<boolean>(false);
+
+  // Flush all pending data before page unload
+  const flushPendingData = React.useCallback(async () => {
+    const maxWaitMs = 3000; // Max 3 seconds to block navigation
+    const startTime = Date.now();
+
+    while (
+      (pendingOperationsCount.current > 0 || storageWritePendingRef.current) &&
+      (Date.now() - startTime < maxWaitMs)
+    ) {
+      await new Promise(resolve => setTimeout(resolve, 50)); // Wait 50ms
+    }
+
+    // Force flush storage manager queue
+    if (storageManager.hasPendingWrites) {
+      await storageManager.flush();
+    }
+
+    logger.info('✅ Flushed all pending data before unload');
+  }, []);
+
+  // Block navigation if critical operations pending
+  React.useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (pendingOperationsCount.current > 0 || storageManager.hasPendingWrites) {
+        // Standard way to trigger browser confirmation dialog
+        e.preventDefault();
+        e.returnValue = '';
+
+        // Try to flush data (best effort)
+        flushPendingData().catch(err => {
+          logger.error('Failed to flush data on unload:', err);
+        });
+
+        return '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [flushPendingData]);
+
+  // Handle mobile visibility change (mobile browsers use this instead of beforeunload)
+  React.useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Page is being hidden - flush immediately
+        flushPendingData().catch(err => {
+          logger.error('Failed to flush data on visibility change:', err);
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [flushPendingData]);
 
   // Check for ownership uncertainty flag
   React.useEffect(() => {

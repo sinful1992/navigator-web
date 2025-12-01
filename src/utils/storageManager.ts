@@ -152,6 +152,36 @@ class StorageManager {
   get isPersistent(): boolean {
     return this.persistenceGranted;
   }
+
+  /**
+   * Check if there are pending writes in the queue
+   * Used by beforeunload handler to determine if navigation should be blocked
+   */
+  get hasPendingWrites(): boolean {
+    return this.processing || this.queue.length > 0;
+  }
+
+  /**
+   * Flush all pending writes to IndexedDB
+   * Blocks until queue is empty or timeout is reached
+   * Used by beforeunload handler to ensure data is saved before page close
+   *
+   * @returns Promise that resolves when queue is empty or timeout occurs
+   */
+  async flush(): Promise<void> {
+    const maxWaitMs = 5000; // Max 5 seconds
+    const startTime = Date.now();
+
+    while (this.hasPendingWrites && (Date.now() - startTime < maxWaitMs)) {
+      await new Promise(resolve => setTimeout(resolve, 50)); // Wait 50ms
+    }
+
+    if (this.hasPendingWrites) {
+      logger.warn('⚠️ Storage manager flush timed out after 5s');
+    } else {
+      logger.info('✅ Storage manager queue flushed successfully');
+    }
+  }
 }
 
 // Singleton instance to coordinate all storage operations

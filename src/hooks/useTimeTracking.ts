@@ -111,11 +111,28 @@ export function useTimeTracking({
       // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
       if (shouldSubmit) {
         if (repositories?.address) {
-          repositories.address.saveActiveAddress(idx, now).catch((err) => {
-            logger.error('Failed to save active address:', err);
-            // 🔧 FIX: Clear protection flag on error to prevent deadlock
+          // Add abort controller to prevent hung requests
+          const abortController = new AbortController();
+          const timeoutId = setTimeout(() => {
+            abortController.abort();
             clearProtectionFlag('navigator_active_protection');
-          });
+            logger.error('⚠️ Active address save timed out after 15s - cleared protection flag');
+          }, 15000); // 15 second timeout
+
+          repositories.address.saveActiveAddress(idx, now, { signal: abortController.signal })
+            .then(() => {
+              clearTimeout(timeoutId);
+            })
+            .catch((err) => {
+              clearTimeout(timeoutId);
+              if (err.name === 'AbortError') {
+                logger.warn('Active address save aborted due to timeout');
+              } else {
+                logger.error('Failed to save active address:', err);
+              }
+              // 🔧 FIX: Clear protection flag on error to prevent deadlock
+              clearProtectionFlag('navigator_active_protection');
+            });
         } else if (submitOperation) {
           // Fallback to direct submission
           submitOperation({

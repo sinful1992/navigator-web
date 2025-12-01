@@ -10,6 +10,7 @@ import type { SubmitOperationCallback } from '../types/operations';
 import { generateOperationId } from '../utils/validationUtils';
 import type { CompletionService } from '../services/CompletionService';
 import type { CompletionRepository } from '../repositories/CompletionRepository';
+import { AtomicOperationService } from '../services/AtomicOperationService';
 
 // PHASE 2 Task 3: Updated to use proper SubmitOperationCallback type
 export type { SubmitOperationCallback } from '../types/operations';
@@ -85,6 +86,17 @@ export function useCompletionState({
     new Map()
   );
 
+  // Create atomic operation service instance
+  const atomicService = React.useMemo(
+    () => new AtomicOperationService({
+      setBaseState,
+      submitOperation,
+      addOptimisticUpdate,
+      confirmOptimisticUpdate
+    }),
+    [setBaseState, submitOperation, addOptimisticUpdate, confirmOptimisticUpdate]
+  );
+
   // ---- Cleanup interval for recent completions ----
   React.useEffect(() => {
     const cleanupInterval = setInterval(() => {
@@ -155,13 +167,13 @@ export function useCompletionState({
       );
 
       if (existingCompletion) {
-        // If there's an existing completion, check if it's recent (within last 30 seconds)
-        // This prevents rapid duplicate submissions but allows legitimate re-completion
+        // 🔧 FIX 2E: Check if it's recent (within last 5 seconds) to prevent rapid double-clicks
+        // This prevents duplicate submissions while allowing legitimate re-completion
         const existingTime = new Date(existingCompletion.timestamp).getTime();
         const now = Date.now();
         const timeDiff = now - existingTime;
 
-        if (timeDiff < 30000) { // 30 seconds
+        if (timeDiff < 5000) { // 5 seconds - user-specified duplicate window
           showWarning(`Address "${address.address}" was already completed ${Math.round(timeDiff / 1000)} seconds ago`);
           return Promise.reject(); // Exit early but maintain function signature
         }
@@ -236,37 +248,44 @@ export function useCompletionState({
           completion
         });
 
-        // Apply both optimistic and base state updates in single transaction
-        addOptimisticUpdate('create', 'completion', completion, operationId);
+        // 🔧 ATOMIC OPERATION: State mutation + operation submission with automatic rollback
+        const result = await atomicService.execute({
+          stateMutator: (s) => {
+            if (s.activeIndex === index) {
+              logger.info(`📍 COMPLETED ACTIVE ADDRESS: Clearing active state - SYNC RESUMED`);
+            }
 
-        setBaseState((s) => {
-          if (s.activeIndex === index) {
-            // 🔧 FIX: Clear protection when completing active address
-            logger.info(`📍 COMPLETED ACTIVE ADDRESS: Clearing active state - SYNC RESUMED`);
-          }
-
-          return {
-            ...s,
-            completions: [completion, ...s.completions],
-            activeIndex: s.activeIndex === index ? null : s.activeIndex,
-            activeStartTime: s.activeIndex === index ? null : s.activeStartTime,
-          };
-        });
-
-        // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (repositories?.completion) {
-          repositories.completion.saveCompletion(completion).catch(err => {
-            logger.error('Failed to save completion:', err);
-            // Don't throw - operation is saved locally and will retry
-          });
-        } else if (submitOperation) {
-          // Fallback to direct submission
-          submitOperation({
+            return {
+              ...s,
+              completions: [completion, ...s.completions],
+              activeIndex: s.activeIndex === index ? null : s.activeIndex,
+              activeStartTime: s.activeIndex === index ? null : s.activeStartTime,
+            };
+          },
+          operation: {
             type: 'COMPLETION_CREATE',
             payload: { completion }
-          }).catch(err => {
-            logger.error('Failed to submit completion operation:', err);
-            // Don't throw - operation is saved locally and will retry
+          },
+          operationId,
+          optimisticData: completion,
+          optimisticOperation: 'create',
+          optimisticEntity: 'completion',
+          rollbackOnFailure: true
+        });
+
+        // Handle operation failure
+        if (!result.success) {
+          logger.error('Atomic completion operation failed:', result.error);
+          showError('Failed to save completion. Please try again.');
+          throw result.error;
+        }
+
+        // Alternative repository-based submission (bypasses atomic service for now)
+        // TODO: Integrate repository pattern into AtomicOperationService
+        if (repositories?.completion) {
+          repositories.completion.saveCompletion(completion).catch(err => {
+            logger.error('Failed to save completion via repository:', err);
+            // Don't throw - operation is already submitted via atomic service
           });
         }
 
@@ -277,7 +296,7 @@ export function useCompletionState({
         setPendingCompletions(new Set(pendingCompletionsRef.current));
       }
     },
-    [baseState, addOptimisticUpdate, submitOperation, setBaseState, services, repositories]
+    [baseState, addOptimisticUpdate, submitOperation, setBaseState, services, repositories, atomicService]
   );
 
   /**

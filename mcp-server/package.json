@@ -1,0 +1,13 @@
+{
+  "name": "navigator-race-condition-tester",
+  "version": "1.0.0",
+  "description": "MCP server to test race condition and data persistence fixes",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0"
+  }
+}

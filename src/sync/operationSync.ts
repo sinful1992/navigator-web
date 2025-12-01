@@ -53,6 +53,12 @@ function generateNonce(): string {
 }
 
 /**
+ * Track pending operation submissions for beforeunload handler
+ * Exported so App.tsx can check if navigation should be blocked
+ */
+export const pendingOperationsCount = { current: 0 };
+
+/**
  * SECURITY: Check if operation nonce has been seen before (replay attack detection)
  * Returns true if this is a new operation, false if replay detected
  *
@@ -161,6 +167,12 @@ export function useOperationSync(): UseOperationSync {
   // Callbacks created early (when user=null) must check CURRENT values, not closure values
   const userRef = useRef<User | null>(null);
   const supabaseRef = useRef(supabase);
+
+  // 🔧 FIX 3C: Merge mutex to prevent concurrent merges
+  const mergeMutex = useRef<Promise<any> | null>(null);
+
+  // 🔧 FIX 3E: Global sync lock to prevent simultaneous sync operations
+  const syncLock = useRef<Promise<void> | null>(null);
 
   // 🔧 PERFORMANCE: Cache state reconstruction to avoid rebuilding entire state on every operation
   // - Tracks lastOperationCount to only rebuild when operations actually change
@@ -791,15 +803,66 @@ export function useOperationSync(): UseOperationSync {
     scheduleBatchSyncRef.current = scheduleBatchSync;
   }, [scheduleBatchSync]);
 
+  // 🔧 FIX 3C: Mutex-protected merge function to prevent concurrent merges
+  const mergeWithMutex = useCallback(async (operations: Operation[]): Promise<Operation[]> => {
+    // Wait for any ongoing merge to complete
+    if (mergeMutex.current) {
+      logger.debug('🔒 MERGE MUTEX: Waiting for ongoing merge to complete...');
+      try {
+        await mergeMutex.current;
+      } catch (err) {
+        // Previous merge failed, but we can proceed with this one
+        logger.debug('Previous merge failed, proceeding with new merge');
+      }
+    }
+
+    // Create new merge promise
+    const mergePromise = (async () => {
+      if (!operationLog.current) {
+        throw new Error('Operation log not initialized');
+      }
+
+      logger.debug('🔒 MERGE MUTEX: Starting merge...', { operationCount: operations.length });
+      const startTime = Date.now();
+
+      const newOperations = await operationLog.current.mergeRemoteOperations(operations);
+
+      const duration = Date.now() - startTime;
+      logger.debug('🔒 MERGE MUTEX: Merge complete', {
+        newOperationsCount: newOperations.length,
+        duration: `${duration}ms`
+      });
+
+      return newOperations;
+    })();
+
+    // Store promise in mutex
+    mergeMutex.current = mergePromise;
+
+    try {
+      const result = await mergePromise;
+      return result;
+    } finally {
+      // Clear mutex only if this is still the current merge
+      if (mergeMutex.current === mergePromise) {
+        mergeMutex.current = null;
+      }
+    }
+  }, []);
+
   // Submit a new operation
   const submitOperation = useCallback(async (
     operationData: Omit<Operation, 'id' | 'timestamp' | 'clientId' | 'sequence'>
   ): Promise<void> => {
-    // PHASE 1.3: CRITICAL FIX - Validate operation can be submitted to correct user's log
-    if (!operationLog.current) {
-      logger.error('❌ SYNC FAILURE: Operation log not initialized');
-      throw new Error('Operation log not initialized');
-    }
+    // Track pending operation for beforeunload handler
+    pendingOperationsCount.current++;
+
+    try {
+      // PHASE 1.3: CRITICAL FIX - Validate operation can be submitted to correct user's log
+      if (!operationLog.current) {
+        logger.error('❌ SYNC FAILURE: Operation log not initialized');
+        throw new Error('Operation log not initialized');
+      }
 
     // Verify user hasn't signed out since this operation was initiated
     if (!currentUserIdRef.current) {
@@ -840,6 +903,10 @@ export function useOperationSync(): UseOperationSync {
       nonce: generateNonce(), // Unique identifier to prevent replay attacks
     } as Omit<Operation, 'sequence'> & { nonce: string };
 
+    // 🔧 FIX 3A: Enhanced logging - capture state before operation
+    const stateBeforeOp = currentState;
+    const startTime = Date.now();
+
     // Add to local log (assigns sequence internally)
     // SequenceGenerator automatically caps unreasonable sequences to prevent timestamp poisoning
     const persistedOperation = await operationLog.current.append(operationEnvelope);
@@ -848,6 +915,22 @@ export function useOperationSync(): UseOperationSync {
     // 🔧 PERFORMANCE: Only rebuild if operations changed (most calls do, but cache handles edge cases)
     const newState = rebuildStateIfNeeded(true); // Force rebuild since we just added an operation
     setCurrentState(newState);
+
+    // 🔧 FIX 3A: Enhanced logging - log operation timing and state changes
+    const duration = Date.now() - startTime;
+    logger.info(`📊 OPERATION APPLIED: ${operationData.type}`, {
+      operationId: persistedOperation.id,
+      sequence: persistedOperation.sequence,
+      duration: `${duration}ms`,
+      stateChanges: {
+        completionsBefore: stateBeforeOp.completions.length,
+        completionsAfter: newState.completions.length,
+        addressesBefore: stateBeforeOp.addresses.length,
+        addressesAfter: newState.addresses.length,
+        arrangementsBefore: stateBeforeOp.arrangements?.length || 0,
+        arrangementsAfter: newState.arrangements?.length || 0,
+      }
+    });
 
     // Notify all listeners of state change (critical for App.tsx to update!)
     // 🔧 CRITICAL FIX: Pass ALL operations from log, not just the single new operation
@@ -878,10 +961,20 @@ export function useOperationSync(): UseOperationSync {
       id: persistedOperation.id,
       willSync: isOnline && !!user,
     });
+    } finally {
+      // Always decrement counter, even if operation fails
+      pendingOperationsCount.current--;
+    }
   }, [isOnline, user, scheduleBatchSync]);
 
   // Sync operations to cloud
   const syncOperationsToCloud = useCallback(async () => {
+    // 🔧 FIX 3E: Check if sync is already running
+    if (syncLock.current) {
+      logger.debug('🔒 SYNC LOCK: Already syncing, skipping duplicate sync request');
+      return syncLock.current; // Return existing promise
+    }
+
     // 🔧 CRITICAL FIX: Check refs to get current values, not stale closures
     const currentUser = userRef.current;
     const currentSupabase = supabaseRef.current;
@@ -896,9 +989,11 @@ export function useOperationSync(): UseOperationSync {
       return;
     }
 
-    setIsSyncing(true);
-    try {
-      // 🔄 PHASE 1: Check retry queue for operations ready to retry
+    // 🔧 FIX 3E: Create sync promise and store in lock
+    const syncPromise = (async () => {
+      setIsSyncing(true);
+      try {
+        // 🔄 PHASE 1: Check retry queue for operations ready to retry
       const retryItems = await retryQueueManager.getReadyForRetry();
       logger.debug('🔄 RETRY QUEUE: Operations ready for retry:', retryItems.length);
 
@@ -1026,10 +1121,21 @@ export function useOperationSync(): UseOperationSync {
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
 
+          // 🔧 FIX 3A: Enhanced error logging with full context
           logger.error('❌ UPLOAD FAILED (after retries):', {
             operation: operation.type,
+            operationId: operation.id,
             sequence: operation.sequence,
+            timestamp: operation.timestamp,
+            entity,
+            entityId,
             error: errorMsg,
+            errorCode: (error as any)?.code,
+            errorStatus: (error as any)?.status,
+            errorDetails: (error as any)?.details,
+            retryAttempts: DEFAULT_RETRY_CONFIG.maxAttempts,
+            userId: currentUser.id,
+            deviceId: operation.clientId,
           });
 
           // 🔄 PHASE 1: Add to persistent retry queue instead of in-memory array
@@ -1090,8 +1196,21 @@ export function useOperationSync(): UseOperationSync {
     } catch (err) {
       logger.error('❌ SYNC FAILED:', err);
       // Don't mark as synced so we can retry later
+      } finally {
+        setIsSyncing(false);
+      }
+    })(); // End of syncPromise async function
+
+    // 🔧 FIX 3E: Store promise in lock
+    syncLock.current = syncPromise;
+
+    try {
+      await syncPromise;
     } finally {
-      setIsSyncing(false);
+      // 🔧 FIX 3E: Clear lock only if this is still the current sync
+      if (syncLock.current === syncPromise) {
+        syncLock.current = null;
+      }
     }
   }, [user]);
 
@@ -1220,7 +1339,8 @@ export function useOperationSync(): UseOperationSync {
         // Silently skip invalid operations - already filtered out
 
         // Merge remote operations and resolve conflicts
-        const newOperations = await operationLog.current!.mergeRemoteOperations(remoteOperations);
+        // 🔧 FIX 3C: Use mutex-protected merge to prevent concurrent merges
+        const newOperations = await mergeWithMutex(remoteOperations);
 
         // ✅ TIMESTAMP-BASED SYNC: No gap detection/recovery needed!
         // Timestamps don't have "gaps" - each operation is independent and fetched by timestamp range
@@ -1280,7 +1400,7 @@ export function useOperationSync(): UseOperationSync {
     } catch (err) {
       logger.error('❌ FETCH ERROR:', err);
     }
-  }, [user]);
+  }, [user, mergeWithMutex]);
 
   // Force sync
   const forceSync = useCallback(async () => {
@@ -1411,7 +1531,8 @@ export function useOperationSync(): UseOperationSync {
               // BEST PRACTICE: Wrap real-time merge in retry logic
               await retryWithBackoff(
                 async () => {
-                  const newOps = await operationLog.current!.mergeRemoteOperations([operation]);
+                  // 🔧 FIX 3C: Use mutex-protected merge to prevent concurrent merges
+                  const newOps = await mergeWithMutex([operation]);
 
                   if (newOps.length > 0) {
                     // 🔧 CRITICAL FIX: Don't mark operations from OTHER devices as synced
@@ -1524,7 +1645,7 @@ export function useOperationSync(): UseOperationSync {
       subscriptionCleanup.current = cleanup;
       return cleanup;
     },
-    [user]
+    [user, mergeWithMutex]
   );
 
   // Get current state (computed from operations)
