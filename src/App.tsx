@@ -420,12 +420,14 @@ function AuthedApp() {
     logger.info('🔄 DELTA SYNC: Setting up operation subscription for user:', user.id);
 
     let cleanup: undefined | (() => void);
+    let isFirstUpdate = true; // Track first update (bootstrap)
 
     // Subscribe to operations (local + remote)
     cleanup = cloudSync.subscribeToData((updaterOrState) => {
       logger.info('📥 APP: subscribeToData callback fired', {
         isFunction: typeof updaterOrState === 'function',
         hasData: !!updaterOrState,
+        isFirstUpdate,
       });
 
       if (!updaterOrState) {
@@ -433,23 +435,32 @@ function AuthedApp() {
         return;
       }
 
-      // Protection flags
-      if (isProtectionActive('navigator_restore_in_progress')) {
-        logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
-        return;
+      // 🔧 CRITICAL FIX: Allow first update (bootstrap) to bypass protection flags
+      // Protection flags should only block ongoing realtime updates, not initial state load
+      if (!isFirstUpdate) {
+        // Protection flags (only check for non-bootstrap updates)
+        if (isProtectionActive('navigator_restore_in_progress')) {
+          logger.sync('🛡️ APP: RESTORE PROTECTION - Skipping cloud state update');
+          return;
+        }
+        if (isProtectionActive('navigator_import_in_progress')) {
+          logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping cloud state update');
+          return;
+        }
+        if (isProtectionActive('navigator_active_protection')) {
+          logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
+          return;
+        }
+        if (isProtectionActive('navigator_day_session_protection')) {
+          logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
+          return;
+        }
+      } else {
+        logger.info('📥 APP: BOOTSTRAP - Allowing first state load (bypassing protection flags)');
       }
-      if (isProtectionActive('navigator_import_in_progress')) {
-        logger.sync('🛡️ APP: IMPORT PROTECTION - Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_active_protection')) {
-        logger.sync('🛡️ APP: ACTIVE PROTECTION - Skipping cloud state update');
-        return;
-      }
-      if (isProtectionActive('navigator_day_session_protection')) {
-        logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
-        return;
-      }
+
+      // Mark that we've processed the first update
+      isFirstUpdate = false;
 
       logger.info('✅ APP: No protection flags active, applying state update');
 

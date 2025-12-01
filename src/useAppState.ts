@@ -559,8 +559,23 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
           logger.info('State loaded from IndexedDB:', {
             hasBonusSettings: !!next.bonusSettings,
-            bonusSettings: next.bonusSettings
+            bonusSettings: next.bonusSettings,
+            daySessions: next.daySessions.length
           });
+
+          // 🔧 CRITICAL FIX: Restore day session protection flag if there's an active session
+          // This ensures the protection flag persists across page refreshes
+          const today = new Date().toISOString().slice(0, 10);
+          const hasActiveSessionToday = next.daySessions.some(s => s.date === today && !s.end);
+
+          if (hasActiveSessionToday) {
+            logger.info('📍 RESTORED ACTIVE DAY SESSION: Reactivating protection flag');
+            setProtectionFlag('navigator_day_session_protection');
+          } else {
+            // Clear stale protection flag if no active session
+            logger.info('📍 NO ACTIVE SESSION: Clearing stale protection flag');
+            clearProtectionFlag('navigator_day_session_protection');
+          }
 
           setBaseState(next);
         } else {
