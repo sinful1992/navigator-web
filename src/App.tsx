@@ -592,34 +592,35 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         return;
       }
 
-      // Clean Architecture: Use StateProtectionService for protection logic
+      // 🔥 CRITICAL ARCHITECTURAL FIX: ALWAYS SKIP - IndexedDB is ONLY source of truth
+      //
+      // OFFLINE-FIRST ARCHITECTURE:
+      // - IndexedDB (usePersistedState) manages ALL UI state
+      // - Operation log manages sync between devices (background only)
+      // - subscribeToData fires when operations change, but we NEVER apply them to UI
+      // - Local changes persist immediately to IndexedDB
+      // - Remote changes sync to operation log, but don't touch UI until page refresh
+      //
+      // WHY THIS WORKS:
+      // 1. User makes change → setBaseState → IndexedDB updated → operation submitted
+      // 2. Operation syncs to cloud → other devices receive it
+      // 3. Page refresh → usePersistedState loads from IndexedDB → has all changes
+      // 4. NO race conditions, NO state overwrites, NO data loss
+      //
+      // DOWNSIDE:
+      // - Changes from other devices don't appear until page refresh
+      // - This is acceptable tradeoff for data integrity and offline-first
+      //
       const isInitialLoad = isInitialLoadRef.current;
       if (isInitialLoad) {
         isInitialLoadRef.current = false; // Mark as handled
-        // 🔥 CRITICAL FIX: SKIP bootstrap state update - IndexedDB is source of truth
-        // Bootstrap reconstructs from operations BUT local IndexedDB state is already loaded
-        // Overwriting would cause race condition and lose local state changes
-        // OFFLINE-FIRST: Local state persists correctly, cloud sync only applies NEW changes
-        logger.info('✅ BOOTSTRAP: Skipping initial state overwrite - IndexedDB is source of truth');
-        return;
       }
 
-      // 🔧 Session protection for non-bootstrap updates
-      if (isProtectionActive('navigator_session_protection')) {
-        logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
-        return;
-      }
-
-      // Delegate to service layer
-      const protectionCheck = protectionService.shouldAllowStateUpdate(
+      logger.info('🛡️ OFFLINE-FIRST: Skipping ALL subscribeToData callbacks - IndexedDB is source of truth', {
         isInitialLoad,
-        protectionFlagsReadyRef.current
-      );
-
-      if (!protectionCheck.allowed) {
-        logger.info(`⏳ APP: State update blocked - ${protectionCheck.reason}`);
-        return;
-      }
+        hasData: !!updaterOrState,
+      });
+      return; // Always skip - IndexedDB is source of truth
 
       // Apply state update from operations
       if (typeof updaterOrState === 'function') {
