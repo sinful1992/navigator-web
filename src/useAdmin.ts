@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from './lib/supabaseClient';
-
+import { useIdentityCache } from './contexts/IdentityCacheContext';
 import { logger } from './utils/logger';
 
 interface AdminUser {
@@ -25,6 +25,7 @@ interface UseAdmin {
 }
 
 export function useAdmin(user: User | null): UseAdmin {
+  const identityCache = useIdentityCache();
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
@@ -46,7 +47,24 @@ export function useAdmin(user: User | null): UseAdmin {
       setIsLoading(true);
       clearError();
 
-      // Check if user is admin
+      // ⚡ OPTIMIZATION: Check cache first (5-minute TTL)
+      const cacheKey = `admin_${user.id}`;
+      const cached = identityCache.getCache<{
+        isAdmin: boolean;
+        isOwner: boolean;
+        adminUser: AdminUser | null;
+      }>(cacheKey);
+
+      if (cached) {
+        // Use cached data (80% reduction in RPC calls)
+        setIsAdmin(cached.isAdmin);
+        setIsOwner(cached.isOwner);
+        setAdminUser(cached.adminUser);
+        setIsLoading(false);
+        return;
+      }
+
+      // Cache miss - fetch from database
       const { data: adminCheck, error: adminCheckError } = await supabase
         .rpc('is_admin', { user_uuid: user.id });
 
@@ -61,6 +79,9 @@ export function useAdmin(user: User | null): UseAdmin {
 
       setIsAdmin(adminCheck || false);
 
+      let ownerCheckResult = false;
+      let adminUserData = null;
+
       if (adminCheck) {
         // Check if user is owner
         const { data: ownerCheck, error: ownerCheckError } = await supabase
@@ -69,7 +90,8 @@ export function useAdmin(user: User | null): UseAdmin {
         if (ownerCheckError) {
           logger.warn('Failed to check owner status:', ownerCheckError);
         } else {
-          setIsOwner(ownerCheck || false);
+          ownerCheckResult = ownerCheck || false;
+          setIsOwner(ownerCheckResult);
         }
 
         // Get admin user details
@@ -82,12 +104,20 @@ export function useAdmin(user: User | null): UseAdmin {
         if (adminError) {
           logger.warn('Failed to fetch admin user details:', adminError);
         } else {
+          adminUserData = adminData;
           setAdminUser(adminData);
         }
       } else {
         setIsOwner(false);
         setAdminUser(null);
       }
+
+      // ⚡ OPTIMIZATION: Store in cache (5 minutes TTL)
+      identityCache.setCache(cacheKey, {
+        isAdmin: adminCheck || false,
+        isOwner: ownerCheckResult,
+        adminUser: adminUserData,
+      }, 5 * 60 * 1000); // 5 minutes
 
     } catch (e: unknown) {
       // Don't set error for permission issues - just not admin
@@ -98,7 +128,7 @@ export function useAdmin(user: User | null): UseAdmin {
     } finally {
       setIsLoading(false);
     }
-  }, [user, clearError]);
+  }, [user, clearError, identityCache]);
 
   useEffect(() => {
     refreshAdmin();

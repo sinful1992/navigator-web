@@ -8,6 +8,7 @@ import { useUnifiedSync } from "./sync/migrationAdapter";
 import { pendingOperationsCount } from "./sync/operationSync";
 import { storageManager } from "./utils/storageManager";
 import { ModalProvider, useModalContext } from "./components/ModalProvider";
+import { IdentityCacheProvider } from "./contexts/IdentityCacheContext";
 import { logger } from "./utils/logger";
 import { Auth } from "./Auth";
 import { AddressList } from "./AddressList";
@@ -222,9 +223,11 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <ModalProvider>
-        <AuthedApp cloudSync={cloudSync} />
-      </ModalProvider>
+      <IdentityCacheProvider userId={cloudSync.user?.id}>
+        <ModalProvider>
+          <AuthedApp cloudSync={cloudSync} />
+        </ModalProvider>
+      </IdentityCacheProvider>
     </ErrorBoundary>
   );
 }
