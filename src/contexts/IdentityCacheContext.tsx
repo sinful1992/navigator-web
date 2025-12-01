@@ -2,7 +2,8 @@
 // Identity caching for admin/subscription status checks
 // Purpose: Cache RPC results for 5 minutes to reduce database calls
 
-import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { logger } from '../utils/logger';
 
 interface IdentityCacheEntry<T> {
