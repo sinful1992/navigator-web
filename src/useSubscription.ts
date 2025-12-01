@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabaseClient";
+import { useIdentityCache } from "./contexts/IdentityCacheContext";
 import { logger } from "./utils/logger";
 import type { UserSubscription, SubscriptionPlan, SubscriptionStatus } from "./types";
 
@@ -79,6 +80,7 @@ function isSubscriptionExpired(subscription: UserSubscription | null): boolean {
 }
 
 export function useSubscription(user: User | null): UseSubscription {
+  const identityCache = useIdentityCache();
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [availablePlans] = useState<SubscriptionPlan[]>(DEFAULT_PLANS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -96,11 +98,24 @@ export function useSubscription(user: User | null): UseSubscription {
         return;
       }
 
+      // ⚡ OPTIMIZATION: Check cache first (5-minute TTL)
+      const cacheKey = `owner_${user.id}`;
+      const cached = identityCache.getCache<boolean>(cacheKey);
+
+      if (cached !== null) {
+        setIsOwner(cached);
+        return;
+      }
+
       try {
         const { data: ownerCheck } = await supabase
           .rpc('is_owner', { user_uuid: user.id });
-        
-        setIsOwner(ownerCheck || false);
+
+        const result = ownerCheck || false;
+        setIsOwner(result);
+
+        // ⚡ OPTIMIZATION: Store in cache (5 minutes TTL)
+        identityCache.setCache(cacheKey, result, 5 * 60 * 1000);
       } catch (err) {
         // If function doesn't exist or fails, assume not owner
         setIsOwner(false);
@@ -108,7 +123,7 @@ export function useSubscription(user: User | null): UseSubscription {
     };
 
     checkOwnerStatus();
-  }, [user]);
+  }, [user, identityCache]);
 
   // Derived state
   const isActive = isSubscriptionActive(subscription);
@@ -147,6 +162,16 @@ export function useSubscription(user: User | null): UseSubscription {
       setIsLoading(true);
       clearError();
 
+      // ⚡ OPTIMIZATION: Check cache first (5-minute TTL)
+      const cacheKey = `subscription_${user.id}`;
+      const cached = identityCache.getCache<UserSubscription | null>(cacheKey);
+
+      if (cached !== undefined) { // null is valid cached value
+        setSubscription(cached);
+        setIsLoading(false);
+        return;
+      }
+
       if (import.meta.env.DEV) {
         logger.info("Loading subscription for user:", user.id);
       }
@@ -180,6 +205,9 @@ export function useSubscription(user: User | null): UseSubscription {
 
       setSubscription(sub);
 
+      // ⚡ OPTIMIZATION: Store in cache (5 minutes TTL)
+      identityCache.setCache(cacheKey, sub, 5 * 60 * 1000);
+
     } catch (e: unknown) {
       logger.error('Failed to load subscription:', e);
       setError((e as Error)?.message || 'Failed to load subscription');
@@ -187,7 +215,7 @@ export function useSubscription(user: User | null): UseSubscription {
     } finally {
       setIsLoading(false);
     }
-  }, [user, clearError]);
+  }, [user, clearError, identityCache]);
 
   // Check server-side trial access for unconfirmed users
   const checkServerTrialAccess = useCallback(async () => {
