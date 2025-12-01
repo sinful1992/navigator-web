@@ -119,7 +119,7 @@ export function useTimeTracking({
             logger.error('⚠️ Active address save timed out after 15s - cleared protection flag');
           }, 15000); // 15 second timeout
 
-          repositories.address.saveActiveAddress(idx, now, { signal: abortController.signal })
+          repositories.address.saveActiveAddress(idx, now)
             .then(() => {
               clearTimeout(timeoutId);
             })

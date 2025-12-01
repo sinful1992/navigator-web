@@ -998,6 +998,7 @@ export function useOperationSync(): UseOperationSync {
       logger.debug('🔄 RETRY QUEUE: Operations ready for retry:', retryItems.length);
 
       // Get unsynced operations from log
+      if (!operationLog.current) return; // Extra safety check
       const unsyncedOps = operationLog.current.getUnsyncedOperations();
       logger.debug('📋 Unsynced operations from log:', unsyncedOps.length);
 
@@ -1157,6 +1158,7 @@ export function useOperationSync(): UseOperationSync {
           return tsTime > maxTime ? ts : max;
         });
 
+        if (!operationLog.current) return; // Extra safety check
         const currentLastSynced = operationLog.current.getLogState().lastSyncTimestamp;
         const maxTime = new Date(maxTimestamp).getTime();
         const currentTime = currentLastSynced ? new Date(currentLastSynced).getTime() : 0;

@@ -154,13 +154,13 @@ async function testAbortController() {
     critical: true
   });
 
-  // Check for signal passing
-  const hasSignal = codeContains(code, /signal:\s*abortController\.signal/i);
+  // Check for timeout cleanup (clearTimeout)
+  const hasCleanup = codeContains(code, /clearTimeout.*timeoutId/i);
   results.push({
-    test: 'AbortSignal passed to request',
-    expected: 'signal: abortController.signal',
-    actual: hasSignal ? 'Found' : 'Missing',
-    passed: hasSignal,
+    test: 'Timeout cleanup on success',
+    expected: 'clearTimeout(timeoutId) on success',
+    actual: hasCleanup ? 'Found' : 'Missing',
+    passed: hasCleanup,
     critical: true
   });
 

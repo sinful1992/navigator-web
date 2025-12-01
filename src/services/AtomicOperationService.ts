@@ -4,7 +4,7 @@
 import React from 'react';
 import { logger } from '../utils/logger';
 import type { AppState } from '../types';
-import type { SubmitOperationCallback } from '../types/operations';
+import type { SubmitOperationCallback, SubmitOperation } from '../types/operations';
 
 export interface AtomicOperationOptions {
   setBaseState: React.Dispatch<React.SetStateAction<AppState>>;
@@ -60,7 +60,7 @@ export class AtomicOperationService {
    */
   async execute<T = void>(params: {
     stateMutator: (state: AppState) => AppState;
-    operation: { type: string; payload: any };
+    operation: SubmitOperation;
     operationId?: string;
     optimisticData?: unknown;
     optimisticOperation?: string;
@@ -134,7 +134,7 @@ export class AtomicOperationService {
   async executeBatch<T = void>(
     operations: Array<{
       stateMutator: (state: AppState) => AppState;
-      operation: { type: string; payload: any };
+      operation: SubmitOperation;
       operationId?: string;
       optimisticData?: unknown;
       optimisticOperation?: string;
