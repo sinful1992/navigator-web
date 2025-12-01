@@ -32,19 +32,34 @@ export function useUnifiedSync() {
   // Wrap subscribeToOperations to match the expected interface
   const subscribeToData = (onChange: React.Dispatch<React.SetStateAction<AppState>>): (() => void) => {
     return operationSync.subscribeToOperations((allOperations) => {
-      // 🔧 CRITICAL FIX: Reconstruct state from ALL operations, not from React currentState
-      // The allOperations parameter now contains the COMPLETE operation history from the log,
-      // not just the delta/new operations. This avoids the race condition where React's
-      // async setState hasn't completed yet, causing stale state to be returned.
-      // By reconstructing from allOperations, we get the guaranteed correct state.
+      // 🔥 CRITICAL ARCHITECTURAL FIX: OFFLINE-FIRST - IndexedDB is source of truth
+      // DO NOT reconstruct and overwrite state from operations!
+      //
+      // OLD ARCHITECTURE (BROKEN):
+      // - Reconstruct entire state from operations
+      // - Call onChange(state) which overwrites IndexedDB
+      // - Race condition: IndexedDB state vs reconstructed state fight each other
+      // - Result: Local changes lost on page refresh
+      //
+      // NEW ARCHITECTURE (FIXED):
+      // - IndexedDB (usePersistedState) is the ONLY source of truth
+      // - Operations sync in background (operation log separate from UI state)
+      // - Local changes persist to IndexedDB immediately
+      // - NO state reconstruction, NO overwrites
+      // - Operations are for sync between devices, not for UI state management
+      //
+      // The reconstructed state is passed to App.tsx, which checks isInitialLoad
+      // and skips it. This keeps operations syncing without touching UI state.
       const state = reconstructState(INITIAL_STATE, allOperations);
-      logger.debug('📤 subscribeToData: Notifying App.tsx with state:', {
+      logger.debug('📤 subscribeToData: Reconstructed state from operations (will be skipped by App.tsx):', {
         addresses: state.addresses?.length,
         completions: state.completions?.length,
         arrangements: state.arrangements?.length,
         daySessions: state.daySessions?.length,
         operationCount: allOperations.length,
       });
+
+      // Pass to App.tsx, but App.tsx will skip it (offline-first architecture)
       onChange(state);
     });
   };

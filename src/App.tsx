@@ -592,29 +592,35 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         return;
       }
 
-      // Clean Architecture: Use StateProtectionService for protection logic
+      // 🔥 CRITICAL ARCHITECTURAL FIX: ALWAYS SKIP - IndexedDB is ONLY source of truth
+      //
+      // OFFLINE-FIRST ARCHITECTURE:
+      // - IndexedDB (usePersistedState) manages ALL UI state
+      // - Operation log manages sync between devices (background only)
+      // - subscribeToData fires when operations change, but we NEVER apply them to UI
+      // - Local changes persist immediately to IndexedDB
+      // - Remote changes sync to operation log, but don't touch UI until page refresh
+      //
+      // WHY THIS WORKS:
+      // 1. User makes change → setBaseState → IndexedDB updated → operation submitted
+      // 2. Operation syncs to cloud → other devices receive it
+      // 3. Page refresh → usePersistedState loads from IndexedDB → has all changes
+      // 4. NO race conditions, NO state overwrites, NO data loss
+      //
+      // DOWNSIDE:
+      // - Changes from other devices don't appear until page refresh
+      // - This is acceptable tradeoff for data integrity and offline-first
+      //
       const isInitialLoad = isInitialLoadRef.current;
       if (isInitialLoad) {
         isInitialLoadRef.current = false; // Mark as handled
       }
 
-      // 🔧 CRITICAL FIX: Allow initial load (bootstrap) to bypass session protection
-      // Session protection should only block ongoing realtime updates, not initial state load
-      if (!isInitialLoad && isProtectionActive('navigator_session_protection')) {
-        logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
-        return;
-      }
-
-      // Delegate to service layer
-      const protectionCheck = protectionService.shouldAllowStateUpdate(
+      logger.info('🛡️ OFFLINE-FIRST: Skipping ALL subscribeToData callbacks - IndexedDB is source of truth', {
         isInitialLoad,
-        protectionFlagsReadyRef.current
-      );
-
-      if (!protectionCheck.allowed) {
-        logger.info(`⏳ APP: State update blocked - ${protectionCheck.reason}`);
-        return;
-      }
+        hasData: !!updaterOrState,
+      });
+      return; // Always skip - IndexedDB is source of truth
 
       // Apply state update from operations
       if (typeof updaterOrState === 'function') {
@@ -624,6 +630,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
             addresses: prevState.addresses?.length || 0,
             completions: prevState.completions?.length || 0,
             arrangements: prevState.arrangements?.length || 0,
+            daySessions: prevState.daySessions?.length || 0,
           });
 
           const newState = updaterOrState(prevState);
@@ -631,6 +638,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
             addresses: newState.addresses?.length || 0,
             completions: newState.completions?.length || 0,
             arrangements: newState.arrangements?.length || 0,
+            daySessions: newState.daySessions?.length || 0,
           });
 
           const normalized = normalizeState(newState);
@@ -638,6 +646,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
             addresses: normalized.addresses?.length || 0,
             completions: normalized.completions?.length || 0,
             arrangements: normalized.arrangements?.length || 0,
+            daySessions: normalized.daySessions?.length || 0,
           });
 
           lastFromCloudRef.current = JSON.stringify(normalized);
@@ -648,6 +657,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           addresses: updaterOrState.addresses?.length || 0,
           completions: updaterOrState.completions?.length || 0,
           arrangements: updaterOrState.arrangements?.length || 0,
+          daySessions: updaterOrState.daySessions?.length || 0,
         });
 
         const normalized = normalizeState(updaterOrState);
@@ -655,6 +665,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
           addresses: normalized.addresses?.length || 0,
           completions: normalized.completions?.length || 0,
           arrangements: normalized.arrangements?.length || 0,
+          daySessions: normalized.daySessions?.length || 0,
         });
 
         setState(() => normalized);
