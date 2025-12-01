@@ -2,7 +2,7 @@ name: Secure Deploy (Build Only - No Source Code)
 
 on:
   push:
-    branches: [ main, project ]
+    branches: [ project ]
   workflow_dispatch:
 
 permissions:
