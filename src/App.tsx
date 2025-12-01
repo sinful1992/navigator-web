@@ -3,7 +3,7 @@
 import * as React from "react";
 import "./App.css"; // Use the updated modern CSS
 import { useAppState } from "./useAppState";
-import { normalizeState, normalizeBackupData } from "./utils/normalizeState";
+import { normalizeBackupData } from "./utils/normalizeState";
 import { useUnifiedSync } from "./sync/migrationAdapter";
 import { pendingOperationsCount } from "./sync/operationSync";
 import { storageManager } from "./utils/storageManager";
@@ -49,7 +49,6 @@ import { SettingsDropdown } from "./components/SettingsDropdown";
 import { ToastContainer } from "./components/ToastContainer";
 import { showSuccess, showError } from "./utils/toast";
 import { setProtectionFlag, isProtectionActive } from "./utils/protectionFlags";
-import { StateProtectionService } from "./services/StateProtectionService";
 import { PrivacyConsent } from "./components/PrivacyConsent";
 import { EnhancedOfflineIndicator } from "./components/EnhancedOfflineIndicator";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
@@ -233,21 +232,8 @@ export default function App() {
 function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync> }) {
   const deviceId = React.useMemo(() => getOrCreateDeviceId(), []);
 
-  // Clean Architecture: Use StateProtectionService for centralized protection logic
-  const protectionService = React.useRef(new StateProtectionService()).current;
-
-  // 🔧 PHASE 1.2.2 (REVISED): Initialize hybrid protection flags cache on app startup
-  // FIX #3: Track readiness state to prevent race condition at startup
-  // Hybrid architecture: in-memory cache for fast synchronous reads, IndexedDB for atomic updates
-  const protectionFlagsReadyRef = React.useRef(false);
-  // 🔧 FIX #4: Track if this is initial bootstrap (allow through) vs live update (check protection)
+  // 🔧 FIX: Track if this is initial bootstrap (for logging purposes)
   const isInitialLoadRef = React.useRef(true);
-
-  React.useEffect(() => {
-    // Protection flags use localStorage and are ready immediately (no initialization needed)
-    protectionFlagsReadyRef.current = true;
-    logger.debug('✅ Protection flags ready (localStorage-based)');
-  }, []); // Run once on mount
 
   const {
     state,
@@ -621,57 +607,6 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         hasData: !!updaterOrState,
       });
       return; // Always skip - IndexedDB is source of truth
-
-      // Apply state update from operations
-      if (typeof updaterOrState === 'function') {
-        logger.info('🔄 APP: Applying function updater');
-        setState(prevState => {
-          logger.info('📊 APP: Previous state:', {
-            addresses: prevState.addresses?.length || 0,
-            completions: prevState.completions?.length || 0,
-            arrangements: prevState.arrangements?.length || 0,
-            daySessions: prevState.daySessions?.length || 0,
-          });
-
-          const newState = updaterOrState(prevState);
-          logger.info('📊 APP: New state from updater:', {
-            addresses: newState.addresses?.length || 0,
-            completions: newState.completions?.length || 0,
-            arrangements: newState.arrangements?.length || 0,
-            daySessions: newState.daySessions?.length || 0,
-          });
-
-          const normalized = normalizeState(newState);
-          logger.info('📊 APP: Normalized state:', {
-            addresses: normalized.addresses?.length || 0,
-            completions: normalized.completions?.length || 0,
-            arrangements: normalized.arrangements?.length || 0,
-            daySessions: normalized.daySessions?.length || 0,
-          });
-
-          lastFromCloudRef.current = JSON.stringify(normalized);
-          return normalized;
-        });
-      } else {
-        logger.info('🔄 APP: Applying direct state', {
-          addresses: updaterOrState.addresses?.length || 0,
-          completions: updaterOrState.completions?.length || 0,
-          arrangements: updaterOrState.arrangements?.length || 0,
-          daySessions: updaterOrState.daySessions?.length || 0,
-        });
-
-        const normalized = normalizeState(updaterOrState);
-        logger.info('📊 APP: Normalized state:', {
-          addresses: normalized.addresses?.length || 0,
-          completions: normalized.completions?.length || 0,
-          arrangements: normalized.arrangements?.length || 0,
-          daySessions: normalized.daySessions?.length || 0,
-        });
-
-        setState(() => normalized);
-        lastFromCloudRef.current = JSON.stringify(normalized);
-        logger.info('✅ APP: setState called successfully');
-      }
     });
 
     setHydrated(true);
