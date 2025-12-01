@@ -597,7 +597,10 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       if (isInitialLoad) {
         isInitialLoadRef.current = false; // Mark as handled
       }
-      if (isProtectionActive('navigator_session_protection')) {
+
+      // 🔧 CRITICAL FIX: Allow initial load (bootstrap) to bypass session protection
+      // Session protection should only block ongoing realtime updates, not initial state load
+      if (!isInitialLoad && isProtectionActive('navigator_session_protection')) {
         logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
         return;
       }
