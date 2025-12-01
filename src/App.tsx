@@ -596,19 +596,18 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       const isInitialLoad = isInitialLoadRef.current;
       if (isInitialLoad) {
         isInitialLoadRef.current = false; // Mark as handled
-      }
-
-      // 🔧 CRITICAL FIX: Allow initial load (bootstrap) to bypass session protection
-      // Session protection should only block ongoing realtime updates, not initial state load
-      if (!isInitialLoad && isProtectionActive('navigator_session_protection')) {
-        logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
-        logger.info('⚠️ DIAGNOSTIC: Session protection blocking non-initial update');
+        // 🔥 CRITICAL FIX: SKIP bootstrap state update - IndexedDB is source of truth
+        // Bootstrap reconstructs from operations BUT local IndexedDB state is already loaded
+        // Overwriting would cause race condition and lose local state changes
+        // OFFLINE-FIRST: Local state persists correctly, cloud sync only applies NEW changes
+        logger.info('✅ BOOTSTRAP: Skipping initial state overwrite - IndexedDB is source of truth');
         return;
       }
 
-      // 🔍 DIAGNOSTIC: Log initial load status
-      if (isInitialLoad) {
-        logger.info('✅ DIAGNOSTIC: Initial load detected - allowing state update through session protection');
+      // 🔧 Session protection for non-bootstrap updates
+      if (isProtectionActive('navigator_session_protection')) {
+        logger.sync('🛡️ APP: DAY SESSION PROTECTION - Skipping cloud state update');
+        return;
       }
 
       // Delegate to service layer
