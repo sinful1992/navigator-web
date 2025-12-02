@@ -581,53 +581,39 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         return;
       }
 
-      // 🔥 CRITICAL FIX: Apply remote operations to state for real-time sync
+      // 🔥 CRITICAL FIX: Apply reconstructed state to IndexedDB on initial load
       //
-      // OFFLINE-FIRST ARCHITECTURE WITH REAL-TIME SYNC:
-      // - IndexedDB (usePersistedState) is source of truth for UI state
-      // - Operation log manages sync between devices
-      // - Remote operations are applied to IndexedDB for real-time updates
-      // - Protection flags prevent overwrites during critical operations
+      // OFFLINE-FIRST ARCHITECTURE WITH OPERATION-BASED RECONSTRUCTION:
+      // - IndexedDB is source of truth for UI state
+      // - Operation log is source of truth for sync
+      // - On initial load: reconstruct state from ALL operations → save to IndexedDB
+      // - On real-time updates: skip to avoid race conditions with local changes
       //
       // FLOW:
-      // 1. Device A: User makes change → setBaseState → IndexedDB → operation submitted
-      // 2. Cloud: Operation syncs to navigator_operations table
-      // 3. Device B: Receives operation via real-time subscription
-      // 4. Device B: Operation applied to local operation log
-      // 5. Device B: setState() called to update IndexedDB and UI
-      // 6. Protection flags (import, active, restore) prevent conflicts
+      // 1. Page load: operationSync fetches ALL operations (local + remote)
+      // 2. State reconstructed from operations (includes Device A's route export)
+      // 3. isInitialLoad=true: save reconstructed state to IndexedDB
+      // 4. IndexedDB now has latest data from all devices
+      // 5. Subsequent updates: skip to avoid overwriting local changes
       //
       const isInitialLoad = isInitialLoadRef.current;
       if (isInitialLoad) {
         isInitialLoadRef.current = false; // Mark as handled
+
+        logger.info('📥 BOOTSTRAP: Applying reconstructed state to IndexedDB', {
+          hasData: !!updaterOrState,
+        });
+
+        // Apply reconstructed state to IndexedDB
+        setState(updaterOrState);
+        return;
       }
 
-      logger.info('📥 REAL-TIME SYNC: Applying remote operations to state', {
-        isInitialLoad,
+      // Skip real-time updates to prevent race conditions
+      logger.info('⏭️ SKIP: Real-time update skipped - IndexedDB is source of truth', {
         hasData: !!updaterOrState,
-        protectionActive: {
-          import: isProtectionActive('navigator_import_in_progress'),
-          active: isProtectionActive('navigator_active_protection'),
-          restore: isProtectionActive('navigator_restore_in_progress'),
-        }
       });
-
-      // Check protection flags - skip if any critical operation is in progress
-      if (isProtectionActive('navigator_import_in_progress')) {
-        logger.info('⏭️ SKIP: Import in progress on this device');
-        return;
-      }
-      if (isProtectionActive('navigator_active_protection')) {
-        logger.info('⏭️ SKIP: Active address protection enabled');
-        return;
-      }
-      if (isProtectionActive('navigator_restore_in_progress')) {
-        logger.info('⏭️ SKIP: Restore in progress');
-        return;
-      }
-
-      // Apply the remote state
-      setState(updaterOrState);
+      return;
     });
 
     setHydrated(true);
