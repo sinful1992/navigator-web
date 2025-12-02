@@ -411,8 +411,24 @@ export function useOperationSync(): UseOperationSync {
               }
 
               // All security checks passed
-              // 🔧 CRITICAL FIX: Use database sequence_number (correct) instead of operation_data.sequence (corrupted)
-              const operation = { ...row.operation_data };
+              // 🔧 CRITICAL FIX: Parse JSON string from Supabase JSONB column
+              // operation_data comes as JSON string from Supabase, must parse before using
+              const operation = typeof row.operation_data === 'string'
+                ? JSON.parse(row.operation_data)
+                : row.operation_data;
+
+              // Validate parsed operation structure
+              if (!operation || typeof operation !== 'object') {
+                logger.warn('❌ BOOTSTRAP: Invalid operation_data', { row });
+                continue;
+              }
+
+              if (!operation.type || !operation.id) {
+                logger.warn('❌ BOOTSTRAP: Missing required fields', { operation });
+                continue;
+              }
+
+              // Use database sequence_number (correct) instead of operation_data.sequence (may be corrupted)
               if (row.sequence_number && typeof row.sequence_number === 'number') {
                 operation.sequence = row.sequence_number;
               }
