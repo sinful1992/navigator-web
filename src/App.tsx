@@ -581,35 +581,53 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         return;
       }
 
-      // 🔥 CRITICAL ARCHITECTURAL FIX: ALWAYS SKIP - IndexedDB is ONLY source of truth
+      // 🔥 CRITICAL FIX: Apply remote operations to state for real-time sync
       //
-      // OFFLINE-FIRST ARCHITECTURE:
-      // - IndexedDB (usePersistedState) manages ALL UI state
-      // - Operation log manages sync between devices (background only)
-      // - subscribeToData fires when operations change, but we NEVER apply them to UI
-      // - Local changes persist immediately to IndexedDB
-      // - Remote changes sync to operation log, but don't touch UI until page refresh
+      // OFFLINE-FIRST ARCHITECTURE WITH REAL-TIME SYNC:
+      // - IndexedDB (usePersistedState) is source of truth for UI state
+      // - Operation log manages sync between devices
+      // - Remote operations are applied to IndexedDB for real-time updates
+      // - Protection flags prevent overwrites during critical operations
       //
-      // WHY THIS WORKS:
-      // 1. User makes change → setBaseState → IndexedDB updated → operation submitted
-      // 2. Operation syncs to cloud → other devices receive it
-      // 3. Page refresh → usePersistedState loads from IndexedDB → has all changes
-      // 4. NO race conditions, NO state overwrites, NO data loss
-      //
-      // DOWNSIDE:
-      // - Changes from other devices don't appear until page refresh
-      // - This is acceptable tradeoff for data integrity and offline-first
+      // FLOW:
+      // 1. Device A: User makes change → setBaseState → IndexedDB → operation submitted
+      // 2. Cloud: Operation syncs to navigator_operations table
+      // 3. Device B: Receives operation via real-time subscription
+      // 4. Device B: Operation applied to local operation log
+      // 5. Device B: setState() called to update IndexedDB and UI
+      // 6. Protection flags (import, active, restore) prevent conflicts
       //
       const isInitialLoad = isInitialLoadRef.current;
       if (isInitialLoad) {
         isInitialLoadRef.current = false; // Mark as handled
       }
 
-      logger.info('🛡️ OFFLINE-FIRST: Skipping ALL subscribeToData callbacks - IndexedDB is source of truth', {
+      logger.info('📥 REAL-TIME SYNC: Applying remote operations to state', {
         isInitialLoad,
         hasData: !!updaterOrState,
+        protectionActive: {
+          import: isProtectionActive('navigator_import_in_progress'),
+          active: isProtectionActive('navigator_active_protection'),
+          restore: isProtectionActive('navigator_restore_in_progress'),
+        }
       });
-      return; // Always skip - IndexedDB is source of truth
+
+      // Check protection flags - skip if any critical operation is in progress
+      if (isProtectionActive('navigator_import_in_progress')) {
+        logger.info('⏭️ SKIP: Import in progress on this device');
+        return;
+      }
+      if (isProtectionActive('navigator_active_protection')) {
+        logger.info('⏭️ SKIP: Active address protection enabled');
+        return;
+      }
+      if (isProtectionActive('navigator_restore_in_progress')) {
+        logger.info('⏭️ SKIP: Restore in progress');
+        return;
+      }
+
+      // Apply the remote state
+      setState(updaterOrState);
     });
 
     setHydrated(true);
