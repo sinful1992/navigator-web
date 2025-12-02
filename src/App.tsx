@@ -581,35 +581,66 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         return;
       }
 
-      // 🔥 CRITICAL ARCHITECTURAL FIX: ALWAYS SKIP - IndexedDB is ONLY source of truth
+      // 🔄 BOOTSTRAP SYNC FIX: Apply reconstructed state to IndexedDB on initial load
       //
-      // OFFLINE-FIRST ARCHITECTURE:
-      // - IndexedDB (usePersistedState) manages ALL UI state
-      // - Operation log manages sync between devices (background only)
-      // - subscribeToData fires when operations change, but we NEVER apply them to UI
-      // - Local changes persist immediately to IndexedDB
-      // - Remote changes sync to operation log, but don't touch UI until page refresh
+      // OFFLINE-FIRST ARCHITECTURE WITH BOOTSTRAP SYNC:
+      // - IndexedDB (usePersistedState) is source of truth for UI state
+      // - Operation log manages sync between devices
+      // - On page refresh: Bootstrap fetches operations → reconstructs state → updates IndexedDB
+      // - Real-time updates: Skipped to prevent race conditions
       //
-      // WHY THIS WORKS:
-      // 1. User makes change → setBaseState → IndexedDB updated → operation submitted
-      // 2. Operation syncs to cloud → other devices receive it
-      // 3. Page refresh → usePersistedState loads from IndexedDB → has all changes
-      // 4. NO race conditions, NO state overwrites, NO data loss
+      // FLOW:
+      // 1. Device A: User makes change → setBaseState → IndexedDB → operation submitted
+      // 2. Cloud: Operation syncs to navigator_operations table
+      // 3. Device B: Page refresh → Bootstrap fetches operations → reconstructs state
+      // 4. Device B: subscribeToData callback → updates IndexedDB (INITIAL LOAD ONLY)
+      // 5. Device B: UI shows new data from updated IndexedDB
       //
-      // DOWNSIDE:
-      // - Changes from other devices don't appear until page refresh
-      // - This is acceptable tradeoff for data integrity and offline-first
+      // PROTECTION FLAGS:
+      // - Respect import/active/restore protection to prevent conflicts
       //
       const isInitialLoad = isInitialLoadRef.current;
+
       if (isInitialLoad) {
+        // ✅ BOOTSTRAP: Apply reconstructed state to IndexedDB
         isInitialLoadRef.current = false; // Mark as handled
+
+        // Check protection flags - skip if any active operation in progress
+        if (
+          isProtectionActive('navigator_import_in_progress') ||
+          isProtectionActive('navigator_active_protection') ||
+          isProtectionActive('navigator_restore_in_progress')
+        ) {
+          logger.warn('⚠️ BOOTSTRAP: Protection flag active, skipping IndexedDB update', {
+            import: isProtectionActive('navigator_import_in_progress'),
+            active: isProtectionActive('navigator_active_protection'),
+            restore: isProtectionActive('navigator_restore_in_progress'),
+          });
+          return;
+        }
+
+        // Apply reconstructed state to IndexedDB
+        if (typeof updaterOrState === 'function') {
+          // State updater function - apply to IndexedDB
+          setState(updaterOrState);
+          logger.info('✅ BOOTSTRAP: Applied reconstructed state updater to IndexedDB', {
+            timestamp: new Date().toISOString()
+          });
+        } else if (updaterOrState) {
+          // Direct state object - replace IndexedDB
+          setState(updaterOrState);
+          logger.info('✅ BOOTSTRAP: Replaced IndexedDB with reconstructed state', {
+            timestamp: new Date().toISOString()
+          });
+        }
+        return;
       }
 
-      logger.info('🛡️ OFFLINE-FIRST: Skipping ALL subscribeToData callbacks - IndexedDB is source of truth', {
-        isInitialLoad,
+      // ⏭️ REAL-TIME UPDATES: Skip to prevent race conditions
+      logger.info('🛡️ OFFLINE-FIRST: Skipping real-time subscribeToData callback', {
         hasData: !!updaterOrState,
       });
-      return; // Always skip - IndexedDB is source of truth
+      return;
     });
 
     setHydrated(true);
