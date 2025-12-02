@@ -24,16 +24,11 @@ export function useStats(
   currentListVersion: number
 ) {
   return useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
-
-    // CRITICAL FIX: Filter completions by BOTH listVersion AND today's date
-    // This ensures "completed today" label is accurate
+    // Filter completions by listVersion only (not by date)
+    // This shows all completions for the current list version
     const completedIdx = new Set(
       completions
-        .filter((c) =>
-          c.listVersion === currentListVersion &&
-          (c.timestamp || "").slice(0, 10) === todayStr
-        )
+        .filter((c) => c.listVersion === currentListVersion)
         .map((c) => c.index)
     );
     const total = addresses.length;
@@ -51,6 +46,9 @@ export function useStats(
       (c) => c.listVersion === currentListVersion && c.outcome === "ARR"
     ).length;
     const completed = completedIdx.size;
+
+    // Today's date filter ONLY for todaysPIF calculation
+    const todayStr = new Date().toISOString().slice(0, 10);
 
     const pendingArrangements = arrangements.filter(arr =>
       arr.status !== "Completed" && arr.status !== "Cancelled"
