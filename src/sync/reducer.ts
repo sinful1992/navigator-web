@@ -23,8 +23,17 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           return state;
         }
 
-        // Duplicate detection removed - operation_id uniqueness enforced by Supabase
-        // Each operation can only be processed once, duplicates prevented at source
+        // CRITICAL FIX: Duplicate detection by timestamp
+        // Check if completion with same timestamp already exists
+        const existingIndex = state.completions.findIndex(c => c.timestamp === completion.timestamp);
+
+        if (existingIndex !== -1) {
+          logger.warn('⚠️ COMPLETION_CREATE: Duplicate completion detected, skipping', {
+            timestamp: completion.timestamp,
+            operation: operation.id,
+          });
+          return state; // Skip duplicate
+        }
 
         // Set initial version on create
         const versionedCompletion = {
