@@ -99,6 +99,29 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
         };
       }
 
+      case 'COMPLETION_BULK_DELETE': {
+        const { listVersion } = operation.payload;
+
+        logger.info('🗑️ BULK DELETE COMPLETIONS:', {
+          listVersion,
+          beforeCount: state.completions.length,
+        });
+
+        const filtered = state.completions.filter(c =>
+          (c.listVersion || state.currentListVersion) !== listVersion
+        );
+
+        logger.info('🗑️ BULK DELETE RESULT:', {
+          afterCount: filtered.length,
+          deletedCount: state.completions.length - filtered.length,
+        });
+
+        return {
+          ...state,
+          completions: filtered,
+        };
+      }
+
       case 'ADDRESS_BULK_IMPORT': {
         const { addresses, newListVersion, preserveCompletions } = operation.payload;
 

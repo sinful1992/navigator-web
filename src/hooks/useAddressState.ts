@@ -98,6 +98,21 @@ export function useAddressState({
         return;
       }
 
+      // If not preserving completions, submit bulk delete FIRST (fire-and-forget)
+      if (!preserveCompletions && submitOperation) {
+        submitOperation({
+          type: 'COMPLETION_BULK_DELETE',
+          payload: {
+            listVersion: baseState.currentListVersion,
+            reason: 'import'
+          }
+        }).catch((err) => {
+          logger.error('Failed to submit bulk delete:', err);
+        });
+
+        logger.info('🗑️ SUBMITTED BULK DELETE for listVersion:', baseState.currentListVersion);
+      }
+
       // Apply optimistically
       addOptimisticUpdate(
         'update',

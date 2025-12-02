@@ -153,17 +153,29 @@ const AddressListComponent = function AddressList({
       //
       // SOLUTION: Match completions by EITHER:
       //   - Strategy 1: Index + ListVersion (standard matching for normal flow)
-      //   - Strategy 2: Address string (fallback for route planning imports)
+      //   - Strategy 2: Address string + ListVersion (route planning within SAME list)
       //
-      // This ensures completed addresses stay hidden even after reordering/re-importing
-      const hasCompletion = completions.some(c =>
-        // Strategy 1: Strict match by index and list version (normal workflow)
-        (c.index === index && (c.listVersion || state.currentListVersion) === state.currentListVersion)
-        ||
-        // Strategy 2: Lenient match by address string (route planning workflow)
-        // This prevents duplicate work when addresses are reordered or list version changes
-        (c.address === addr.address)
-      );
+      // ENHANCED FIX: Strategy 2 now ALSO checks listVersion to prevent stale completions
+      // from old imports (different lists) from hiding addresses in new imports
+      const hasCompletion = completions.some(c => {
+        // Strategy 1: Strict index + listVersion match (normal workflow)
+        const strictMatch = (
+          c.index === index &&
+          (c.listVersion || state.currentListVersion) === state.currentListVersion
+        );
+
+        if (strictMatch) return true;
+
+        // Strategy 2: Address string match (route planning workflow ONLY)
+        // Safety: Also check list version to prevent stale completions from old imports
+        const addressMatch = c.address === addr.address;
+        const listVersionMatch = (c.listVersion || state.currentListVersion) === state.currentListVersion;
+
+        // CRITICAL: Require BOTH address AND list version to match
+        // This preserves route planning (same list, reordered addresses)
+        // But prevents stale completions from old imports (different list)
+        return addressMatch && listVersionMatch;
+      });
 
       if (hasCompletion) {
         set.add(index);

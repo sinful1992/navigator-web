@@ -51,6 +51,13 @@ export type CompletionOperation = BaseOperation & (
         listVersion: number;
       };
     }
+  | {
+      type: 'COMPLETION_BULK_DELETE';
+      payload: {
+        listVersion: number;
+        reason: 'import' | 'manual';
+      };
+    }
 );
 
 // Address operations

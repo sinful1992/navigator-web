@@ -24,9 +24,16 @@ export function useStats(
   currentListVersion: number
 ) {
   return useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    // CRITICAL FIX: Filter completions by BOTH listVersion AND today's date
+    // This ensures "completed today" label is accurate
     const completedIdx = new Set(
       completions
-        .filter((c) => c.listVersion === currentListVersion)
+        .filter((c) =>
+          c.listVersion === currentListVersion &&
+          (c.timestamp || "").slice(0, 10) === todayStr
+        )
         .map((c) => c.index)
     );
     const total = addresses.length;
@@ -49,7 +56,6 @@ export function useStats(
       arr.status !== "Completed" && arr.status !== "Cancelled"
     ).length;
 
-    const todayStr = new Date().toISOString().slice(0, 10);
     const todaysPIF = completions
       .filter((c) =>
         c.outcome === "PIF" &&
