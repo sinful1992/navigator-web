@@ -1059,17 +1059,20 @@ export function useOperationSync(): UseOperationSync {
 
       // Upload operations to cloud with retry logic
       for (const operation of allOpsToSync) {
-        // 🔧 FIX: Guard against undefined sequence (causes bigint error in Supabase)
-        if (typeof operation.sequence !== 'number' || !Number.isFinite(operation.sequence)) {
-          logger.error('❌ SYNC SKIP: Operation has invalid sequence', {
+        // 🔧 FIX: Ensure sequence is valid (prevents bigint error in Supabase)
+        // If sequence is missing, assign one based on timestamp to prevent data loss
+        let sequenceToUse = operation.sequence;
+        if (typeof sequenceToUse !== 'number' || !Number.isFinite(sequenceToUse)) {
+          sequenceToUse = Date.now(); // Use timestamp as fallback sequence
+          logger.error('⚠️ SYNC: Operation had invalid sequence, assigned fallback', {
             operationId: operation.id,
             type: operation.type,
-            sequence: operation.sequence,
+            originalSequence: operation.sequence,
+            fallbackSequence: sequenceToUse,
           });
-          continue; // Skip this operation
         }
 
-        logger.debug('Uploading operation:', operation.type, operation.id, 'seq:', operation.sequence);
+        logger.debug('Uploading operation:', operation.type, operation.id, 'seq:', sequenceToUse);
 
         // Derive entity from operation type
         const entity = operation.type.includes('COMPLETION') ? 'completion'
@@ -1101,7 +1104,7 @@ export function useOperationSync(): UseOperationSync {
                   // New columns
                   user_id: currentUser.id,
                   operation_id: operation.id,
-                  sequence_number: operation.sequence,
+                  sequence_number: sequenceToUse,
                   operation_type: operation.type,
                   operation_data: operation,
                   client_id: operation.clientId,
@@ -1829,16 +1832,19 @@ export function useOperationSync(): UseOperationSync {
 
               for (const operation of opsToSync) {
                 // 🔧 FIX: Guard against undefined sequence (causes bigint error in Supabase)
-                if (typeof operation.sequence !== 'number' || !Number.isFinite(operation.sequence)) {
-                  logger.error('❌ AUTO-SYNC SKIP: Operation has invalid sequence', {
+                // Use fallback sequence instead of skipping to prevent data loss
+                let sequenceToUse = operation.sequence;
+                if (typeof sequenceToUse !== 'number' || !Number.isFinite(sequenceToUse)) {
+                  sequenceToUse = Date.now(); // Use timestamp as fallback sequence
+                  logger.error('⚠️ AUTO-SYNC: Operation had invalid sequence, assigned fallback', {
                     operationId: operation.id,
                     type: operation.type,
-                    sequence: operation.sequence,
+                    originalSequence: operation.sequence,
+                    fallbackSequence: sequenceToUse,
                   });
-                  continue;
                 }
 
-                logger.debug('AUTO-SYNC: Uploading operation:', operation.type, 'seq:', operation.sequence);
+                logger.debug('AUTO-SYNC: Uploading operation:', operation.type, 'seq:', sequenceToUse);
 
                 // Derive entity from operation type
                 const entity = operation.type.includes('COMPLETION') ? 'completion'
@@ -1864,9 +1870,9 @@ export function useOperationSync(): UseOperationSync {
                     // New columns
                     user_id: currentUser.id,
                     operation_id: operation.id,
-                    sequence_number: operation.sequence,
+                    sequence_number: sequenceToUse,
                     operation_type: operation.type,
-                    operation_data: operation,
+                    operation_data: { ...operation, sequence: sequenceToUse },
                     client_id: operation.clientId,
                     timestamp: operation.timestamp,
                     // Old columns (still required for backwards compatibility)
@@ -1884,7 +1890,7 @@ export function useOperationSync(): UseOperationSync {
                 if (error && error.code !== '23505') {
                   logger.error('AUTO-SYNC: Upload failed:', {
                     type: operation.type,
-                    sequence: operation.sequence,
+                    sequence: sequenceToUse,
                     error: error.message,
                   });
 
@@ -2252,9 +2258,11 @@ if (typeof window !== 'undefined') {
         let uploaded = 0;
         for (const operation of operations) {
           // 🔧 FIX: Guard against undefined sequence (causes bigint error in Supabase)
-          if (typeof operation.sequence !== 'number' || !Number.isFinite(operation.sequence)) {
-            console.error('❌ FORCE SYNC SKIP: Operation has invalid sequence', operation.id, operation.sequence);
-            continue;
+          // Use fallback sequence instead of skipping to prevent data loss
+          let sequenceToUse = operation.sequence;
+          if (typeof sequenceToUse !== 'number' || !Number.isFinite(sequenceToUse)) {
+            sequenceToUse = Date.now(); // Use timestamp as fallback sequence
+            console.warn('⚠️ FORCE SYNC: Operation had invalid sequence, assigned fallback', operation.id, sequenceToUse);
           }
 
           console.log(`📤 Uploading operation ${uploaded + 1}/${operations.length}: ${operation.type}`);
@@ -2283,9 +2291,9 @@ if (typeof window !== 'undefined') {
               // New columns
               user_id: userId,
               operation_id: operation.id,
-              sequence_number: operation.sequence,
+              sequence_number: sequenceToUse,
               operation_type: operation.type,
-              operation_data: operation,
+              operation_data: { ...operation, sequence: sequenceToUse },
               client_id: operation.clientId,
               timestamp: operation.timestamp,
               // Old columns (still required for backwards compatibility)
