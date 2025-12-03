@@ -1059,6 +1059,16 @@ export function useOperationSync(): UseOperationSync {
 
       // Upload operations to cloud with retry logic
       for (const operation of allOpsToSync) {
+        // 🔧 FIX: Guard against undefined sequence (causes bigint error in Supabase)
+        if (typeof operation.sequence !== 'number' || !Number.isFinite(operation.sequence)) {
+          logger.error('❌ SYNC SKIP: Operation has invalid sequence', {
+            operationId: operation.id,
+            type: operation.type,
+            sequence: operation.sequence,
+          });
+          continue; // Skip this operation
+        }
+
         logger.debug('Uploading operation:', operation.type, operation.id, 'seq:', operation.sequence);
 
         // Derive entity from operation type
@@ -1818,6 +1828,16 @@ export function useOperationSync(): UseOperationSync {
               const failedOps: Array<{seq: number; type: string; error: string}> = [];
 
               for (const operation of opsToSync) {
+                // 🔧 FIX: Guard against undefined sequence (causes bigint error in Supabase)
+                if (typeof operation.sequence !== 'number' || !Number.isFinite(operation.sequence)) {
+                  logger.error('❌ AUTO-SYNC SKIP: Operation has invalid sequence', {
+                    operationId: operation.id,
+                    type: operation.type,
+                    sequence: operation.sequence,
+                  });
+                  continue;
+                }
+
                 logger.debug('AUTO-SYNC: Uploading operation:', operation.type, 'seq:', operation.sequence);
 
                 // Derive entity from operation type
@@ -2231,6 +2251,12 @@ if (typeof window !== 'undefined') {
         // Upload all operations to cloud
         let uploaded = 0;
         for (const operation of operations) {
+          // 🔧 FIX: Guard against undefined sequence (causes bigint error in Supabase)
+          if (typeof operation.sequence !== 'number' || !Number.isFinite(operation.sequence)) {
+            console.error('❌ FORCE SYNC SKIP: Operation has invalid sequence', operation.id, operation.sequence);
+            continue;
+          }
+
           console.log(`📤 Uploading operation ${uploaded + 1}/${operations.length}: ${operation.type}`);
 
           // Derive entity from operation type

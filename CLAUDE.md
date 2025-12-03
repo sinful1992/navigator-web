@@ -538,6 +538,22 @@ updateCompletion(index, {
 - Bypass operation submission - breaks cross-device sync
 - Remove updateCompletion function - required for delta sync
 
+### 🔧 Sync Bug Fixes (December 2025)
+
+**Bugs Fixed**:
+1. **30-Day Timestamp Rejection** - Historical operations older than 30 days were silently rejected during bootstrap. Removed the overly aggressive anti-replay check.
+2. **Remote Operations Not Marked Synced** - Real-time subscription wasn't marking received operations as synced, causing redundant re-fetching on page refresh.
+3. **Heartbeat Reconnection** - After 90s of silence, the subscription channel was removed but never re-established. Now fetches missed operations immediately.
+4. **Invalid Sequence Guard** - Added guards to prevent `bigint: undefined` Supabase errors when operations have invalid sequence numbers.
+5. **Vector Clock Cleanup** - Removed incomplete/unused vector clock implementation to reduce code complexity.
+
+**Files Modified**:
+- `src/services/operationValidators.ts` - Removed 30-day limit
+- `src/sync/operationSync.ts` - Fixed sync marking, heartbeat, sequence guards
+- `src/sync/operationLog.ts` - Removed vector clock code
+- `src/sync/syncConfig.ts` - Removed ENABLE_VECTOR_CLOCKS
+- `src/sync/operations.ts` - Increased sequence cap to 10M with warning at 9M
+
 ## Environment Setup
 
 Create `.env.local` for development:
