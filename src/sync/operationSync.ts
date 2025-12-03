@@ -396,19 +396,12 @@ export function useOperationSync(): UseOperationSync {
                 continue;
               }
 
-              // SECURITY: Check for replay attacks (use nonce if present, else operation ID)
-              const nonce = (row.operation_data as any)?.nonce || row.operation_data?.id;
-              if (!checkAndRegisterNonce(nonce)) {
-                logger.error('🚨 SECURITY: Rejecting operation - replay attack detected (duplicate nonce):', {
-                  opId: row.operation_data?.id,
-                  opType: row.operation_data?.type,
-                });
-                invalidOps.push({
-                  raw: row.operation_data,
-                  error: 'Replay attack detected - duplicate nonce'
-                });
-                continue;
-              }
+              // 🔧 FIX: Removed nonce check for remote operations
+              // Remote operations from Supabase are already validated by the database
+              // The merge check (by operation ID) in mergeRemoteOperations() handles deduplication
+              // Using operation ID as nonce was causing false "replay attack" rejections when:
+              // - Same operation arrives via bootstrap AND real-time subscription
+              // - Operations are refetched after page refresh within 5 minutes
 
               // All security checks passed
               // 🔧 CRITICAL FIX: Parse JSON string from Supabase JSONB column
@@ -1571,15 +1564,12 @@ export function useOperationSync(): UseOperationSync {
               return;
             }
 
-            // SECURITY: Check for replay attacks (use nonce if present, else operation ID)
-            const opNonce = (operation as any)?.nonce || operation?.id;
-            if (!checkAndRegisterNonce(opNonce)) {
-              logger.error('🚨 SECURITY: Rejecting operation - replay attack detected (real-time):', {
-                opType: operation?.type,
-                opId: operation?.id,
-              });
-              return;
-            }
+            // 🔧 FIX: Removed nonce check for real-time operations
+            // Real-time operations from Supabase are already validated by the database
+            // The merge check (by operation ID) in mergeRemoteOperations() handles deduplication
+            // Using operation ID as nonce was causing false "replay attack" rejections when:
+            // - Bootstrap already registered the operation ID in nonce queue
+            // - Same operation arrives via real-time within 5 minutes of bootstrap
 
             logger.debug('Operation details:', {
               type: operation.type,
