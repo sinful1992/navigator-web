@@ -429,7 +429,8 @@ export function useOperationSync(): UseOperationSync {
               }
 
               // Use database sequence_number (correct) instead of operation_data.sequence (may be corrupted)
-              if (row.sequence_number && typeof row.sequence_number === 'number') {
+              // 🔧 FIX: Don't use falsy check - sequence 0 is valid! Check type and finite instead.
+              if (typeof row.sequence_number === 'number' && Number.isFinite(row.sequence_number)) {
                 operation.sequence = row.sequence_number;
               }
               remoteOperations.push(operation);
@@ -468,12 +469,19 @@ export function useOperationSync(): UseOperationSync {
 
             // 🔧 CRITICAL FIX: Detect corrupted sequence numbers BEFORE merging
             // If cloud operations have huge sequence numbers compared to local ones, they're likely corrupted
-            const localMaxSeqBefore = localOpsBefore.length > 0
-              ? Math.max(...localOpsBefore.map(op => op.sequence))
+            // 🔧 FIX: Filter out NaN/Infinity sequences before Math.max to prevent NaN poisoning
+            const validLocalSeqs = localOpsBefore
+              .map(op => op.sequence)
+              .filter(s => typeof s === 'number' && Number.isFinite(s) && s >= 0);
+            const localMaxSeqBefore = validLocalSeqs.length > 0
+              ? Math.max(...validLocalSeqs)
               : 0;
 
-            const cloudMaxSeq = remoteOperations.length > 0
-              ? Math.max(...remoteOperations.map(op => op.sequence))
+            const validCloudSeqs = remoteOperations
+              .map(op => op.sequence)
+              .filter(s => typeof s === 'number' && Number.isFinite(s) && s >= 0);
+            const cloudMaxSeq = validCloudSeqs.length > 0
+              ? Math.max(...validCloudSeqs)
               : 0;
 
             const seqGap = cloudMaxSeq - localMaxSeqBefore;
@@ -621,12 +629,19 @@ export function useOperationSync(): UseOperationSync {
               // If we only mark "this device's" operations, other devices' operations get re-fetched
               // and then deduplicated away, causing data loss on page refresh (29 PIFs → 10 PIFs)
 
-              const allRemoteSequences = remoteOperations.map(op => op.sequence);
+              // 🔧 FIX: Filter out NaN/Infinity sequences before Math.max to prevent NaN poisoning
+              const allRemoteSequences = remoteOperations
+                .map(op => op.sequence)
+                .filter(s => typeof s === 'number' && Number.isFinite(s) && s >= 0);
 
               if (allRemoteSequences.length > 0) {
                 const maxCloudSeq = Math.max(...allRemoteSequences);
-                const localMaxSeq = operationLog.current.getAllOperations().length > 0
-                  ? Math.max(...operationLog.current.getAllOperations().map(op => op.sequence))
+                const localOps = operationLog.current.getAllOperations();
+                const validLocalSeqs = localOps
+                  .map(op => op.sequence)
+                  .filter(s => typeof s === 'number' && Number.isFinite(s) && s >= 0);
+                const localMaxSeq = validLocalSeqs.length > 0
+                  ? Math.max(...validLocalSeqs)
                   : 0;
 
                 // PHASE 1.1.2 FIX: Use configurable threshold for sequence corruption detection
@@ -1378,7 +1393,8 @@ export function useOperationSync(): UseOperationSync {
           // All security checks passed
           // 🔧 CRITICAL FIX: Use database sequence_number (correct) instead of operation_data.sequence (corrupted)
           const operation = { ...row.operation_data };
-          if (row.sequence_number && typeof row.sequence_number === 'number') {
+          // 🔧 FIX: Don't use falsy check - sequence 0 is valid! Check type and finite instead.
+          if (typeof row.sequence_number === 'number' && Number.isFinite(row.sequence_number)) {
             operation.sequence = row.sequence_number;
           }
           remoteOperations.push(operation);
@@ -1537,6 +1553,11 @@ export function useOperationSync(): UseOperationSync {
 
             logger.info('📥 REAL-TIME: Received operation from another device');
             const operation: Operation = payload.new.operation_data;
+
+            // 🔧 FIX: Use database sequence_number column (correct) instead of operation_data.sequence (may be stale/missing)
+            if (typeof payload.new.sequence_number === 'number' && Number.isFinite(payload.new.sequence_number)) {
+              operation.sequence = payload.new.sequence_number;
+            }
 
             // SECURITY: Validate operation before processing (prevents malformed data corruption)
             const validation = validateSyncOperation(operation);

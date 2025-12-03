@@ -230,6 +230,16 @@ class SequenceGenerator {
   // PHASE 1.3: CRITICAL FIX - Make set() also respect the lock
   // Prevents race condition where set() and next() could execute concurrently
   async setAsync(seq: number): Promise<void> {
+    // 🔧 FIX: Validate input before any Math operations to prevent NaN poisoning
+    if (typeof seq !== 'number' || !Number.isFinite(seq) || seq < 0) {
+      console.error('⚠️ setSequenceAsync: Invalid input, ignoring to prevent generator corruption', {
+        seq,
+        type: typeof seq,
+        isFinite: Number.isFinite(seq),
+      });
+      return; // Don't corrupt generator with invalid input
+    }
+
     const myTurn = this.lock;
     let release: () => void = () => {};
     this.lock = new Promise<void>(resolve => { release = resolve; });
@@ -255,6 +265,16 @@ class SequenceGenerator {
 
   // Synchronous version for backward compatibility (e.g., in error recovery paths)
   set(seq: number): void {
+    // 🔧 FIX: Validate input before any Math operations to prevent NaN poisoning
+    if (typeof seq !== 'number' || !Number.isFinite(seq) || seq < 0) {
+      console.error('⚠️ setSequence: Invalid input, ignoring to prevent generator corruption', {
+        seq,
+        type: typeof seq,
+        isFinite: Number.isFinite(seq),
+      });
+      return; // Don't corrupt generator with invalid input
+    }
+
     // 🚨 CRITICAL: Cap unreasonable sequences instead of silently accepting them
     const cappedSeq = Math.min(seq, this.MAX_REASONABLE_SEQUENCE);
     if (cappedSeq < seq) {

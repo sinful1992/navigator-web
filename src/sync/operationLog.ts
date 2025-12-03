@@ -118,20 +118,39 @@ export class OperationLogManager {
 
         // 🔧 CRITICAL FIX: Detect and cleanup corrupted sequences in local log
         // This happens when operations were created with huge sequence numbers (e.g., Unix timestamps)
+        // OR when sequences become NaN/Infinity due to generator corruption
         let hasCorruptedSequences = false;
         try {
-          const sequences = this.log.operations.map(op => op.sequence).sort((a, b) => a - b);
+          // 🔧 FIX: First check for NaN/Infinity sequences (Math.max returns NaN if ANY value is NaN)
+          const hasInvalidSequences = this.log.operations.some(op =>
+            typeof op.sequence !== 'number' || !Number.isFinite(op.sequence)
+          );
+          if (hasInvalidSequences) {
+            hasCorruptedSequences = true;
+            logger.error('🚨 LOAD: Found operations with NaN/Infinity sequences - will reassign', {
+              invalidCount: this.log.operations.filter(op =>
+                typeof op.sequence !== 'number' || !Number.isFinite(op.sequence)
+              ).length,
+              totalCount: this.log.operations.length,
+            });
+          }
+
+          // 🔧 FIX: Filter to only valid sequences for gap detection to prevent NaN poisoning Math operations
+          const validSequences = this.log.operations
+            .map(op => op.sequence)
+            .filter(s => typeof s === 'number' && Number.isFinite(s) && s >= 0)
+            .sort((a, b) => a - b);
 
           // If we have a huge gap in sequences (e.g., gap > 10000), it indicates corruption
           // Example: sequences [1, 2, 46, 1758009505, 1758009894] - big jump after 46
-          if (sequences.length > 2) {
-            for (let i = 0; i < sequences.length - 1; i++) {
-              const gap = sequences[i + 1] - sequences[i];
+          if (!hasCorruptedSequences && validSequences.length > 2) {
+            for (let i = 0; i < validSequences.length - 1; i++) {
+              const gap = validSequences[i + 1] - validSequences[i];
               if (gap > SEQUENCE_CORRUPTION_THRESHOLD) {
                 // Found a huge jump - likely corruption
                 hasCorruptedSequences = true;
                 logger.warn('🔧 LOAD: Detected corrupted sequences in local log', {
-                  gapAt: `${sequences[i]}...${sequences[i + 1]}`,
+                  gapAt: `${validSequences[i]}...${validSequences[i + 1]}`,
                   gapSize: gap,
                   threshold: SEQUENCE_CORRUPTION_THRESHOLD,
                 });
