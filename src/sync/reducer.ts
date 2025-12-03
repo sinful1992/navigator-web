@@ -23,21 +23,11 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
           return state;
         }
 
-        // 🔧 FIX: Duplicate detection by timestamp
-        // This protects against edge case where two devices create completions with identical timestamps
-        // (e.g., completing same address within same millisecond on different devices)
-        // Note: Operation-level dedup by ID happens in mergeRemoteOperations() - this is additional safety
-        const existingIndex = state.completions.findIndex(c => c.timestamp === completion.timestamp);
-
-        if (existingIndex !== -1) {
-          logger.debug('⚠️ COMPLETION_CREATE: Completion with same timestamp already exists, skipping', {
-            timestamp: completion.timestamp,
-            operation: operation.id,
-            existingAddress: state.completions[existingIndex].address,
-            newAddress: completion.address,
-          });
-          return state; // Skip duplicate
-        }
+        // 🔧 FIX: Removed timestamp-based duplicate detection
+        // Each operation has a unique ID - if operations have different IDs, they're different operations
+        // The merge logic (mergeRemoteOperations) already deduplicates by operation ID
+        // Timestamp matching was incorrectly dropping legitimate completions when two devices
+        // happened to complete addresses at the exact same millisecond
 
         // Set initial version on create
         const versionedCompletion = {
