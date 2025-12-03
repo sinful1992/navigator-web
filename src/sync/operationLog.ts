@@ -15,30 +15,11 @@ function getTransactionLogKey(userId: string): string {
   return `navigator_transaction_log_${userId}_v1`;
 }
 
-/**
- * PHASE 1.2.1: Vector Clock for Multi-Device Conflict Detection
- *
- * Vector clock tracks logical timestamp from each device
- * Example: { 'device-1': 5, 'device-2': 3, 'device-3': 7 }
- *
- * Interpretation:
- * - This device has seen 5 operations from device-1
- * - This device has seen 3 operations from device-2
- * - This device has seen 7 operations from device-3
- *
- * Usage:
- * - Compare vector clocks to detect causal relationships
- * - Detect concurrent operations (not causally related)
- * - Prevent duplicate completions using causality
- */
-export type VectorClock = Record<string, number>;
-
 export type OperationLog = {
   operations: Operation[];
   lastSequence: number;
   lastSyncTimestamp: string | null; // Last timestamp we synced to cloud (null = never synced)
   checksum: string;
-  vectorClock?: VectorClock; // PHASE 1.2.1: Track logical time per device
 };
 
 /**
@@ -80,9 +61,6 @@ export class OperationLogManager {
 
   // PHASE 1.1.3: Track per-client sequence for out-of-order detection
   private clientSequences: Map<string, number> = new Map();
-
-  // PHASE 1.2.1: Vector clock for multi-device conflict detection
-  private vectorClock: VectorClock = {};
 
   private deviceId: string;
   private operationLogKey: string;  // 🔧 FIX: Per-user operation log key
@@ -217,11 +195,6 @@ export class OperationLogManager {
         // PHASE 1.1.3: Rebuild per-client sequence map
         this.rebuildClientSequences();
 
-        // PHASE 1.2.1: Restore vector clock from persisted state
-        if (saved.vectorClock) {
-          this.vectorClock = { ...saved.vectorClock };
-        }
-
         // 🔍 DEBUG: Log operation types breakdown
         const byType: Record<string, number> = {};
         for (const op of this.log.operations) {
@@ -233,7 +206,6 @@ export class OperationLogManager {
           lastSequence: this.log.lastSequence,
           lastSyncTimestamp: this.log.lastSyncTimestamp,
           uniqueClients: this.clientSequences.size,
-          vectorClock: this.vectorClock,
           // 🔍 DEBUG: Show operation type breakdown
           operationsByType: byType,
           // 🔍 CRITICAL: How many SESSION_START operations are loaded?
@@ -321,9 +293,6 @@ export class OperationLogManager {
 
     // Get sequence number (now async and thread-safe)
     const sequence = await nextSequence();
-
-    // PHASE 1.2.1: Increment our vector clock for new local operation
-    this.incrementVectorClockForDevice();
 
     const fullOperation = {
       ...operation,
@@ -511,9 +480,6 @@ export class OperationLogManager {
         // PHASE 1.1.3: Update per-client sequence tracking
         this.updateClientSequence(remoteOp);
 
-        // PHASE 1.2.1: Update vector clock from incoming operation
-        this.updateVectorClockFromOperation((remoteOp as any).vectorClock);
-
         // Update sequence tracking - done after all operations added
         this.log.lastSequence = Math.max(this.log.lastSequence, remoteOp.sequence);
       }
@@ -698,75 +664,6 @@ export class OperationLogManager {
     if (operation.sequence > currentMax) {
       this.clientSequences.set(operation.clientId, operation.sequence);
     }
-  }
-
-  /**
-   * PHASE 1.2.1: Update our vector clock when processing an operation
-   * Merges incoming vector clock with ours to track logical time
-   *
-   * Example:
-   * - Our clock: { device-1: 5, device-2: 3 }
-   * - Incoming op clock: { device-1: 4, device-2: 5, device-3: 2 }
-   * - Result: { device-1: 5, device-2: 5, device-3: 2 }
-   * (We take max of each device's clock)
-   */
-  private updateVectorClockFromOperation(operationVectorClock?: VectorClock): void {
-    if (!operationVectorClock) return; // Skip if operation has no vector clock
-
-    for (const [deviceId, timestamp] of Object.entries(operationVectorClock)) {
-      const currentTimestamp = this.vectorClock[deviceId] || 0;
-      this.vectorClock[deviceId] = Math.max(currentTimestamp, timestamp);
-    }
-  }
-
-  /**
-   * PHASE 1.2.1: Increment our own device's vector clock
-   * Called when we create a local operation
-   *
-   * This marks that we've created a new operation and increments our logical time
-   */
-  private incrementVectorClockForDevice(): void {
-    const currentTimestamp = this.vectorClock[this.deviceId] || 0;
-    this.vectorClock[this.deviceId] = currentTimestamp + 1;
-  }
-
-  /**
-   * PHASE 1.2.1: Compare two vector clocks to detect causality
-   *
-   * Returns:
-   * - 'before': vc1 happened before vc2 (vc1 is ancestor of vc2)
-   * - 'after': vc1 happened after vc2 (vc2 is ancestor of vc1)
-   * - 'concurrent': neither is ancestor of other (operations are concurrent)
-   * - 'equal': both clocks are identical
-   */
-  compareVectorClocks(vc1: VectorClock, vc2: VectorClock): 'before' | 'after' | 'concurrent' | 'equal' {
-    let hasGreater = false;
-    let hasLess = false;
-
-    // Get all unique devices
-    const allDevices = new Set([...Object.keys(vc1), ...Object.keys(vc2)]);
-
-    for (const device of allDevices) {
-      const ts1 = vc1[device] || 0;
-      const ts2 = vc2[device] || 0;
-
-      if (ts1 > ts2) hasGreater = true;
-      if (ts1 < ts2) hasLess = true;
-    }
-
-    // Determine relationship
-    if (!hasGreater && !hasLess) return 'equal';
-    if (!hasLess) return 'after'; // vc1 is strictly >= vc2
-    if (!hasGreater) return 'before'; // vc1 is strictly <= vc2
-    return 'concurrent'; // Neither is ancestor of other
-  }
-
-  /**
-   * PHASE 1.2.1: Get current vector clock state
-   * Used when serializing operations to include causality info
-   */
-  getVectorClock(): VectorClock {
-    return { ...this.vectorClock };
   }
 
   /**

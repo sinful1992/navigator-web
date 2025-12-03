@@ -200,7 +200,8 @@ export function createOperation<T extends Operation>(
 class SequenceGenerator {
   private sequence = 0;
   private lock = Promise.resolve();
-  private readonly MAX_REASONABLE_SEQUENCE = 1000000; // Max reasonable value (10 years of heavy use)
+  private readonly MAX_REASONABLE_SEQUENCE = 10000000; // 10M - more headroom for heavy use
+  private readonly SEQUENCE_WARNING_THRESHOLD = 9000000; // Warn at 90%
 
   async next(): Promise<number> {
     // Queue this request and wait for previous ones to complete
@@ -212,6 +213,14 @@ class SequenceGenerator {
 
     try {
       const seq = ++this.sequence;
+      // 🔧 FIX: Warn when approaching maximum sequence number
+      if (seq > this.SEQUENCE_WARNING_THRESHOLD) {
+        console.warn('⚠️ SEQUENCE WARNING: Approaching maximum sequence number', {
+          current: seq,
+          max: this.MAX_REASONABLE_SEQUENCE,
+          remaining: this.MAX_REASONABLE_SEQUENCE - seq,
+        });
+      }
       return seq;
     } finally {
       release(); // Let next request proceed

@@ -89,15 +89,15 @@ describe('OperationValidators - SyncOperation Validation', () => {
   });
 
   describe('Clock Skew Protection', () => {
-    it('accepts timestamps within 24-hour future window', () => {
-      const future = new Date(Date.now() + 3600000).toISOString(); // 1 hour in future
+    it('accepts timestamps within 5-minute future window', () => {
+      const future = new Date(Date.now() + 2 * 60 * 1000).toISOString(); // 2 minutes in future
       const operation = { ...baseValidOperation, timestamp: future };
       const result = validateSyncOperation(operation);
       expect(result.success).toBe(true);
     });
 
-    it('rejects timestamps more than 24 hours in future', () => {
-      const tooFar = new Date(Date.now() + 86400000 + 1000).toISOString(); // 24h + 1s
+    it('rejects timestamps more than 5 minutes in future', () => {
+      const tooFar = new Date(Date.now() + 6 * 60 * 1000).toISOString(); // 6 minutes in future
       const operation = { ...baseValidOperation, timestamp: tooFar };
       const result = validateSyncOperation(operation);
       expect(result.success).toBe(false);
@@ -106,8 +106,9 @@ describe('OperationValidators - SyncOperation Validation', () => {
       }
     });
 
-    it('accepts past timestamps', () => {
-      const past = new Date(Date.now() - 3600000).toISOString();
+    it('accepts past timestamps (historical data)', () => {
+      // Historical data must be accepted for bootstrap sync to work
+      const past = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(); // 90 days ago
       const operation = { ...baseValidOperation, timestamp: past };
       const result = validateSyncOperation(operation);
       expect(result.success).toBe(true);

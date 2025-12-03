@@ -436,32 +436,6 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
     });
   });
 
-  describe('Vector Clock Causality', () => {
-    it('should correctly identify causally related operations', () => {
-      const vc1: VectorClock = { 'device-a': 1, 'device-b': 0 };
-      const vc2: VectorClock = { 'device-a': 2, 'device-b': 0 }; // Strictly after vc1
-
-      const relationship = manager.compareVectorClocks(vc1, vc2);
-      expect(relationship).toBe('before');
-    });
-
-    it('should correctly identify concurrent operations', () => {
-      const vc1: VectorClock = { 'device-a': 1, 'device-b': 0 };
-      const vc2: VectorClock = { 'device-a': 0, 'device-b': 1 };
-
-      const relationship = manager.compareVectorClocks(vc1, vc2);
-      expect(relationship).toBe('concurrent');
-    });
-
-    it('should handle missing devices in vector clocks', () => {
-      const vc1: VectorClock = { 'device-a': 1 };
-      const vc2: VectorClock = { 'device-a': 1, 'device-b': 1 };
-
-      const relationship = manager.compareVectorClocks(vc1, vc2);
-      expect(relationship).toBe('before'); // vc1 < vc2
-    });
-  });
-
   describe('Backward Compatibility', () => {
     it('should work with operations lacking vector clocks', () => {
       const op1: Operation = {
@@ -561,22 +535,6 @@ describe('PHASE 1.3: Vector Clock Conflict Resolution', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle equal vector clocks', () => {
-      const vc1: VectorClock = { 'device-a': 1, 'device-b': 1 };
-      const vc2: VectorClock = { 'device-a': 1, 'device-b': 1 };
-
-      const relationship = manager.compareVectorClocks(vc1, vc2);
-      expect(relationship).toBe('equal');
-    });
-
-    it('should handle empty vector clocks', () => {
-      const vc1: VectorClock = {};
-      const vc2: VectorClock = {};
-
-      const relationship = manager.compareVectorClocks(vc1, vc2);
-      expect(relationship).toBe('equal');
-    });
-
     it('should handle outcome priority for unknown outcomes', () => {
       const op1: Operation = {
         type: 'COMPLETION_CREATE',

@@ -62,17 +62,10 @@ export function validateSyncOperation(operation: unknown): ValidationResult<Sync
     );
   }
 
-  // BEST PRACTICE: Check for operations from distant past (replay attack prevention)
-  const maxAgeMs = 30 * 24 * 60 * 60 * 1000; // 30 days
-
-  if (opTime < now - maxAgeMs) {
-    return ValidationFailure(
-      'timestamp',
-      ValidationErrorCode.CLOCK_SKEW,
-      'Operation timestamp too old (>30 days) - possible replay attack',
-      { maxAgeMs, received: opTime, now, ageMs: now - opTime }
-    );
-  }
+  // NOTE: Removed 30-day limit check that was blocking historical data during bootstrap
+  // Historical operations from database are legitimate and must be allowed to sync
+  // Replay attack prevention is handled by operation ID deduplication in mergeRemoteOperations()
+  // The nonce-based replay check in checkAndRegisterNonce() handles real-time replay attacks
 
   // Required: clientId (non-empty string)
   if (typeof op.clientId !== 'string' || !op.clientId.trim()) {

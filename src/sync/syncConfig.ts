@@ -104,18 +104,6 @@ export const ENABLE_PER_CLIENT_SEQUENCE_TRACKING = true;
 export const ENABLE_SEQUENCE_CONTINUITY_VALIDATION = true;
 
 /**
- * PHASE 1.2: Vector Clock Implementation
- *
- * Enable vector clock-based conflict detection.
- * Prevents duplicate completions using causality tracking.
- *
- * Current: false (planned for Phase 1.2.1)
- * Impact: ~5% performance overhead for clock updates
- * Benefit: Eliminates duplicate completion race condition
- */
-export const ENABLE_VECTOR_CLOCKS = false;
-
-/**
  * PHASE 1.3: Automatic Conflict Resolution
  *
  * Enable vector clock-based conflict resolution in state reconstruction.

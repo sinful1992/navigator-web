@@ -818,7 +818,7 @@ export function useOperationSync(): UseOperationSync {
         logger.debug('⏭️ NO UNSYNCED OPERATIONS - skipping sync');
       }
     }, 2000); // 2 second debounce
-  }, [isOnline, user]);
+  }, [isOnline]); // 🔧 FIX: Removed 'user' - userRef.current handles stale closure
 
   // PHASE 1.3: Track current user to detect signout during operation submission
   const currentUserIdRef = useRef<string | null>(null);
@@ -1570,13 +1570,10 @@ export function useOperationSync(): UseOperationSync {
                   const newOps = await mergeWithMutex([operation]);
 
                   if (newOps.length > 0) {
-                    // 🔧 CRITICAL FIX: Don't mark operations from OTHER devices as synced
-                    // Only mark as synced if this operation is from THIS device (shouldn't happen here since we filter above)
-                    // This is just for safety in case the filter is removed
-                    if (operation.clientId === deviceId.current) {
-                      await operationLog.current!.markSyncedUpTo(operation.timestamp);
-                      logger.info('📥 REAL-TIME: Marked own operation as synced');
-                    }
+                    // 🔧 FIX: Mark remote operations as synced (they came from cloud, so already synced)
+                    // This prevents redundant re-fetching on page refresh
+                    await operationLog.current!.markSyncedUpTo(operation.timestamp);
+                    logger.info('📥 REAL-TIME: Marked remote operation as synced');
 
                     // Reconstruct state and notify
                     // PHASE 1.3: Use conflict resolution for vector clock-based integrity
@@ -1646,8 +1643,15 @@ export function useOperationSync(): UseOperationSync {
           // Clear this interval (will be recreated on reconnection)
           clearInterval(healthCheckInterval);
 
-          // Trigger reconnection by calling subscribeToOperations again
-          // Note: This will be handled by React's useEffect cleanup and re-run
+          // 🔧 FIX: Fetch any missed operations immediately
+          // The subscription will be re-established on next component re-render
+          if (forceSyncRef.current) {
+            logger.info('📥 REALTIME: Fetching missed operations after dead channel removal...');
+            forceSyncRef.current().catch(err => {
+              logger.error('Error fetching missed operations:', err);
+            });
+          }
+
           if (subscriptionCleanup.current) {
             subscriptionCleanup.current();
             subscriptionCleanup.current = null;
