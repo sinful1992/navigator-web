@@ -740,6 +740,13 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       const importTime = setProtectionFlag('navigator_import_in_progress');
       logger.info('🛡️ IMPORT PROTECTION ACTIVATED:', new Date(importTime).toISOString());
 
+      // 🔧 FIX: Store last import time with longer window for data integrity check
+      // This prevents false "data loss" warnings when user intentionally imports smaller list
+      localStorage.setItem('navigator_last_import_time', JSON.stringify({
+        timestamp: Date.now(),
+        addressCount: rows.length
+      }));
+
       const operationId = generateOperationId("update", "address", {
         type: "bulk_import",
         count: rows.length,

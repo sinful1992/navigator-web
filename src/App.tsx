@@ -552,6 +552,38 @@ function AuthedApp() {
           return;
         }
 
+        // Skip check if import protection is active or import happened recently
+        // The import protection flag lasts 6 seconds, but we use a 60-second window
+        // to account for the 30-second integrity check interval
+        if (isProtectionActive('navigator_import_in_progress')) {
+          logger.info('Skipping data integrity check - import in progress');
+          return;
+        }
+
+        // Check if an import happened recently (within 60 seconds)
+        // This handles the case where import protection expired but integrity check hasn't run yet
+        const lastImportData = localStorage.getItem('navigator_last_import_time');
+        if (lastImportData) {
+          try {
+            const { timestamp } = JSON.parse(lastImportData);
+            const timeSinceImport = Date.now() - timestamp;
+            const recentImportWindow = 60 * 1000; // 60 seconds
+
+            if (timeSinceImport < recentImportWindow) {
+              logger.info(`Skipping data integrity check - recent import (${Math.round(timeSinceImport / 1000)}s ago)`);
+              // Update stored counts to match current state after import
+              localStorage.setItem('navigator_data_counts', JSON.stringify({
+                completions: completionsCount,
+                addresses: addressesCount,
+                timestamp: new Date().toISOString()
+              }));
+              return;
+            }
+          } catch {
+            // Invalid JSON, ignore
+          }
+        }
+
         // Be more tolerant if sync happened recently (within last 2 minutes)
         const recentSyncThreshold = 2 * 60 * 1000; // 2 minutes
         const timeSinceLastSync = cloudSync.lastSyncTime ? Date.now() - cloudSync.lastSyncTime.getTime() : Infinity;
