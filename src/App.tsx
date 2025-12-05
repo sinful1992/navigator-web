@@ -503,6 +503,12 @@ function AuthedApp() {
     setHydrated(true);
     logger.info('✅ DELTA SYNC: Subscription active');
 
+    // 🔧 FIX: Reset data counts on hydration to prevent false data loss warnings
+    // The previous session's counts in localStorage might not match the cloud-synced data
+    // This ensures we compare against the freshly loaded data, not stale counts
+    localStorage.removeItem('navigator_data_counts');
+    logger.info('🔄 Reset navigator_data_counts on hydration');
+
 
 
     return () => {

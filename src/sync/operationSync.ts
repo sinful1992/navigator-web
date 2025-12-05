@@ -179,15 +179,48 @@ export function useOperationSync(): UseOperationSync {
         if (isOnline && supabase) {
           logger.info('🔄 BOOTSTRAP: Fetching operations from cloud for user:', user.id);
 
-          // Inline fetch to avoid dependency issues
+          // 🔧 FIX: First check total cloud operations to detect sync mismatch
+          const { count: cloudCount } = await supabase
+            .from('navigator_operations')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id);
+
+          const localCount = operationLog.current.getAllOperations().length;
           const lastSequence = operationLog.current.getLogState().lastSyncSequence;
 
-          const { data, error } = await supabase
-            .from('navigator_operations')
-            .select('operation_data')
-            .eq('user_id', user.id)
-            .gt('sequence_number', lastSequence)
-            .order('sequence_number', { ascending: true });
+          logger.info('📊 BOOTSTRAP: Comparing local vs cloud:', {
+            localCount,
+            cloudCount,
+            lastSequence,
+          });
+
+          // 🔧 CRITICAL FIX: If cloud has MORE operations than local, do a FULL fetch
+          // This handles the case where lastSequence is out of sync with actual data
+          const shouldFullFetch = (cloudCount || 0) > localCount + 10; // Allow some tolerance
+
+          let data: any[] | null = null;
+          let error: any = null;
+
+          if (shouldFullFetch) {
+            logger.warn('⚠️ BOOTSTRAP: Cloud has more operations than local - doing FULL fetch');
+            const result = await supabase
+              .from('navigator_operations')
+              .select('operation_data')
+              .eq('user_id', user.id)
+              .order('sequence_number', { ascending: true });
+            data = result.data;
+            error = result.error;
+          } else {
+            // Normal incremental fetch
+            const result = await supabase
+              .from('navigator_operations')
+              .select('operation_data')
+              .eq('user_id', user.id)
+              .gt('sequence_number', lastSequence)
+              .order('sequence_number', { ascending: true });
+            data = result.data;
+            error = result.error;
+          }
 
           if (error) {
             logger.error('❌ BOOTSTRAP FETCH FAILED:', error.message);
