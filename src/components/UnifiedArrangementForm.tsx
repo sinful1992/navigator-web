@@ -35,7 +35,7 @@ export default function UnifiedArrangementForm({
   state,
   arrangement,
   preSelectedAddressIndex,
-  onAddAddress,
+  onAddAddress: _onAddAddress,  // Unused - manual addresses no longer added to list
   onSave,
   onCancel,
   isLoading = false,
@@ -131,7 +131,7 @@ export default function UnifiedArrangementForm({
 
   // Parse numeric string fields for calculations
   const totalPaymentsNum = parseInt(formData.totalPayments, 10) || 2;
-  const numberOfCasesNum = parseInt(formData.numberOfCases, 10) || 1;
+  // numberOfCases is stored as string but used directly in form - parsed on submission if needed
 
   // Calculate payment timeline for recurring payments
   const paymentTimeline = React.useMemo(() => {

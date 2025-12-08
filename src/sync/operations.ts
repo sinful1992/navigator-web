@@ -91,6 +91,7 @@ export type SessionOperation = BaseOperation & (
       payload: {
         date: string;
         endTime: string;
+        explicitUserAction?: boolean;
       };
     }
   | {
