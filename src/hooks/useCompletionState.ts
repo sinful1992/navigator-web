@@ -280,14 +280,8 @@ export function useCompletionState({
           throw result.error;
         }
 
-        // Alternative repository-based submission (bypasses atomic service for now)
-        // TODO: Integrate repository pattern into AtomicOperationService
-        if (repositories?.completion) {
-          repositories.completion.saveCompletion(completion).catch(err => {
-            logger.error('Failed to save completion via repository:', err);
-            // Don't throw - operation is already submitted via atomic service
-          });
-        }
+        // NOTE: Repository submission REMOVED - atomicService.execute() already submits the operation
+        // The duplicate call was causing all completions to be doubled in the database
 
         return operationId;
       } finally {

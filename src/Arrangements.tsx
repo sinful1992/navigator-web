@@ -322,8 +322,9 @@ const ArrangementsComponent = function Arrangements({
   const handleArrangementSave = async (arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => {
     setLoadingStates(prev => ({ ...prev, saving: true }));
     try {
-      // Validate address index is still valid
-      if (arrangementData.addressIndex < 0 || arrangementData.addressIndex >= state.addresses.length) {
+      // Validate address index is still valid (skip for manual addresses with addressIndex -1)
+      const isManualAddress = arrangementData.addressIndex === -1;
+      if (!isManualAddress && (arrangementData.addressIndex < 0 || arrangementData.addressIndex >= state.addresses.length)) {
         throw new Error('Selected address is no longer valid. Please refresh and try again.');
       }
 
@@ -352,12 +353,14 @@ const ArrangementsComponent = function Arrangements({
         // No initial payment - standard flow
         await onAddArrangement(arrangementData);
 
-        // Record ARR completion
-        try {
-          onComplete(arrangementData.addressIndex, "ARR");
-        } catch (completionError) {
-          logger.error('Error recording ARR completion:', completionError);
-          alert('Arrangement created successfully, but there was an issue recording the completion. You may need to manually mark this address as ARR.');
+        // Record ARR completion (only for addresses in the main list)
+        if (!isManualAddress) {
+          try {
+            onComplete(arrangementData.addressIndex, "ARR");
+          } catch (completionError) {
+            logger.error('Error recording ARR completion:', completionError);
+            alert('Arrangement created successfully, but there was an issue recording the completion. You may need to manually mark this address as ARR.');
+          }
         }
       }
 

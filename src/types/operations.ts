@@ -99,6 +99,7 @@ export type SessionStartPayload = {
 export type SessionEndPayload = {
   date: string;
   endTime: string;
+  explicitUserAction?: boolean;  // True if user explicitly clicked "End Day"
 };
 
 /**

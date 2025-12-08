@@ -174,15 +174,26 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       }
 
       case 'SESSION_END': {
-        const { date, endTime} = operation.payload;
+        const { date, endTime, explicitUserAction } = operation.payload;
+
+        // Only apply SESSION_END if explicitly requested by user
+        // This prevents stale/duplicate operations from ending sessions unexpectedly
+        if (!explicitUserAction) {
+          // Log for debugging but don't apply
+          console.warn('SESSION_END rejected: not an explicit user action', { date, endTime });
+          return state;
+        }
 
         return {
           ...state,
           daySessions: state.daySessions.map(session => {
+            // Only end sessions that aren't already ended (prevent duplicate ends)
             if (session.date === date && !session.end) {
               const startTime = new Date(session.start || new Date()).getTime();
               const endTimeMs = new Date(endTime).getTime();
               const durationSeconds = Math.floor((endTimeMs - startTime) / 1000);
+
+              console.log('SESSION_END applied:', { date, endTime, durationSeconds });
 
               return {
                 ...session,

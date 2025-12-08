@@ -222,8 +222,11 @@ export function useOperationSync(): UseOperationSync {
         operationLog.current = getOperationLog(storedDeviceId, 'local');
         await operationLog.current.load();
 
-        // BEST PRACTICE: Clean up old operations on startup (keep 90 days)
-        await operationLog.current.cleanupOldOperations(90);
+        // 🔧 FIX: Disabled cleanup - causes data loss with incremental fetch
+        // When operations are cleaned locally but not re-fetched from cloud,
+        // state reconstruction loses completions. Operations grow unbounded
+        // but this is acceptable for single-user app (~KB per month).
+        // await operationLog.current.cleanupOldOperations(90);
 
         // Reconstruct state from operations
         // Note: rebuildStateIfNeeded will be available after component setup, so we do inline rebuild here

@@ -333,7 +333,7 @@ export function useAppStateV2() {
 
       await submitOperationOrUpdate(
         'SESSION_END',
-        { date: today, endTime },
+        { date: today, endTime, explicitUserAction: true },
         (s) => ({
           ...s,
           daySessions: s.daySessions.map(session => {

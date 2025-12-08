@@ -457,9 +457,10 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
     // 🔥 CRITICAL FIX: AWAIT operation submission to ensure persistence before returning
     // This prevents operation loss if page refreshes quickly after ending day
+    // Pass explicitUserAction=true to ensure this operation is applied by reducer
     if (servicesAndRepos?.repositories.session && endedSession && endedSession.end) {
       try {
-        await servicesAndRepos.repositories.session.saveSessionEnd(endedSession.date, endedSession.end);
+        await servicesAndRepos.repositories.session.saveSessionEnd(endedSession.date, endedSession.end, true);
         logger.info('✅ Session end operation persisted successfully');
       } catch (err) {
         logger.error('❌ Failed to persist session end operation:', err);

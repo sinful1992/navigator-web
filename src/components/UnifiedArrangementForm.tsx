@@ -61,7 +61,7 @@ export default function UnifiedArrangementForm({
 
     // Case details (NEW: Added case reference and number of cases)
     caseReference: "",
-    numberOfCases: 1,
+    numberOfCases: "1",  // String for proper input handling
 
     // Payment details
     totalAmount: arrangement?.amount ?? "",
@@ -76,7 +76,7 @@ export default function UnifiedArrangementForm({
     // Payment schedule - single dropdown instead of checkbox + frequency
     paymentFrequency: 'single' as 'single' | 'weekly' | 'biweekly' | 'monthly',
     recurrenceInterval: 1,
-    totalPayments: 4,
+    totalPayments: "4",  // String for proper input handling
   });
 
   const [formErrors, setFormErrors] = React.useState<{
@@ -129,14 +129,18 @@ export default function UnifiedArrangementForm({
     });
   }, [formData.previousPayments]);
 
+  // Parse numeric string fields for calculations
+  const totalPaymentsNum = parseInt(formData.totalPayments, 10) || 2;
+  const numberOfCasesNum = parseInt(formData.numberOfCases, 10) || 1;
+
   // Calculate payment timeline for recurring payments
   const paymentTimeline = React.useMemo(() => {
-    if (formData.paymentFrequency === 'single' || formData.totalPayments < 2) return [];
+    if (formData.paymentFrequency === 'single' || totalPaymentsNum < 2) return [];
 
     const dates: string[] = [];
     const startDate = parseISO(formData.scheduledDate);
 
-    for (let i = 0; i < formData.totalPayments; i++) {
+    for (let i = 0; i < totalPaymentsNum; i++) {
       let nextDate = startDate;
 
       if (formData.paymentFrequency === 'weekly') {
@@ -151,7 +155,7 @@ export default function UnifiedArrangementForm({
     }
 
     return dates;
-  }, [formData.paymentFrequency, formData.scheduledDate, formData.recurrenceInterval, formData.totalPayments]);
+  }, [formData.paymentFrequency, formData.scheduledDate, formData.recurrenceInterval, totalPaymentsNum]);
 
   // Calculate completion percentage for recurring payments
   const completionPercentage = React.useMemo(() => {
@@ -301,7 +305,6 @@ export default function UnifiedArrangementForm({
   // Actually submit after confirmation
   const confirmAndSubmit = async () => {
     setShowConfirmation(false);
-
     setIsSubmitting(true);
 
     try {
@@ -329,27 +332,20 @@ export default function UnifiedArrangementForm({
           finalAddress = selectedAddress.address;
         }
       } else {
-        // Manual address mode
+        // Manual address mode - address is stored directly in arrangement, NOT added to main list
         const existingIndex = state.addresses.findIndex(
           addr => addr.address.toLowerCase().trim() === formData.manualAddress.toLowerCase().trim()
         );
 
         if (existingIndex >= 0) {
+          // Address already exists in list - use that index
           finalAddressIndex = existingIndex;
           finalAddress = state.addresses[existingIndex].address;
         } else {
-          if (!onAddAddress) {
-            throw new Error('Cannot add new addresses');
-          }
-
-          const newAddressRow: AddressRow = {
-            address: formData.manualAddress.trim(),
-            lat: null,
-            lng: null
-          };
-
-          finalAddressIndex = await onAddAddress(newAddressRow);
-          finalAddress = newAddressRow.address;
+          // Manual address not in list - use -1 as sentinel value
+          // Address is stored in arrangement.address field only
+          finalAddressIndex = -1;
+          finalAddress = formData.manualAddress.trim();
         }
       }
 
@@ -359,8 +355,8 @@ export default function UnifiedArrangementForm({
 
       // If recurring (not single payment), split remaining amount across payments
       const isRecurring = formData.paymentFrequency !== 'single';
-      if (isRecurring && formData.totalPayments > 1) {
-        actualAmount = arrangementAmount / formData.totalPayments;
+      if (isRecurring && totalPaymentsNum > 1) {
+        actualAmount = arrangementAmount / totalPaymentsNum;
       }
 
       const arrangementData: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -375,7 +371,7 @@ export default function UnifiedArrangementForm({
         status: formData.status,
         recurrenceType: isRecurring ? (formData.paymentFrequency as 'weekly' | 'biweekly' | 'monthly') : "none",
         recurrenceInterval: isRecurring ? formData.recurrenceInterval : undefined,
-        totalPayments: isRecurring ? formData.totalPayments : 1,
+        totalPayments: isRecurring ? totalPaymentsNum : 1,
         paymentsMade: arrangement?.paymentsMade ?? 0,
       };
 
@@ -536,10 +532,11 @@ export default function UnifiedArrangementForm({
           <div className="uaf-field">
             <label className="uaf-label">Number of Cases</label>
             <input
-              type="number"
-              min="1"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={formData.numberOfCases}
-              onChange={(e) => setFormData(prev => ({ ...prev, numberOfCases: parseInt(e.target.value) || 1 }))}
+              onChange={(e) => setFormData(prev => ({ ...prev, numberOfCases: e.target.value }))}
               className="uaf-input"
               placeholder="1"
             />
@@ -720,12 +717,13 @@ export default function UnifiedArrangementForm({
               <div className="uaf-field">
                 <label className="uaf-label">Number of Payments</label>
                 <input
-                  type="number"
-                  min="2"
-                  max="12"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={formData.totalPayments}
-                  onChange={(e) => setFormData(prev => ({ ...prev, totalPayments: parseInt(e.target.value) || 2 }))}
+                  onChange={(e) => setFormData(prev => ({ ...prev, totalPayments: e.target.value }))}
                   className="uaf-input"
+                  placeholder="4"
                 />
               </div>
             )}
@@ -734,7 +732,7 @@ export default function UnifiedArrangementForm({
           {formData.paymentFrequency !== 'single' && (
             <>
               <div className="uaf-payment-preview">
-                💡 {formData.totalPayments} payments of £{(remainingAmount / formData.totalPayments).toFixed(2)} each
+                💡 {totalPaymentsNum} payments of £{(remainingAmount / totalPaymentsNum).toFixed(2)} each
               </div>
 
               {/* Visual Timeline */}
@@ -746,7 +744,7 @@ export default function UnifiedArrangementForm({
                       <div key={index} className="uaf-timeline-item">
                         <span className="uaf-timeline-number">{index + 1}</span>
                         <span className="uaf-timeline-date">{date}</span>
-                        <span className="uaf-timeline-amount">£{(remainingAmount / formData.totalPayments).toFixed(2)}</span>
+                        <span className="uaf-timeline-amount">£{(remainingAmount / totalPaymentsNum).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
@@ -874,7 +872,7 @@ export default function UnifiedArrangementForm({
                   <div className="uaf-confirmation-section">
                     <div className="uaf-confirmation-label">🔄 Payment Plan</div>
                     <div className="uaf-confirmation-value">
-                      {formData.totalPayments} {formData.paymentFrequency} payments of £{(remainingAmount / formData.totalPayments).toFixed(2)}
+                      {totalPaymentsNum} {formData.paymentFrequency} payments of £{(remainingAmount / totalPaymentsNum).toFixed(2)}
                     </div>
                   </div>
                   <div className="uaf-confirmation-timeline">

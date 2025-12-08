@@ -33,14 +33,17 @@ export class SessionRepository extends BaseRepository {
 
   /**
    * Persist session end operation
+   * @param date - Session date
+   * @param endTime - End timestamp
+   * @param explicitUserAction - True if user explicitly clicked "End Day" (prevents stale operations)
    */
-  async saveSessionEnd(date: string, endTime: string): Promise<void> {
+  async saveSessionEnd(date: string, endTime: string, explicitUserAction: boolean = true): Promise<void> {
     setProtectionFlag('navigator_session_protection');
 
     try {
       await this.submit({
         type: 'SESSION_END',
-        payload: { date, endTime },
+        payload: { date, endTime, explicitUserAction },
       });
     } finally {
       clearProtectionFlag('navigator_session_protection');
