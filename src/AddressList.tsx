@@ -81,11 +81,12 @@ function FitBounds({ positions, resetTrigger }: { positions: [number, number][];
 }
 
 // Create numbered marker icon
-function createNumberedIcon(number: number, isActive: boolean): L.DivIcon {
+function createNumberedIcon(number: number, isActive: boolean, isCompleted: boolean = false): L.DivIcon {
+  const statusClass = isCompleted ? 'marker-completed' : isActive ? 'marker-active' : '';
   return L.divIcon({
     className: 'custom-numbered-marker',
-    html: `<div class="marker-pin ${isActive ? 'marker-active' : ''}">
-      <div class="marker-number">${number}</div>
+    html: `<div class="marker-pin ${statusClass}">
+      <div class="marker-number">${isCompleted ? '✓' : number}</div>
     </div>`,
     iconSize: [40, 40],
     iconAnchor: [20, 40],
@@ -250,17 +251,32 @@ const AddressListComponent = function AddressList({
     await completionPromise;
   }, [onComplete]);
 
-  // Filter visible addresses that have coordinates for map view
+  // Filter visible addresses that have coordinates for map view (pending only)
   const geocodedVisible = React.useMemo(
     () => visible.filter(({ a }) => a.lat && a.lng),
     [visible]
   );
 
-  if (visible.length === 0) {
+  // All geocoded addresses including completed (for map view to show greyed out completed)
+  const geocodedAll = React.useMemo(
+    () => addresses
+      .map((a, i) => ({ a, i }))
+      .filter(({ a }) => a.lat && a.lng)
+      .filter(({ a }) => !lowerQ || (a.address ?? "").toLowerCase().includes(lowerQ)),
+    [addresses, lowerQ]
+  );
+
+  // Helper to check if an address is completed
+  const isAddressCompleted = React.useCallback((index: number) => {
+    return completedIdx.has(index);
+  }, [completedIdx]);
+
+  // Show empty state only if there are no addresses at all (not just no pending)
+  if (addresses.length === 0) {
     return (
       <div className="empty-state">
         <div className="empty-icon">📍</div>
-        <div className="empty-title">No Pending Addresses</div>
+        <div className="empty-title">No Addresses</div>
         <div className="empty-message">
           Import an Excel file or add addresses manually to get started
         </div>
@@ -337,29 +353,44 @@ const AddressListComponent = function AddressList({
             />
 
             <FitBounds
-              positions={geocodedVisible.map(({ a }) => [a.lat!, a.lng!])}
+              positions={geocodedAll.map(({ a }) => [a.lat!, a.lng!])}
               resetTrigger={mapResetTrigger}
             />
 
-            {geocodedVisible.map(({ a, i }, displayIndex) => {
+            {geocodedAll.map(({ a, i }, displayIndex) => {
               const isActive = activeIndex === i;
+              const isCompleted = isAddressCompleted(i);
+              const mapHref = makeMapsHref(a);
 
               return (
                 <Marker
                   key={i}
                   position={[a.lat!, a.lng!]}
-                  icon={createNumberedIcon(displayIndex + 1, isActive)}
+                  icon={createNumberedIcon(displayIndex + 1, isActive, isCompleted)}
+                  opacity={isCompleted ? 0.6 : 1}
                 >
                   <Popup>
-                    <div className="map-popup">
+                    <div className={`map-popup ${isCompleted ? 'popup-completed' : ''}`}>
                       <div className="popup-header">
                         <span className="popup-number">#{displayIndex + 1}</span>
-                        <span className={`popup-status ${isActive ? 'status-active' : 'status-pending'}`}>
-                          {isActive ? 'Active' : 'Pending'}
+                        <span className={`popup-status ${isCompleted ? 'status-completed' : isActive ? 'status-active' : 'status-pending'}`}>
+                          {isCompleted ? 'Completed' : isActive ? 'Active' : 'Pending'}
                         </span>
                       </div>
                       <div className="popup-address">{a.address}</div>
-                      {!isActive && (
+
+                      {/* Navigate button - always shown */}
+                      <a
+                        className="popup-btn-navigate"
+                        href={mapHref}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        🧭 Navigate
+                      </a>
+
+                      {/* Start button - only for pending (not completed, not active) */}
+                      {!isCompleted && !isActive && (
                         <button
                           className="popup-btn-start"
                           onClick={() => setActive(i)}
@@ -367,6 +398,8 @@ const AddressListComponent = function AddressList({
                           ▶️ Start
                         </button>
                       )}
+
+                      {/* Active address controls */}
                       {isActive && (
                         <div className="popup-active-info">
                           <ElapsedTimer startTime={state.activeStartTime} />
@@ -894,6 +927,14 @@ const AddressListComponent = function AddressList({
           animation: markerPulse 2s ease-in-out infinite;
         }
 
+        .marker-pin.marker-completed::before {
+          background: #888;
+        }
+
+        .marker-pin.marker-completed .marker-number {
+          font-size: 1rem;
+        }
+
         @keyframes markerPulse {
           0%, 100% {
             transform: rotate(-45deg) scale(1);
@@ -972,10 +1013,40 @@ const AddressListComponent = function AddressList({
           color: var(--gray-100);
         }
 
+        .popup-status.status-completed {
+          background: #888;
+          color: white;
+        }
+
+        .popup-completed {
+          opacity: 0.8;
+        }
+
         .popup-address {
           margin-bottom: 0.75rem;
           font-weight: 500;
           color: var(--text-primary);
+        }
+
+        .popup-btn-navigate {
+          display: block;
+          width: 100%;
+          padding: 0.5rem 1rem;
+          border: none;
+          border-radius: var(--radius-md);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          background: var(--gray-600);
+          color: white;
+          text-align: center;
+          text-decoration: none;
+          margin-bottom: 0.5rem;
+        }
+
+        .popup-btn-navigate:hover {
+          background: var(--gray-700);
+          color: white;
         }
 
         .popup-btn-start,
