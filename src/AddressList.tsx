@@ -223,6 +223,8 @@ const AddressListComponent = function AddressList({
   }, [activeIndex]);
 
   // Robust completion handler with Promise-based locking
+  // 🔧 FIX: Set pending guard BEFORE any async operations to prevent race condition
+  // Previous bug: set() happened AFTER promise started, allowing re-renders to slip through
   const handleCompletion = React.useCallback(async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseRef?: string, numCases?: number, enfFees?: number[]) => {
     // Check if there's already a pending completion for this index
     const existingPromise = pendingCompletions.current.get(index);
@@ -232,23 +234,29 @@ const AddressListComponent = function AddressList({
       return;
     }
 
-    // Create and store the completion promise
-    const completionPromise = (async () => {
-      try {
-        setSubmittingIndex(index);
-        await onComplete(index, outcome, amount, arrangementId, caseRef, numCases, enfFees);
-        setOutcomeOpenFor(null);
-      } catch (error) {
-        logger.error('Completion failed:', error);
-        throw error;
-      } finally {
-        setSubmittingIndex(null);
-        pendingCompletions.current.delete(index);
-      }
-    })();
+    // 🔧 FIX: Create deferred promise - allows set() BEFORE any async work
+    // This prevents race condition where setSubmittingIndex() triggers re-render
+    // before the pending guard is set, allowing duplicate submissions
+    let resolvePromise: () => void;
+    const completionPromise = new Promise<void>((resolve) => {
+      resolvePromise = resolve;
+    });
 
+    // Mark as pending IMMEDIATELY (synchronously, before any state changes)
     pendingCompletions.current.set(index, completionPromise);
-    await completionPromise;
+
+    try {
+      setSubmittingIndex(index);
+      await onComplete(index, outcome, amount, arrangementId, caseRef, numCases, enfFees);
+      setOutcomeOpenFor(null);
+    } catch (error) {
+      logger.error('Completion failed:', error);
+      throw error;
+    } finally {
+      setSubmittingIndex(null);
+      pendingCompletions.current.delete(index);
+      resolvePromise!();
+    }
   }, [onComplete]);
 
   // Filter visible addresses that have coordinates for map view (pending only)

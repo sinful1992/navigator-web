@@ -174,15 +174,12 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
       }
 
       case 'SESSION_END': {
-        const { date, endTime, explicitUserAction } = operation.payload;
+        const { date, endTime } = operation.payload;
 
-        // Only apply SESSION_END if explicitly requested by user
-        // This prevents stale/duplicate operations from ending sessions unexpectedly
-        if (!explicitUserAction) {
-          // Log for debugging but don't apply
-          console.warn('SESSION_END rejected: not an explicit user action', { date, endTime });
-          return state;
-        }
+        // 🔧 FIX: Removed explicitUserAction check
+        // Any SESSION_END that reaches cloud and syncs back IS an explicit user action
+        // The check was incorrectly blocking legitimate remote operations
+        // (e.g., Device B ends day, Device A should see it end)
 
         return {
           ...state,
@@ -193,7 +190,7 @@ export function applyOperation(state: AppState, operation: Operation): AppState 
               const endTimeMs = new Date(endTime).getTime();
               const durationSeconds = Math.floor((endTimeMs - startTime) / 1000);
 
-              console.log('SESSION_END applied:', { date, endTime, durationSeconds });
+              logger.info('SESSION_END applied:', { date, endTime, durationSeconds });
 
               return {
                 ...session,
