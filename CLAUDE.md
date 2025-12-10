@@ -546,6 +546,7 @@ updateCompletion(index, {
 3. **Heartbeat Reconnection** - After 90s of silence, the subscription channel was removed but never re-established. Now fetches missed operations immediately.
 4. **Invalid Sequence Guard** - Added guards to prevent `bigint: undefined` Supabase errors when operations have invalid sequence numbers.
 5. **Vector Clock Cleanup** - Removed incomplete/unused vector clock implementation to reduce code complexity.
+6. **Session Start Stale Closure** - `startDay`, `endDay`, and `updateSession` callbacks could capture stale `null` values for `servicesAndRepos`/`submitOperation` due to React's closure semantics. Fixed using refs to always access current values.
 
 **Files Modified**:
 - `src/services/operationValidators.ts` - Removed 30-day limit
@@ -553,6 +554,53 @@ updateCompletion(index, {
 - `src/sync/operationLog.ts` - Removed vector clock code
 - `src/sync/syncConfig.ts` - Removed ENABLE_VECTOR_CLOCKS
 - `src/sync/operations.ts` - Increased sequence cap to 10M with warning at 9M
+- `src/useAppState.ts` - Added `servicesAndReposRef` and `submitOperationRef` refs to fix stale closure bug in day tracking callbacks
+
+### ⚠️ Session Tracking Stale Closure Fix (CRITICAL)
+
+**Background**: Users could press "Start Day" immediately after page load, but the session would not sync to cloud. The day timer would work locally, but on page refresh the session would disappear because the SESSION_START operation was never added to the operation log.
+
+**Root Cause**:
+- `startDay` callback was created with `useCallback([servicesAndRepos])` as dependency
+- When component first mounts, `servicesAndRepos` is `null` (sync not ready yet)
+- Callback captures this `null` value in a closure
+- User presses "Start Day" → callback uses stale `null` value → operation not submitted
+- React eventually recreates callback with valid value, but user may not press again
+
+**Critical Logic** (`useAppState.ts:205-210, 375-378`):
+```typescript
+// Ref always has the latest value
+const servicesAndReposRef = React.useRef(servicesAndRepos);
+React.useEffect(() => {
+  servicesAndReposRef.current = servicesAndRepos;
+}, [servicesAndRepos]);
+
+// Callback uses ref, never stale
+const startDay = React.useCallback(async () => {
+  const currentServices = servicesAndReposRef.current;
+  if (currentServices?.repositories.session) {
+    await currentServices.repositories.session.saveSessionStart(sess);
+  }
+}, []); // No dependencies - uses ref for current value
+```
+
+**Key Implementation Details**:
+- **Ref Pattern**: Uses `useRef` + `useEffect` to keep ref updated with latest value
+- **Empty Dependency Array**: Callback never recreated (stable reference)
+- **Read from Ref**: Inside callback, always read from `.current` to get latest value
+- **Industry Standard**: This is the recommended React pattern for avoiding stale closures
+
+**DO NOT**:
+- Add `servicesAndRepos` to dependency array - callback recreates on every change
+- Access `servicesAndRepos` directly in callback - captures stale value
+- Remove the ref pattern - will reintroduce the stale closure bug
+
+**Affected Functions**:
+- `startDay` - uses `servicesAndReposRef.current`
+- `endDay` - uses `servicesAndReposRef.current`
+- `updateSession` - uses `submitOperationRef.current`
+
+**Reference**: See https://tkdodo.eu/blog/hooks-dependencies-and-stale-closures for explanation of the pattern
 
 ## Environment Setup
 

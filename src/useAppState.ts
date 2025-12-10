@@ -202,6 +202,13 @@ function prepareEndDaySessions(
 }
 
 export function useAppState(userId?: string, submitOperation?: SubmitOperationCallback) {
+  // 🔥 CRITICAL FIX: Use ref to always access the latest submitOperation
+  // This prevents stale closure bugs where callbacks capture old undefined value
+  const submitOperationRef = React.useRef(submitOperation);
+  React.useEffect(() => {
+    submitOperationRef.current = submitOperation;
+  }, [submitOperation]);
+
   // ---- Composed hooks ----
   // 1. Persistence hook (loads/saves state)
   const { state: baseState, setState: setBaseState, loading, ownerMetadata } = usePersistedState(userId);
@@ -369,6 +376,14 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
 
   // ---- 🔧 FIXED: Enhanced day tracking with better validation ----
 
+  // 🔥 CRITICAL FIX: Use ref to always access the latest servicesAndRepos
+  // This prevents stale closure bugs where startDay captures old null value
+  // See: https://tkdodo.eu/blog/hooks-dependencies-and-stale-closures
+  const servicesAndReposRef = React.useRef(servicesAndRepos);
+  React.useEffect(() => {
+    servicesAndReposRef.current = servicesAndRepos;
+  }, [servicesAndRepos]);
+
   const startDay = React.useCallback(async () => {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
@@ -411,17 +426,26 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       };
     });
 
+    // 🔥 CRITICAL FIX: Use ref to get current servicesAndRepos (not stale closure)
+    const currentServices = servicesAndReposRef.current;
+
     // 🔥 CRITICAL FIX: AWAIT operation submission to ensure persistence before returning
     // This prevents operation loss if page refreshes quickly after starting day
-    if (shouldSubmit && servicesAndRepos?.repositories.session) {
+    if (shouldSubmit && currentServices?.repositories.session) {
       try {
-        await servicesAndRepos.repositories.session.saveSessionStart(sess);
+        await currentServices.repositories.session.saveSessionStart(sess);
         logger.info('✅ Session start operation persisted successfully');
       } catch (err) {
         logger.error('❌ Failed to persist session start operation:', err);
       }
+    } else if (shouldSubmit && !currentServices?.repositories.session) {
+      // 🚨 Log warning - session saved to IndexedDB but NOT to operation log
+      logger.error('❌ SESSION_START NOT SYNCED: servicesAndRepos not ready!', {
+        hasCurrentServices: !!currentServices,
+        session: sess,
+      });
     }
-  }, [servicesAndRepos]);
+  }, []); // No dependencies - uses ref for current value
 
 
   const endDay = React.useCallback(async () => {
@@ -455,18 +479,21 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       return { ...s, daySessions: updatedSessions };
     });
 
+    // 🔥 CRITICAL FIX: Use ref to get current servicesAndRepos (not stale closure)
+    const currentServices = servicesAndReposRef.current;
+
     // 🔥 CRITICAL FIX: AWAIT operation submission to ensure persistence before returning
     // This prevents operation loss if page refreshes quickly after ending day
     // Pass explicitUserAction=true to ensure this operation is applied by reducer
-    if (servicesAndRepos?.repositories.session && endedSession && endedSession.end) {
+    if (currentServices?.repositories.session && endedSession && endedSession.end) {
       try {
-        await servicesAndRepos.repositories.session.saveSessionEnd(endedSession.date, endedSession.end, true);
+        await currentServices.repositories.session.saveSessionEnd(endedSession.date, endedSession.end, true);
         logger.info('✅ Session end operation persisted successfully');
       } catch (err) {
         logger.error('❌ Failed to persist session end operation:', err);
       }
     }
-  }, [servicesAndRepos]);
+  }, []); // No dependencies - uses ref for current value
 
   const updateSession = React.useCallback((date: string, updates: Partial<DaySession>, createIfMissing: boolean = false) => {
     // 🔧 CRITICAL FIX: Set protection flag BEFORE state mutation to prevent race condition
@@ -515,9 +542,12 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       }
     });
 
+    // 🔥 CRITICAL FIX: Use ref to get current submitOperation (not stale closure)
+    const currentSubmitOp = submitOperationRef.current;
+
     // Submit operation to cloud
-    if (submitOperation) {
-      submitOperation({
+    if (currentSubmitOp) {
+      currentSubmitOp({
         type: 'SESSION_UPDATE',
         payload: { date, updates }
       })
@@ -531,7 +561,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
           clearProtectionFlag('navigator_session_protection');
         });
     }
-  }, [submitOperation]);
+  }, []); // No dependencies - uses ref for current value
 
   const processReminders = React.useCallback(() => {
     setBaseState((s: AppState) => {
