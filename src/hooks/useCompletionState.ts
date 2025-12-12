@@ -86,6 +86,19 @@ export function useCompletionState({
     new Map()
   );
 
+  // Refs to avoid stale closures - same pattern as useAppState.ts
+  // See CLAUDE.md "Session Tracking Stale Closure Fix" for explanation
+  const repositoriesRef = React.useRef(repositories);
+  const submitOperationRef = React.useRef(submitOperation);
+
+  React.useEffect(() => {
+    repositoriesRef.current = repositories;
+  }, [repositories]);
+
+  React.useEffect(() => {
+    submitOperationRef.current = submitOperation;
+  }, [submitOperation]);
+
   // Create atomic operation service instance
   const atomicService = React.useMemo(
     () => new AtomicOperationService({
@@ -290,7 +303,7 @@ export function useCompletionState({
         setPendingCompletions(new Set(pendingCompletionsRef.current));
       }
     },
-    [baseState, addOptimisticUpdate, submitOperation, setBaseState, services, repositories, atomicService]
+    [baseState, addOptimisticUpdate, setBaseState, services, atomicService]
   );
 
   /**
@@ -337,15 +350,19 @@ export function useCompletionState({
       });
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
+      // Use refs to avoid stale closure bug (same pattern as useAppState.ts)
       if (shouldSubmit && originalTimestamp) {
-        if (repositories?.completion) {
+        const currentRepos = repositoriesRef.current;
+        const currentSubmit = submitOperationRef.current;
+
+        if (currentRepos?.completion) {
           // TIMESTAMP-ORDERED SYNC: No version checking needed
-          repositories.completion.updateCompletion(originalTimestamp, updates).catch(err => {
+          currentRepos.completion.updateCompletion(originalTimestamp, updates).catch(err => {
             logger.error('Failed to update completion:', err);
           });
-        } else if (submitOperation) {
+        } else if (currentSubmit) {
           // Fallback to direct submission
-          submitOperation({
+          currentSubmit({
             type: 'COMPLETION_UPDATE',
             payload: {
               originalTimestamp,
@@ -357,7 +374,7 @@ export function useCompletionState({
         }
       }
     },
-    [setBaseState, addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, repositories]
+    [setBaseState, addOptimisticUpdate, confirmOptimisticUpdate]
   );
 
   /**
@@ -408,18 +425,22 @@ export function useCompletionState({
       });
 
       // 🔥 DELTA SYNC: Submit operation to cloud immediately (AFTER state update)
+      // Use refs to avoid stale closure bug (same pattern as useAppState.ts)
       if (completionToDelete) {
-        if (repositories?.completion) {
-          repositories.completion.deleteCompletion(
+        const currentRepos = repositoriesRef.current;
+        const currentSubmit = submitOperationRef.current;
+
+        if (currentRepos?.completion) {
+          currentRepos.completion.deleteCompletion(
             completionToDelete.timestamp,
             completionToDelete.index,
             completionToDelete.listVersion ?? 1
           ).catch(err => {
             logger.error('Failed to delete completion:', err);
           });
-        } else if (submitOperation) {
+        } else if (currentSubmit) {
           // Fallback to direct submission
-          submitOperation({
+          currentSubmit({
             type: 'COMPLETION_DELETE',
             payload: {
               timestamp: completionToDelete.timestamp,
@@ -432,7 +453,7 @@ export function useCompletionState({
         }
       }
     },
-    [setBaseState, addOptimisticUpdate, confirmOptimisticUpdate, submitOperation, repositories]
+    [setBaseState, addOptimisticUpdate, confirmOptimisticUpdate]
   );
 
   /**
@@ -510,14 +531,18 @@ export function useCompletionState({
         }));
 
         // 🔥 DELTA SYNC: Submit operation to cloud immediately
-        if (repositories?.completion) {
-          repositories.completion.saveCompletion(completion).catch(err => {
+        // Use refs to avoid stale closure bug (same pattern as useAppState.ts)
+        const currentRepos = repositoriesRef.current;
+        const currentSubmit = submitOperationRef.current;
+
+        if (currentRepos?.completion) {
+          currentRepos.completion.saveCompletion(completion).catch(err => {
             logger.error('Failed to save historical completion:', err);
             // Don't throw - operation is saved locally and will retry
           });
-        } else if (submitOperation) {
+        } else if (currentSubmit) {
           // Fallback to direct submission
-          submitOperation({
+          currentSubmit({
             type: 'COMPLETION_CREATE',
             payload: { completion }
           }).catch(err => {
@@ -534,7 +559,7 @@ export function useCompletionState({
         throw error;
       }
     },
-    [baseState, addOptimisticUpdate, submitOperation, setBaseState, services, repositories]
+    [baseState, addOptimisticUpdate, setBaseState, services]
   );
 
   return {
