@@ -132,13 +132,13 @@ export function calculateComplexBonus(
   if (!settings.complexSettings) return 0;
 
   const {
-    basePifBonus,
-    largePifThreshold,
-    largePifPercentage,
-    largePifCap,
-    smallPifBonus,
-    linkedCaseBonus,
-    dailyThreshold,
+    basePifBonus = 100,
+    largePifThreshold = 1500,
+    largePifPercentage = 0.025,
+    largePifCap = 500,
+    smallPifBonus = 30,
+    linkedCaseBonus = 10,
+    dailyThreshold = 100,
   } = settings.complexSettings;
 
   let totalBonus = 0;
@@ -375,12 +375,12 @@ export function calculateBonusBreakdown(
       bonusForThisPif = settings.simpleSettings.pifBonus;
     } else if (settings.calculationType === 'complex' && settings.complexSettings) {
       const {
-        basePifBonus,
-        largePifThreshold,
-        largePifPercentage,
-        largePifCap,
-        smallPifBonus,
-        linkedCaseBonus,
+        basePifBonus = 100,
+        largePifThreshold = 1500,
+        largePifPercentage = 0.025,
+        largePifCap = 500,
+        smallPifBonus = 30,
+        linkedCaseBonus = 10,
       } = settings.complexSettings;
 
       // Check if we have individual enforcement fees

@@ -26,7 +26,15 @@ export function BonusSettingsModal({
   }, [initialSettings]);
 
   const handleSave = () => {
-    onUpdateSettings(localSettings);
+    // Ensure all complex settings have default values for fields not exposed in UI
+    const settingsToSave: BonusSettings = {
+      ...localSettings,
+      complexSettings: localSettings.complexSettings ? {
+        ...DEFAULT_BONUS_SETTINGS.complexSettings,
+        ...localSettings.complexSettings,
+      } : localSettings.complexSettings,
+    };
+    onUpdateSettings(settingsToSave);
     onClose();
   };
 
