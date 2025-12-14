@@ -82,21 +82,72 @@ export type Tab = "list" | "completed" | "arrangements" | "earnings" | "planning
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
-  { hasError: boolean; msg?: string }
+  { hasError: boolean; msg?: string; isChunkError?: boolean }
 > {
   constructor(p: any) {
     super(p);
     this.state = { hasError: false };
   }
   static getDerivedStateFromError(err: unknown) {
-    return { hasError: true, msg: String(err) };
+    const msg = String(err);
+    // Detect chunk loading errors (happens after deployments)
+    const isChunkError = msg.includes('Failed to fetch dynamically imported module') ||
+                         msg.includes('Loading chunk') ||
+                         msg.includes('ChunkLoadError');
+    return { hasError: true, msg, isChunkError };
   }
+
+  handleRefresh = async () => {
+    // Clear service worker caches and reload
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(name => caches.delete(name)));
+    }
+    // Force reload from server (bypass cache)
+    window.location.reload();
+  };
+
   render() {
     if (this.state.hasError) {
+      // Auto-refresh for chunk loading errors (new deployment detected)
+      if (this.state.isChunkError) {
+        return (
+          <div className="container" style={{ paddingTop: "4rem", textAlign: "center" }}>
+            <h2>App Update Available</h2>
+            <p style={{ color: "var(--text-secondary)", marginBottom: "1.5rem" }}>
+              A new version has been deployed. Please refresh to load the latest version.
+            </p>
+            <button
+              onClick={this.handleRefresh}
+              style={{
+                padding: "0.75rem 1.5rem",
+                fontSize: "1rem",
+                backgroundColor: "var(--primary)",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+              }}
+            >
+              Refresh Now
+            </button>
+          </div>
+        );
+      }
       return (
         <div className="container" style={{ paddingTop: "4rem" }}>
           <h2>Something went wrong</h2>
           <pre style={{ whiteSpace: "pre-wrap" }}>{this.state.msg}</pre>
+          <button
+            onClick={this.handleRefresh}
+            style={{
+              marginTop: "1rem",
+              padding: "0.5rem 1rem",
+              cursor: "pointer",
+            }}
+          >
+            Refresh Page
+          </button>
         </div>
       );
     }

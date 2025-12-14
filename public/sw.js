@@ -1,7 +1,7 @@
 // Enhanced Service Worker with Background Sync and Offline Support
-// Version 2.0
+// Version 2.1 - Network-first for JS chunks to prevent deployment errors
 
-const CACHE_VERSION = 'navigator-v2';
+const CACHE_VERSION = 'navigator-v2.1';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const MAPS_CACHE = `${CACHE_VERSION}-maps`;
@@ -18,7 +18,7 @@ const STATIC_ASSETS = [
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v2.0...');
+  console.log('[SW] Installing service worker v2.1...');
 
   event.waitUntil(
     caches.open(STATIC_CACHE)
@@ -39,7 +39,7 @@ self.addEventListener('install', (event) => {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v2.0...');
+  console.log('[SW] Activating service worker v2.1...');
 
   event.waitUntil(
     caches.keys()
@@ -86,8 +86,12 @@ self.addEventListener('fetch', (event) => {
   } else if (url.pathname.includes('/api/') || url.hostname.includes('supabase')) {
     // API calls: Network first, fallback to cache (for offline data access)
     event.respondWith(networkFirstStrategy(request, API_CACHE));
-  } else if (url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|woff2)$/)) {
-    // Static assets: Cache first, fallback to network
+  } else if (url.pathname.match(/\.(js)$/)) {
+    // JS files: Network first to ensure fresh chunks after deployments
+    // Prevents "Failed to fetch dynamically imported module" errors
+    event.respondWith(networkFirstStrategy(request, DYNAMIC_CACHE));
+  } else if (url.pathname.match(/\.(css|png|jpg|jpeg|svg|woff2)$/)) {
+    // Non-JS static assets: Cache first, fallback to network
     event.respondWith(cacheFirstStrategy(request, STATIC_CACHE));
   } else {
     // HTML and other resources: Network first, fallback to cache
@@ -275,4 +279,4 @@ self.addEventListener('notificationclick', (event) => {
   }
 });
 
-console.log('[SW] Service Worker v2.0 loaded');
+console.log('[SW] Service Worker v2.1 loaded');
