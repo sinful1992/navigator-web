@@ -135,50 +135,51 @@ const AddressListComponent = function AddressList({
     localStorage.setItem('navigator_address_view_mode', viewMode);
   }, [viewMode]);
 
-  // Simple timestamp-based filtering: hide any address that has a completion
+  // PERFORMANCE OPTIMIZED: O(n+m) instead of O(n×m)
+  // Hide any address that has a completion using pre-built lookup maps
   const completedIdx = React.useMemo(() => {
-    const set = new Set<number>();
+    // CRITICAL FIX: Check completion using TWO strategies to handle route planning imports
+    //
+    // PROBLEM: When user optimizes route and exports to main list during active day:
+    //   1. Day starts with addresses [A,B,C,D,E] at listVersion=1
+    //   2. User completes A,B → completions saved with listVersion=1, index=0,1
+    //   3. User optimizes route → new order [C,D,E,A,B]
+    //   4. Export to main → setAddresses() bumps to listVersion=2, indices change
+    //   5. Old completions have listVersion=1 and wrong indices → don't match!
+    //   6. User's work appears lost (but is preserved in data)
+    //
+    // SOLUTION: Match completions by EITHER:
+    //   - Strategy 1: Index + ListVersion (standard matching for normal flow)
+    //   - Strategy 2: Address string + ListVersion (route planning within SAME list)
 
+    // Build lookup Sets ONCE - O(completions)
+    // Strategy 1: "index|version" for strict index matching
+    const byIndexVersion = new Set<string>();
+    // Strategy 2: "address|version" for address string matching
+    const byAddressVersion = new Set<string>();
+
+    for (const c of completions) {
+      const version = c.listVersion || state.currentListVersion;
+      byIndexVersion.add(`${c.index}|${version}`);
+      byAddressVersion.add(`${c.address}|${version}`);
+    }
+
+    // Check each address with O(1) lookups
+    const set = new Set<number>();
     addresses.forEach((addr, index) => {
       if (!addr.address) return;
 
-      // CRITICAL FIX: Check completion using TWO strategies to handle route planning imports
-      //
-      // PROBLEM: When user optimizes route and exports to main list during active day:
-      //   1. Day starts with addresses [A,B,C,D,E] at listVersion=1
-      //   2. User completes A,B → completions saved with listVersion=1, index=0,1
-      //   3. User optimizes route → new order [C,D,E,A,B]
-      //   4. Export to main → setAddresses() bumps to listVersion=2, indices change
-      //   5. Old completions have listVersion=1 and wrong indices → don't match!
-      //   6. User's work appears lost (but is preserved in data)
-      //
-      // SOLUTION: Match completions by EITHER:
-      //   - Strategy 1: Index + ListVersion (standard matching for normal flow)
-      //   - Strategy 2: Address string + ListVersion (route planning within SAME list)
-      //
-      // ENHANCED FIX: Strategy 2 now ALSO checks listVersion to prevent stale completions
-      // from old imports (different lists) from hiding addresses in new imports
-      const hasCompletion = completions.some(c => {
-        // Strategy 1: Strict index + listVersion match (normal workflow)
-        const strictMatch = (
-          c.index === index &&
-          (c.listVersion || state.currentListVersion) === state.currentListVersion
-        );
+      // Strategy 1: Strict index + listVersion match (normal workflow)
+      const indexKey = `${index}|${state.currentListVersion}`;
+      if (byIndexVersion.has(indexKey)) {
+        set.add(index);
+        return;
+      }
 
-        if (strictMatch) return true;
-
-        // Strategy 2: Address string match (route planning workflow ONLY)
-        // Safety: Also check list version to prevent stale completions from old imports
-        const addressMatch = c.address === addr.address;
-        const listVersionMatch = (c.listVersion || state.currentListVersion) === state.currentListVersion;
-
-        // CRITICAL: Require BOTH address AND list version to match
-        // This preserves route planning (same list, reordered addresses)
-        // But prevents stale completions from old imports (different list)
-        return addressMatch && listVersionMatch;
-      });
-
-      if (hasCompletion) {
+      // Strategy 2: Address string + listVersion match (route planning workflow)
+      // Safety: Also checks listVersion to prevent stale completions from old imports
+      const addressKey = `${addr.address}|${state.currentListVersion}`;
+      if (byAddressVersion.has(addressKey)) {
         set.add(index);
       }
     });

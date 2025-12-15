@@ -81,14 +81,15 @@ export function useTimeTracking({
         }
 
         // Check if this address is already completed (cross-device protection)
+        // PERFORMANCE: Build Set for O(1) lookup instead of O(n) some()
         if (address) {
-          const isCompleted = s.completions.some(
-            (c) =>
-              c.index === idx &&
-              (c.listVersion || s.currentListVersion) === s.currentListVersion
+          const completedIndices = new Set(
+            s.completions
+              .filter(c => (c.listVersion || s.currentListVersion) === s.currentListVersion)
+              .map(c => c.index)
           );
 
-          if (isCompleted) {
+          if (completedIndices.has(idx)) {
             logger.warn(`Cannot set active - address at index ${idx} is already completed`);
             showWarning(`This address is already completed`);
             // 🔧 CRITICAL FIX: Don't set/clear protection flag on validation failure

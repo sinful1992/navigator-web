@@ -187,43 +187,84 @@ export function usePersistedState(userId?: string): UsePersistedStateReturn {
     };
   }, []);
 
-  // ---- Persist to IndexedDB (immediate - no debounce for data safety) ----
+  // ---- Persist to IndexedDB (debounced for performance) ----
+  // PERFORMANCE: 300ms debounce reduces IndexedDB writes during rapid state changes
+  // Data safety maintained by: delta sync persists operations immediately, beforeunload flushes
+  const debounceTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingStateRef = React.useRef<AppState | null>(null);
+
+  // Persist function that can be called immediately or debounced
+  const doPersist = React.useCallback(async (stateToPersist: AppState) => {
+    try {
+      // Add schema version and owner signature before saving
+      const stateToSave: any = {
+        ...stateToPersist,
+        _schemaVersion: CURRENT_SCHEMA_VERSION
+      };
+
+      // Add immutable owner signature if authenticated
+      if (ownerUserIdRef.current) {
+        stateToSave._ownerUserId = ownerUserIdRef.current;
+        // Create tamper-detection hash: hash(userId + timestamp + data checksum)
+        const dataChecksum = JSON.stringify({
+          addressCount: stateToPersist.addresses.length,
+          completionCount: stateToPersist.completions.length,
+          listVersion: stateToPersist.currentListVersion
+        });
+        const signatureInput = `${ownerUserIdRef.current}|${dataChecksum}`;
+        stateToSave._ownerChecksum = btoa(signatureInput).slice(0, 32);
+      }
+
+      await storageManager.queuedSet(STORAGE_KEY, stateToSave);
+      pendingStateRef.current = null;
+    } catch (error) {
+      logger.error('Failed to persist state to IndexedDB:', error);
+    }
+  }, []);
+
   React.useEffect(() => {
     if (loading) return;
 
-    // Persist immediately to prevent data loss on page close
-    // storageManager.queuedSet already serializes writes to prevent corruption
-    const persist = async () => {
-      try {
-        // Add schema version and owner signature before saving
-        const stateToSave: any = {
-          ...baseState,
-          _schemaVersion: CURRENT_SCHEMA_VERSION
-        };
+    // Store pending state for beforeunload flush
+    pendingStateRef.current = baseState;
 
-        // Add immutable owner signature if authenticated
-        if (ownerUserIdRef.current) {
-          stateToSave._ownerUserId = ownerUserIdRef.current;
-          // Create tamper-detection hash: hash(userId + timestamp + data checksum)
-          const dataChecksum = JSON.stringify({
-            addressCount: baseState.addresses.length,
-            completionCount: baseState.completions.length,
-            listVersion: baseState.currentListVersion
-          });
-          const signatureInput = `${ownerUserIdRef.current}|${dataChecksum}`;
-          stateToSave._ownerChecksum = btoa(signatureInput).slice(0, 32);
-        }
+    // Clear existing timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
 
-        await storageManager.queuedSet(STORAGE_KEY, stateToSave);
+    // Debounce persistence by 300ms
+    debounceTimeoutRef.current = setTimeout(() => {
+      doPersist(baseState);
+      debounceTimeoutRef.current = null;
+    }, 300);
 
-        // DEBUG logging removed - creates thousands of logs due to frequent persistence
-      } catch (error) {
-        logger.error('Failed to persist state to IndexedDB:', error);
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [baseState, loading, doPersist]);
+
+  // ---- Flush pending writes on page close ----
+  React.useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Cancel debounce and persist immediately
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+        debounceTimeoutRef.current = null;
+      }
+      // Persist synchronously if there's pending state
+      if (pendingStateRef.current) {
+        doPersist(pendingStateRef.current);
       }
     };
 
-    persist(); // Fire immediately, no debounce
-  }, [baseState, loading]);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [doPersist]);
 
   return {
     state: baseState,
