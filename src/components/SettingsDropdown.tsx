@@ -11,7 +11,6 @@ import { SyncStatusPanel } from './SyncStatusPanel';
 import type { ReminderSettings as ReminderSettingsType, BonusSettings } from '../types';
 import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
 import {
-  SESSION_TIMEOUT_OPTIONS,
   getSessionTimeoutPreference,
   setSessionTimeoutPreference,
   type SessionTimeoutOption,
