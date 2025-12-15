@@ -66,6 +66,7 @@ import { Sidebar } from "./components/Sidebar";
 import { syncRepairConsole } from "./utils/syncRepairConsole";
 import { getOrCreateDeviceId } from "./services/deviceIdService";
 import { useConflictResolution } from "./hooks/useConflictResolution";
+import { useInactivityTimeout } from "./hooks/useInactivityTimeout";
 import { ConflictResolutionModal } from "./components/ConflictResolutionModal";
 import { HistoricalPifModal } from "./components/HistoricalPifModal";
 // PHASE 5: Add timing constants for loading and initialization
@@ -345,6 +346,12 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
 
   // Tab navigation with URL hash sync and browser history support
   const { tab, navigateToTab, search, setSearch } = useTabNavigation();
+
+  // Session inactivity timeout - auto-logout after configured period
+  const { refreshTimeoutOption } = useInactivityTimeout(
+    cloudSync.signOut,
+    !!cloudSync.user
+  );
   const [autoCreateArrangementFor, setAutoCreateArrangementFor] =
     React.useState<number | null>(null);
 
@@ -1428,6 +1435,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
               hasSupabase={!!supabase}
               userId={cloudSync.user?.id}
               deviceId={deviceId}
+              onSessionTimeoutChange={refreshTimeoutOption}
             />
           </div>
 
@@ -1762,11 +1770,20 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         onUpdatePassword={async (newPassword) => {
           await cloudSync.updatePassword(newPassword);
         }}
+        onGlobalSignOut={async () => {
+          // Sign out all devices (global scope)
+          if (supabase) {
+            await supabase.auth.signOut({ scope: 'global' });
+          }
+          await cloudSync.signOut();
+        }}
+        userEmail={cloudSync.user?.email}
       />
 
       <ChangeEmailModal
         open={showChangeEmail}
         onClose={() => setShowChangeEmail(false)}
+        userEmail={cloudSync.user?.email}
       />
 
       <DeleteAccountModal
@@ -1775,6 +1792,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         onConfirm={async () => {
           await cloudSync.signOut();
         }}
+        userEmail={cloudSync.user?.email}
       />
 
       {/* Historical PIF Recording Modal */}

@@ -10,6 +10,12 @@ import { SyncRepairPanel } from './SyncRepairPanel';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import type { ReminderSettings as ReminderSettingsType, BonusSettings } from '../types';
 import { DEFAULT_REMINDER_SETTINGS } from '../services/reminderScheduler';
+import {
+  SESSION_TIMEOUT_OPTIONS,
+  getSessionTimeoutPreference,
+  setSessionTimeoutPreference,
+  type SessionTimeoutOption,
+} from '../hooks/useInactivityTimeout';
 import type { AppState } from '../types';
 import {
   exportDataAsJSON,
@@ -54,6 +60,7 @@ interface SettingsDropdownProps {
   onShowSupabaseSetup?: () => void;
   onSignOut?: () => void;
   hasSupabase?: boolean;
+  onSessionTimeoutChange?: () => void;
 }
 
 
@@ -81,7 +88,8 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
   onShowSubscription,
   onShowSupabaseSetup,
   onSignOut,
-  hasSupabase
+  hasSupabase,
+  onSessionTimeoutChange,
 }) => {
   // Extract state and actions from hook
   const { state, actions, refs } = useSettingsDropdown();
@@ -468,6 +476,39 @@ const SettingsDropdownComponent: React.FC<SettingsDropdownProps> = ({
                   <span className="modern-button-icon">📄</span>
                   <span className="modern-button-text">Terms of Use</span>
                 </a>
+              </div>
+            </SettingsSection>
+
+            {/* Security */}
+            <SettingsSection
+              title="Security"
+              icon="🛡️"
+              sectionKey="security"
+              isExpanded={state.expandedSection === 'security'}
+              onToggle={actions.toggleSection}
+            >
+              <div className="modern-setting-column">
+                <label htmlFor="session-timeout" className="modern-setting-label">
+                  Session Timeout
+                </label>
+                <select
+                  id="session-timeout"
+                  className="modern-select"
+                  value={getSessionTimeoutPreference()}
+                  onChange={(e) => {
+                    setSessionTimeoutPreference(e.target.value as SessionTimeoutOption);
+                    onSessionTimeoutChange?.();
+                  }}
+                >
+                  <option value="15min">15 minutes</option>
+                  <option value="30min">30 minutes</option>
+                  <option value="1hr">1 hour</option>
+                  <option value="4hr">4 hours</option>
+                  <option value="never">Never (stay signed in)</option>
+                </select>
+                <p className="modern-setting-desc">
+                  Automatically sign out after this period of inactivity
+                </p>
               </div>
             </SettingsSection>
 

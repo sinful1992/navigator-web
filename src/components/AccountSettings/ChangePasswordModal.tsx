@@ -1,13 +1,22 @@
 // src/components/AccountSettings/ChangePasswordModal.tsx
 import { useModalContext } from '../ModalProvider';
+import { supabase } from '../../lib/supabaseClient';
 
 export interface ChangePasswordModalProps {
   open: boolean;
   onClose: () => void;
   onUpdatePassword: (newPassword: string) => Promise<void>;
+  onGlobalSignOut?: () => Promise<void>;
+  userEmail?: string;
 }
 
-export function ChangePasswordModal({ open, onClose, onUpdatePassword }: ChangePasswordModalProps) {
+export function ChangePasswordModal({
+  open,
+  onClose,
+  onUpdatePassword,
+  onGlobalSignOut,
+  userEmail
+}: ChangePasswordModalProps) {
   const { alert } = useModalContext();
 
   if (!open) return null;
@@ -48,22 +57,50 @@ export function ChangePasswordModal({ open, onClose, onUpdatePassword }: ChangeP
         <form onSubmit={async (e) => {
           e.preventDefault();
           const form = e.target as HTMLFormElement;
+          const currentPassword = (form.elements.namedItem('currentPassword') as HTMLInputElement).value;
           const newPassword = (form.elements.namedItem('newPassword') as HTMLInputElement).value;
           const confirmPassword = (form.elements.namedItem('confirmPassword') as HTMLInputElement).value;
 
-          if (newPassword !== confirmPassword) {
+          // Verify current password first
+          if (!currentPassword) {
             await alert({
-              title: 'Password Mismatch',
-              message: 'The passwords you entered do not match. Please try again.',
+              title: 'Current Password Required',
+              message: 'Please enter your current password to continue.',
               type: 'error'
             });
             return;
           }
 
-          if (newPassword.length < 6) {
+          // Verify current password by attempting to sign in
+          if (userEmail && supabase) {
+            const { error: verifyError } = await supabase.auth.signInWithPassword({
+              email: userEmail,
+              password: currentPassword
+            });
+
+            if (verifyError) {
+              await alert({
+                title: 'Incorrect Password',
+                message: 'The current password you entered is incorrect.',
+                type: 'error'
+              });
+              return;
+            }
+          }
+
+          if (newPassword !== confirmPassword) {
+            await alert({
+              title: 'Password Mismatch',
+              message: 'The new passwords you entered do not match. Please try again.',
+              type: 'error'
+            });
+            return;
+          }
+
+          if (newPassword.length < 8) {
             await alert({
               title: 'Password Too Short',
-              message: 'Password must be at least 6 characters long.',
+              message: 'Password must be at least 8 characters long.',
               type: 'error'
             });
             return;
@@ -71,12 +108,24 @@ export function ChangePasswordModal({ open, onClose, onUpdatePassword }: ChangeP
 
           try {
             await onUpdatePassword(newPassword);
-            onClose();
-            await alert({
-              title: 'Password Updated',
-              message: 'Your password has been updated successfully!',
-              type: 'success'
-            });
+
+            // Sign out all devices after password change
+            if (onGlobalSignOut) {
+              await alert({
+                title: 'Password Updated',
+                message: 'Your password has been updated. All devices will be signed out for security. Please sign in again with your new password.',
+                type: 'success'
+              });
+              onClose();
+              await onGlobalSignOut();
+            } else {
+              onClose();
+              await alert({
+                title: 'Password Updated',
+                message: 'Your password has been updated successfully!',
+                type: 'success'
+              });
+            }
           } catch (err: unknown) {
             await alert({
               title: 'Update Failed',
@@ -85,6 +134,34 @@ export function ChangePasswordModal({ open, onClose, onUpdatePassword }: ChangeP
             });
           }
         }}>
+          {/* Current Password */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontWeight: 500,
+              fontSize: '0.9375rem',
+              color: 'var(--text-primary)'
+            }}>
+              Current Password
+            </label>
+            <input
+              type="password"
+              name="currentPassword"
+              className="input"
+              required
+              placeholder="Enter your current password"
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                borderRadius: '8px',
+                border: '1.5px solid var(--gray-300)',
+                fontSize: '1rem'
+              }}
+            />
+          </div>
+
+          {/* New Password */}
           <div style={{ marginBottom: '1.25rem' }}>
             <label style={{
               display: 'block',
@@ -100,7 +177,7 @@ export function ChangePasswordModal({ open, onClose, onUpdatePassword }: ChangeP
               name="newPassword"
               className="input"
               required
-              minLength={6}
+              minLength={8}
               placeholder="Enter new password"
               style={{
                 width: '100%',
@@ -115,10 +192,11 @@ export function ChangePasswordModal({ open, onClose, onUpdatePassword }: ChangeP
               fontSize: '0.8125rem',
               color: 'var(--text-secondary)'
             }}>
-              Must be at least 6 characters
+              Must be at least 8 characters
             </p>
           </div>
 
+          {/* Confirm Password */}
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{
               display: 'block',
@@ -127,14 +205,14 @@ export function ChangePasswordModal({ open, onClose, onUpdatePassword }: ChangeP
               fontSize: '0.9375rem',
               color: 'var(--text-primary)'
             }}>
-              Confirm Password
+              Confirm New Password
             </label>
             <input
               type="password"
               name="confirmPassword"
               className="input"
               required
-              minLength={6}
+              minLength={8}
               placeholder="Re-enter new password"
               style={{
                 width: '100%',
@@ -144,6 +222,18 @@ export function ChangePasswordModal({ open, onClose, onUpdatePassword }: ChangeP
                 fontSize: '1rem'
               }}
             />
+          </div>
+
+          {/* Security Notice */}
+          <div style={{
+            padding: '0.75rem',
+            backgroundColor: 'var(--warning-bg, #fff3cd)',
+            borderRadius: '8px',
+            marginBottom: '1rem',
+            fontSize: '0.8125rem',
+            color: 'var(--warning-text, #856404)'
+          }}>
+            For security, all devices will be signed out after changing your password.
           </div>
 
           <div style={{
