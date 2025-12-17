@@ -72,6 +72,21 @@ export type AgentProfile = {
   contactInfo?: string;
 };
 
+/**
+ * Individual payment instalment in a payment plan
+ * Each instalment can have its date and amount edited independently
+ */
+export type PaymentInstalment = {
+  id: string;               // Unique ID for this instalment
+  instalmentNumber: number; // 1, 2, 3, etc.
+  scheduledDate: string;    // ISO date string (YYYY-MM-DD)
+  amount: number;           // Amount in pounds (e.g., 300.00)
+  status: 'pending' | 'paid' | 'missed' | 'cancelled';
+  paidDate?: string;        // ISO date string when actually paid
+  paidAmount?: number;      // Actual amount paid (may differ from scheduled)
+  notes?: string;
+};
+
 export type Arrangement = {
   id: string;               // unique identifier
   addressIndex: number;     // links to address in the main list
@@ -86,10 +101,16 @@ export type Arrangement = {
   initialPaymentAmount?: string;  // Initial payment recorded at arrangement creation
   createdAt: string;
   updatedAt: string;
-  // Case details
+  // Case details (REQUIRED for new arrangements)
   caseReference?: string;   // Case reference number for tracking
   numberOfCases?: number;   // Number of linked cases (e.g., 1 debtor with 3 cases)
-  // Recurring payment fields
+
+  // Payment plan with editable instalments
+  totalAmountOwed?: number;           // Total debt amount
+  paymentInstalments?: PaymentInstalment[];  // Full editable payment schedule
+  currentInstalmentIndex?: number;    // Index of next pending instalment (0-based)
+
+  // Recurring payment fields (legacy - kept for backward compatibility)
   recurrenceType?: RecurrenceType;
   recurrenceInterval?: number;  // e.g., 1 for weekly, 2 for bi-weekly
   paymentSchedule?: 'Single' | 'Weekly' | 'Bi-weekly' | 'Monthly';  // Payment frequency
