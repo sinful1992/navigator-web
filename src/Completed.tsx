@@ -75,6 +75,11 @@ function safeDurationSeconds(s: DaySession): number {
   }
   return 0;
 }
+function formatTime(isoString: string): string {
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
 function buildDays(startKey: string, endKey: string): string[] {
   if (!startKey || !endKey) return [];
   const start = fromKey(startKey);
@@ -316,6 +321,29 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
     return m;
   }, [daySessions]);
 
+  // Track earliest start and latest end per day
+  const timesByDay = React.useMemo(() => {
+    const m = new Map<string, { start?: string; end?: string }>();
+    for (const s of daySessions) {
+      if (!s.date) continue;
+      const existing = m.get(s.date) || {};
+      // Track earliest start
+      if (s.start) {
+        if (!existing.start || new Date(s.start) < new Date(existing.start)) {
+          existing.start = s.start;
+        }
+      }
+      // Track latest end
+      if (s.end) {
+        if (!existing.end || new Date(s.end) > new Date(existing.end)) {
+          existing.end = s.end;
+        }
+      }
+      m.set(s.date, existing);
+    }
+    return m;
+  }, [daySessions]);
+
   // Map day -> indices of completions for that day
   const completionIdxByDay = React.useMemo(() => {
     const m = new Map<string, number[]>();
@@ -434,6 +462,19 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
                 >
                   <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
                     <strong>{k}</strong>
+                    {(() => {
+                      const times = timesByDay.get(k);
+                      if (times?.start) {
+                        const startTime = formatTime(times.start);
+                        const endTime = times.end ? formatTime(times.end) : "ongoing";
+                        return (
+                          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                            {startTime} - {endTime}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                     <span className="pill">Hours {hoursFmt(seconds)}</span>
                     <span className="pill pill-done">Completed {total}</span>
                     <span className="pill pill-pif">PIF {pif}</span>
