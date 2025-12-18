@@ -287,9 +287,6 @@ export default function App() {
 function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync> }) {
   const deviceId = React.useMemo(() => getOrCreateDeviceId(), []);
 
-  // 🔧 FIX: Track if this is initial bootstrap (for logging purposes)
-  const isInitialLoadRef = React.useRef(true);
-
   const {
     state,
     loading,
@@ -639,66 +636,50 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         return;
       }
 
-      // 🔄 BOOTSTRAP SYNC FIX: Apply reconstructed state to IndexedDB on initial load
+      // 🔄 EVENT SOURCING: Operation log is the source of truth
       //
-      // OFFLINE-FIRST ARCHITECTURE WITH BOOTSTRAP SYNC:
-      // - IndexedDB (usePersistedState) is source of truth for UI state
-      // - Operation log manages sync between devices
-      // - On page refresh: Bootstrap fetches operations → reconstructs state → updates IndexedDB
-      // - Real-time updates: Skipped to prevent race conditions
+      // ARCHITECTURE:
+      // - Operation log (navigator_operations) is the source of truth
+      // - IndexedDB (navigator_state_v5) is a derived cache of the operation log
+      // - When operations change, IndexedDB is updated to reflect reconstructed state
       //
       // FLOW:
       // 1. Device A: User makes change → setBaseState → IndexedDB → operation submitted
       // 2. Cloud: Operation syncs to navigator_operations table
-      // 3. Device B: Page refresh → Bootstrap fetches operations → reconstructs state
-      // 4. Device B: subscribeToData callback → updates IndexedDB (INITIAL LOAD ONLY)
-      // 5. Device B: UI shows new data from updated IndexedDB
+      // 3. Any device: Operations change → state reconstructed → IndexedDB updated
+      // 4. UI shows current data from IndexedDB
       //
       // PROTECTION FLAGS:
-      // - Respect import/active/restore protection to prevent conflicts
+      // - Import/active/restore flags prevent conflicts during specific operations
+      // - These are the ONLY reasons to skip applying reconstructed state
       //
-      const isInitialLoad = isInitialLoadRef.current;
+      // SAFETY: operationSync.ts:1517-1525 guards against empty state notifications
+      // during initialization, so we won't receive empty state here.
+      //
 
-      if (isInitialLoad) {
-        // ✅ BOOTSTRAP: Apply reconstructed state to IndexedDB
-        isInitialLoadRef.current = false; // Mark as handled
-
-        // Check protection flags - skip if any active operation in progress
-        if (
-          isProtectionActive('navigator_import_in_progress') ||
-          isProtectionActive('navigator_active_protection') ||
-          isProtectionActive('navigator_restore_in_progress')
-        ) {
-          logger.warn('⚠️ BOOTSTRAP: Protection flag active, skipping IndexedDB update', {
-            import: isProtectionActive('navigator_import_in_progress'),
-            active: isProtectionActive('navigator_active_protection'),
-            restore: isProtectionActive('navigator_restore_in_progress'),
-          });
-          return;
-        }
-
-        // Apply reconstructed state to IndexedDB
-        if (typeof updaterOrState === 'function') {
-          // State updater function - apply to IndexedDB
-          setState(updaterOrState);
-          logger.info('✅ BOOTSTRAP: Applied reconstructed state updater to IndexedDB', {
-            timestamp: new Date().toISOString()
-          });
-        } else if (updaterOrState) {
-          // Direct state object - replace IndexedDB
-          setState(updaterOrState);
-          logger.info('✅ BOOTSTRAP: Replaced IndexedDB with reconstructed state', {
-            timestamp: new Date().toISOString()
-          });
-        }
+      // Check protection flags - skip if any active operation in progress
+      if (
+        isProtectionActive('navigator_import_in_progress') ||
+        isProtectionActive('navigator_active_protection') ||
+        isProtectionActive('navigator_restore_in_progress')
+      ) {
+        logger.info('🛡️ PROTECTION: Skipping state update due to active flag', {
+          import: isProtectionActive('navigator_import_in_progress'),
+          active: isProtectionActive('navigator_active_protection'),
+          restore: isProtectionActive('navigator_restore_in_progress'),
+        });
         return;
       }
 
-      // ⏭️ REAL-TIME UPDATES: Skip to prevent race conditions
-      logger.info('🛡️ OFFLINE-FIRST: Skipping real-time subscribeToData callback', {
-        hasData: !!updaterOrState,
+      // Apply reconstructed state from operations (source of truth)
+      if (typeof updaterOrState === 'function') {
+        setState(updaterOrState);
+      } else if (updaterOrState) {
+        setState(updaterOrState);
+      }
+      logger.info('✅ STATE SYNC: Applied state from operation log', {
+        timestamp: new Date().toISOString(),
       });
-      return;
     });
 
     setHydrated(true);
@@ -735,71 +716,85 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
   // All data is safely stored in navigator_operations table
 
   // CRITICAL FIX: Data integrity monitoring to detect potential data loss
+  // Uses sessionStorage for within-session tracking to avoid false positives
+  // The "peak count" approach only alerts when count drops below previous session peak
   React.useEffect(() => {
     if (!cloudSync.user || loading || !hydrated) return;
+
+    // Clean up old localStorage key that was causing false positives
+    localStorage.removeItem('navigator_data_counts');
 
     const checkDataIntegrity = () => {
       const completionsCount = safeState.completions.length;
       const addressesCount = safeState.addresses.length;
 
-      // Store current counts
-      const lastCounts = localStorage.getItem('navigator_data_counts');
-      if (lastCounts) {
-        const { completions: lastCompletions, addresses: lastAddresses } = JSON.parse(lastCounts);
+      // Skip check if cloud sync is currently active to avoid false positives
+      if (cloudSync.isSyncing) {
+        logger.info('Skipping data integrity check - cloud sync in progress');
+        return;
+      }
 
-        // Skip check if cloud sync is currently active to avoid false positives
-        if (cloudSync.isSyncing) {
-          logger.info('Skipping data integrity check - cloud sync in progress');
-          return;
-        }
+      // Use sessionStorage to track peak counts within this session only
+      // This avoids false positives from cross-session sync differences
+      const sessionKey = 'navigator_session_peak_counts';
+      const storedPeaks = sessionStorage.getItem(sessionKey);
+      const peaks = storedPeaks ? JSON.parse(storedPeaks) : { completions: 0, addresses: 0 };
 
-        // Be more tolerant if sync happened recently (within last 2 minutes)
-        const recentSyncThreshold = 2 * 60 * 1000; // 2 minutes
-        const timeSinceLastSync = cloudSync.lastSyncTime ? Date.now() - cloudSync.lastSyncTime.getTime() : Infinity;
-        const isRecentSync = timeSinceLastSync < recentSyncThreshold;
+      // Update peaks if current counts are higher (counts should only go up)
+      const newPeaks = {
+        completions: Math.max(peaks.completions, completionsCount),
+        addresses: Math.max(peaks.addresses, addressesCount),
+      };
 
-        // Use more relaxed thresholds during/after sync operations
-        const completionThreshold = isRecentSync ? 50 : 10; // Be more tolerant after recent sync
-        const addressThreshold = isRecentSync ? 200 : 50;   // Be more tolerant after recent sync
+      // Only check for drops if we've established a meaningful baseline
+      // (peak must be > 10 to avoid triggering on app initialization)
+      if (peaks.completions > 10) {
+        // Alert if completions dropped significantly from the session peak
+        // Use a higher threshold (50) since temporary UI/sync glitches can cause fluctuations
+        const completionDropThreshold = 50;
+        if (completionsCount < peaks.completions - completionDropThreshold) {
+          logger.error(`POTENTIAL DATA LOSS DETECTED: Completions dropped from ${peaks.completions} to ${completionsCount}`);
 
-        // Warn if we've lost significant data (but not during legitimate sync operations)
-        if (completionsCount < lastCompletions - completionThreshold) {
-          logger.error(`POTENTIAL DATA LOSS DETECTED: Completions dropped from ${lastCompletions} to ${completionsCount}`);
+          // Be more tolerant if sync happened recently (within last 2 minutes)
+          const recentSyncThreshold = 2 * 60 * 1000;
+          const timeSinceLastSync = cloudSync.lastSyncTime ? Date.now() - cloudSync.lastSyncTime.getTime() : Infinity;
+          const isRecentSync = timeSinceLastSync < recentSyncThreshold;
 
-          // Only show alert if this wasn't due to recent sync activity
           if (!isRecentSync) {
             alert({
               title: "⚠️ POTENTIAL DATA LOSS",
-              message: `Completions count dropped significantly (${lastCompletions} → ${completionsCount}). Check cloud backups immediately!`,
+              message: `Completions count dropped significantly (${peaks.completions} → ${completionsCount}). Try refreshing the page first. If the issue persists, check cloud backups.`,
               type: "error"
             });
           } else {
-            logger.warn(`Large completion count change during recent sync (${lastCompletions} → ${completionsCount}) - monitoring`);
-          }
-        }
-
-        if (addressesCount < lastAddresses - addressThreshold) {
-          logger.error(`POTENTIAL DATA LOSS DETECTED: Addresses dropped from ${lastAddresses} to ${addressesCount}`);
-
-          // Only show alert if this wasn't due to recent sync activity
-          if (!isRecentSync) {
-            alert({
-              title: "⚠️ POTENTIAL DATA LOSS",
-              message: `Address count dropped significantly (${lastAddresses} → ${addressesCount}). Check cloud backups immediately!`,
-              type: "error"
-            });
-          } else {
-            logger.warn(`Large address count change during recent sync (${lastAddresses} → ${addressesCount}) - monitoring`);
+            logger.warn(`Large completion count change during recent sync (${peaks.completions} → ${completionsCount}) - monitoring`);
           }
         }
       }
 
-      // Update stored counts
-      localStorage.setItem('navigator_data_counts', JSON.stringify({
-        completions: completionsCount,
-        addresses: addressesCount,
-        timestamp: new Date().toISOString()
-      }));
+      if (peaks.addresses > 10) {
+        const addressDropThreshold = 50;
+        if (addressesCount < peaks.addresses - addressDropThreshold) {
+          logger.error(`POTENTIAL DATA LOSS DETECTED: Addresses dropped from ${peaks.addresses} to ${addressesCount}`);
+
+          const recentSyncThreshold = 2 * 60 * 1000;
+          const timeSinceLastSync = cloudSync.lastSyncTime ? Date.now() - cloudSync.lastSyncTime.getTime() : Infinity;
+          const isRecentSync = timeSinceLastSync < recentSyncThreshold;
+
+          if (!isRecentSync) {
+            alert({
+              title: "⚠️ POTENTIAL DATA LOSS",
+              message: `Address count dropped significantly (${peaks.addresses} → ${addressesCount}). Try refreshing the page first. If the issue persists, check cloud backups.`,
+              type: "error"
+            });
+          } else {
+            logger.warn(`Large address count change during recent sync (${peaks.addresses} → ${addressesCount}) - monitoring`);
+          }
+        }
+      }
+
+      // Update session peaks
+      sessionStorage.setItem(sessionKey, JSON.stringify(newPeaks));
     };
 
     // Check integrity every 30 seconds

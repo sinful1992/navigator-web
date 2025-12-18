@@ -32,26 +32,22 @@ export function useUnifiedSync() {
   // Wrap subscribeToOperations to match the expected interface
   const subscribeToData = (onChange: React.Dispatch<React.SetStateAction<AppState>>): (() => void) => {
     return operationSync.subscribeToOperations((allOperations) => {
-      // 🔥 CRITICAL ARCHITECTURAL FIX: OFFLINE-FIRST - IndexedDB is source of truth
-      // DO NOT reconstruct and overwrite state from operations!
+      // 🔄 EVENT SOURCING: Operation log is the source of truth
       //
-      // OLD ARCHITECTURE (BROKEN):
-      // - Reconstruct entire state from operations
-      // - Call onChange(state) which overwrites IndexedDB
-      // - Race condition: IndexedDB state vs reconstructed state fight each other
-      // - Result: Local changes lost on page refresh
+      // ARCHITECTURE:
+      // - Operation log (navigator_operations) is the source of truth
+      // - IndexedDB (navigator_state_v5) is a derived cache
+      // - When operations change, state is reconstructed and IndexedDB updated
       //
-      // NEW ARCHITECTURE (FIXED):
-      // - IndexedDB (usePersistedState) is the ONLY source of truth
-      // - Operations sync in background (operation log separate from UI state)
-      // - Local changes persist to IndexedDB immediately
-      // - NO state reconstruction, NO overwrites
-      // - Operations are for sync between devices, not for UI state management
+      // This callback fires when:
+      // - Initial bootstrap completes (page load)
+      // - New operation submitted locally
+      // - New operation received from another device
       //
-      // The reconstructed state is passed to App.tsx, which checks isInitialLoad
-      // and skips it. This keeps operations syncing without touching UI state.
+      // App.tsx applies the reconstructed state to IndexedDB unless
+      // a protection flag is active (import/active/restore in progress).
       const state = reconstructState(INITIAL_STATE, allOperations);
-      logger.debug('📤 subscribeToData: Reconstructed state from operations (will be skipped by App.tsx):', {
+      logger.debug('📤 subscribeToData: Reconstructed state from operations:', {
         addresses: state.addresses?.length,
         completions: state.completions?.length,
         arrangements: state.arrangements?.length,
@@ -59,7 +55,7 @@ export function useUnifiedSync() {
         operationCount: allOperations.length,
       });
 
-      // Pass to App.tsx, but App.tsx will skip it (offline-first architecture)
+      // Pass reconstructed state to App.tsx for IndexedDB update
       onChange(state);
     });
   };
