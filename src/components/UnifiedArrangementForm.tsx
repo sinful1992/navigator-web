@@ -314,7 +314,7 @@ export default function UnifiedArrangementForm({
       for (const payment of previousPayments) {
         if (parseFloat(payment.amount) > 0) {
           try {
-            onComplete(finalAddressIndex, "PIF", payment.amount, undefined, caseReference);
+            onComplete(finalAddressIndex, "ARR", payment.amount, undefined, caseReference);
           } catch (error) {
             logger.error('Error recording previous payment:', error);
           }
