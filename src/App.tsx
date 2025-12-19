@@ -672,11 +672,28 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
       }
 
       // Apply reconstructed state from operations (source of truth)
-      if (typeof updaterOrState === 'function') {
-        setState(updaterOrState);
-      } else if (updaterOrState) {
-        setState(updaterOrState);
-      }
+      // 🔧 FIX: Preserve local activeIndex/activeStartTime - they are transient UI state
+      // that shouldn't be overwritten by operation log reconstruction
+      setState((currentState) => {
+        const newState = typeof updaterOrState === 'function'
+          ? updaterOrState(currentState)
+          : updaterOrState;
+
+        // Preserve local active state if we have one (user is working on an address)
+        if (currentState.activeIndex !== null && currentState.activeStartTime) {
+          logger.info('🛡️ PRESERVING local active state during sync', {
+            activeIndex: currentState.activeIndex,
+            activeStartTime: currentState.activeStartTime,
+          });
+          return {
+            ...newState,
+            activeIndex: currentState.activeIndex,
+            activeStartTime: currentState.activeStartTime,
+          };
+        }
+
+        return newState;
+      });
       logger.info('✅ STATE SYNC: Applied state from operation log', {
         timestamp: new Date().toISOString(),
       });
