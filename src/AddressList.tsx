@@ -152,17 +152,28 @@ const AddressListComponent = function AddressList({
     //   - Strategy 1: Index + ListVersion (standard matching for normal flow)
     //   - Strategy 2: Address string + ListVersion (route planning within SAME list)
 
-    // Build lookup Sets ONCE - O(completions)
-    // Strategy 1: "index|version" for strict index matching
+    // Build lookup structures ONCE - O(completions)
+    // Strategy 1: "index|version" for strict index matching (Set - exact match)
     const byIndexVersion = new Set<string>();
-    // Strategy 2: "address|version" for address string matching
-    const byAddressVersion = new Set<string>();
+    // Strategy 2: "address|version" → count of completions (Map - count-based)
+    // Using a Map instead of Set to handle duplicate addresses correctly:
+    // If you have 2 "123 Main St" and complete 1, only 1 should disappear
+    const completionCountByAddressVersion = new Map<string, number>();
 
     for (const c of completions) {
       const version = c.listVersion || state.currentListVersion;
       byIndexVersion.add(`${c.index}|${version}`);
-      byAddressVersion.add(`${c.address}|${version}`);
+
+      // Count completions per address+version
+      const addressKey = `${c.address}|${version}`;
+      completionCountByAddressVersion.set(
+        addressKey,
+        (completionCountByAddressVersion.get(addressKey) || 0) + 1
+      );
     }
+
+    // Track how many addresses we've hidden per address string
+    const hiddenCountByAddressVersion = new Map<string, number>();
 
     // Check each address with O(1) lookups
     const set = new Set<number>();
@@ -177,10 +188,15 @@ const AddressListComponent = function AddressList({
       }
 
       // Strategy 2: Address string + listVersion match (route planning workflow)
-      // Safety: Also checks listVersion to prevent stale completions from old imports
+      // COUNT-BASED: Only hide as many addresses as we have completions for
+      // This fixes the bug where 2 identical addresses both disappear when only 1 is completed
       const addressKey = `${addr.address}|${state.currentListVersion}`;
-      if (byAddressVersion.has(addressKey)) {
+      const totalCompletions = completionCountByAddressVersion.get(addressKey) || 0;
+      const alreadyHidden = hiddenCountByAddressVersion.get(addressKey) || 0;
+
+      if (alreadyHidden < totalCompletions) {
         set.add(index);
+        hiddenCountByAddressVersion.set(addressKey, alreadyHidden + 1);
       }
     });
 
