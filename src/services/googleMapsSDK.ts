@@ -270,10 +270,9 @@ export async function geocodeAddressSDK(address: string): Promise<{
     return new Promise((resolve) => {
       const geocoder = new window.google.maps.Geocoder();
 
-      // Restrict to UK to prevent matching streets in other cities/countries
+      // Bias results towards UK (region biasing doesn't require extra API permissions)
       geocoder.geocode({
         address,
-        componentRestrictions: { country: 'GB' },
         region: 'gb'
       }, (results, status) => {
         if (status === window.google.maps.GeocoderStatus.OK && results && results.length > 0) {
