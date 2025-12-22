@@ -137,9 +137,9 @@ class GeocodingService {
           body: { addresses: [address] }
         });
 
-        if (!error && data?.results?.[0]?.success) {
+        if (!error && data?.results?.[0]) {
           const result = data.results[0];
-          // Cache the successful result
+          // Cache ALL results (success or failure) to prevent repeated API calls
           this.cache[normalizedAddress] = {
             result,
             timestamp: Date.now(),
@@ -152,13 +152,19 @@ class GeocodingService {
       logger.warn('Edge Function geocoding failed:', error);
     }
 
-    // Return failure
-    return {
+    // Return failure and cache it to prevent repeated calls
+    const failureResult: GeocodingResult = {
       success: false,
       address,
       originalAddress: address,
       error: 'Geocoding service unavailable'
     };
+    this.cache[normalizedAddress] = {
+      result: failureResult,
+      timestamp: Date.now(),
+    };
+    this.saveCache().catch(logger.warn);
+    return failureResult;
   }
 
   getCacheStats(): { totalEntries: number; validEntries: number; expiredEntries: number } {
@@ -271,21 +277,10 @@ export async function geocodeAddresses(
     }
   }
 
-  // If many addresses failed, try Supabase Edge Function as fallback
+  // Log stats - no retry to avoid double API calls
   const failedCount = results.filter(r => !r.success).length;
-  if (failedCount > addresses.length * 0.5) { // If more than 50% failed
-    logger.warn(`${failedCount}/${addresses.length} addresses failed with direct API, trying Supabase Edge Function...`);
-    try {
-      const { geocodeAddresses: centralizedGeocode } = await import('./centralizedRouting');
-      const fallbackResults = await centralizedGeocode(addresses, onProgress);
-
-      // Use fallback results for addresses that failed with direct API
-      return results.map((result, idx) =>
-        result.success ? result : fallbackResults[idx]
-      );
-    } catch (error) {
-      logger.warn('Centralized batch geocoding also failed:', error);
-    }
+  if (failedCount > 0) {
+    logger.warn(`${failedCount}/${addresses.length} addresses failed to geocode`);
   }
 
   return results;
