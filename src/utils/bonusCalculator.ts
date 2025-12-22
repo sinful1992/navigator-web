@@ -106,11 +106,11 @@ export function calculateSimpleBonus(
 
   const { pifBonus, dailyThreshold } = settings.simpleSettings;
 
-  // Count PIFs - each debtor counts as 1 PIF regardless of number of cases
+  // Count PIFs - each case counts as 1 PIF (per employment contract)
   let totalPifs = 0;
   for (const completion of completions) {
     if (completion.outcome === 'PIF') {
-      totalPifs += 1;  // Always count as 1 PIF per debtor
+      totalPifs += completion.numberOfCases || 1;  // Count all cases as PIFs
     }
   }
 
@@ -364,7 +364,7 @@ export function calculateBonusBreakdown(
     const actualCases = completion.numberOfCases || 1;
     const totalEnforcementFees = completion.totalEnforcementFees;
 
-    breakdown.totalPifs++;  // Count as 1 PIF per debtor
+    breakdown.totalPifs += actualCases;  // Count all cases as PIFs (per employment contract)
     breakdown.totalCases += actualCases;
 
     let bonusForThisPif = 0;

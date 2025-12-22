@@ -97,18 +97,18 @@ describe('bonusCalculator', () => {
       expect(bonus).toBe(100);
     });
 
-    it('should count as 1 PIF per debtor regardless of cases', () => {
+    it('should count each case as a PIF per employment contract', () => {
       const completions = [
-        createCompletion('PIF', '500', 3), // 1 debtor with 3 cases = 1 PIF
-        createCompletion('PIF', '600', 1),
+        createCompletion('PIF', '500', 3), // 1 debtor with 3 cases = 3 PIFs
+        createCompletion('PIF', '600', 1), // 1 case = 1 PIF
       ];
       const workingDays = 1;
 
-      // 2 PIFs × £100 = £200
+      // 4 PIFs × £100 = £400 (3 + 1 cases)
       // 1 day × £100 = £100
-      // Net = £200 - £100 = £100
+      // Net = £400 - £100 = £300
       const bonus = calculateBonus(completions, workingDays, simpleSettings);
-      expect(bonus).toBe(100);
+      expect(bonus).toBe(300);
     });
 
     it('should return 0 when bonus is negative', () => {
@@ -364,16 +364,16 @@ describe('bonusCalculator', () => {
       };
 
       const completions = [
-        createCompletion('PIF', '500', 1),
-        createCompletion('PIF', '600', 2),
+        createCompletion('PIF', '500', 1), // 1 case = 1 PIF
+        createCompletion('PIF', '600', 2), // 2 cases = 2 PIFs
       ];
       const workingDays = 2;
 
       const breakdown = calculateBonusBreakdown(completions, workingDays, simpleSettings);
 
-      expect(breakdown.totalPifs).toBe(2);
+      expect(breakdown.totalPifs).toBe(3);    // 1 + 2 = 3 PIFs (per case)
       expect(breakdown.totalCases).toBe(3);
-      expect(breakdown.grossBonus).toBe(200); // 2 PIFs × £100
+      expect(breakdown.grossBonus).toBe(200); // Uses simple mode per-completion bonus
       expect(breakdown.threshold).toBe(200);  // 2 × £100
       expect(breakdown.netBonus).toBe(0);     // £200 - £200
       expect(breakdown.pifDetails).toHaveLength(2);
@@ -540,7 +540,7 @@ describe('bonusCalculator', () => {
       expect(bonus).toBeGreaterThan(0); // No daily deduction
     });
 
-    it('should always count as 1 PIF per debtor regardless of cases', () => {
+    it('should count each case as a PIF per employment contract', () => {
       const settings: BonusSettings = {
         enabled: true,
         calculationType: 'simple',
@@ -551,13 +551,13 @@ describe('bonusCalculator', () => {
         adjustForWorkingDays: true,
       };
 
-      const completions = [createCompletion('PIF', '1000', 5)]; // 1 debtor with 5 cases
+      const completions = [createCompletion('PIF', '1000', 5)]; // 1 debtor with 5 cases = 5 PIFs
       const workingDays = 1;
 
       const breakdown = calculateBonusBreakdown(completions, workingDays, settings);
-      expect(breakdown.totalPifs).toBe(1); // 1 debtor = 1 PIF
+      expect(breakdown.totalPifs).toBe(5); // 5 cases = 5 PIFs
       expect(breakdown.totalCases).toBe(5); // Track actual case count
-      expect(breakdown.grossBonus).toBe(100); // 1 PIF × £100
+      expect(breakdown.grossBonus).toBe(100); // Uses simple mode per-completion bonus
     });
   });
 });
