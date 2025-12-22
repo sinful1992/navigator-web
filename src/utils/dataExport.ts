@@ -2,6 +2,7 @@
 // GDPR-compliant data export utilities
 
 import type { AppState } from '../types';
+import { del } from 'idb-keyval';
 
 import { logger } from './logger';
 
@@ -206,19 +207,24 @@ export async function getStorageInfo(): Promise<{
  */
 export async function clearLocalCaches(): Promise<void> {
   try {
-    // Clear geocoding cache
+    // Clear geocoding cache from IndexedDB (this is where it's actually stored)
+    await del('geocode-cache');
+    logger.info('Cleared geocoding cache from IndexedDB');
+
+    // Also clear any legacy localStorage entries
     const geocodingKeys = Object.keys(localStorage).filter(k => k.startsWith('geocoding_cache_'));
     geocodingKeys.forEach(key => localStorage.removeItem(key));
 
     // Clear map tile cache if using service worker
+    let mapCachesCleared = 0;
     if ('caches' in window) {
       const cacheNames = await caches.keys();
       const mapCaches = cacheNames.filter(name => name.includes('map') || name.includes('tile'));
       await Promise.all(mapCaches.map(name => caches.delete(name)));
+      mapCachesCleared = mapCaches.length;
     }
 
-    logger.info(`Cleared ${geocodingKeys.length} geocoding cache entries`);
-    alert(`Cache cleared successfully!\n\nRemoved:\n- ${geocodingKeys.length} geocoding entries\n- Map tile caches`);
+    alert(`Cache cleared successfully!\n\nRemoved:\n- Geocoding cache (re-geocode addresses to get fresh results)\n- ${mapCachesCleared} map tile caches`);
   } catch (error) {
     logger.error('Failed to clear caches:', error);
     alert('Failed to clear some caches. See console for details.');

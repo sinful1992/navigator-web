@@ -270,7 +270,12 @@ export async function geocodeAddressSDK(address: string): Promise<{
     return new Promise((resolve) => {
       const geocoder = new window.google.maps.Geocoder();
 
-      geocoder.geocode({ address }, (results, status) => {
+      // Restrict to UK to prevent matching streets in other cities/countries
+      geocoder.geocode({
+        address,
+        componentRestrictions: { country: 'GB' },
+        region: 'gb'
+      }, (results, status) => {
         if (status === window.google.maps.GeocoderStatus.OK && results && results.length > 0) {
           const result = results[0];
           resolve({
