@@ -270,12 +270,7 @@ export async function geocodeAddressSDK(address: string): Promise<{
     return new Promise((resolve) => {
       const geocoder = new window.google.maps.Geocoder();
 
-      // Append UK to bias geocoding towards United Kingdom
-      const addressWithCountry = address.includes('UK') || address.includes('United Kingdom')
-        ? address
-        : `${address}, UK`;
-
-      geocoder.geocode({ address: addressWithCountry }, (results, status) => {
+      geocoder.geocode({ address }, (results, status) => {
         if (status === window.google.maps.GeocoderStatus.OK && results && results.length > 0) {
           const result = results[0];
           resolve({
