@@ -102,7 +102,8 @@ serve(async (req) => {
           }
         }
 
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address.trim())}&key=${GOOGLE_MAPS_API_KEY}`
+        // Restrict to UK to prevent wrong city matches
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address.trim())}&components=country:GB&region=gb&key=${GOOGLE_MAPS_API_KEY}`
 
         const response = await fetch(url)
 

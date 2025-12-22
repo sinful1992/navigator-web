@@ -126,15 +126,19 @@ class GeocodingService {
       return cached.result;
     }
 
-    // Try JavaScript SDK first (bypasses referer restrictions)
+    // Skip SDK - go directly to Edge Function (uses Geocoding API which is enabled)
+    // SDK requires Maps JavaScript API which may not be enabled
+    logger.info(`Geocoding via Edge Function: "${address}"`);
+
     try {
-      logger.info(`Geocoding with Google Maps SDK: "${address}"`);
-      const { geocodeAddressSDK, isGoogleMapsSDKAvailable } = await import('./googleMapsSDK');
+      const { supabase } = await import('../lib/supabaseClient');
+      if (supabase) {
+        const { data, error } = await supabase.functions.invoke('geocode-google', {
+          body: { addresses: [address] }
+        });
 
-      if (isGoogleMapsSDKAvailable()) {
-        const result = await geocodeAddressSDK(address);
-
-        if (result.success) {
+        if (!error && data?.results?.[0]?.success) {
+          const result = data.results[0];
           // Cache the successful result
           this.cache[normalizedAddress] = {
             result,
@@ -142,25 +146,18 @@ class GeocodingService {
           };
           this.saveCache().catch(logger.warn);
           return result;
-        } else {
-          // Cache negative results too to avoid repeated SDK calls
-          this.cache[normalizedAddress] = {
-            result,
-            timestamp: Date.now(),
-          };
-          this.saveCache().catch(logger.warn);
         }
       }
-    } catch (sdkError) {
-      logger.warn('JavaScript SDK geocoding failed, falling back to Supabase Edge Function:', sdkError);
+    } catch (error) {
+      logger.warn('Edge Function geocoding failed:', error);
     }
 
-    // Return failure - fallback to Supabase Edge Function will be handled in the calling function
+    // Return failure
     return {
       success: false,
       address,
       originalAddress: address,
-      error: 'Google Maps direct geocoding not available'
+      error: 'Geocoding service unavailable'
     };
   }
 
