@@ -88,12 +88,14 @@ serve(async (req) => {
       throw new Error('Maximum 25 addresses per request')
     }
 
-    console.log(`Geocoding ${addresses.length} addresses for user ${user.email} using Google Maps`)
+    console.log(`[geocode-google] Starting geocode for ${addresses.length} addresses, user: ${user.email}`)
+    console.log(`[geocode-google] API key configured: ${GOOGLE_MAPS_API_KEY ? 'YES (length: ' + GOOGLE_MAPS_API_KEY.length + ')' : 'NO'}`)
 
     // Function to geocode a single address
     const geocodeSingle = async (address: string): Promise<GeocodeResult> => {
       try {
         if (!address.trim()) {
+          console.log(`[geocode-google] Empty address provided, skipping`)
           return {
             success: false,
             address: address,
@@ -105,16 +107,22 @@ serve(async (req) => {
         // Restrict to UK to prevent wrong city matches
         const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address.trim())}&components=country:GB&region=gb&key=${GOOGLE_MAPS_API_KEY}`
 
+        console.log(`[geocode-google] Geocoding: "${address}"`)
+
         const response = await fetch(url)
+        console.log(`[geocode-google] Response status: ${response.status}`)
 
         if (!response.ok) {
+          console.error(`[geocode-google] HTTP error: ${response.status} ${response.statusText}`)
           throw new Error(`Google Maps API error: ${response.status}`)
         }
 
         const data = await response.json()
+        console.log(`[geocode-google] API response status: ${data.status}, results: ${data.results?.length || 0}`)
 
         if (data.status === 'OK' && data.results?.length > 0) {
           const result = data.results[0]
+          console.log(`[geocode-google] SUCCESS: "${address}" -> "${result.formatted_address}"`)
 
           return {
             success: true,
@@ -126,6 +134,7 @@ serve(async (req) => {
             formattedAddress: result.formatted_address
           }
         } else if (data.status === 'ZERO_RESULTS') {
+          console.log(`[geocode-google] ZERO_RESULTS for: "${address}"`)
           return {
             success: false,
             address: address,
@@ -133,6 +142,7 @@ serve(async (req) => {
             error: 'No geocoding results found'
           }
         } else {
+          console.error(`[geocode-google] API ERROR: ${data.status} - ${data.error_message || 'no message'}`)
           return {
             success: false,
             address: address,
@@ -142,7 +152,7 @@ serve(async (req) => {
         }
 
       } catch (error) {
-        console.error(`Geocoding failed for "${address}":`, error)
+        console.error(`[geocode-google] EXCEPTION for "${address}":`, error)
         return {
           success: false,
           address: address,
