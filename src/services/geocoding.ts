@@ -149,31 +149,27 @@ class GeocodingService {
         result.address = address;
         result.originalAddress = address;
 
-        // Cache ALL results (success or failure) to prevent repeated API calls
-        this.cache[normalizedAddress] = {
-          result,
-          timestamp: Date.now(),
-        };
-        this.saveCache().catch(logger.warn);
+        // Only cache successful results - don't cache failures
+        if (result.success) {
+          this.cache[normalizedAddress] = {
+            result,
+            timestamp: Date.now(),
+          };
+          this.saveCache().catch(logger.warn);
+        }
         return result;
       }
     } catch (sdkError) {
       logger.warn('SDK geocoding failed:', sdkError);
     }
 
-    // Return failure and cache it to prevent repeated calls
-    const failureResult: GeocodingResult = {
+    // Return failure - don't cache failures so they can be retried
+    return {
       success: false,
       address,
       originalAddress: address,
       error: 'Geocoding service unavailable'
     };
-    this.cache[normalizedAddress] = {
-      result: failureResult,
-      timestamp: Date.now(),
-    };
-    this.saveCache().catch(logger.warn);
-    return failureResult;
   }
 
   getCacheStats(): { totalEntries: number; validEntries: number; expiredEntries: number } {
