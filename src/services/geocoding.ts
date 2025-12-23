@@ -126,33 +126,33 @@ class GeocodingService {
       return cached.result;
     }
 
-    // Use Edge Function (server-side Geocoding API with UK restriction)
+    // Use client-side SDK (works with referer-restricted API keys)
     try {
-      logger.info(`Geocoding via Edge Function: "${address}"`);
-      const { supabase } = await import('../lib/supabaseClient');
+      const { geocodeAddressSDK, isGoogleMapsSDKAvailable } = await import('./googleMapsSDK');
 
-      if (supabase) {
-        const { data, error } = await supabase.functions.invoke('geocode-google', {
-          body: { addresses: [address] }
-        });
+      if (isGoogleMapsSDKAvailable()) {
+        // Append ", UK" to bias results towards United Kingdom
+        const addressWithUK = address.includes('UK') || address.includes('United Kingdom')
+          ? address
+          : `${address}, UK`;
 
-        logger.info(`Edge Function response - error: ${error?.message || 'none'}, data: ${JSON.stringify(data)}`);
+        logger.info(`Geocoding with SDK: "${addressWithUK}"`);
+        const result = await geocodeAddressSDK(addressWithUK);
 
-        if (!error && data?.results?.[0]) {
-          const result = data.results[0];
-          // Cache ALL results (success or failure) to prevent repeated API calls
-          this.cache[normalizedAddress] = {
-            result,
-            timestamp: Date.now(),
-          };
-          this.saveCache().catch(logger.warn);
-          return result;
-        } else if (error) {
-          logger.error(`Edge Function error: ${error.message}`);
-        }
+        // Restore original address in result
+        result.address = address;
+        result.originalAddress = address;
+
+        // Cache ALL results (success or failure) to prevent repeated API calls
+        this.cache[normalizedAddress] = {
+          result,
+          timestamp: Date.now(),
+        };
+        this.saveCache().catch(logger.warn);
+        return result;
       }
-    } catch (edgeFnError) {
-      logger.warn('Edge Function geocoding failed:', edgeFnError);
+    } catch (sdkError) {
+      logger.warn('SDK geocoding failed:', sdkError);
     }
 
     // Return failure and cache it to prevent repeated calls
