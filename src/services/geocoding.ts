@@ -126,30 +126,32 @@ class GeocodingService {
       return cached.result;
     }
 
-    // Skip SDK - go directly to Edge Function (uses Geocoding API which is enabled)
-    // SDK requires Maps JavaScript API which may not be enabled
-    logger.info(`Geocoding via Edge Function: "${address}"`);
-
+    // Try JavaScript SDK (append UK to address for better accuracy)
     try {
-      const { supabase } = await import('../lib/supabaseClient');
-      if (supabase) {
-        const { data, error } = await supabase.functions.invoke('geocode-google', {
-          body: { addresses: [address] }
-        });
+      logger.info(`Geocoding with Google Maps SDK: "${address}"`);
+      const { geocodeAddressSDK, isGoogleMapsSDKAvailable } = await import('./googleMapsSDK');
 
-        if (!error && data?.results?.[0]) {
-          const result = data.results[0];
-          // Cache ALL results (success or failure) to prevent repeated API calls
-          this.cache[normalizedAddress] = {
-            result,
-            timestamp: Date.now(),
-          };
-          this.saveCache().catch(logger.warn);
-          return result;
-        }
+      if (isGoogleMapsSDKAvailable()) {
+        // Append UK to bias towards United Kingdom
+        const addressWithUK = address.includes('UK') || address.includes('United Kingdom')
+          ? address
+          : `${address}, UK`;
+
+        const result = await geocodeAddressSDK(addressWithUK);
+        // Restore original address in result
+        result.address = address;
+        result.originalAddress = address;
+
+        // Cache ALL results (success or failure) to prevent repeated API calls
+        this.cache[normalizedAddress] = {
+          result,
+          timestamp: Date.now(),
+        };
+        this.saveCache().catch(logger.warn);
+        return result;
       }
-    } catch (error) {
-      logger.warn('Edge Function geocoding failed:', error);
+    } catch (sdkError) {
+      logger.warn('JavaScript SDK geocoding failed:', sdkError);
     }
 
     // Return failure and cache it to prevent repeated calls
