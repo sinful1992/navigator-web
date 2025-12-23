@@ -220,12 +220,10 @@ export async function clearLocalCaches(): Promise<void> {
     geocodingKeys.forEach(key => localStorage.removeItem(key));
 
     // Clear map tile cache if using service worker
-    let mapCachesCleared = 0;
     if ('caches' in window) {
       const cacheNames = await caches.keys();
       const mapCaches = cacheNames.filter(name => name.includes('map') || name.includes('tile'));
       await Promise.all(mapCaches.map(name => caches.delete(name)));
-      mapCachesCleared = mapCaches.length;
     }
 
     alert(`Cache cleared! Please refresh the page to complete.`);
