@@ -95,12 +95,15 @@ class GeocodingService {
   }
 
   async geocodeAddressInternal(address: string): Promise<GeocodingResult> {
+    logger.info(`[geocodeInternal] Starting for: "${address}"`);
+
     // RACE CONDITION FIX: Wait for cache to load before proceeding
     if (this.cacheLoadPromise) {
       await this.cacheLoadPromise;
     }
 
     if (!this.apiKey) {
+      logger.error(`[geocodeInternal] No API key configured!`);
       return {
         success: false,
         address,
@@ -110,6 +113,7 @@ class GeocodingService {
     }
 
     if (!address?.trim()) {
+      logger.warn(`[geocodeInternal] Empty address provided`);
       return {
         success: false,
         address,
@@ -123,12 +127,14 @@ class GeocodingService {
     // Check cache first
     const cached = this.cache[normalizedAddress];
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION_MS) {
+      logger.info(`[geocodeInternal] Cache hit for: "${address}"`);
       return cached.result;
     }
 
     // Use client-side SDK (works with referer-restricted API keys)
     try {
       const { geocodeAddressSDK, isGoogleMapsSDKAvailable } = await import('./googleMapsSDK');
+      logger.info(`[geocodeInternal] SDK available: ${isGoogleMapsSDKAvailable()}`);
 
       if (isGoogleMapsSDKAvailable()) {
         // Append ", UK" to bias results towards United Kingdom
