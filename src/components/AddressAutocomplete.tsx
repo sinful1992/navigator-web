@@ -89,8 +89,10 @@ export const AddressAutocomplete = forwardRef<HTMLInputElement, AddressAutocompl
       try {
         const placeDetails = await resolveSelectedPlace(suggestion.placeId);
         if (placeDetails) {
-          onChange(suggestion.label);
-          onSelect(suggestion.label, placeDetails.lat, placeDetails.lng);
+          // Use formatted address (includes postcode) instead of suggestion label
+          const fullAddress = placeDetails.formattedAddress || suggestion.label;
+          onChange(fullAddress);
+          onSelect(fullAddress, placeDetails.lat, placeDetails.lng);
         } else {
           // Fallback if place details fail
           onChange(suggestion.label);
