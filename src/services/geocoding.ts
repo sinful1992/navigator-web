@@ -240,15 +240,16 @@ export async function geocodeAddresses(
   return centralizedGeocode(addresses, onProgress);
 }
 
-import { getPlaceDetailsNew, isNewPlacesAPIAvailable, getCurrentSessionToken, clearCurrentSessionToken } from './newPlacesAPI';
+import { getPlaceAutocomplete, getPlaceDetailsNew, isNewPlacesAPIAvailable, getCurrentSessionToken, clearCurrentSessionToken } from './newPlacesAPI';
 
 import { logger } from '../utils/logger';
 
 // Legacy session token management - now handled by newPlacesAPI service
 
 /**
- * Address autocomplete/search using server-side Edge Function
- * API key is securely stored on server
+ * Address autocomplete/search using Google Places API (client-side)
+ * Uses Places Autocomplete API which is designed for as-you-type suggestions
+ * Falls back to server-side Edge Function if Places API unavailable
  */
 export async function searchAddresses(
   query: string,
@@ -260,8 +261,37 @@ export async function searchAddresses(
     return [];
   }
 
-  const { searchAddresses: centralizedSearch } = await import('./centralizedRouting');
-  return centralizedSearch(query, countryCode, limit);
+  // Try Google Places API directly first (best for autocomplete)
+  if (isNewPlacesAPIAvailable()) {
+    try {
+      logger.info(`Searching addresses with Google Places API: "${query}"`);
+
+      const predictions = await getPlaceAutocomplete(query, {
+        componentRestrictions: { country: countryCode.toLowerCase() },
+        types: ['street_address', 'route', 'premise']
+      });
+
+      if (predictions.length > 0) {
+        return predictions.slice(0, limit).map(prediction => ({
+          label: prediction.description,
+          coordinates: [0, 0], // Will be resolved when user selects
+          confidence: 0.9,
+          placeId: prediction.place_id
+        }));
+      }
+    } catch (error) {
+      logger.warn('Google Places API search failed, trying fallback:', error);
+    }
+  }
+
+  // Fallback to server-side Edge Function (OpenRouteService)
+  try {
+    const { searchAddresses: centralizedSearch } = await import('./centralizedRouting');
+    return centralizedSearch(query, countryCode, limit);
+  } catch (error) {
+    logger.warn('Fallback address search also failed:', error);
+    return [];
+  }
 }
 
 /**
