@@ -215,7 +215,14 @@ export async function getPlaceAutocomplete(
       }),
       ...(options.types && options.types.length > 0 && {
         includedPrimaryTypes: options.types
-      })
+      }),
+      // Bias towards UK to get more specific results with postcodes
+      locationBias: {
+        rectangle: {
+          low: { latitude: 49.9, longitude: -8.6 },  // SW corner of UK
+          high: { latitude: 60.9, longitude: 1.8 }   // NE corner of UK
+        }
+      }
     };
 
     logger.info('Making Places API (New) autocomplete request:', requestBody);
