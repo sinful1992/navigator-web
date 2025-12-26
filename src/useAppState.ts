@@ -545,6 +545,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
           const next: AppState = {
             addresses: saved.addresses.filter(validateAddressRow),
             activeIndex: (typeof saved.activeIndex === "number") ? saved.activeIndex : null,
+            activeStartTime: saved.activeStartTime ?? null,
             completions: stampCompletionsWithVersion(saved.completions, version),
             daySessions: Array.isArray(saved.daySessions) ? saved.daySessions : [],
             arrangements: Array.isArray(saved.arrangements) ? saved.arrangements : [],
@@ -1578,6 +1579,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       addresses: baseState.addresses,
       completions: baseState.completions,
       activeIndex: baseState.activeIndex,
+      activeStartTime: baseState.activeStartTime,
       daySessions: baseState.daySessions,
       arrangements: baseState.arrangements,
       currentListVersion: baseState.currentListVersion,
@@ -1626,6 +1628,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
         addresses: obj.addresses,
         completions: stampCompletionsWithVersion(obj.completions, version),
         activeIndex: obj.activeIndex ?? null,
+        activeStartTime: obj.activeStartTime ?? null,
         daySessions: obj.daySessions ?? [],
         arrangements: obj.arrangements ?? [],
         currentListVersion: version,
@@ -1705,6 +1708,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
             ),
 
             activeIndex: restoredState.activeIndex ?? currentState.activeIndex,
+            activeStartTime: restoredState.activeStartTime ?? currentState.activeStartTime,
           };
 
           return merged;
