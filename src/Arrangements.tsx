@@ -10,10 +10,10 @@ import { logger } from './utils/logger';
 type Props = {
   state: AppState;
   onAddArrangement: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
-  onUpdateArrangement: (id: string, updates: Partial<Arrangement>) => void;
+  onUpdateArrangement: (id: string, updates: Partial<Arrangement>) => Promise<void>;
   onDeleteArrangement: (id: string) => void;
   onAddAddress?: (address: AddressRow) => Promise<number>;
-  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string) => void;
+  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, enforcementFees?: number[], addressOverride?: string) => Promise<void>;
   autoCreateForAddress?: number | null;
   onAutoCreateHandled?: () => void;
 };
@@ -238,8 +238,8 @@ const ArrangementsComponent = function Arrangements({
       const currentInstalment = getCurrentInstalment(arrangement);
       const amount = currentInstalment?.amount?.toFixed(2) ?? arrangement.amount ?? "0";
 
-      // Record ARR payment
-      onComplete(arrangement.addressIndex, "ARR", amount, arrangement.id, arrangement.caseReference);
+      // Record ARR payment (await to ensure completion succeeds before updating arrangement)
+      await onComplete(arrangement.addressIndex, "ARR", amount, arrangement.id, arrangement.caseReference, undefined, undefined, arrangement.address);
 
       // Update instalments
       let updatedInstalments = arrangement.paymentInstalments;
@@ -300,13 +300,16 @@ const ArrangementsComponent = function Arrangements({
         .reduce((sum, i) => sum + (i.paidAmount ?? i.amount), 0) ?? 0;
       const remainingAmount = Math.max(0, totalOwed - paidSoFar);
 
-      // Record PIF completion
-      onComplete(
+      // Record PIF completion (await to ensure completion succeeds before updating arrangement)
+      await onComplete(
         arrangement.addressIndex,
         "PIF",
         remainingAmount.toFixed(2),
         arrangement.id,
-        arrangement.caseReference
+        arrangement.caseReference,
+        undefined,
+        undefined,
+        arrangement.address
       );
 
       // Mark all remaining instalments as paid
@@ -345,7 +348,8 @@ const ArrangementsComponent = function Arrangements({
     }));
 
     try {
-      onComplete(arrangement.addressIndex, "Done", undefined, arrangement.id, arrangement.caseReference);
+      // Record Done completion (await to ensure completion succeeds before updating arrangement)
+      await onComplete(arrangement.addressIndex, "Done", undefined, arrangement.id, arrangement.caseReference, undefined, undefined, arrangement.address);
       await onUpdateArrangement(arrangement.id, {
         status: "Completed",
         updatedAt: new Date().toISOString()
@@ -382,7 +386,8 @@ const ArrangementsComponent = function Arrangements({
     if (!arrangement) return;
 
     try {
-      onComplete(arrangement.addressIndex, "ARR", amount, arrangement.id, arrangement.caseReference);
+      // Record ARR payment (await to ensure completion succeeds)
+      await onComplete(arrangement.addressIndex, "ARR", amount, arrangement.id, arrangement.caseReference, undefined, undefined, arrangement.address);
       setQuickPaymentArrangementId(null);
     } catch (error) {
       logger.error('Error recording payment:', error);
@@ -448,7 +453,6 @@ const ArrangementsComponent = function Arrangements({
           onSave={handleArrangementSave}
           onCancel={() => setShowAddForm(false)}
           isLoading={loadingStates.saving}
-          onComplete={onComplete}
           fullscreen={true}
         />
       )}

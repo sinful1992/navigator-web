@@ -833,9 +833,9 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
   }, [setAddresses]);
 
   const handleComplete = React.useCallback(
-    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, enforcementFees?: number[]) => {
+    async (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, enforcementFees?: number[], addressOverride?: string) => {
       try {
-        await complete(index, outcome, amount, arrangementId, caseReference, numberOfCases, enforcementFees);
+        await complete(index, outcome, amount, arrangementId, caseReference, numberOfCases, enforcementFees, addressOverride);
 
         // Local storage backup only (no cloud backup needed with delta sync)
         try {
@@ -848,6 +848,7 @@ function AuthedApp({ cloudSync }: { cloudSync: ReturnType<typeof useUnifiedSync>
         }
       } catch (error) {
         logger.error("Failed to complete address:", error);
+        throw error; // Re-throw so callers can handle failure
       }
     },
     [complete, backupState]

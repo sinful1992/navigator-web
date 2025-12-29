@@ -141,34 +141,44 @@ export function useCompletionState({
       arrangementId?: string,
       caseReference?: string,
       numberOfCases?: number,
-      enforcementFees?: number[]
+      enforcementFees?: number[],
+      addressOverride?: string  // For manual addresses (index -1)
     ): Promise<string> => {
-      // Validate index is a valid number
-      if (!Number.isInteger(index) || index < 0) {
-        const error = `Invalid index: ${index}. Index must be a non-negative integer.`;
+      const currentState = baseState;
+
+      // Determine if using manual address mode (index -1 with address override)
+      const isManualAddress = index === -1 && addressOverride;
+
+      // Validate index is a valid number (allow -1 only with addressOverride)
+      if (!Number.isInteger(index) || (index < 0 && !isManualAddress)) {
+        const error = `Invalid index: ${index}. Index must be a non-negative integer (or -1 with addressOverride).`;
         logger.error(error);
         showError('Invalid address index. Please refresh and try again.');
         throw new Error(error);
       }
 
-      // Check array bounds
-      const currentState = baseState;
-      if (index >= currentState.addresses.length) {
+      // Check array bounds (skip for manual addresses)
+      if (!isManualAddress && index >= currentState.addresses.length) {
         const error = `Index ${index} out of bounds. Total addresses: ${currentState.addresses.length}`;
         logger.error(error);
         showError('Address not found. The list may have changed. Please refresh.');
         throw new Error(error);
       }
 
-      // Check if completion is already pending for this index
-      if (pendingCompletionsRef.current.has(index)) {
+      // Check if completion is already pending for this index (skip for manual addresses)
+      if (!isManualAddress && pendingCompletionsRef.current.has(index)) {
         throw new Error(`Completion already pending for index ${index}`);
       }
 
-      // Check if address exists and has valid data
-      const address = currentState.addresses[index];
+      // Get address data - from list or from override
+      const address = isManualAddress
+        ? { address: addressOverride, lat: null, lng: null }
+        : currentState.addresses[index];
+
       if (!address || !address.address) {
-        const error = `Address at index ${index} is invalid or empty`;
+        const error = isManualAddress
+          ? `No address override provided for manual address`
+          : `Address at index ${index} is invalid or empty`;
         logger.error(error);
         showError('Invalid address data. Please refresh and try again.');
         throw new Error(error);
@@ -248,9 +258,11 @@ export function useCompletionState({
       const operationId = generateOperationId('create', 'completion', completion);
 
       try {
-        // Mark as pending
-        pendingCompletionsRef.current.add(index);
-        setPendingCompletions(new Set(pendingCompletionsRef.current));
+        // Mark as pending (skip for manual addresses since index -1 isn't meaningful)
+        if (!isManualAddress) {
+          pendingCompletionsRef.current.add(index);
+          setPendingCompletions(new Set(pendingCompletionsRef.current));
+        }
 
         // Apply all changes synchronously to avoid race conditions
         const completionKey = `${index}_${outcome}_${currentState.currentListVersion}`;
@@ -298,9 +310,11 @@ export function useCompletionState({
 
         return operationId;
       } finally {
-        // Always clear pending state, even if above operations fail
-        pendingCompletionsRef.current.delete(index);
-        setPendingCompletions(new Set(pendingCompletionsRef.current));
+        // Always clear pending state, even if above operations fail (skip for manual addresses)
+        if (!isManualAddress) {
+          pendingCompletionsRef.current.delete(index);
+          setPendingCompletions(new Set(pendingCompletionsRef.current));
+        }
       }
     },
     [baseState, addOptimisticUpdate, setBaseState, services, atomicService]

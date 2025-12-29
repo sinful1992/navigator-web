@@ -1,5 +1,5 @@
 import React from 'react';
-import type { AppState, Arrangement, ArrangementStatus, AddressRow, Outcome, PaymentInstalment } from '../types';
+import type { AppState, Arrangement, AddressRow, PaymentInstalment } from '../types';
 import { LoadingButton } from './LoadingButton';
 import { addWeeks, addMonths, format, parseISO } from 'date-fns';
 import { logger } from '../utils/logger';
@@ -14,7 +14,6 @@ type Props = {
   onSave: (arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void> | void;
   onCancel: () => void;
   isLoading?: boolean;
-  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string) => void;
   fullscreen?: boolean;
 };
 
@@ -28,7 +27,6 @@ export default function UnifiedArrangementForm({
   onSave,
   onCancel,
   isLoading = false,
-  onComplete,
   fullscreen = false
 }: Props) {
   const overlayRef = React.useRef<HTMLDivElement>(null);
@@ -310,25 +308,10 @@ export default function UnifiedArrangementForm({
 
       await onSave(arrangementData);
 
-      // Record previous payments as completions
-      for (const payment of previousPayments) {
-        if (parseFloat(payment.amount) > 0) {
-          try {
-            onComplete(finalAddressIndex, "ARR", payment.amount, undefined, caseReference);
-          } catch (error) {
-            logger.error('Error recording previous payment:', error);
-          }
-        }
-      }
-
-      // Record ARR completion for the new arrangement (only for addresses in the main list)
-      if (finalAddressIndex !== -1) {
-        try {
-          onComplete(finalAddressIndex, "ARR", undefined, undefined, caseReference);
-        } catch (error) {
-          logger.error('Error recording ARR completion:', error);
-        }
-      }
+      // NOTE: Previous payments and initial ARR are NOT recorded as completions.
+      // They are stored on the arrangement object itself (via paymentInstalments)
+      // and should not affect bonus calculations. Completions are only created
+      // when actual payments are made via handleContinue, handlePaidInFull, etc.
 
     } catch (error) {
       logger.error('Error saving arrangement:', error);
