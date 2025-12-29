@@ -248,6 +248,33 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       // Update baseState immediately
       setTimeout(() => setBaseState((s: AppState) => ({ ...s, bonusSettings: DEFAULT_BONUS_SETTINGS })), 0);
     }
+
+    // 🔧 FIX: Correct wrong largePifPercentage (was 0.001875, should be 0.025)
+    // This fixes a bug where the percentage was incorrectly set to "2.5% of 7.5%" instead of "2.5% of debt"
+    const complexSettings = patchedBaseState.bonusSettings?.complexSettings;
+    if (complexSettings && complexSettings.largePifPercentage !== undefined && complexSettings.largePifPercentage < 0.01) {
+      logger.warn('Fixing incorrect largePifPercentage:', complexSettings.largePifPercentage, '-> 0.025');
+      const fixedBonusSettings = {
+        ...patchedBaseState.bonusSettings!,
+        complexSettings: {
+          ...complexSettings,
+          largePifPercentage: 0.025
+        }
+      };
+      patchedBaseState = { ...patchedBaseState, bonusSettings: fixedBonusSettings };
+      // Persist the fix
+      setTimeout(() => setBaseState((s: AppState) => ({
+        ...s,
+        bonusSettings: {
+          ...s.bonusSettings!,
+          complexSettings: {
+            ...s.bonusSettings!.complexSettings!,
+            largePifPercentage: 0.025
+          }
+        }
+      })), 0);
+    }
+
     return applyOptimisticUpdates(patchedBaseState, optimisticUpdates);
   }, [baseState, optimisticUpdates, setBaseState]);
 

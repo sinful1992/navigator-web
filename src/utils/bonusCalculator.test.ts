@@ -421,7 +421,7 @@ describe('bonusCalculator', () => {
         baseEnforcementFee: 235,
         basePifBonus: 100,
         largePifThreshold: 1500,
-        largePifPercentage: 0.001875,
+        largePifPercentage: 0.025,
         largePifCap: 500,
         smallPifBonus: 30,
         linkedCaseBonus: 10,

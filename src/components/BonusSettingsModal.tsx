@@ -314,7 +314,7 @@ export function BonusSettingsModal({
                       {localSettings.complexSettings?.basePifBonus || 100}
                     </li>
                     <li>
-                      Large PIF (&gt;£1500): £{localSettings.complexSettings?.basePifBonus || 100} + 2.5% of 7.5% over £1500 (max £{localSettings.complexSettings?.largePifCap || 500})
+                      Large PIF (&gt;£1500): £{localSettings.complexSettings?.basePifBonus || 100} + 2.5% of debt over £1500 (max £{localSettings.complexSettings?.largePifCap || 500})
                     </li>
                     <li>
                       Small PIF (&lt;£100): £{localSettings.complexSettings?.smallPifBonus || 30}

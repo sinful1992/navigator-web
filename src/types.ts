@@ -270,7 +270,7 @@ export type BonusSettings = {
     baseEnforcementFee: number;    // £235 enforcement fee
     basePifBonus: number;          // £100 for standard PIF
     largePifThreshold: number;     // £1500 debt threshold
-    largePifPercentage: number;    // 2.5% of 7.5% = 0.025 * 0.075 = 0.001875
+    largePifPercentage: number;    // 2.5% of debt over £1500 (0.025)
     largePifCap: number;           // £500 max bonus
     smallPifBonus: number;         // £30 for balance < £100
     linkedCaseBonus: number;       // £10 for linked cases with 0 fee
