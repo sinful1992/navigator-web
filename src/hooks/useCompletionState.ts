@@ -39,7 +39,8 @@ export interface UseCompletionStateReturn {
     arrangementId?: string,
     caseReference?: string,
     numberOfCases?: number,
-    enforcementFees?: number[]
+    enforcementFees?: number[],
+    addressOverride?: string  // For manual addresses (index -1)
   ) => Promise<string>;
   completeHistorical: (
     date: string,

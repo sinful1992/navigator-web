@@ -688,7 +688,6 @@ const CompletedComponent = function Completed({ state, onChangeOutcome, onAddArr
             setShowArrangementForm(null);
           }}
           onCancel={() => setShowArrangementForm(null)}
-          onComplete={onComplete}
           fullscreen={true}
         />
       )}

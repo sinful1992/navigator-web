@@ -1,5 +1,5 @@
 import React from 'react';
-import type { AppState, Arrangement, AddressRow, PaymentInstalment } from '../types';
+import type { AppState, Arrangement, ArrangementStatus, AddressRow, PaymentInstalment } from '../types';
 import { LoadingButton } from './LoadingButton';
 import { addWeeks, addMonths, format, parseISO } from 'date-fns';
 import { logger } from '../utils/logger';

@@ -655,7 +655,6 @@ const AddressListComponent = function AddressList({
             setShowArrangementForm(null);
           }}
           onCancel={() => setShowArrangementForm(null)}
-          onComplete={handleCompletion}
           fullscreen={true}
         />
       )}
