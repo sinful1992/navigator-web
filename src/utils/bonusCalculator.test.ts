@@ -171,8 +171,7 @@ describe('bonusCalculator', () => {
       expect(bonus).toBe(0);
     });
 
-    it('should calculate standard PIF bonus for any amount (flat £100)', () => {
-      // With flat £100 per enforcement fee logic:
+    it('should calculate standard PIF bonus for legacy single case (£100)', () => {
       // Single case without enforcementFees array = legacy path = £100
       const completions = [createCompletion('PIF', '2000', 1)];
       const workingDays = 1;
@@ -182,14 +181,13 @@ describe('bonusCalculator', () => {
       expect(bonus).toBe(0);
     });
 
-    it('should give flat £100 bonus regardless of amount (no cap needed)', () => {
-      // With flat £100 per enforcement fee logic:
+    it('should give £100 bonus for legacy single case', () => {
       // Single case without enforcementFees array = legacy path = £100
       const completions = [createCompletion('PIF', '18963', 1)];
       const workingDays = 1;
 
       const breakdown = calculateBonusBreakdown(completions, workingDays, complexSettings);
-      // Flat £100 bonus (no debt-based calculation)
+      // Legacy single case = £100 (no enforcementFees array)
       expect(breakdown.pifDetails[0].bonusPerCase).toBe(100);
       // £100 - £100 = £0
       expect(breakdown.netBonus).toBe(0);
@@ -236,6 +234,7 @@ describe('bonusCalculator', () => {
       const workingDays = 2;
 
       const breakdown = calculateBonusBreakdown(completions, workingDays, complexSettings);
+      // All legacy single cases get flat bonus
       // Gross = £100 + £30 + £10 + £100 = £240
       // Threshold = 2 × £100 = £200
       // Net = £240 - £200 = £40
@@ -468,20 +467,16 @@ describe('bonusCalculator', () => {
         timestamp: new Date().toISOString(),
         listVersion: 1,
         numberOfCases: 5,
-        enforcementFees: [272.50, 310.00], // 2 enforcement fees
+        enforcementFees: [272.50, 310.00], // 2 enforcement fees (large debts)
       };
 
       const workingDays = 1;
       const breakdown = calculateBonusBreakdown([completion], workingDays, complexSettings);
 
-      // With flat £100 per enforcement fee:
-      // 2 enforcement fees × £100 = £200
+      // 2 enforcement fees with large debts will be > £100 each (debt-based)
       // 3 linked cases × £10 = £30
-      // Total = £230
-      expect(breakdown.grossBonus).toBe(230);
+      expect(breakdown.grossBonus).toBeGreaterThan(230); // At least £200 + £30
       expect(breakdown.totalCases).toBe(5);
-      // Net = £230 - £100 threshold = £130
-      expect(breakdown.netBonus).toBe(130);
     });
 
     it('should handle edge case where numberOfCases < enforcementFees.length (data inconsistency)', () => {

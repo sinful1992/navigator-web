@@ -163,8 +163,26 @@ export function calculateComplexBonus(
 
     // Check if we have individual enforcement fees
     if (completion.enforcementFees && completion.enforcementFees.length > 0) {
-      // Each enforcement fee = £100 (flat, not debt-based)
-      totalBonus += completion.enforcementFees.length * basePifBonus;
+      // Calculate bonus for each enforcement fee based on debt
+      for (const enfFee of completion.enforcementFees) {
+        // Reverse-engineer debt from enforcement fee
+        // If E > 235, then D > 1500: E = 235 + 0.075 × (D - 1500)
+        // Solving: D = (E - 235) / 0.075 + 1500
+        let debt: number;
+        if (enfFee <= 235) {
+          debt = 1000; // Assume mid-range debt for standard enforcement fee
+        } else {
+          debt = (enfFee - 235) / 0.075 + 1500;
+        }
+
+        // Calculate bonus based on debt
+        if (debt > largePifThreshold) {
+          const additionalBonus = largePifPercentage * (debt - largePifThreshold);
+          totalBonus += Math.min(basePifBonus + additionalBonus, largePifCap);
+        } else {
+          totalBonus += basePifBonus;
+        }
+      }
 
       // Linked cases = £10 each
       const linkedCases = Math.max(0, actualCases - completion.enforcementFees.length);
@@ -356,8 +374,22 @@ export function calculateBonusBreakdown(
 
       // Check if we have individual enforcement fees
       if (completion.enforcementFees && completion.enforcementFees.length > 0) {
-        // Each enforcement fee = £100 (flat, not debt-based)
-        bonusForThisPif = completion.enforcementFees.length * basePifBonus;
+        // Calculate bonus for each enforcement fee based on debt
+        for (const enfFee of completion.enforcementFees) {
+          let debt: number;
+          if (enfFee <= 235) {
+            debt = 1000;
+          } else {
+            debt = (enfFee - 235) / 0.075 + 1500;
+          }
+
+          if (debt > largePifThreshold) {
+            const additionalBonus = largePifPercentage * (debt - largePifThreshold);
+            bonusForThisPif += Math.min(basePifBonus + additionalBonus, largePifCap);
+          } else {
+            bonusForThisPif += basePifBonus;
+          }
+        }
 
         // Linked cases = £10 each
         const linkedCases = Math.max(0, actualCases - completion.enforcementFees.length);
