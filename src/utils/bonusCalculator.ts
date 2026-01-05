@@ -163,55 +163,26 @@ export function calculateComplexBonus(
 
     // Check if we have individual enforcement fees
     if (completion.enforcementFees && completion.enforcementFees.length > 0) {
-      // NEW: Calculate bonus for each enforcement fee individually
-      for (const enfFee of completion.enforcementFees) {
-        // Calculate debt for this specific enforcement fee
-        // D = E - 235, then reverse to get original debt using enforcement fee formula
-        // If E > 235, then D > 1500, so: E = 235 + 0.075 × (D - 1500)
-        // Solving: D = (E - 235) / 0.075 + 1500
-        let debt: number;
-        if (enfFee <= 235) {
-          debt = 1000; // Assume mid-range debt for standard enforcement fee
-        } else {
-          debt = (enfFee - 235) / 0.075 + 1500;
-        }
+      // Each enforcement fee = £100 (flat, not debt-based)
+      totalBonus += completion.enforcementFees.length * basePifBonus;
 
-        // Calculate bonus based on debt
-        if (debt > largePifThreshold) {
-          const additionalBonus = largePifPercentage * (debt - largePifThreshold);
-          totalBonus += Math.min(basePifBonus + additionalBonus, largePifCap);
-        } else {
-          totalBonus += basePifBonus;
-        }
-      }
-
-      // Add bonus for linked cases (cases without enforcement fees)
-      // Safety check: if actualCases < enforcementFees.length, assume actualCases = enforcementFees.length (no linked cases)
-      const adjustedCases = Math.max(actualCases, completion.enforcementFees.length);
-      const linkedCases = adjustedCases - completion.enforcementFees.length;
-      if (linkedCases > 0) {
-        totalBonus += linkedCases * linkedCaseBonus;
-      }
+      // Linked cases = £10 each
+      const linkedCases = Math.max(0, actualCases - completion.enforcementFees.length);
+      totalBonus += linkedCases * linkedCaseBonus;
     } else {
-      // LEGACY: Backward compatibility - use old calculation method
-      const totalEnforcementFees = completion.totalEnforcementFees;
-
-      if (amount === 0) {
+      // LEGACY: Backward compatibility - completions without enforcementFees array
+      if (actualCases > 1) {
+        // Multi-case: 1 main case (£100) + linked cases (£10 each)
+        totalBonus += basePifBonus + (actualCases - 1) * linkedCaseBonus;
+      } else if (amount === 0) {
         // Linked case with 0 fee
         totalBonus += linkedCaseBonus;
       } else if (amount < 100) {
         // Small PIF (balance < £100)
         totalBonus += smallPifBonus;
       } else {
-        // Calculate debt from total using reverse formula
-        const debt = calculateDebtFromTotal(amount, actualCases, totalEnforcementFees);
-
-        if (debt > largePifThreshold) {
-          const additionalBonus = largePifPercentage * (debt - largePifThreshold);
-          totalBonus += Math.min(basePifBonus + additionalBonus, largePifCap);
-        } else {
-          totalBonus += basePifBonus;
-        }
+        // Single case = standard PIF
+        totalBonus += basePifBonus;
       }
     }
   }
@@ -385,44 +356,24 @@ export function calculateBonusBreakdown(
 
       // Check if we have individual enforcement fees
       if (completion.enforcementFees && completion.enforcementFees.length > 0) {
-        // Calculate bonus for each enforcement fee
-        for (const enfFee of completion.enforcementFees) {
-          let debt: number;
-          if (enfFee <= 235) {
-            debt = 1000;
-          } else {
-            debt = (enfFee - 235) / 0.075 + 1500;
-          }
+        // Each enforcement fee = £100 (flat, not debt-based)
+        bonusForThisPif = completion.enforcementFees.length * basePifBonus;
 
-          if (debt > largePifThreshold) {
-            const additionalBonus = largePifPercentage * (debt - largePifThreshold);
-            bonusForThisPif += Math.min(basePifBonus + additionalBonus, largePifCap);
-          } else {
-            bonusForThisPif += basePifBonus;
-          }
-        }
-
-        // Add bonus for linked cases
-        // Safety check: if actualCases < enforcementFees.length, assume actualCases = enforcementFees.length (no linked cases)
-        const adjustedCases = Math.max(actualCases, completion.enforcementFees.length);
-        const linkedCases = adjustedCases - completion.enforcementFees.length;
-        if (linkedCases > 0) {
-          bonusForThisPif += linkedCases * linkedCaseBonus;
-        }
+        // Linked cases = £10 each
+        const linkedCases = Math.max(0, actualCases - completion.enforcementFees.length);
+        bonusForThisPif += linkedCases * linkedCaseBonus;
       } else {
-        // Legacy calculation
-        if (amount === 0) {
+        // LEGACY: Backward compatibility - completions without enforcementFees array
+        if (actualCases > 1) {
+          // Multi-case: 1 main case (£100) + linked cases (£10 each)
+          bonusForThisPif = basePifBonus + (actualCases - 1) * linkedCaseBonus;
+        } else if (amount === 0) {
           bonusForThisPif = linkedCaseBonus;
         } else if (amount < 100) {
           bonusForThisPif = smallPifBonus;
         } else {
-          debtAmount = calculateDebtFromTotal(amount, actualCases, totalEnforcementFees);
-          if (debtAmount > largePifThreshold) {
-            const additionalBonus = largePifPercentage * (debtAmount - largePifThreshold);
-            bonusForThisPif = Math.min(basePifBonus + additionalBonus, largePifCap);
-          } else {
-            bonusForThisPif = basePifBonus;
-          }
+          // Single case = standard PIF
+          bonusForThisPif = basePifBonus;
         }
       }
     } else if (settings.calculationType === 'custom' && settings.customFormula) {

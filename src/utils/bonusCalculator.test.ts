@@ -171,32 +171,28 @@ describe('bonusCalculator', () => {
       expect(bonus).toBe(0);
     });
 
-    it('should calculate large PIF bonus', () => {
-      // Amount £2000, 1 case
-      // Debt = (2000 - 75) / 1.075 = 1790.70
-      // Debt > £1500, so bonus = £100 + 0.025 * (1790.70 - 1500)
-      // Bonus = £100 + 7.27 = £107.27
+    it('should calculate standard PIF bonus for any amount (flat £100)', () => {
+      // With flat £100 per enforcement fee logic:
+      // Single case without enforcementFees array = legacy path = £100
       const completions = [createCompletion('PIF', '2000', 1)];
       const workingDays = 1;
 
       const bonus = calculateBonus(completions, workingDays, complexSettings);
-      // £107.27 - £100 = £7.27
-      expect(bonus).toBeCloseTo(7.27, 2);
+      // £100 - £100 = £0
+      expect(bonus).toBe(0);
     });
 
-    it('should cap large PIF bonus at £500', () => {
-      // Very large amount to exceed cap
-      // To reach £500 cap: £500 = £100 + 0.025 * (D - 1500)
-      // D = 1500 + (400 / 0.025) = 17500
-      // T = 17500 * 1.075 + 75 = 18962.5
+    it('should give flat £100 bonus regardless of amount (no cap needed)', () => {
+      // With flat £100 per enforcement fee logic:
+      // Single case without enforcementFees array = legacy path = £100
       const completions = [createCompletion('PIF', '18963', 1)];
       const workingDays = 1;
 
       const breakdown = calculateBonusBreakdown(completions, workingDays, complexSettings);
-      // Should be capped at £500
-      expect(breakdown.pifDetails[0].bonusPerCase).toBe(500);
-      // £500 - £100 = £400
-      expect(breakdown.netBonus).toBe(400);
+      // Flat £100 bonus (no debt-based calculation)
+      expect(breakdown.pifDetails[0].bonusPerCase).toBe(100);
+      // £100 - £100 = £0
+      expect(breakdown.netBonus).toBe(0);
     });
 
     it('should calculate small PIF bonus (< £100)', () => {
@@ -219,34 +215,32 @@ describe('bonusCalculator', () => {
       expect(bonus).toBe(0);
     });
 
-    it('should handle multiple linked cases with large debt', () => {
-      // Total collected £5000, 3 cases
-      // Debt = (5000 - 75*3) / 1.075 = (5000 - 225) / 1.075 = 4441.86
-      // Bonus = £100 + 0.025 * (4441.86 - 1500) = £100 + 73.55 = £173.55
-      // Count as 1 PIF (not multiplied by cases)
+    it('should handle multiple cases without enforcement fees (legacy path)', () => {
+      // 3 cases without enforcementFees array = legacy path
+      // 1 main case (£100) + 2 linked cases (£20) = £120
       const completions = [createCompletion('PIF', '5000', 3)];
       const workingDays = 1;
 
       const bonus = calculateBonus(completions, workingDays, complexSettings);
-      // £173.55 - £100 = £73.55
-      expect(bonus).toBeCloseTo(73.55, 2);
+      // £120 - £100 = £20
+      expect(bonus).toBe(20);
     });
 
     it('should calculate mixed PIFs correctly', () => {
       const completions = [
-        createCompletion('PIF', '500', 1),  // Standard: £100
+        createCompletion('PIF', '500', 1),  // Standard: £100 (legacy single case)
         createCompletion('PIF', '80', 1),   // Small: £30
         createCompletion('PIF', '0', 1),    // Linked: £10
-        createCompletion('PIF', '3000', 1), // Large: ~£103
+        createCompletion('PIF', '3000', 1), // Standard: £100 (legacy single case)
       ];
       const workingDays = 2;
 
       const breakdown = calculateBonusBreakdown(completions, workingDays, complexSettings);
-      // Gross = £100 + £30 + £10 + £103 = £243
+      // Gross = £100 + £30 + £10 + £100 = £240
       // Threshold = 2 × £100 = £200
-      // Net = £243 - £200 = £43
-      expect(breakdown.grossBonus).toBeGreaterThan(240);
-      expect(breakdown.netBonus).toBeGreaterThan(40);
+      // Net = £240 - £200 = £40
+      expect(breakdown.grossBonus).toBe(240);
+      expect(breakdown.netBonus).toBe(40);
     });
   });
 
@@ -408,8 +402,12 @@ describe('bonusCalculator', () => {
       expect(breakdown.totalPifs).toBe(2);
       expect(breakdown.totalCases).toBe(2);
       expect(breakdown.pifDetails).toHaveLength(2);
-      expect(breakdown.pifDetails[0].debtAmount).toBeDefined();
-      expect(breakdown.pifDetails[1].debtAmount).toBeDefined();
+      // With flat £100 logic, each single-case PIF gets £100
+      expect(breakdown.pifDetails[0].bonusPerCase).toBe(100);
+      expect(breakdown.pifDetails[1].bonusPerCase).toBe(100);
+      // Gross = £200, threshold = £100, net = £100
+      expect(breakdown.grossBonus).toBe(200);
+      expect(breakdown.netBonus).toBe(100);
     });
   });
 
@@ -470,16 +468,20 @@ describe('bonusCalculator', () => {
         timestamp: new Date().toISOString(),
         listVersion: 1,
         numberOfCases: 5,
-        enforcementFees: [272.50, 310.00], // 2 enforcement fees (large debts)
+        enforcementFees: [272.50, 310.00], // 2 enforcement fees
       };
 
       const workingDays = 1;
       const breakdown = calculateBonusBreakdown([completion], workingDays, complexSettings);
 
-      // 2 enforcement fees with large debts will be > £100 each
+      // With flat £100 per enforcement fee:
+      // 2 enforcement fees × £100 = £200
       // 3 linked cases × £10 = £30
-      expect(breakdown.grossBonus).toBeGreaterThan(230); // At least £200 + £30
+      // Total = £230
+      expect(breakdown.grossBonus).toBe(230);
       expect(breakdown.totalCases).toBe(5);
+      // Net = £230 - £100 threshold = £130
+      expect(breakdown.netBonus).toBe(130);
     });
 
     it('should handle edge case where numberOfCases < enforcementFees.length (data inconsistency)', () => {

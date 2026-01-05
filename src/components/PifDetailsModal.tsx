@@ -109,7 +109,18 @@ export function PifDetailsModal({
         return;
       }
 
-      finalEnforcementFees = parsedFees.length > 0 ? parsedFees : undefined;
+      if (parsedFees.length === 0) {
+        if (pifAmount > 1500) {
+          // Require manual entry for amounts over £1500 (fees vary based on case balances)
+          alert("Please enter at least 1 enforcement fee for multi-case PIFs over £1500");
+          return;
+        } else {
+          // Auto-calculate for amounts ≤ £1500 (fee is always £235)
+          finalEnforcementFees = [235];
+        }
+      } else {
+        finalEnforcementFees = parsedFees;
+      }
     }
 
     onConfirm({
