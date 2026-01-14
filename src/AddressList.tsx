@@ -13,7 +13,7 @@ type Props = {
   state: AppState;
   setActive: (index: number) => void;
   cancelActive: () => void;
-  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, enforcementFees?: number[]) => void;
+  onComplete: (index: number, outcome: Outcome, amount?: string, arrangementId?: string, caseReference?: string, numberOfCases?: number, enforcementFees?: number[], addressOverride?: string) => void;
   onAddArrangement?: (
     arrangement: Omit<Arrangement, 'id' | 'createdAt' | 'updatedAt'>
   ) => Promise<string>;
@@ -184,6 +184,9 @@ const AddressListComponent = function AddressList({
       const indexKey = `${index}|${state.currentListVersion}`;
       if (byIndexVersion.has(indexKey)) {
         set.add(index);
+        // Also increment hidden count so Strategy 2 doesn't double-hide duplicate addresses
+        const addressKey = `${addr.address}|${state.currentListVersion}`;
+        hiddenCountByAddressVersion.set(addressKey, (hiddenCountByAddressVersion.get(addressKey) || 0) + 1);
         return;
       }
 
@@ -264,7 +267,9 @@ const AddressListComponent = function AddressList({
 
     try {
       setSubmittingIndex(index);
-      await onComplete(index, outcome, amount, arrangementId, caseRef, numCases, enfFees);
+      // Pass address string as addressOverride for reliable matching (especially for manual addresses)
+      const addr = addresses[index];
+      await onComplete(index, outcome, amount, arrangementId, caseRef, numCases, enfFees, addr?.address);
       setOutcomeOpenFor(null);
     } catch (error) {
       logger.error('Completion failed:', error);
@@ -274,7 +279,7 @@ const AddressListComponent = function AddressList({
       pendingCompletions.current.delete(index);
       resolvePromise!();
     }
-  }, [onComplete]);
+  }, [onComplete, addresses]);
 
   // Filter visible addresses that have coordinates for map view (pending only)
   const geocodedVisible = React.useMemo(

@@ -32,6 +32,12 @@ export function PifDetailsModal({
     initialEnforcementFees.length > 0 ? initialEnforcementFees.map(f => String(f)) : ['']
   );
 
+  // Detect dark mode for proper styling
+  const [isDarkMode, setIsDarkMode] = React.useState(false);
+  React.useEffect(() => {
+    setIsDarkMode(document.documentElement.classList.contains('dark-mode'));
+  }, []);
+
   // Auto-calculate enforcement fee for single case
   const calculatedSingleCaseFee = React.useMemo(() => {
     const numCases = Number(numberOfCases);
@@ -138,7 +144,7 @@ export function PifDetailsModal({
   };
 
   return (
-    <div className="pif-modal-overlay" onClick={handleOverlayClick}>
+    <div className={`pif-modal-overlay${isDarkMode ? ' dark-mode' : ''}`} onClick={handleOverlayClick}>
       <div className="pif-modal" onClick={(e) => e.stopPropagation()}>
         <div className="pif-modal-header">
           <h3>💷 Enter PIF Details</h3>
@@ -551,56 +557,56 @@ export function PifDetailsModal({
         }
 
         /* Dark mode */
-        .dark-mode .pif-modal {
+        .pif-modal-overlay.dark-mode .pif-modal {
           background: var(--gray-100);
         }
 
-        .dark-mode .pif-modal-header {
+        .pif-modal-overlay.dark-mode .pif-modal-header {
           background: linear-gradient(135deg, #065f46 0%, #047857 100%);
           border-color: var(--gray-300);
         }
 
-        .dark-mode .pif-modal-header h3 {
+        .pif-modal-overlay.dark-mode .pif-modal-header h3 {
           color: white;
         }
 
-        .dark-mode .pif-close-btn {
+        .pif-modal-overlay.dark-mode .pif-close-btn {
           color: white;
         }
 
-        .dark-mode .pif-close-btn:hover {
+        .pif-modal-overlay.dark-mode .pif-close-btn:hover {
           background: rgba(255,255,255,0.1);
         }
 
-        .dark-mode .pif-input {
+        .pif-modal-overlay.dark-mode .pif-input {
           background: var(--gray-200);
           border-color: var(--gray-400);
           color: var(--gray-900);
         }
 
-        .dark-mode .pif-amount-input {
+        .pif-modal-overlay.dark-mode .pif-amount-input {
           background: linear-gradient(135deg, #065f46 0%, #047857 100%);
           color: white;
         }
 
-        .dark-mode .pif-currency-symbol {
+        .pif-modal-overlay.dark-mode .pif-currency-symbol {
           color: white;
         }
 
-        .dark-mode .pif-info-box {
+        .pif-modal-overlay.dark-mode .pif-info-box {
           background: var(--blue-900, #1e3a8a);
           border-color: var(--blue-700, #1d4ed8);
         }
 
-        .dark-mode .pif-info-title {
+        .pif-modal-overlay.dark-mode .pif-info-title {
           color: var(--blue-200, #bfdbfe);
         }
 
-        .dark-mode .pif-info-content {
+        .pif-modal-overlay.dark-mode .pif-info-content {
           color: var(--blue-200, #bfdbfe);
         }
 
-        .dark-mode .pif-modal-footer {
+        .pif-modal-overlay.dark-mode .pif-modal-footer {
           background: var(--gray-200);
           border-color: var(--gray-300);
         }

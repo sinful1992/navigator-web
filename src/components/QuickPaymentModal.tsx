@@ -12,6 +12,12 @@ type Props = {
 export function QuickPaymentModal({ arrangement, onConfirm, onCancel, isLoading = false }: Props) {
   const [amount, setAmount] = React.useState(arrangement.amount || '');
 
+  // Detect dark mode for proper styling
+  const [isDarkMode, setIsDarkMode] = React.useState(false);
+  React.useEffect(() => {
+    setIsDarkMode(document.documentElement.classList.contains('dark-mode'));
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || parseFloat(amount) <= 0) {
@@ -28,7 +34,7 @@ export function QuickPaymentModal({ arrangement, onConfirm, onCancel, isLoading 
   };
 
   return (
-    <div className="qp-overlay" onClick={handleOverlayClick}>
+    <div className={`qp-overlay${isDarkMode ? ' dark-mode' : ''}`} onClick={handleOverlayClick}>
       <div className="qp-modal">
         <form onSubmit={handleSubmit}>
           <div className="qp-header">
@@ -325,56 +331,56 @@ export function QuickPaymentModal({ arrangement, onConfirm, onCancel, isLoading 
         }
 
         /* Dark mode */
-        .dark-mode .qp-modal {
+        .qp-overlay.dark-mode .qp-modal {
           background: var(--gray-100);
         }
 
-        .dark-mode .qp-header {
+        .qp-overlay.dark-mode .qp-header {
           background: linear-gradient(135deg, #065f46 0%, #047857 100%);
           border-color: var(--gray-300);
         }
 
-        .dark-mode .qp-header h3 {
+        .qp-overlay.dark-mode .qp-header h3 {
           color: white;
         }
 
-        .dark-mode .qp-close {
+        .qp-overlay.dark-mode .qp-close {
           color: white;
         }
 
-        .dark-mode .qp-close:hover {
+        .qp-overlay.dark-mode .qp-close:hover {
           background: rgba(255,255,255,0.1);
         }
 
-        .dark-mode .qp-info-box {
+        .qp-overlay.dark-mode .qp-info-box {
           background: var(--blue-900, #1e3a8a);
           border-color: var(--blue-700, #1d4ed8);
         }
 
-        .dark-mode .qp-info-title {
+        .qp-overlay.dark-mode .qp-info-title {
           color: var(--blue-200, #bfdbfe);
         }
 
-        .dark-mode .qp-info-content {
+        .qp-overlay.dark-mode .qp-info-content {
           color: var(--blue-200, #bfdbfe);
         }
 
-        .dark-mode .qp-input {
+        .qp-overlay.dark-mode .qp-input {
           background: var(--gray-200);
           border-color: var(--gray-400);
           color: var(--gray-900);
         }
 
-        .dark-mode .qp-amount-input {
+        .qp-overlay.dark-mode .qp-amount-input {
           background: linear-gradient(135deg, #065f46 0%, #047857 100%);
           color: white;
         }
 
-        .dark-mode .qp-amount-symbol {
+        .qp-overlay.dark-mode .qp-amount-symbol {
           color: white;
         }
 
-        .dark-mode .qp-actions {
+        .qp-overlay.dark-mode .qp-actions {
           background: var(--gray-200);
           border-color: var(--gray-300);
         }

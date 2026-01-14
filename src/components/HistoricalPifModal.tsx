@@ -26,6 +26,12 @@ export function HistoricalPifModal({ onConfirm, onCancel, isLoading = false }: P
   const [numberOfCases, setNumberOfCases] = React.useState('1');
   const [enforcementFees, setEnforcementFees] = React.useState<string[]>(['']);
 
+  // Detect dark mode for proper styling
+  const [isDarkMode, setIsDarkMode] = React.useState(false);
+  React.useEffect(() => {
+    setIsDarkMode(document.documentElement.classList.contains('dark-mode'));
+  }, []);
+
   // Auto-calculate enforcement fee for single case
   const calculatedSingleCaseFee = React.useMemo(() => {
     const numCases = Number(numberOfCases);
@@ -127,7 +133,7 @@ export function HistoricalPifModal({ onConfirm, onCancel, isLoading = false }: P
   };
 
   return (
-    <div className="historical-pif-modal-overlay" onClick={handleOverlayClick}>
+    <div className={`historical-pif-modal-overlay${isDarkMode ? ' dark-mode' : ''}`} onClick={handleOverlayClick}>
       <div className="historical-pif-modal" onClick={(e) => e.stopPropagation()}>
         <div className="historical-pif-modal-header">
           <h3>📅 Record Historical PIF</h3>
@@ -577,56 +583,56 @@ export function HistoricalPifModal({ onConfirm, onCancel, isLoading = false }: P
         }
 
         /* Dark mode */
-        .dark-mode .historical-pif-modal {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-modal {
           background: var(--gray-100);
         }
 
-        .dark-mode .historical-pif-modal-header {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-modal-header {
           background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
           border-color: var(--gray-300);
         }
 
-        .dark-mode .historical-pif-modal-header h3 {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-modal-header h3 {
           color: white;
         }
 
-        .dark-mode .historical-pif-close-btn {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-close-btn {
           color: white;
         }
 
-        .dark-mode .historical-pif-close-btn:hover {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-close-btn:hover {
           background: rgba(255,255,255,0.1);
         }
 
-        .dark-mode .historical-pif-input {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-input {
           background: var(--gray-200);
           border-color: var(--gray-400);
           color: var(--gray-900);
         }
 
-        .dark-mode .historical-pif-amount-input {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-amount-input {
           background: linear-gradient(135deg, #065f46 0%, #047857 100%);
           color: white;
         }
 
-        .dark-mode .historical-pif-currency-symbol {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-currency-symbol {
           color: white;
         }
 
-        .dark-mode .historical-pif-info-box {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-info-box {
           background: var(--blue-900, #1e3a8a);
           border-color: var(--blue-700, #1d4ed8);
         }
 
-        .dark-mode .historical-pif-info-title {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-info-title {
           color: var(--blue-200, #bfdbfe);
         }
 
-        .dark-mode .historical-pif-info-content {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-info-content {
           color: var(--blue-200, #bfdbfe);
         }
 
-        .dark-mode .historical-pif-modal-footer {
+        .historical-pif-modal-overlay.dark-mode .historical-pif-modal-footer {
           background: var(--gray-200);
           border-color: var(--gray-300);
         }
