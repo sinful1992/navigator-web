@@ -244,6 +244,56 @@ export class OperationLogManager {
     logger.info('Cleared operation log');
   }
 
+  /**
+   * 🔧 CRITICAL FIX: Clear operations but preserve sequence continuity for restore
+   * This prevents sequence gaps during backup restore by:
+   * 1. Detecting if lastSyncSequence is corrupted (unreasonably high)
+   * 2. If corrupted, reset to 0 to start fresh
+   * 3. If valid, preserve it to continue sequence from cloud
+   * 4. Setting sequence counter appropriately
+   * This ensures new operations don't conflict with old ones, and doesn't perpetuate corruption
+   */
+  async clearForRestore(): Promise<void> {
+    const previousLastSynced = this.log.lastSyncSequence;
+    const maxLocalSeq = this.log.operations.length > 0
+      ? Math.max(...this.log.operations.map(op => op.sequence))
+      : 0;
+
+    // 🔧 CRITICAL: Detect corrupted lastSyncSequence
+    // If lastSyncSequence > maxLocalSeq, it's corrupted (came from cloud operations with huge sequence numbers)
+    const isCorrupted = previousLastSynced > maxLocalSeq;
+
+    const nextLastSynced = isCorrupted ? 0 : previousLastSynced;
+
+    logger.info('🔧 RESTORE: Clearing operation log with sequence preservation:', {
+      previousLastSynced,
+      maxLocalSeq,
+      isCorrupted,
+      nextLastSynced,
+      operationsCleared: this.log.operations.length,
+    });
+
+    // Clear operations and reset sequence if corrupted
+    this.log = {
+      operations: [],
+      lastSequence: nextLastSynced,
+      lastSyncSequence: nextLastSynced,
+      checksum: '',
+    };
+
+    // Set sequence counter - if it was corrupted, reset to 0 so we start fresh
+    // This prevents perpetuating huge sequence numbers from cloud
+    setSequence(nextLastSynced);
+
+    await this.persist();
+
+    logger.info('✅ RESTORE: Operation log cleared, sequence state reset:', {
+      newLastSynced: nextLastSynced,
+      newStartSequence: nextLastSynced + 1,
+      corruptionDetected: isCorrupted,
+    });
+  }
+
   private async persist(): Promise<void> {
     try {
       await storageManager.queuedSet(OPERATION_LOG_KEY, this.log);

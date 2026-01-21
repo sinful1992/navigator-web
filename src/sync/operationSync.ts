@@ -31,6 +31,8 @@ type UseOperationSync = {
   subscribeToOperations: (onOperations: (operations: Operation[]) => void) => () => void;
   forceSync: () => Promise<void>;
   getStateFromOperations: () => AppState;
+  getOperationLogState: () => ReturnType<OperationLogManager['getLogState']> | null; // 🔧 FIX: Expose operation log state for restore operations
+  clearOperationLogForRestore: () => Promise<void>; // 🔧 FIX: Clear with sequence preservation during backup restore
 };
 
 const INITIAL_STATE: AppState = {
@@ -212,7 +214,24 @@ export function useOperationSync(): UseOperationSync {
 
               if (myOpsToMarkSynced.length > 0) {
                 const maxMySeq = Math.max(...myOpsToMarkSynced);
-                if (Number.isFinite(maxMySeq)) {
+
+                // 🔧 CRITICAL FIX: Detect corrupted sequence numbers from cloud
+                // If all local operations are much lower than cloud sequence, cloud is corrupted
+                const localMaxSeq = operationLog.current.getAllOperations().length > 0
+                  ? Math.max(...operationLog.current.getAllOperations().map(op => op.sequence))
+                  : 0;
+
+                const isCloudCorrupted = maxMySeq > (localMaxSeq + 1000); // Allow some margin
+
+                if (isCloudCorrupted) {
+                  logger.error('🚨 BOOTSTRAP: Cloud operations have corrupted sequence numbers!', {
+                    cloudMaxSeq: maxMySeq,
+                    localMaxSeq,
+                    gap: maxMySeq - localMaxSeq,
+                  });
+                  // DON'T use this corrupted sequence - it will poison our local sequence generator
+                  logger.info('📥 BOOTSTRAP: Skipping corrupted sequence number marking');
+                } else if (Number.isFinite(maxMySeq)) {
                   await operationLog.current.markSyncedUpTo(maxMySeq);
                   logger.info(`📥 BOOTSTRAP: Marked sequences up to ${maxMySeq} as synced (from this device)`);
                 }
@@ -287,6 +306,9 @@ export function useOperationSync(): UseOperationSync {
   // Operation batching for backpressure control
   const batchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingBatchRef = useRef<boolean>(false);
+
+  // 🔧 FIX: Track last time we logged "no progress" to prevent spam
+  const lastNoProgressLogRef = useRef<number>(0);
 
   // Trigger batch sync with debouncing
   const scheduleBatchSync = useCallback(() => {
@@ -518,13 +540,18 @@ export function useOperationSync(): UseOperationSync {
             logger.error('⚠️ FAILED OPERATIONS (will retry):', failedOps);
           }
         } else {
-          logger.warn('⚠️ NO PROGRESS: Successful uploads exist but not continuous from last synced', {
-            currentLastSynced,
-            successfulSequences: successfulSequences.slice(0, 5), // Show first 5
-            firstGap: successfulSequences[0] > currentLastSynced + 1
-              ? currentLastSynced + 1
-              : 'unknown',
-          });
+          // 🔧 FIX: Only log "NO PROGRESS" once every 30 seconds to prevent spam
+          const now = Date.now();
+          if (now - lastNoProgressLogRef.current > 30000) {
+            logger.warn('⚠️ NO PROGRESS: Successful uploads exist but not continuous from last synced', {
+              currentLastSynced,
+              successfulSequences: successfulSequences.slice(0, 5), // Show first 5
+              firstGap: successfulSequences[0] > currentLastSynced + 1
+                ? currentLastSynced + 1
+                : 'unknown',
+            });
+            lastNoProgressLogRef.current = now;
+          }
         }
       } else {
         logger.error('❌ ALL UPLOADS FAILED - no operations marked as synced');
@@ -968,13 +995,18 @@ export function useOperationSync(): UseOperationSync {
 
                   setLastSyncTime(new Date());
                 } else {
-                  logger.warn('⚠️ AUTO-SYNC NO PROGRESS: Successful uploads exist but not continuous from last synced', {
-                    currentLastSynced,
-                    successfulSequences: successfulSequences.slice(0, 5),
-                    firstGap: successfulSequences[0] > currentLastSynced + 1
-                      ? currentLastSynced + 1
-                      : 'unknown',
-                  });
+                  // 🔧 FIX: Only log "NO PROGRESS" once every 30 seconds to prevent spam
+                  const now = Date.now();
+                  if (now - lastNoProgressLogRef.current > 30000) {
+                    logger.warn('⚠️ AUTO-SYNC NO PROGRESS: Successful uploads exist but not continuous from last synced', {
+                      currentLastSynced,
+                      successfulSequences: successfulSequences.slice(0, 5),
+                      firstGap: successfulSequences[0] > currentLastSynced + 1
+                        ? currentLastSynced + 1
+                        : 'unknown',
+                    });
+                    lastNoProgressLogRef.current = now;
+                  }
                 }
               } else {
                 logger.error('❌ AUTO-SYNC: All uploads failed');
@@ -1004,6 +1036,24 @@ export function useOperationSync(): UseOperationSync {
     };
   }, []);
 
+  // 🔧 CRITICAL: Get operation log state for restore operations
+  // This preserves lastSyncSequence during backup restore
+  const getOperationLogState = useCallback(() => {
+    return operationLog.current?.getLogState() ?? null;
+  }, []);
+
+  // 🔧 CRITICAL: Clear operation log while preserving sequence continuity
+  // Called during backup restore to prevent sequence gaps
+  const clearOperationLogForRestore = useCallback(async () => {
+    if (operationLog.current) {
+      await operationLog.current.clearForRestore();
+      // Reconstruct state from empty operations (should give INITIAL_STATE)
+      const newState = reconstructState(INITIAL_STATE, []);
+      setCurrentState(newState);
+      logger.info('✅ Operation log cleared for restore, sequence continuity preserved');
+    }
+  }, []);
+
   return useMemo<UseOperationSync>(
     () => ({
       user,
@@ -1022,6 +1072,8 @@ export function useOperationSync(): UseOperationSync {
       subscribeToOperations,
       forceSync,
       getStateFromOperations,
+      getOperationLogState,
+      clearOperationLogForRestore,
     }),
     [
       user,
@@ -1040,6 +1092,8 @@ export function useOperationSync(): UseOperationSync {
       subscribeToOperations,
       forceSync,
       getStateFromOperations,
+      getOperationLogState,
+      clearOperationLogForRestore,
     ]
   );
 }

@@ -367,6 +367,10 @@ function AuthedApp() {
 
         restoreState(data);
 
+        // 🔧 CRITICAL FIX: Clear operation log with sequence preservation before syncing
+        // This prevents sequence gaps that cause sync to get stuck
+        await cloudSync.clearOperationLogForRestore?.();
+
         // 🔧 CRITICAL FIX: Wait for restore protection window before syncing
         setTimeout(async () => {
           await cloudSync.syncData(data);
@@ -790,6 +794,10 @@ function AuthedApp() {
       };
 
       restoreState(data);
+
+      // 🔧 CRITICAL FIX: Clear operation log with sequence preservation before syncing
+      // This prevents sequence gaps that cause sync to get stuck
+      await cloudSync.clearOperationLogForRestore?.();
 
       // 🔧 CRITICAL FIX: Wait for restore protection window before syncing
       setTimeout(async () => {
