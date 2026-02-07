@@ -747,11 +747,12 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
       });
 
       // 🔧 FIX: Validate rows before applying
+      const isEmptyImport = Array.isArray(rows) && rows.length === 0;
       const validRows = Array.isArray(rows) ? rows.filter(validateAddressRow) : [];
 
       logger.info(`🔄 IMPORT VALIDATION: ${validRows.length} valid out of ${rows.length} total`);
 
-      if (validRows.length === 0) {
+      if (validRows.length === 0 && !isEmptyImport) {
         logger.warn('No valid addresses to import');
         return;
       }
@@ -774,13 +775,14 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
           logger.error(`❌ IMPORT WHILE ACTIVE: This should never happen! activeIndex=${s.activeIndex}, protection should be blocking this`);
         }
 
+        const shouldPreserveCompletions = !isEmptyImport && preserveCompletions;
         const newState = {
           ...s,
           addresses: validRows,
           activeIndex: null,
           activeStartTime: null, // 🔧 CRITICAL FIX: Clear activeStartTime when clearing activeIndex
           currentListVersion: newListVersion,
-          completions: preserveCompletions ? s.completions : [],
+          completions: shouldPreserveCompletions ? s.completions : [],
         };
 
         logger.info(`🔄 IMPORT RESULT STATE: addresses=${newState.addresses.length}, completions=${newState.completions.length}, listVersion=${newState.currentListVersion}`);
@@ -797,7 +799,7 @@ export function useAppState(userId?: string, submitOperation?: SubmitOperationCa
           payload: {
             addresses: validRows,
             newListVersion: (typeof baseState.currentListVersion === "number" ? baseState.currentListVersion : 1) + 1,
-            preserveCompletions
+            preserveCompletions: !isEmptyImport && preserveCompletions
           }
         }).catch(err => {
           logger.error('Failed to submit bulk import operation:', err);
